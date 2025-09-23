@@ -1,6 +1,6 @@
 # RetroIPTVGuide
 
-![Build](https://github.com/thehack904/RetroIPTVGuide/actions/workflows/python-app.yml/badge.svg) ![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)
+![Build](https://github.com/thehack904/RetroIPTVGuide/actions/workflows/python-app.yml/badge.svg) ![Version](https://img.shields.io/badge/version-v0.1.0--BETA-blue.svg) ![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)
 
 ## 📌 Description
 A retro-style IPTV web guide with EPG, HLS playback, and user management.
