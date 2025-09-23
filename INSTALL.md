@@ -26,7 +26,7 @@ Once installed, access the guide in your browser:
 http://<server-ip>:5000
 ```
 
-Default login: **admin / admin**
+Default login: **admin / strongpassword123**
 
 ## Updating
 ```bash

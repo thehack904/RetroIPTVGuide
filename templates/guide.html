@@ -1,6 +1,291 @@
-{% extends "layout.html" %}
-{% block title %}IPTV Guide{% endblock %}
-{% block content %}
-<h1>IPTV Guide</h1>
-<div id="guide">Guide grid loads here...</div>
-{% endblock %}
+<!doctype html>
+<html>
+<head>
+    <title>Live TV Guide</title>
+    <style>
+        :root { --chan-w: 200px; }
+
+        body { font-family: Arial, sans-serif; margin:0; }
+        .header { display:flex; justify-content:space-between; align-items:center; padding:10px; }
+        .header .links { display:flex; align-items:center; }
+        .header .links a, .dropbtn {
+            margin-left:15px; text-decoration:none; font-weight:bold; cursor:pointer; color:inherit;
+        }
+        .clock { font-weight:bold; font-size:16px; }
+
+        /* Dropdown menus */
+        .dropdown { position: relative; display: inline-block; }
+        .dropbtn { background:none; border:none; font:inherit; }
+        .dropdown-content {
+            display:none;
+            position:absolute;
+            background-color:inherit;
+            min-width:160px;
+            box-shadow:0px 8px 16px rgba(0,0,0,0.2);
+            z-index:10;
+        }
+        .dropdown-content a {
+            display:block; padding:8px 12px; text-decoration:none; color:inherit;
+        }
+        .dropdown:hover .dropdown-content { display:block; }
+
+        .player { display:flex; gap:16px; padding:12px; }
+        #video { width:620px; height:350px; }
+        .summary { flex:1; }
+
+        .guide-outer { 
+            height: calc(100vh - 420px); 
+            overflow-y: auto; 
+            padding-bottom: 80px;
+        }
+
+        .guide-row { display:flex; }
+        .chan-col  { width: var(--chan-w); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; }
+        .grid-col  { position:relative; flex:1; overflow-x:auto; overflow-y:visible; z-index:1; }
+
+        .chan-header { height: 34px; border-bottom:1px solid; position:sticky; top:0; z-index:5; }
+        .time-header-wrap { position:sticky; top:0; z-index:6; border-bottom:1px solid; }
+        .time-header { display:flex; height:34px; align-items:center; }
+        .time-cell { flex:0 0 {{ 30*SCALE }}px; width:{{ 30*SCALE }}px; text-align:center; border-right:1px solid; font-weight:600; }
+
+        .chan-name { 
+            padding:10px; height:60px; display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+            border-bottom:1px solid; cursor:pointer; position: relative; z-index: 10; pointer-events: auto; user-select: none;
+        }
+        .chan-name img { width:36px; height:36px; object-fit:contain; }
+
+        .grid-row  { position:relative; height:60px; border-bottom:1px solid; }
+        .grid-content { position:relative; width: {{ total_width }}px; min-height:100%; }
+
+        .program { position:absolute; top:6px; height:48px; border:1px solid; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                   font-size:12px; border-radius:6px; }
+        .program.now { font-weight:bold; }
+
+        .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:8; pointer-events:none; left: {{ now_offset }}px; }
+
+        /* Dark */
+        body.dark { background:#111; color:#ddd; }
+        body.dark .header { background:#222; }
+        body.dark .header .links a, body.dark .dropbtn { color:#0af; }
+        body.dark .clock { color:#0f0; }
+        body.dark #video { background:#000; }
+        body.dark .summary { color:#ccc; }
+        body.dark .chan-col { background:#1a1a1a; border-color:#333; }
+        body.dark .grid-col { background:#181818; }
+        body.dark .chan-header, body.dark .time-header-wrap { background:#222; border-color:#444; }
+        body.dark .time-cell { color:#bbb; border-color:#333; }
+        body.dark .chan-name { color:#fff; border-color:#333; }
+        body.dark .program { background:#3a3a3a; border-color:#555; color:#eee; }
+        body.dark .program.now { background:#2d5030; border-color:#47a447; }
+        body.dark .now-line { background:#0f0; }
+
+        /* Light */
+        body.light { background:#fff; color:#000; }
+        body.light .header { background:#eee; }
+        body.light .header .links a, body.light .dropbtn { color:#06c; }
+        body.light .clock { color:#090; }
+        body.light #video { background:#fff; }
+        body.light .summary { color:#000; }
+        body.light .chan-col { background:#f9f9f9; border-color:#ccc; }
+        body.light .grid-col { background:#fafafa; }
+        body.light .chan-header, body.light .time-header-wrap { background:#ddd; border-color:#bbb; }
+        body.light .time-cell { color:#000; border-color:#ccc; }
+        body.light .chan-name { color:#000; border-color:#ccc; }
+        body.light .program { background:#ddd; border-color:#aaa; color:#000; }
+        body.light .program.now { background:#cfe8cf; border-color:#090; }
+        body.light .now-line { background:#090; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="clock" id="clock">--:-- --</div>
+    <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+
+        {% if current_user.username == 'admin' %}
+        <div class="dropdown">
+            <button class="dropbtn">User Admin</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('add_user_route') }}">New User</a>
+                <a href="{{ url_for('delete_user') }}">Delete User</a>
+            </div>
+        </div>
+
+        <div class="dropdown">
+            <button class="dropbtn">Settings</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <a href="{{ url_for('change_password') }}">Change Password</a>
+        <a onclick="toggleTheme()">Toggle Theme</a>
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </div>
+</div>
+
+<div class="player">
+    <video id="video" controls></video>
+    <div class="summary" id="summary">
+        <h3>Program Info</h3>
+        <p>Click a channel on the left to start playback.</p>
+    </div>
+</div>
+
+<div class="guide-outer">
+    <div class="guide-row">
+        <div class="chan-col"><div class="chan-header"></div></div>
+        <div class="grid-col">
+            <div class="time-header-wrap">
+                <div class="grid-content">
+                    <div class="time-header">
+                        {% for t in hours_header %}
+                            <div class="time-cell" data-utc="{{ t.isoformat() }}">{{ t.isoformat() }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="now-line" id="nowLine"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% for ch in channels %}
+    <div class="guide-row" data-cid="{{ ch.tvg_id }}">
+        <div class="chan-col">
+            <div class="chan-name"
+                 data-url="{{ ch.url }}"
+                 data-cid="{{ ch.tvg_id }}"
+                 data-name="{{ ch.name|e }}">
+                {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}
+                <span>{{ ch.name }}</span>
+            </div>
+        </div>
+        <div class="grid-col">
+            <div class="grid-content">
+                {% set cid = ch.tvg_id %}
+                {% for prog in epg.get(cid, []) %}
+                    {% if prog.start and prog.stop %}
+                        {% set left = ((prog.start - grid_start).total_seconds()/60) * SCALE %}
+                        {% set calc_width = (prog.stop - prog.start).total_seconds()/60 * SCALE %}
+                        {% set width = 24 if calc_width < 24 else calc_width %}
+                        <div class="program {% if prog.start <= now <= prog.stop %}now{% endif %}"
+                             style="left:{{ left }}px; width:{{ width }}px;"
+                             data-start="{{ prog.start.isoformat() }}"
+                             data-stop="{{ prog.stop.isoformat() }}"
+                             data-title="{{ prog.title }}"
+                             data-desc="{{ prog.desc }}">
+                            {{ prog.title }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script src="{{ url_for('static', filename='hls.js') }}"></script>
+<script>
+let hlsInstance = null;
+let currentChannelId = null;
+
+function playChannel(url, cid, name) {
+    const video = document.getElementById('video');
+    currentChannelId = cid;
+    updateSummary(cid, name);
+
+    if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+    if (Hls.isSupported()) {
+        hlsInstance = new Hls();
+        hlsInstance.loadSource(url);
+        hlsInstance.attachMedia(video);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+    } else {
+        video.src = url;
+        video.play().catch(()=>{});
+    }
+}
+
+function updateSummary(cid, fallbackName) {
+    const summary = document.getElementById('summary');
+    const now = new Date();
+    const row = document.querySelector(`.guide-row[data-cid="${cid}"]`);
+    if (!row) return;
+
+    let currentProg = null;
+    row.querySelectorAll('.program').forEach(prog => {
+        const start = new Date(prog.dataset.start);
+        const stop = new Date(prog.dataset.stop);
+        if (start <= now && stop >= now) currentProg = prog;
+    });
+
+    if (currentProg) {
+        const title = currentProg.dataset.title || fallbackName;
+        const desc = currentProg.dataset.desc || '';
+        const start = new Date(currentProg.dataset.start);
+        const stop = new Date(currentProg.dataset.stop);
+        summary.innerHTML = `<h3>${title}</h3>
+                             <p>${desc}</p>
+                             <p>${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p>`;
+    } else {
+        summary.innerHTML = `<h3>${fallbackName}</h3><p>No Program Info</p>`;
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    document.body.classList.add(savedTheme);
+
+    document.querySelectorAll('.chan-name').forEach(el => {
+        el.addEventListener('click', () => {
+            playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
+        });
+    });
+
+    document.querySelectorAll('.time-cell').forEach(cell => {
+        const utc = new Date(cell.dataset.utc);
+        cell.textContent = utc.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    });
+
+    document.querySelectorAll('.program').forEach(prog => {
+        const start = new Date(prog.dataset.start);
+        const stop = new Date(prog.dataset.stop);
+        prog.title = `${prog.dataset.title}\n${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
+    });
+});
+
+function toggleTheme() {
+    const body = document.body;
+    if (body.classList.contains("dark")) {
+        body.classList.replace("dark", "light");
+        localStorage.setItem("theme", "light");
+    } else {
+        body.classList.replace("light", "dark");
+        localStorage.setItem("theme", "dark");
+    }
+}
+
+function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent = now.toLocaleString([], {
+        weekday:'short', month:'short', day:'numeric',
+        hour:'2-digit', minute:'2-digit', second:'2-digit'
+    });
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+function updateNowLine() {
+    const gridStart = new Date("{{ grid_start.isoformat() }}");
+    const scale = {{ SCALE }};
+    const now = new Date();
+    const minutesFromStart = (now - gridStart) / 60000;
+    document.getElementById('nowLine').style.left = (minutesFromStart * scale) + "px";
+}
+setInterval(updateNowLine, 60000);
+updateNowLine();
+</script>
+</body>
+</html>
+

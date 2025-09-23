@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}New User - IPTV{% endblock %}
+
+{% block content %}
+<h1>Create New User</h1>
+<form method="POST" action="{{ url_for('new_user') }}">
+  <label for="username">Username</label>
+  <input type="text" id="username" name="username" required>
+
+  <label for="password">Password</label>
+  <input type="password" id="password" name="password" required>
+
+  <label>
+    <input type="checkbox" name="is_admin"> Admin user?
+  </label>
+
+  <button type="submit">Create User</button>
+</form>
+{% endblock %}
+

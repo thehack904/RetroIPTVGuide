@@ -1,9 +1,53 @@
-{% extends "layout.html" %}
-{% block title %}Login{% endblock %}
-{% block content %}
-<form method="POST" action="/login">
-  <label>Username:</label><input type="text" name="username"><br>
-  <label>Password:</label><input type="password" name="password"><br>
-  <button type="submit">Login</button>
-</form>
-{% endblock %}
+<!doctype html>
+<html>
+<head>
+    <title>Login</title>
+    <style>
+        /* Shared CSS */
+        body { font-family: Arial, sans-serif; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
+        .box { padding:20px; border-radius:8px; width:300px; box-sizing:border-box; }
+        input { width:100%; padding:8px; margin:5px 0; border-radius:4px; box-sizing:border-box; }
+        button { width:100%; padding:10px; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }
+        button.primary { background:#06c; color:#fff; }
+        button.primary:hover { background:#049; }
+        body.dark { background:#111; color:#eee; }
+        body.dark .box { background:#222; }
+        body.dark input { border:1px solid #444; background:#333; color:#eee; }
+        body.dark button.primary { background:#0af; }
+        body.dark button.primary:hover { background:#08c; }
+        body.light { background:#fff; color:#000; }
+        body.light .box { background:#f3f3f3; }
+        body.light input { border:1px solid #aaa; background:#fff; color:#000; }
+        body.light button.primary { background:#06c; }
+        body.light button.primary:hover { background:#049; }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>Login</h2>
+        <form method="POST">
+            <input type="text" name="username" placeholder="Username" required>
+            <input type="password" name="password" placeholder="Password" required>
+            <button type="submit" class="primary">Login</button>
+        </form>
+        {% if error %}
+            <p style="color:yellow;">{{ error }}</p>
+        {% endif %}
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for msg in messages %}
+                    <p style="color:yellow;">{{ msg }}</p>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+    </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const saved = localStorage.getItem("theme") || "dark";
+    document.body.classList.add(saved);
+});
+</script>
+</body>
+</html>
+

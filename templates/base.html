@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>{% block title %}IPTV{% endblock %}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; background: #f6f7fb; }
+    header { background: #1f2937; color: #fff; padding: 12px 16px; }
+    .brand { font-weight: bold; }
+    nav a, nav span { color: #fff; text-decoration: none; margin-right: 16px; cursor: pointer; }
+    .wrapper { max-width: 1000px; margin: 24px auto; padding: 0 16px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 20px; }
+    .flash { padding: 10px; margin: 10px 0; border-radius: 5px; }
+    .flash.success { background: #d4edda; color: #155724; }
+    .flash.danger { background: #f8d7da; color: #721c24; }
+
+    /* Dropdowns */
+    .menu { display: inline-block; position: relative; }
+    .menu .label { padding: 4px 0; display: inline-block; }
+    .menu .dropdown { display: none; position: absolute; top: 24px; left: 0;
+                      background: #111827; padding: 8px 0; border-radius: 6px; min-width: 160px; z-index: 10; }
+    .menu:hover .dropdown { display: block; }
+    .dropdown a { display: block; padding: 8px 14px; color: #fff; }
+    .dropdown a:hover { background: #374151; }
+
+    /* Forms */
+    label { display: block; margin-top: 12px; font-weight: bold; }
+    input[type="text"], input[type="password"], select {
+      width: 100%; padding: 8px; margin-top: 5px; border: 1px solid #9ca3af; border-radius: 4px; box-sizing: border-box;
+    }
+    button { margin-top: 15px; padding: 10px 15px; border: none; background: #2563eb; color: #fff; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #1e40af; }
+    .row { display: flex; gap: 16px; }
+    .row > * { flex: 1; }
+
+    /* Autosizing input class */
+    .autosize-input { min-width: 300px; max-width: 100%; }
+  </style>
+
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header>
+    <nav>
+      <span class="brand">IPTV</span>
+      {% if session.get("username") %}
+        <a href="{{ url_for('guide') }}">Guide</a>
+        {% if session.get("is_admin") %}
+          <div class="menu">
+            <span class="label">Settings ▾</span>
+            <div class="dropdown">
+              <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+            </div>
+          </div>
+
+          <div class="menu">
+            <span class="label">User Admin ▾</span>
+            <div class="dropdown">
+              <a href="{{ url_for('new_user') }}">New User</a>
+              <a href="{{ url_for('delete_user') }}">Delete User</a>
+            </div>
+          </div>
+        {% endif %}
+        <a href="{{ url_for('logout') }}">Logout</a>
+      {% else %}
+        <a href="{{ url_for('login') }}">Login</a>
+      {% endif %}
+    </nav>
+  </header>
+
+  <div class="wrapper">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    <div class="card">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+
+  <script>
+    // Horizontally auto-resize single-line inputs (e.g., tuner URLs)
+    function autoResizeInput(el) {
+      el.style.width = "5px"; // reset for shrinking
+      el.style.width = (el.scrollWidth + 10) + "px"; // grow to fit content
+    }
+    // Initialize autosize on page load for any prefilled values
+    document.addEventListener("DOMContentLoaded", function () {
+      document.querySelectorAll(".autosize-input").forEach(function (el) {
+        autoResizeInput(el);
+        el.addEventListener("input", function(){ autoResizeInput(el); });
+      });
+    });
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
+

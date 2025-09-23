@@ -1,0 +1,151 @@
+<!doctype html>
+<html>
+<head>
+    <title>User Logs</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:0; }
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; }
+        .header .links { display:flex; align-items:center; height:100%; }
+        .header .links > a, .header .links > .dropdown > .dropbtn {
+            display:flex; align-items:center; justify-content:center; padding:0 18px;
+            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
+        }
+        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+        .dropdown { position:relative; }
+        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+        .dropdown-content {
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
+        }
+        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+        .dropdown-content a:hover { background:#0af; color:#fff; }
+        .dropdown:hover .dropdown-content { display:block; }
+
+        h2 { text-align:center; margin:20px 0; }
+
+        table { width:90%; border-collapse:collapse; margin:0 auto 40px auto; font-size:14px; }
+        th, td { padding:10px; border-bottom:1px solid #ccc; text-align:left; cursor:default; }
+        th { background:#333; color:#fff; cursor:pointer; user-select:none; }
+        th.sort-asc::after { content:" ▲"; }
+        th.sort-desc::after { content:" ▼"; }
+
+        /* Highlight action types */
+        .login { color:#0f0; }
+        .logout { color:#f66; }
+        .password { color:#0af; }
+        .tuner { color:#ff0; }
+        .channel { color:#ffa500; }
+
+        /* Dark */
+        body.dark { background:#111; color:#eee; }
+        body.dark th { background:#444; }
+        body.light { background:#fff; color:#000; }
+        body.light th { background:#ddd; color:#000; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="links">
+        <a href="{{ url_for('guide') }}">HOME</a>
+        <div class="dropdown">
+            <button class="dropbtn">USER ADMIN ▾</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('add_user_route') }}">New User</a>
+                <a href="{{ url_for('delete_user') }}">Delete User</a>
+            </div>
+        </div>
+        <div class="dropdown">
+            <button class="dropbtn">SETTINGS ▾</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('change_password') }}">Change Password</a>
+                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+            </div>
+        </div>
+        <a href="{{ url_for('view_logs') }}">LOGS</a>
+        <a href="{{ url_for('logout') }}">LOGOUT</a>
+    </div>
+</div>
+
+<h2>User Activity Logs</h2>
+<table id="logsTable">
+    <thead>
+        <tr>
+            <th data-col="0">User</th>
+            <th data-col="1">Action</th>
+            <th data-col="2">Timestamp</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for user, action, ts in entries %}
+    <tr>
+        <td>{{ user }}</td>
+        <td class="{% if 'Logged in' in action %}login{% elif 'Logged out' in action %}logout{% elif 'password' in action %}password{% elif 'tuner' in action %}tuner{% elif 'Clicked channel' in action %}channel{% endif %}">
+            {{ action }}
+        </td>
+        <td>{{ ts }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const saved = localStorage.getItem("theme") || "dark";
+    document.body.classList.add(saved);
+
+    // Table sorting
+    const table = document.getElementById("logsTable");
+    const headers = table.querySelectorAll("th");
+    let sortCol = null, sortDir = 1;
+
+    headers.forEach(header => {
+        header.addEventListener("click", () => {
+            const colIndex = parseInt(header.dataset.col);
+            const rows = Array.from(table.querySelector("tbody").rows);
+
+            // Toggle sort direction
+            if (sortCol === colIndex) {
+                sortDir = -sortDir;
+            } else {
+                sortDir = 1;
+                if (sortCol !== null) headers[sortCol].classList.remove("sort-asc","sort-desc");
+            }
+            sortCol = colIndex;
+
+            // Sort rows
+            rows.sort((a, b) => {
+                const aText = a.cells[colIndex].textContent.trim();
+                const bText = b.cells[colIndex].textContent.trim();
+                if (colIndex === 2) { // Timestamp column
+                    return sortDir * (new Date(aText) - new Date(bText));
+                }
+                return sortDir * aText.localeCompare(bText);
+            });
+
+            // Update DOM
+            const tbody = table.querySelector("tbody");
+            tbody.innerHTML = "";
+            rows.forEach(row => tbody.appendChild(row));
+
+            // Update arrow indicator
+            headers[colIndex].classList.remove("sort-asc","sort-desc");
+            headers[colIndex].classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
+        });
+    });
+});
+
+function toggleTheme() {
+    const body = document.body;
+    if (body.classList.contains("dark")) {
+        body.classList.replace("dark", "light");
+        localStorage.setItem("theme", "light");
+    } else {
+        body.classList.replace("light", "dark");
+        localStorage.setItem("theme", "dark");
+    }
+}
+</script>
+</body>
+</html>
+

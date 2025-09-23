@@ -33,4 +33,4 @@ sudo systemctl enable iptv-server.service
 sudo systemctl restart iptv-server.service
 
 echo "Installation complete! Access the guide at http://<server-ip>:5000"
-echo "Default login: admin / admin"
+echo "Default login: admin / strongpassword123"
