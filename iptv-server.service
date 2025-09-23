@@ -4,6 +4,7 @@ After=network.target
 
 [Service]
 User=iptv
+Group=iptv
 WorkingDirectory=/home/iptv/iptv-server
 ExecStart=/home/iptv/iptv-server/venv/bin/python app.py
 Restart=always

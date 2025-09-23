@@ -1,27 +1,18 @@
 # RetroIPTVGuide
 
-![Build](https://github.com/thehack904/RetroIPTVGuide/actions/workflows/python-app.yml/badge.svg) ![Version](https://img.shields.io/badge/version-v0.1.0--BETA-blue.svg) ![License](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)
+![Version](https://img.shields.io/badge/version-v0.1.1--BETA-blue.svg)
+![License](https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-lightgrey.svg)
+![Build](https://github.com/thehack904/RetroIPTVGuide/actions/workflows/python-app.yml/badge.svg)
 
-## 📌 Description
-A retro-style IPTV web guide with EPG, HLS playback, and user management.
+A retro-styled IPTV web interface that pays homage to 90s and 2000s cable TV guides.  
+Designed for use with ErsatzTV, but compatible with any IPTV provider supporting `.m3u` playlists and `.xml` EPG files.
 
-RetroIPTVGuide is a Flask-based IPTV web interface inspired by 90s/2000s cable TV guides. 
-It displays channel lineups from M3U playlists and program data from XMLTV EPGs in a nostalgic grid. 
-Features include user authentication, admin controls, and HLS playback, making it perfect for ErsatzTV or any IPTV source.
+## Features
+- Web-based IPTV program guide
+- M3U + XMLTV support
+- Login and user management
+- Video player with HLS support
+- Runs as a systemd service under a dedicated `iptv` user
 
-## 🏷️ GitHub Topics
-`iptv`, `flask`, `epg`, `xmltv`, `m3u`, `hls`, `ersatztv`, `web-interface`, `video-streaming`, `tv-guide`, `retro`
-
-## 🚀 Features
-- Retro cable-style grid interface
-- M3U playlist + XMLTV EPG parsing
-- HLS video playback with hls.js
-- User authentication & admin panel
-- Systemd integration for auto-start
-
-## 📦 Installation
-See [INSTALL.md](INSTALL.md) for full setup instructions.
-
-## 📜 License
-Licensed under [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/) — 
-free for personal use, commercial use requires permission.
+## License
+Licensed under CC BY-NC-SA 4.0. See LICENSE for details.
