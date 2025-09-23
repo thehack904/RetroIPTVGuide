@@ -1,40 +1,36 @@
 #!/bin/bash
 set -e
 
-# Create iptv system user if missing
-if ! id -u iptv >/dev/null 2>&1; then
+echo "=== RetroIPTVGuide Installer (v1.1) ==="
+
+# Create iptv system user if it doesn't exist
+if ! id "iptv" &>/dev/null; then
     echo "Creating iptv system user..."
-    sudo adduser --system --home /home/iptv --group iptv
+    sudo useradd -m -d /home/iptv -s /bin/bash iptv
 fi
 
-# Ensure home and project directory exist
-sudo mkdir -p /home/iptv/iptv-server
-sudo chown -R iptv:iptv /home/iptv
+# Prepare target directory
+TARGET_DIR=/home/iptv/iptv-server
+sudo mkdir -p $TARGET_DIR
+sudo chown -R iptv:iptv $TARGET_DIR
 
-# Copy project files from current repo directory into /home/iptv/iptv-server
-SRC_DIR="$(pwd)"
-echo "Copying project files from $SRC_DIR to /home/iptv/iptv-server..."
-sudo rsync -a --exclude 'venv' "$SRC_DIR/" /home/iptv/iptv-server/
-sudo chown -R iptv:iptv /home/iptv/iptv-server
+# Copy project files to target directory
+echo "Copying files to $TARGET_DIR..."
+sudo cp -r . $TARGET_DIR
+cd $TARGET_DIR
 
-# Switch to iptv user for installation
-sudo -u iptv bash <<'EOF'
-cd /home/iptv/iptv-server
-
-# Setup venv
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install --upgrade pip
-pip install -r requirements.txt
-EOF
+# Setup virtual environment
+echo "Setting up virtual environment..."
+sudo -u iptv python3 -m venv venv
+sudo -u iptv ./venv/bin/pip install --upgrade pip
+sudo -u iptv ./venv/bin/pip install -r requirements.txt
 
 # Install systemd service
-sudo cp /home/iptv/iptv-server/iptv-server.service /etc/systemd/system/iptv-server.service
-sudo systemctl daemon-reload
+echo "Installing systemd service..."
+sudo cp iptv-server.service /etc/systemd/system/iptv-server.service
+sudo systemctl daemon-reexec
 sudo systemctl enable iptv-server.service
-sudo systemctl start iptv-server.service
+sudo systemctl restart iptv-server.service
 
-echo "✅ IPTV server installed and running at http://<your-server-ip>:5000"
-
+echo "Installation complete! Access the guide at http://<server-ip>:5000"
+echo "Default login: admin / admin"

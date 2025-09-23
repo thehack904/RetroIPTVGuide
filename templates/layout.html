@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% block title %}Retro IPTV Guide{% endblock %}</title>
+</head>
+<body>
+  <nav>
+    <a href="{{ url_for('guide') }}">Guide</a> |
+    <a href="{{ url_for('logout') }}">Logout</a>
+  </nav>
+  <hr>
+  {% block content %}{% endblock %}
+</body>
+</html>

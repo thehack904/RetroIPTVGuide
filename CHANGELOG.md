@@ -1,19 +1,17 @@
 # Changelog
 
-## v0.1.1 (BETA) - 2025-09-23
-### Added
-- Installer now creates and configures dedicated `iptv` system user automatically.
-- Ensured installation under `/home/iptv/iptv-server` owned by `iptv`.
-- Added `tests/test_placeholder.py` to guarantee passing CI builds until real tests are added.
+## v1.1 (Current Release)
+- Added automated installer (`install.sh`) with system user `iptv` and locked directory `/home/iptv/iptv-server`.
+- Updated systemd service (`iptv-server.service`) to run under `iptv` user.
+- Scaffold zip now includes Golden Build merged with installer and docs.
+- Updated `INSTALL.md` with clearer install, access instructions, and beta warning.
+- Updated `README.md` for clarity and links.
+- Ensured LICENSE (CC BY-NC-SA 4.0) included in repo.
+- Version rolled forward to v1.1.
 
-### Changed
-- Updated `iptv-server.service` to run under `iptv` user with correct working directory.
-- Cleaned `requirements.txt` by removing invalid dependencies (e.g., hls.js).
-- Updated `INSTALL.md` to document new install path and `iptv` user handling.
-
----
-
-## v0.1.0 (BETA) - Initial Release
-- Initial scaffold with Flask IPTV web interface.
-- Basic login, guide, and service integration.
-- Packaged with systemd service file and install script.
+## v1.0 (Initial Beta)
+- First public beta release.
+- Flask web interface.
+- IPTV guide with .m3u + .xml support.
+- Systemd integration.
+- User management.

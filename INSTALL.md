@@ -1,39 +1,32 @@
-# Installation Instructions
+# Installation Guide
 
-## Prerequisites
-- Ubuntu 22.04+ or Debian-based Linux
+## Requirements
 - Python 3.10+
-- Systemd
+- Systemd-based Linux OS
 
-## Steps
+## Installation
+Clone the repository and run the installer:
 
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git
 cd RetroIPTVGuide
-chmod +x install.sh
-./install.sh
+sudo ./install.sh
 ```
 
-This will:
-- Create a dedicated `iptv` system user
-- Install the project under `/home/iptv/iptv-server`
-- Setup a Python virtual environment and dependencies
-- Install and start a systemd service
+The installer will:
+- Create a system user `iptv` (if not present)
+- Install into `/home/iptv/iptv-server`
+- Set up Python virtual environment + dependencies
+- Configure systemd service
 
 ## Access
-Once installed, access the IPTV web interface at:
+Once installed, access the guide in your browser:
 
 ```
-http://<your-server-ip>:5000
+http://<server-ip>:5000
 ```
 
-### Default login
-- **Username:** admin  
-- **Password:** admin  
-
-⚠️ Change this immediately after first login.
-
----
+Default login: **admin / admin**
 
 ## Updating
 ```bash
@@ -46,5 +39,6 @@ Licensed under CC BY-NC-SA 4.0. See LICENSE for details.
 
 ---
 
-🚨 **BETA WARNING**  
-This is an initial BETA release. Do not expose it directly to the public Internet without additional security hardening.
+⚠️ **Initial BETA Notice**  
+This project is currently in **BETA**.  
+It should **not** be exposed directly to the Internet or used in production without additional hardening.
