@@ -4,10 +4,10 @@
     <title>User Logs</title>
     <style>
         body { font-family: Arial, sans-serif; margin:0; }
-        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; }
-        .header .links { display:flex; align-items:center; height:100%; }
-        .header .links > a, .header .links > .dropdown > .dropbtn {
-            display:flex; align-items:center; justify-content:center; padding:0 18px;
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
+            display:flex; align-items:center; justify-content:center; padding:0 12px;
             color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
         }
         .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
@@ -36,7 +36,7 @@
         .tuner { color:#ff0; }
         .channel { color:#ffa500; }
 
-        /* Dark */
+        /* Dark / Light */
         body.dark { background:#111; color:#eee; }
         body.dark th { background:#444; }
         body.light { background:#fff; color:#000; }
@@ -46,7 +46,10 @@
 <body>
 <div class="header">
     <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
         <a href="{{ url_for('guide') }}">HOME</a>
+
+        {% if current_user is defined and current_user.username == 'admin' %}
         <div class="dropdown">
             <button class="dropbtn">USER ADMIN ▾</button>
             <div class="dropdown-content">
@@ -54,17 +57,25 @@
                 <a href="{{ url_for('delete_user') }}">Delete User</a>
             </div>
         </div>
+        {% endif %}
+
         <div class="dropdown">
             <button class="dropbtn">SETTINGS ▾</button>
             <div class="dropdown-content">
+                {% if current_user is defined and current_user.username == 'admin' %}
                 <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
+                {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
                 <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
             </div>
         </div>
-        <a href="{{ url_for('view_logs') }}">LOGS</a>
+
         <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
+
+    <!-- Right: live clock -->
+    <div id="clock" class="clock">--:-- --</div>
 </div>
 
 <h2>User Activity Logs</h2>
@@ -77,15 +88,38 @@
         </tr>
     </thead>
     <tbody>
-    {% for user, action, ts in entries %}
-    <tr>
-        <td>{{ user }}</td>
-        <td class="{% if 'Logged in' in action %}login{% elif 'Logged out' in action %}logout{% elif 'password' in action %}password{% elif 'tuner' in action %}tuner{% elif 'Clicked channel' in action %}channel{% endif %}">
-            {{ action }}
-        </td>
-        <td>{{ ts }}</td>
-    </tr>
-    {% endfor %}
+    {% if entries %}
+        {% for user, action, ts in entries %}
+        <tr>
+            <td>{{ user }}</td>
+            <td class="{% set a = action %}
+                      {% if 'Logged in' in a %}login{% elif 'Logged out' in a %}logout
+                      {% elif 'password' in a %}password{% elif 'tuner' in a %}tuner
+                      {% elif 'Clicked channel' in a %}channel{% endif %}">
+                {{ action }}
+            </td>
+            <td>{{ ts }}</td>
+        </tr>
+        {% endfor %}
+    {% elif log_text %}
+        {% for line in log_text.splitlines() if line.strip() %}
+            {% set parts = line.split(' | ') %}
+            {% set u = parts[0] if parts|length > 0 else 'system' %}
+            {% set a = parts[1] if parts|length > 1 else line %}
+            {% set t = parts[2] if parts|length > 2 else '' %}
+        <tr>
+            <td>{{ u }}</td>
+            <td class="{% if 'Logged in' in a %}login{% elif 'Logged out' in a %}logout
+                       {% elif 'password' in a %}password{% elif 'tuner' in a %}tuner
+                       {% elif 'Clicked channel' in a %}channel{% endif %}">
+                {{ a }}
+            </td>
+            <td>{{ t }}</td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        <tr><td colspan="3">No log entries found.</td></tr>
+    {% endif %}
     </tbody>
 </table>
 
@@ -104,7 +138,6 @@ document.addEventListener("DOMContentLoaded", () => {
             const colIndex = parseInt(header.dataset.col);
             const rows = Array.from(table.querySelector("tbody").rows);
 
-            // Toggle sort direction
             if (sortCol === colIndex) {
                 sortDir = -sortDir;
             } else {
@@ -113,26 +146,27 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             sortCol = colIndex;
 
-            // Sort rows
             rows.sort((a, b) => {
                 const aText = a.cells[colIndex].textContent.trim();
                 const bText = b.cells[colIndex].textContent.trim();
-                if (colIndex === 2) { // Timestamp column
-                    return sortDir * (new Date(aText) - new Date(bText));
+                if (colIndex === 2) {
+                    const da = new Date(aText), db = new Date(bText);
+                    return sortDir * (da - db);
                 }
                 return sortDir * aText.localeCompare(bText);
             });
 
-            // Update DOM
             const tbody = table.querySelector("tbody");
             tbody.innerHTML = "";
             rows.forEach(row => tbody.appendChild(row));
 
-            // Update arrow indicator
             headers[colIndex].classList.remove("sort-asc","sort-desc");
             headers[colIndex].classList.add(sortDir === 1 ? "sort-asc" : "sort-desc");
         });
     });
+
+    updateClock();
+    setInterval(updateClock, 1000);
 });
 
 function toggleTheme() {
@@ -143,6 +177,17 @@ function toggleTheme() {
     } else {
         body.classList.replace("light", "dark");
         localStorage.setItem("theme", "dark");
+    }
+}
+
+function updateClock() {
+    const now = new Date();
+    const el = document.getElementById('clock');
+    if (el) {
+        el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
     }
 }
 </script>

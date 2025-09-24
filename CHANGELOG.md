@@ -1,40 +1,67 @@
-# Changelog
+# 📑 Changelog
 
-## [2.0.0] - 2025-09-23
+All notable changes to this project will be documented here.  
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
+This project follows [Semantic Versioning](https://semver.org/).  
+
+---
+
+## [Unreleased]
+
+- Planned: add `.m3u8` tuner support.  
+- Planned: move logs to SQLite DB.  
+- Planned: add tuner add/remove via UI.  
+- Planned: log filtering and pagination.  
+
+---
+
+## [v2.0.0] – 2025-09-24
 ### Added
-- Packaged the **Golden Trunk build** into a clean, versioned release for GitHub.
-- Included all application files (Flask app, templates, static assets, configs, etc.) in a consistent scaffold.
-- Initial **systemd service file** to manage the IPTV Flask server.
-- `install.sh` script now creates a dedicated `iptv` system user and installs into `/home/iptv/iptv-server`.
-- Updated install.sh to auto-install python3-venv if missing, ensuring clean setup on Debian/Ubuntu systems.
+- Activity logging system (`activity.log`) with:
+  - Successful logins, failed logins, and logouts.  
+  - Password changes, user creation, and user deletion.  
+  - Unauthorized access attempts (non-admin hitting admin routes).  
+  - Tuner switched, tuner URLs updated.  
+  - Channel playback started (user + channel + timestamp).  
+  - Admin access to logs page.  
+- New **logs.html** page with proper header, clock, active tuner display, and logs listing.  
+- Database migration: tuners moved from in-memory dict to **tuners.db** (persistent).  
+  - Added schema for tuners (`name`, `xml`, `m3u`) and settings (`current_tuner`).  
+  - Bootstraps default tuners if DB is empty.  
+- Updated **change_tuner.html**:  
+  - Two sections: switch active tuner, update tuner URLs.  
+  - URLs persist into `tuners.db`.  
+- Updated **add_user.html**, **delete_user.html**, **change_password.html**, **logs.html** headers:  
+  - Unified with `guide.html` header layout.  
+  - Active tuner displayed next to clock.  
+- Updated **guide.html**:  
+  - Menu/header unified across templates.  
+  - Playback logging integrated (`/play_channel`).  
+- App startup now preloads tuners from `tuners.db` and initializes WAL mode for SQLite performance.  
 
 ### Changed
-- Project rebranded from *Golden Trunk* (internal name) to **RetroIPTVGuide** (public GitHub name).
-- Directory structure aligned with `/home/iptv/iptv-server` for consistency across installs.
-- Documentation (`INSTALL.md`, `README.md`) updated to reflect GitHub repo, new username (`thehack904`), and installation instructions.
+- Removed reliance on hardcoded `TUNERS` dict in `app.py`.  
+- Headers across templates are consistent and styled to match `guide.html`.  
 
 ### Fixed
-- Requirements install path corrected so dependencies are properly installed inside the Python virtual environment.
-- Removed erroneous `hls.js` entry from `requirements.txt` (now correctly included as client-side JavaScript in `guide.html`).
-- Cleaned up GitHub Actions workflow so Python CI doesn’t break on frontend assets.
+- Database locked errors reduced by using `timeout=10` and WAL mode.  
+- Unauthorized deletion of `admin` user explicitly blocked and logged.  
 
-### Notes
-- Default login credentials remain `admin / admin` until first password change.
-- ⚠️ **Beta Notice**: This build is marked as a BETA release. Do not expose to the public internet without additional hardening.
+---
 
+## [v1.x.x] – 2025-09-01 → 2025-09-23
+### Added
+- Initial IPTV Flask application with:  
+  - User authentication (login/logout, password change).  
+  - Basic user management (add/delete).  
+  - Guide page rendering from **hardcoded tuners** (`TUNERS` dict).  
+  - XMLTV parsing for program guide and M3U parsing for channel list.  
+  - Playback via HTML5 video with HLS.js support.  
+- Configurable scale and grid sizing for EPG view.  
+- Default admin user created on startup.  
 
-## v1.1 (Current Release)
-- Added automated installer (`install.sh`) with system user `iptv` and locked directory `/home/iptv/iptv-server`.
-- Updated systemd service (`iptv-server.service`) to run under `iptv` user.
-- Scaffold zip now includes Golden Build merged with installer and docs.
-- Updated `INSTALL.md` with clearer install, access instructions, and beta warning.
-- Updated `README.md` for clarity and links.
-- Ensured LICENSE (CC BY-NC-SA 4.0) included in repo.
-- Version rolled forward to v1.1.
-
-## v1.0 (Initial Beta)
-- First public beta release.
-- Flask web interface.
-- IPTV guide with .m3u + .xml support.
-- Systemd integration.
-- User management.
+### Limitations
+- Tuners stored in memory only (changes lost on restart).  
+- Logs were minimal (mostly printed to console).  
+- UI headers inconsistent across templates.  
+- No persistence for tuner updates or user activity logs.  

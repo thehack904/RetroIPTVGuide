@@ -3,66 +3,119 @@
 <head>
     <title>Change Tuner</title>
     <style>
-        body { font-family: Arial, sans-serif; margin:0; display:flex; justify-content:center; align-items:center; height:100vh; }
-        .box { padding:20px; border-radius:8px; width:400px; box-sizing:border-box; }
-        select, input, button { width:100%; padding:8px; margin:5px 0; border-radius:4px; }
-        .toggle { margin-top:10px; cursor:pointer; font-size:0.9em; }
-        .back { margin-top:10px; display:block; text-align:center; }
-
-        /* Dark */
+        /* Shared CSS */
+        body { font-family: Arial, sans-serif; margin:0; }
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; }
+        .header .links { display:flex; align-items:center; height:100%; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span {
+            display:flex; align-items:center; justify-content:center; padding:0 18px;
+            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
+        }
+        .header > #clock {
+            display:flex; align-items:center; justify-content:center; padding:0 18px;
+            color:#eee; font-weight:bold; height:40px; line-height:40px;
+        }
+        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+        .dropdown { position:relative; }
+        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+        .dropdown-content {
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
+        }
+        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+        .dropdown-content a:hover { background:#0af; color:#fff; }
+        .dropdown:hover .dropdown-content { display:block; }
+        .box { margin:40px auto; padding:20px; border-radius:8px; width:400px; box-sizing:border-box; }
+        select, input, button { width:100%; padding:10px; margin-top:10px; border-radius:4px; box-sizing:border-box; }
+        button { border:none; font-weight:bold; cursor:pointer; }
+        button.primary { background:#06c; color:#fff; }
+        button.primary:hover { background:#049; }
         body.dark { background:#111; color:#eee; }
         body.dark .box { background:#222; }
-        body.dark select, body.dark input, body.dark button { border:1px solid #444; background:#333; color:#eee; }
-        body.dark button { background:#06c; color:#fff; }
-        body.dark button:hover { background:#049; }
-        body.dark .toggle, body.dark .back { color:#0af; }
-
-        /* Light */
         body.light { background:#fff; color:#000; }
         body.light .box { background:#f3f3f3; }
-        body.light select, body.light input, body.light button { border:1px solid #aaa; background:#fff; color:#000; }
-        body.light button { background:#06c; color:#fff; }
-        body.light button:hover { background:#049; }
-        body.light .toggle, body.light .back { color:#06c; }
     </style>
 </head>
 <body>
-    <div class="box">
-        <h2>Change IPTV Tuner</h2>
-        <form method="POST">
-            <label for="tuner">Tuner</label>
-            <select name="tuner" id="tuner">
-                {% for t in tuners %}
-                    <option value="{{ t }}" {% if t == current %}selected{% endif %}>{{ t }}</option>
-                {% endfor %}
-            </select>
-
-            <label for="m3u">M3U URL</label>
-            <input type="text" id="m3u" name="m3u" value="{{ current_urls['M3U'] }}">
-
-            <label for="epg">EPG URL</label>
-            <input type="text" id="epg" name="epg" value="{{ current_urls['EPG'] }}">
-
-            <button type="submit" name="update">Update</button>
-        </form>
-
-        {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                {% for msg in messages %}
-                    <p style="color:yellow;">{{ msg }}</p>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
-        <div class="toggle" onclick="toggleTheme()">Toggle Theme</div>
-        <a class="back" href="{{ url_for('guide') }}">Back to Guide</a>
+<div class="header">
+    <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+        <a href="{{ url_for('guide') }}">HOME</a>
+        {% if current_user.username == 'admin' %}
+        <div class="dropdown">
+            <button class="dropbtn">USER ADMIN ▾</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('add_user_route') }}">New User</a>
+                <a href="{{ url_for('delete_user') }}">Delete User</a>
+            </div>
+        </div>
+        {% endif %}
+        <div class="dropdown">
+            <button class="dropbtn">SETTINGS ▾</button>
+            <div class="dropdown-content">
+                {% if current_user.username == 'admin' %}
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
+                {% endif %}
+                <a href="{{ url_for('change_password') }}">Change Password</a>
+                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+            </div>
+        </div>
+        <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
+    <div id="clock" class="clock">--:-- --</div>
+</div>
+
+<div class="box">
+    <h2>Change Active Tuner</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="switch_tuner">
+        <label for="tuner">Select Tuner:</label>
+        <select name="tuner" id="tuner" required>
+            {% for tuner in tuners %}
+            <option value="{{ tuner }}" {% if tuner == current_tuner %}selected{% endif %}>{{ tuner }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="primary">Set Active Tuner</button>
+    </form>
+</div>
+
+<div class="box">
+    <h2>Update Tuner URLs</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="update_urls">
+        <label for="tuner_update">Select Tuner:</label>
+        <select name="tuner" id="tuner_update" required onchange="populateUrls(this.value)">
+            {% for tuner in tuners %}
+            <option value="{{ tuner }}">{{ tuner }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)" required>
+        <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)" required>
+        <button type="submit" class="primary">Update URLs</button>
+    </form>
+</div>
 
 <script>
+const tunerData = {{ TUNERS|tojson }};
+
+function populateUrls(tuner) {
+    if (tunerData[tuner]) {
+        document.getElementById('xml_url').value = tunerData[tuner].xml || "";
+        document.getElementById('m3u_url').value = tunerData[tuner].m3u || "";
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     const saved = localStorage.getItem("theme") || "dark";
     document.body.classList.add(saved);
+    updateClock();
+    setInterval(updateClock, 1000);
+    // Initialize update form with first tuner’s URLs
+    const firstTuner = document.getElementById('tuner_update').value;
+    populateUrls(firstTuner);
 });
+
 function toggleTheme() {
     const body = document.body;
     if (body.classList.contains("dark")) {
@@ -71,6 +124,16 @@ function toggleTheme() {
     } else {
         body.classList.replace("light", "dark");
         localStorage.setItem("theme", "dark");
+    }
+}
+function updateClock() {
+    const now = new Date();
+    const el = document.getElementById('clock');
+    if (el) {
+        el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
     }
 }
 </script>

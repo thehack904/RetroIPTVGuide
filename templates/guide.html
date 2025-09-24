@@ -3,71 +3,58 @@
 <head>
     <title>Live TV Guide</title>
     <style>
-        :root { --chan-w: 200px; }
-
+        /* Header + menus */
         body { font-family: Arial, sans-serif; margin:0; }
-        .header { display:flex; justify-content:space-between; align-items:center; padding:10px; }
-        .header .links { display:flex; align-items:center; }
-        .header .links a, .dropbtn {
-            margin-left:15px; text-decoration:none; font-weight:bold; cursor:pointer; color:inherit;
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
+            display:flex; align-items:center; justify-content:center; padding:0 12px;
+            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
         }
-        .clock { font-weight:bold; font-size:16px; }
-
-        /* Dropdown menus */
-        .dropdown { position: relative; display: inline-block; }
-        .dropbtn { background:none; border:none; font:inherit; }
+        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+        .dropdown { position:relative; }
+        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
         .dropdown-content {
-            display:none;
-            position:absolute;
-            background-color:inherit;
-            min-width:160px;
-            box-shadow:0px 8px 16px rgba(0,0,0,0.2);
-            z-index:10;
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
         }
-        .dropdown-content a {
-            display:block; padding:8px 12px; text-decoration:none; color:inherit;
-        }
+        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+        .dropdown-content a:hover { background:#0af; color:#fff; }
         .dropdown:hover .dropdown-content { display:block; }
 
+        /* Player row: Program Info (left) | Video (right) */
         .player { display:flex; gap:16px; padding:12px; }
-        #video { width:620px; height:350px; }
         .summary { flex:1; }
+        #video  { width:620px; height:350px; }
 
+        /* Guide grid */
         .guide-outer { 
             height: calc(100vh - 420px); 
             overflow-y: auto; 
             padding-bottom: 80px;
         }
-
         .guide-row { display:flex; }
-        .chan-col  { width: var(--chan-w); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; }
+        .chan-col  { width: 200px; flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; }
         .grid-col  { position:relative; flex:1; overflow-x:auto; overflow-y:visible; z-index:1; }
-
         .chan-header { height: 34px; border-bottom:1px solid; position:sticky; top:0; z-index:5; }
         .time-header-wrap { position:sticky; top:0; z-index:6; border-bottom:1px solid; }
         .time-header { display:flex; height:34px; align-items:center; }
         .time-cell { flex:0 0 {{ 30*SCALE }}px; width:{{ 30*SCALE }}px; text-align:center; border-right:1px solid; font-weight:600; }
-
         .chan-name { 
             padding:10px; height:60px; display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
             border-bottom:1px solid; cursor:pointer; position: relative; z-index: 10; pointer-events: auto; user-select: none;
         }
         .chan-name img { width:36px; height:36px; object-fit:contain; }
-
         .grid-row  { position:relative; height:60px; border-bottom:1px solid; }
         .grid-content { position:relative; width: {{ total_width }}px; min-height:100%; }
-
         .program { position:absolute; top:6px; height:48px; border:1px solid; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
                    font-size:12px; border-radius:6px; }
         .program.now { font-weight:bold; }
-
         .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:8; pointer-events:none; left: {{ now_offset }}px; }
 
-        /* Dark */
+        /* Dark theme */
         body.dark { background:#111; color:#ddd; }
         body.dark .header { background:#222; }
-        body.dark .header .links a, body.dark .dropbtn { color:#0af; }
-        body.dark .clock { color:#0f0; }
         body.dark #video { background:#000; }
         body.dark .summary { color:#ccc; }
         body.dark .chan-col { background:#1a1a1a; border-color:#333; }
@@ -79,11 +66,9 @@
         body.dark .program.now { background:#2d5030; border-color:#47a447; }
         body.dark .now-line { background:#0f0; }
 
-        /* Light */
+        /* Light theme */
         body.light { background:#fff; color:#000; }
         body.light .header { background:#eee; }
-        body.light .header .links a, body.light .dropbtn { color:#06c; }
-        body.light .clock { color:#090; }
         body.light #video { background:#fff; }
         body.light .summary { color:#000; }
         body.light .chan-col { background:#f9f9f9; border-color:#ccc; }
@@ -98,41 +83,50 @@
 </head>
 <body>
 <div class="header">
-    <div class="clock" id="clock">--:-- --</div>
+    <!-- Left: menu block -->
     <div class="links">
         <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+        <a href="{{ url_for('guide') }}">HOME</a>
 
-        {% if current_user.username == 'admin' %}
+        {% if current_user is defined and current_user.username == 'admin' %}
         <div class="dropdown">
-            <button class="dropbtn">User Admin</button>
+            <button class="dropbtn">USER ADMIN ▾</button>
             <div class="dropdown-content">
                 <a href="{{ url_for('add_user_route') }}">New User</a>
                 <a href="{{ url_for('delete_user') }}">Delete User</a>
             </div>
         </div>
-
-        <div class="dropdown">
-            <button class="dropbtn">Settings</button>
-            <div class="dropdown-content">
-                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
-            </div>
-        </div>
         {% endif %}
 
-        <a href="{{ url_for('change_password') }}">Change Password</a>
-        <a onclick="toggleTheme()">Toggle Theme</a>
-        <a href="{{ url_for('logout') }}">Logout</a>
+        <div class="dropdown">
+            <button class="dropbtn">SETTINGS ▾</button>
+            <div class="dropdown-content">
+                {% if current_user is defined and current_user.username == 'admin' %}
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
+                {% endif %}
+                <a href="{{ url_for('change_password') }}">Change Password</a>
+                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+            </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
+
+    <!-- Right: live clock -->
+    <div id="clock" class="clock">--:-- --</div>
 </div>
 
+<!-- Player row: summary left, video right -->
 <div class="player">
-    <video id="video" controls></video>
     <div class="summary" id="summary">
         <h3>Program Info</h3>
         <p>Click a channel on the left to start playback.</p>
     </div>
+    <video id="video" controls></video>
 </div>
 
+<!-- Guide grid -->
 <div class="guide-outer">
     <div class="guide-row">
         <div class="chan-col"><div class="chan-header"></div></div>
@@ -195,6 +189,13 @@ function playChannel(url, cid, name) {
     currentChannelId = cid;
     updateSummary(cid, name);
 
+    // 🔥 Log playback to backend
+    fetch("/play_channel", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: "channel_name=" + encodeURIComponent(name)
+    });
+
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (Hls.isSupported()) {
         hlsInstance = new Hls();
@@ -253,6 +254,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const stop = new Date(prog.dataset.stop);
         prog.title = `${prog.dataset.title}\n${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}`;
     });
+
+    updateClock();
+    setInterval(updateClock, 1000);
+    updateNowLine();
+    setInterval(updateNowLine, 60000);
 });
 
 function toggleTheme() {
@@ -268,23 +274,23 @@ function toggleTheme() {
 
 function updateClock() {
     const now = new Date();
-    document.getElementById('clock').textContent = now.toLocaleString([], {
-        weekday:'short', month:'short', day:'numeric',
-        hour:'2-digit', minute:'2-digit', second:'2-digit'
-    });
+    const el = document.getElementById('clock');
+    if (el) {
+        el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+    }
 }
-setInterval(updateClock, 1000);
-updateClock();
 
 function updateNowLine() {
     const gridStart = new Date("{{ grid_start.isoformat() }}");
     const scale = {{ SCALE }};
     const now = new Date();
     const minutesFromStart = (now - gridStart) / 60000;
-    document.getElementById('nowLine').style.left = (minutesFromStart * scale) + "px";
+    const nl = document.getElementById('nowLine');
+    if (nl) nl.style.left = (minutesFromStart * scale) + "px";
 }
-setInterval(updateNowLine, 60000);
-updateNowLine();
 </script>
 </body>
 </html>

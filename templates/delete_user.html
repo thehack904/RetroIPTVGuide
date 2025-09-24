@@ -3,31 +3,36 @@
 <head>
     <title>Delete User</title>
     <style>
-        /* Use same shared CSS as add_user.html */
         body { font-family: Arial, sans-serif; margin:0; }
-        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; }
-        .header .links { display:flex; align-items:center; height:100%; }
-        .header .links > a, .header .links > .dropdown > .dropbtn {
-            display:flex; align-items:center; justify-content:center; padding:0 18px;
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
+            display:flex; align-items:center; justify-content:center; padding:0 12px;
             color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
         }
         .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
         .dropdown { position:relative; }
         .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
-        .dropdown-content { display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px; border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3); }
+        .dropdown-content {
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
+        }
         .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
         .dropdown-content a:hover { background:#0af; color:#fff; }
         .dropdown:hover .dropdown-content { display:block; }
+
         .box { margin:60px auto; padding:20px; border-radius:8px; width:300px; box-sizing:border-box; }
         select { width:100%; padding:8px; margin:5px 0; border-radius:4px; box-sizing:border-box; }
         button { width:100%; padding:10px; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }
         button.danger { background:#c00; color:#fff; }
         button.danger:hover { background:#900; }
+
         body.dark { background:#111; color:#eee; }
         body.dark .box { background:#222; }
         body.dark select { border:1px solid #444; background:#333; color:#eee; }
         body.dark button.danger { background:#f33; }
         body.dark button.danger:hover { background:#c00; }
+
         body.light { background:#fff; color:#000; }
         body.light .box { background:#f3f3f3; }
         body.light select { border:1px solid #aaa; background:#fff; color:#000; }
@@ -38,7 +43,9 @@
 <body>
 <div class="header">
     <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
         <a href="{{ url_for('guide') }}">HOME</a>
+
         {% if current_user.username == 'admin' %}
         <div class="dropdown">
             <button class="dropbtn">USER ADMIN ▾</button>
@@ -48,18 +55,24 @@
             </div>
         </div>
         {% endif %}
+
         <div class="dropdown">
             <button class="dropbtn">SETTINGS ▾</button>
             <div class="dropdown-content">
                 {% if current_user.username == 'admin' %}
                 <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
                 {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
                 <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
             </div>
         </div>
+
         <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
+
+    <!-- Right: live clock -->
+    <div id="clock" class="clock">--:-- --</div>
 </div>
 
 <div class="box">
@@ -85,6 +98,8 @@
 document.addEventListener("DOMContentLoaded", () => {
     const saved = localStorage.getItem("theme") || "dark";
     document.body.classList.add(saved);
+    updateClock();
+    setInterval(updateClock, 1000);
 });
 function toggleTheme() {
     const body = document.body;
@@ -94,6 +109,16 @@ function toggleTheme() {
     } else {
         body.classList.replace("light", "dark");
         localStorage.setItem("theme", "dark");
+    }
+}
+function updateClock() {
+    const now = new Date();
+    const el = document.getElementById('clock');
+    if (el) {
+        el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
     }
 }
 </script>
