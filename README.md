@@ -48,7 +48,8 @@ It has been tested on:
 ## 💻 Tested Devices & OS
 The web interface has been tested on:  
 - **Ubuntu (desktop/server)**  
-- **iOS (mobile/tablet)**  
+- **iOS (mobile/tablet)**
+- **MacOS**
 
 ## 🛠️ Installation Platform
 The backend server should be installed on a **Debian/Ubuntu machine** for best compatibility.  
