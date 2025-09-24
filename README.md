@@ -63,3 +63,12 @@ The backend server should be installed on a **Debian/Ubuntu machine** for best c
 ## 📺 Video Pop Out on Desktop
 ![Desktop Pop Out](docs/screenshots/video_breakout_desktop.png)
 
+---
+
+## 🤝 Contributing
+Contributions are welcome! Here’s how you can help:  
+1. **Report Issues**: Found a bug or want to suggest a feature? Open an [issue](../../issues).  
+2. **Submit Pull Requests**: Fork the repo, make changes, and submit a PR. Please ensure code is tested before submitting.  
+3. **Improve Documentation**: Help refine the installation guide, add screenshots, or improve explanations in the README.  
+
+All contributions will be reviewed by the project maintainer before merging.  
