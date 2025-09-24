@@ -37,6 +37,10 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Make guide responsive (mobile/tablet view).  
 - [ ] Add dark/light theme auto-detect from browser/system.
 
+### 6. Cross-platform
+- [ ] Create installable container.  
+- [ ] Create MacOS install/executable.
+- [ ] Create Microsoft Windows install/executable.
 ---
 
 ## ⚙️ Technical Improvements
