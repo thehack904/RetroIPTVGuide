@@ -6,6 +6,7 @@
 - Included all application files (Flask app, templates, static assets, configs, etc.) in a consistent scaffold.
 - Initial **systemd service file** to manage the IPTV Flask server.
 - `install.sh` script now creates a dedicated `iptv` system user and installs into `/home/iptv/iptv-server`.
+- Updated install.sh to auto-install python3-venv if missing, ensuring clean setup on Debian/Ubuntu systems.
 
 ### Changed
 - Project rebranded from *Golden Trunk* (internal name) to **RetroIPTVGuide** (public GitHub name).
