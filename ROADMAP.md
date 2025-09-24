@@ -40,6 +40,7 @@ These are **not yet implemented**, but provide a development path for future rel
 ---
 
 ## ⚙️ Technical Improvements
+- [ ] Add uninstall.sh 
 - [ ] Refactor tuner handling to rely only on DB (remove in-memory fallback).  
 - [ ] Add migrations for DB changes (via Alembic or custom script).  
 - [ ] Containerize app (Dockerfile + Compose for deployment).  
