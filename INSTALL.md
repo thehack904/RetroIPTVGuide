@@ -10,6 +10,7 @@ Clone the repository and run the installer:
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git
 cd RetroIPTVGuide
+sudo chmod +x install.sh 
 sudo ./install.sh
 ```
 
