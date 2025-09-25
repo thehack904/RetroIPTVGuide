@@ -12,7 +12,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
   - Option A: Special-case `.m3u8` handling in parser.  
   - Option B: Add explicit `hls` column to `tuners.db`.  
-- [ ] Validate tuner URLs (ping/check format before saving).  
+- [x] Validate tuner URLs (ping/check format before saving).  
 - [ ] Optional auto-refresh of tuner lineup on a schedule.
 
 ### 2. Logging & Monitoring

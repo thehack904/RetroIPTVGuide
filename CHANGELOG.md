@@ -17,6 +17,10 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## [v2.0.0] – 2025-09-24
 ### Added
+- Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
+  - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.
+  - Results shown to the user via flash() messages.
+- change_tuner.html updated to display flash messages under the header for immediate user feedback.
 - Activity logging system (`activity.log`) with:
   - Successful logins, failed logins, and logouts.  
   - Password changes, user creation, and user deletion.  
