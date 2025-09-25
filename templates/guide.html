@@ -41,10 +41,10 @@
         .time-header { display:flex; height:34px; align-items:center; }
         .time-cell { flex:0 0 {{ 30*SCALE }}px; width:{{ 30*SCALE }}px; text-align:center; border-right:1px solid; font-weight:600; }
         .chan-name { 
-            padding:10px; height:60px; display:flex; align-items:center; gap:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-            border-bottom:1px solid; cursor:pointer; position: relative; z-index: 10; pointer-events: auto; user-select: none;
+	    padding: 10px; height: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center;
+	    gap: 6px; border-bottom: 1px solid;  cursor: pointer; position: relative;  z-index: 10; pointer-events: auto; user-select: none;
         }
-        .chan-name img { width:36px; height:36px; object-fit:contain; }
+        .chan-name img { width:36px; height:36px; object-fit:contain; margin-bottom: 4px; }
         .grid-row  { position:relative; height:60px; border-bottom:1px solid; }
         .grid-content { position:relative; width: {{ total_width }}px; min-height:100%; }
         .program { position:absolute; top:6px; height:48px; border:1px solid; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
