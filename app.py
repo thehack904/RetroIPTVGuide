@@ -9,6 +9,9 @@ import os
 import datetime
 import requests
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse   # added
+import socket                       # added
+import ipaddress                    # added
 from datetime import datetime, timezone, timedelta
 
 # ------------------- Config -------------------
@@ -30,6 +33,37 @@ def log_event(user, action):
     os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
     with open(LOG_PATH, "a") as f:
         f.write(f"{user} | {action} | {ts}\n")
+
+# ------------------- URL Validation -------------------
+def validate_tuner_url(url, label="Tuner"):
+    """Warn if tuner URL uses DNS that can't be resolved or invalid IP ranges."""
+    try:
+        host = urlparse(url).hostname
+        if not host:
+            flash(f"⚠️ {label} URL seems invalid: {url}", "warning")
+            return
+
+        # If it's an IP, validate private vs public
+        try:
+            ip_obj = ipaddress.ip_address(host)
+            if ip_obj.is_private:
+                flash(f"ℹ️ {label} is using a private IP ({host})", "info")
+            else:
+                flash(f"ℹ️ {label} is using a public IP ({host}). Ensure it’s reachable.", "info")
+        except ValueError:
+            # Not an IP → must be a hostname
+            try:
+                resolved_ip = socket.gethostbyname(host)
+                ip_obj = ipaddress.ip_address(resolved_ip)
+                if ip_obj.is_private:
+                    flash(f"ℹ️ {label} hostname '{host}' resolved to local IP {resolved_ip}.", "info")
+                else:
+                    flash(f"ℹ️ {label} hostname '{host}' resolved to public IP {resolved_ip}.", "info")
+            except socket.gaierror:
+                flash(f"⚠️ {label} hostname '{host}' could not be resolved. Consider using IP instead.", "warning")
+
+    except Exception as e:
+        flash(f"⚠️ Validation error for {label}: {str(e)}", "warning")
 
 # ------------------- User Model -------------------
 class User(UserMixin):
@@ -325,6 +359,13 @@ def change_tuner():
             tuner = request.form["tuner"]
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
+
+            # ✅ Validation before saving
+            if xml_url:
+              validate_tuner_url(xml_url, label=f"{tuner} XML")
+            if m3u_url:
+              validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+
             update_tuner_urls(tuner, xml_url, m3u_url)
             log_event(current_user.username, f"Updated URLs for tuner {tuner}")
             flash(f"Updated tuner {tuner} URLs")
