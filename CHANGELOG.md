@@ -14,6 +14,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: log filtering and pagination.  
 
 ---
+## v2.3.0 - 2025-09-25
+
+### Added
+- **Tuner Management via UI**:
+  - Added ability to add new tuners (name, XML URL, M3U URL) from `change_tuner.html`.
+  - Added ability to rename tuners directly from the UI.
+  - Added ability to delete tuners from the UI (with safety check preventing deletion of the active tuner).
+- Extended `/change_tuner` route to support new tuner actions (`add_tuner`, `rename_tuner`, `delete_tuner`).
+- Created `add_tuner()` helper to insert tuners into the database.
+
+### Fixed
+- Corrected tuner variable scoping in `/change_tuner` route to avoid `UnboundLocalError`.
+- Fixed alignment of tuner forms with consistent dropdowns and validation.
+- Ensured flash messages and logging work consistently across all tuner operations.
+
 
 ## [v2.0.0] – 2025-09-24
 ### Added

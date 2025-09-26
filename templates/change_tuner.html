@@ -96,6 +96,50 @@
     </form>
 </div>
 
+
+<div class="box">
+    <h2>Manage Tuners</h2>
+
+    <!-- Add new tuner -->
+    <form method="POST" style="margin-bottom:20px;">
+        <input type="hidden" name="action" value="add_tuner">
+        <input type="text" name="tuner_name" placeholder="New Tuner Name" required>
+        <input type="text" name="xml_url" placeholder="XML URL (.xml)" required>
+        <input type="text" name="m3u_url" placeholder="M3U URL (.m3u)" required>
+        <button type="submit" class="primary">Add Tuner</button>
+    </form>
+
+    <!-- Remove existing tuner -->
+    <form method="POST">
+        <input type="hidden" name="action" value="delete_tuner">   <!-- FIXED -->
+        <label for="tuner_remove">Delete Tuner:</label>
+        <select name="tuner" id="tuner_remove" required>
+            {% for tuner in tuners %}
+            {% if tuner != current_tuner %}
+            <option value="{{ tuner }}">{{ tuner }}</option>
+            {% endif %}
+            {% endfor %}
+        </select>
+        <button type="submit" class="primary">Delete Tuner</button>
+    </form>
+
+</div>
+
+<div class="box">
+    <h2>Rename Tuner</h2>
+    <form method="POST">
+        <input type="hidden" name="action" value="rename_tuner">
+        <label for="tuner_rename">Select Tuner:</label>
+        <select name="tuner" id="tuner_rename" required>
+            {% for tuner in tuners %}
+            <option value="{{ tuner }}">{{ tuner }}</option>
+            {% endfor %}
+        </select>
+        <input type="text" name="new_name" placeholder="New Tuner Name" required>
+        <button type="submit" class="primary">Rename</button>
+    </form>
+</div>
+
 <script>
 const tunerData = {{ TUNERS|tojson }};
 

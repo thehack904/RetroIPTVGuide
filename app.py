@@ -1,4 +1,4 @@
-APP_VERSION = "v2.0.0"
+APP_VERSION = "v2.3.0"
 
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -160,6 +160,30 @@ def update_tuner_urls(name, xml_url, m3u_url):
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
         c.execute("UPDATE tuners SET xml=?, m3u=? WHERE name=?", (xml_url, m3u_url, name))
+        conn.commit()
+
+def add_tuner(name, xml_url, m3u_url):
+    """Insert a new tuner into DB."""
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
+            (name, xml_url, m3u_url)
+        )
+        conn.commit()
+
+def delete_tuner(name):
+    """Delete a tuner from DB (except current one)."""
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("DELETE FROM tuners WHERE name=?", (name,))
+        conn.commit()
+
+def rename_tuner(old_name, new_name):
+    """Rename a tuner in DB."""
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("UPDATE tuners SET name=? WHERE name=?", (new_name, old_name))
         conn.commit()
 
 # ------------------- Global cache -------------------
@@ -360,24 +384,59 @@ def change_tuner():
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
 
-            # ✅ Validation before saving
-            if xml_url:
-              validate_tuner_url(xml_url, label=f"{tuner} XML")
-            if m3u_url:
-              validate_tuner_url(m3u_url, label=f"{tuner} M3U")
-
+            # update DB
             update_tuner_urls(tuner, xml_url, m3u_url)
             log_event(current_user.username, f"Updated URLs for tuner {tuner}")
-            flash(f"Updated tuner {tuner} URLs")
+            flash(f"Updated URLs for tuner {tuner}")
+
+            # ✅ Validate inputs
+            if xml_url:
+                validate_tuner_url(xml_url, label=f"{tuner} XML")
+            if m3u_url:
+                validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+
+        elif action == "delete_tuner":
+            tuner = request.form["tuner"]
+            current_tuner = get_current_tuner()
+            if tuner == current_tuner:
+                flash("You cannot delete the currently active tuner.", "warning")
+            else:
+                delete_tuner(tuner)
+                log_event(current_user.username, f"Deleted tuner {tuner}")
+                flash(f"Tuner {tuner} deleted.")
+
+        elif action == "rename_tuner":
+            old_name = request.form["tuner"]   # matches HTML <select name="tuner">
+            new_name = request.form["new_name"].strip()
+            if not new_name:
+                flash("New name cannot be empty.", "warning")
+            else:
+                rename_tuner(old_name, new_name)
+                log_event(current_user.username, f"Renamed tuner {old_name} → {new_name}")
+                flash(f"Tuner {old_name} renamed to {new_name}")
+
+        elif action == "add_tuner":
+            name = request.form["tuner_name"].strip()
+            xml_url = request.form["xml_url"].strip()
+            m3u_url = request.form["m3u_url"].strip()
+
+            if not name:
+                flash("Tuner name cannot be empty.", "warning")
+            elif name in get_tuners():
+                flash(f"Tuner {name} already exists.", "warning")
+            else:
+                add_tuner(name, xml_url, m3u_url)
+                log_event(current_user.username, f"Added tuner {name}")
+                flash(f"Tuner {name} added successfully.")
 
     tuners = get_tuners()
     current_tuner = get_current_tuner()
     return render_template(
-       "change_tuner.html",
-       tuners=tuners.keys(),
-       current_tuner=current_tuner,
-       current_urls=tuners[current_tuner],
-       TUNERS=tuners
+        "change_tuner.html",
+        tuners=tuners.keys(),
+        current_tuner=current_tuner,
+        current_urls=tuners[current_tuner],
+        TUNERS=tuners
     )
 
 @app.route('/guide')
@@ -439,14 +498,35 @@ HOURS_SPAN = 6
 SLOT_MINUTES = 30
 
 # ------------------- Main -------------------
+def ensure_default_tuner():
+    conn = sqlite3.connect('tuners.db')
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM tuners")
+    count = c.fetchone()[0]
+    if count == 0:
+        # Insert a safe default
+        c.execute(
+            "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
+            ("Tuner 1", "http://example.com/guide.xml", "http://example.com/playlist.m3u")
+        )
+        conn.commit()
+    conn.close()
+
 if __name__ == '__main__':
     init_db()
     add_user('admin', 'strongpassword123')
     init_tuners_db()
+
+    # make sure there’s at least one tuner in the DB
+    ensure_default_tuner()
+
     # preload guide cache
     tuners = get_tuners()
     current_tuner = get_current_tuner()
+    if not current_tuner and tuners:  # fallback if no active tuner set
+        current_tuner = list(tuners.keys())[0]
     cached_channels = parse_m3u(tuners[current_tuner]["m3u"])
     cached_epg = parse_epg(tuners[current_tuner]["xml"])
+
     app.run(host='0.0.0.0', port=5000, debug=False)
 

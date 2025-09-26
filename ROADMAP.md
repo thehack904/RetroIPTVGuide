@@ -8,7 +8,8 @@ These are **not yet implemented**, but provide a development path for future rel
 ## 🔮 Feature Upgrades
 
 ### 1. Tuner Management
-- [ ] Add ability to **add/remove tuners** from the UI (instead of manually editing DB).  
+- [x] Add ability to **add/remove tuners** from the UI (instead of manually editing DB).
+- [x] Add ability to rename tuners via the UI.  
 - [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
   - Option A: Special-case `.m3u8` handling in parser.  
   - Option B: Add explicit `hls` column to `tuners.db`.  
@@ -45,6 +46,12 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 7. New Features
 - [ ] Add the ability to have an auto play video stream upon login from a specific channel (Ersatz currently) to act similar to the 90/2000's tv guide that played "Commercials" until a channel was selected.
 - [ ] Option to be a known or unlisted channel when implemented on ErsatzTV for auto play video stream
+
+### 8. Planned Enhancements:
+- [ ] Add **safety checks** in `add_tuner()`:
+  - Prevent inserting duplicate tuner names.
+  - Validate XML/M3U URLs are not empty before committing to DB.
+
 ---
 
 ## ⚙️ Technical Improvements
