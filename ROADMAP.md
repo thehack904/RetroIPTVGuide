@@ -37,6 +37,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Unify CSS across all templates (minimize inline styles).  
 - [ ] Make guide responsive (mobile/tablet view).  
 - [ ] Add dark/light theme auto-detect from browser/system.
+- [ ] Frozen header Timeline to prevent scrolling with channel listing
 
 ### 6. Cross-platform
 - [ ] Create installable container.  
