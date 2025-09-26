@@ -11,15 +11,15 @@
 
 ## Installation
 
-Clone the repository and run the installer (chose one, no need to do both below)
+Clone the repository and run the installer (choose one, no need to do both below)
 
-One-line:
+### Option 1: One-liner (quick setup)
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && sudo chmod +x install.sh && sudo ./install.sh
 ```
 or
 
-Multi-line (step-by-step commands):
+### Option 2: Multi-line (step-by-step)
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git
 cd RetroIPTVGuide
@@ -50,17 +50,41 @@ Default login: **admin / strongpassword123**
 
 ## Updating
 
-To update from the repository:
+### Linux/WSL
 
+#### Option 1: One-liner (quick update)
 ```bash
-git pull origin main
-sudo systemctl restart iptv-server.service   # Linux/WSL only
+sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl restart iptv-server.service
+```
+or
+
+#### Option 2: Step-by-step
+```bash
+sudo -u iptv bash -H
+cd /home/iptv/iptv-server
+git fetch --all
+git reset --hard origin/main
+exit
+sudo systemctl restart iptv-server.service
 ```
 
-On Windows (Git Bash), just pull and restart with:
+---
 
+### Windows (Git Bash)
+
+Run these from the folder where you cloned the repo:
+
+#### Option 1: One-liner
 ```bash
-git pull origin main
+git fetch --all && git reset --hard origin/main && ./venv/Scripts/python app.py
+```
+
+or
+
+#### Option 2: Step-by-step
+```bash
+git fetch --all
+git reset --hard origin/main
 ./venv/Scripts/python app.py
 ```
 
