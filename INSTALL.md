@@ -11,12 +11,14 @@
 
 ## Installation
 
-Clone the repository and run the installer
+Clone the repository and run the installer (chose one, no need to do both below)
 
 One-line:
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && sudo chmod +x install.sh && sudo ./install.sh
 ```
+or
+
 Multi-line (step-by-step commands):
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git
