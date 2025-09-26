@@ -5,7 +5,7 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 
 ⚠️ **Note:** This is an initial BETA release. It is not recommended for direct Internet/public-facing deployments.
 
-- [Installation Guide](INSTALL.md)
+- [Installation / Uninstall Guide](INSTALL.md)
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 - [License](LICENSE)
