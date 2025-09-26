@@ -46,7 +46,7 @@ These are **not yet implemented**, but provide a development path for future rel
 
 ### 7. New Features
 - [ ] Add the ability to have an auto play video stream upon login from a specific channel (Ersatz currently) to act similar to the 90/2000's tv guide that played "Commercials" until a channel was selected.
-- [ ] Option to be a known or unlisted channel when implemented on ErsatzTV for auto play video stream
+- [ ] Option to play a known or unlisted channel when implemented on ErsatzTV for auto play video stream
 
 ### 8. Planned Enhancements:
 - [ ] Add **safety checks** in `add_tuner()`:
