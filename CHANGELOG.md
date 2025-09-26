@@ -13,9 +13,26 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: log filtering and pagination.  
 
 ---
-## v2.3.0 - 2025-09-25
+## v2.3.0
 
-### Added
+### 2025-09-26
+#### Added
+- **Installer Enhancements**:
+  - Added logging with timestamped log files (`install_YYYY-MM-DD_HH-MM-SS.log`).
+  - Added environment detection (`Linux`, `WSL`, `Windows Git Bash`) with tailored install steps.
+  - Unified `install.sh` into one cross-platform script.
+- **Uninstaller**:
+  - Added `uninstall.sh` with environment detection and privilege checks.
+  - Linux/WSL: removes service, logs, `iptv` user, and venv.
+  - Windows (Git Bash): stops Flask if running, deletes venv, reminds user to manually delete project folder.
+
+#### Notes
+- **Windows validation pending**: Installer and uninstaller are implemented but require verification on Windows; tracked in ROADMAP “Priority Suggestions”.
+
+---
+
+### 2025-09-25
+#### Added
 - **Tuner Management via UI**:
   - Added ability to add new tuners (name, XML URL, M3U URL) from `change_tuner.html`.
   - Added ability to rename tuners directly from the UI.
@@ -23,10 +40,11 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Extended `/change_tuner` route to support new tuner actions (`add_tuner`, `rename_tuner`, `delete_tuner`).
 - Created `add_tuner()` helper to insert tuners into the database.
 
-### Fixed
+#### Fixed
 - Corrected tuner variable scoping in `/change_tuner` route to avoid `UnboundLocalError`.
 - Fixed alignment of tuner forms with consistent dropdowns and validation.
 - Ensured flash messages and logging work consistently across all tuner operations.
+
 
 
 ## [v2.0.0] – 2025-09-24

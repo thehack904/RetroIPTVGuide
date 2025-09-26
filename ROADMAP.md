@@ -8,12 +8,12 @@ These are **not yet implemented**, but provide a development path for future rel
 ## 🔮 Feature Upgrades
 
 ### 1. Tuner Management
-- [x] Add ability to **add/remove tuners** from the UI (instead of manually editing DB).
-- [x] Add ability to rename tuners via the UI.  
+- [x] Add ability to **add/remove tuners** from the UI (v2.3.0).
+- [x] Add ability to rename tuners via the UI (v2.3.0).  
 - [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
   - Option A: Special-case `.m3u8` handling in parser.  
   - Option B: Add explicit `hls` column to `tuners.db`.  
-- [x] Validate tuner URLs (ping/check format before saving).  
+- [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).  
 - [ ] Optional auto-refresh of tuner lineup on a schedule.
 
 ### 2. Logging & Monitoring
@@ -36,19 +36,20 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 5. UI/UX Improvements
 - [ ] Unify CSS across all templates (minimize inline styles).  
 - [ ] Make guide responsive (mobile/tablet view).  
-- [ ] Add dark/light theme auto-detect from browser/system.
+- [ ] Add dark/light theme auto-detect from browser/system.  
 - [ ] Frozen header Timeline to prevent scrolling with channel listing
 
 ### 6. Cross-platform
 - [ ] Create installable container.  
 - [ ] Create MacOS install/executable.
-- [ ] Create Microsoft Windows install/executable.
+- [x] Create Microsoft Windows install/executable (basic support via Git Bash + PowerShell bootstrap) (v2.3.0)  
+  - [ ] Validate/test installer fully on Windows environments
 
 ### 7. New Features
-- [ ] Add the ability to have an auto play video stream upon login from a specific channel (Ersatz currently) to act similar to the 90/2000's tv guide that played "Commercials" until a channel was selected.
+- [ ] Add the ability to have an auto play video stream upon login from a specific channel (Ersatz currently) to act similar to the 90/2000's tv guide that played "Commercials" until a channel was selected.  
 - [ ] Option to play a known or unlisted channel when implemented on ErsatzTV for auto play video stream
 
-### 8. Planned Enhancements:
+### 8. Planned Enhancements
 - [ ] Add **safety checks** in `add_tuner()`:
   - Prevent inserting duplicate tuner names.
   - Validate XML/M3U URLs are not empty before committing to DB.
@@ -56,8 +57,9 @@ These are **not yet implemented**, but provide a development path for future rel
 ---
 
 ## ⚙️ Technical Improvements
-- [ ] Add uninstall.sh
-- [ ] Add https support
+- [x] Add uninstall.sh (v2.3.0)  
+  - [ ] Validate/test uninstall script fully on Windows environments
+- [ ] Add https support  
 - [ ] Refactor tuner handling to rely only on DB (remove in-memory fallback).  
 - [ ] Add migrations for DB changes (via Alembic or custom script).  
 - [ ] Containerize app (Dockerfile + Compose for deployment).  
@@ -67,6 +69,22 @@ These are **not yet implemented**, but provide a development path for future rel
 ---
 
 ## 📅 Priority Suggestions
-- Short term: unify UI headers across templates (in progress).  
-- Medium term: tuner add/remove UI + log filtering.  
+- Short term: (none — unified UI headers already completed in v2.0.0).  
+- Medium term: log filtering (still pending).  
+- Medium term: Validate installer/uninstaller on Windows (pending).  
 - Long term: .m3u8 support, DB logs, recording functionality.  
+
+---
+
+## ✅ Completed
+- [x] Tuner add/remove via UI (v2.3.0).  
+- [x] Tuner rename via UI (v2.3.0).  
+- [x] Tuner delete via UI (v2.3.0).  
+- [x] Tuner URL validation (v2.0.0).  
+- [x] Unified UI headers across templates (v2.0.0).  
+- [x] Installer logging (timestamped log files) (v2.3.0).  
+- [x] Environment detection in `install.sh` (Linux, WSL, Git Bash) (v2.3.0).  
+- [x] Unified cross-platform `install.sh` (v2.3.0).  
+- [x] Cross-platform `uninstall.sh` with sudo/admin checks and safe cleanup (v2.3.0).  
+- [x] Basic Windows installer support (Git Bash + PowerShell bootstrap) (v2.3.0).  
+
