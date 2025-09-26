@@ -10,7 +10,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 - Planned: add `.m3u8` tuner support.  
 - Planned: move logs to SQLite DB.  
-- Planned: add tuner add/remove via UI.  
 - Planned: log filtering and pagination.  
 
 ---
