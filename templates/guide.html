@@ -104,6 +104,7 @@
                 {% if current_user is defined and current_user.username == 'admin' %}
                 <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
                 <a href="{{ url_for('view_logs') }}">Logs</a>
+                <li><a href="{{ url_for('about') }}">About</a></li>
                 {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
                 <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>

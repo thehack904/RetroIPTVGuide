@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+    <title>About RetroIPTVGuide</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:0; }
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
+            display:flex; align-items:center; justify-content:center; padding:0 12px;
+            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
+        }
+        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+        .dropdown { position:relative; }
+        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+        .dropdown-content {
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
+        }
+        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+        .dropdown-content a:hover { background:#0af; color:#fff; }
+        .dropdown:hover .dropdown-content { display:block; }
+
+        h2 { text-align:center; margin:20px 0; }
+
+        .about-box {
+            width:70%;
+            max-width:700px;
+            margin:0 auto 40px auto;
+            padding:20px;
+            border-radius:6px;
+            box-shadow:0 4px 10px rgba(0,0,0,0.2);
+            background:rgba(255,255,255,0.05);
+        }
+
+        .about-box ul { list-style:none; padding:0; font-size:15px; }
+        .about-box li { padding:6px 0; border-bottom:1px solid #555; }
+        .about-box li:last-child { border-bottom:none; }
+
+        /* Dark / Light */
+        body.dark { background:#111; color:#eee; }
+        body.light { background:#fff; color:#000; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+        <a href="{{ url_for('guide') }}">HOME</a>
+
+        {% if current_user is defined and current_user.username == 'admin' %}
+        <div class="dropdown">
+            <button class="dropbtn">USER ADMIN ▾</button>
+            <div class="dropdown-content">
+                <a href="{{ url_for('add_user_route') }}">New User</a>
+                <a href="{{ url_for('delete_user') }}">Delete User</a>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="dropdown">
+            <button class="dropbtn">SETTINGS ▾</button>
+            <div class="dropdown-content">
+                {% if current_user is defined and current_user.username == 'admin' %}
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
+                <a href="{{ url_for('about') }}">About</a>
+                {% endif %}
+                <a href="{{ url_for('change_password') }}">Change Password</a>
+                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+            </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}">LOGOUT</a>
+    </div>
+
+    <!-- Right: live clock -->
+    <div id="clock" class="clock">--:-- --</div>
+</div>
+
+<h2>About RetroIPTVGuide</h2>
+<div class="about-box">
+    <ul>
+        <li><strong>Version:</strong> {{ info.version }}</li>
+        <li><strong>Release date:</strong> {{ info.release_date }}</li>
+        <li><strong>Python version:</strong> {{ info.python_version }}</li>
+        <li><strong>OS:</strong> {{ info.os_info }}</li>
+        <li><strong>Install path:</strong> {{ info.install_path }}</li>
+        <li><strong>Database:</strong> {{ info.db_path }}</li>
+        <li><strong>Logs:</strong> {{ info.log_path }}</li>
+        <li><strong>Server uptime:</strong> {{ info.uptime }}</li>
+    </ul>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const saved = localStorage.getItem("theme") || "dark";
+    document.body.classList.add(saved);
+
+    updateClock();
+    setInterval(updateClock, 1000);
+});
+
+function toggleTheme() {
+    const body = document.body;
+    if (body.classList.contains("dark")) {
+        body.classList.replace("dark", "light");
+        localStorage.setItem("theme", "light");
+    } else {
+        body.classList.replace("light", "dark");
+        localStorage.setItem("theme", "dark");
+    }
+}
+
+function updateClock() {
+    const now = new Date();
+    const el = document.getElementById('clock');
+    if (el) {
+        el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+        });
+    }
+}
+</script>
+</body>
+</html>
+

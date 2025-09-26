@@ -20,7 +20,8 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Move logs from flat file (`activity.log`) into **SQLite DB** for better querying.  
 - [ ] Add filtering and pagination in logs view (by user, action, or date).  
 - [ ] Add system health checks (e.g., tuner reachability, XMLTV freshness) to logs.  
-- [ ] **Admin log management**: add button/route to clear logs (with confirmation).  
+- [x] **Admin log management**: add button/route to clear logs (with confirmation) (v2.3.1).
+- [x] Display log file size on logs page (v2.3.1)
 
 ### 3. Guide & Playback
 - [ ] Add **search/filter box** to guide for channels/programs.  
@@ -38,6 +39,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Make guide responsive (mobile/tablet view).  
 - [ ] Add dark/light theme auto-detect from browser/system.  
 - [ ] Frozen header Timeline to prevent scrolling with channel listing
+- [x] About page under Settings menu (v2.3.1)
 
 ### 6. Cross-platform
 - [ ] Create installable container.  
@@ -64,7 +66,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Add migrations for DB changes (via Alembic or custom script).  
 - [ ] Containerize app (Dockerfile + Compose for deployment).  
 - [ ] Add test suite for tuner parsing, authentication, and logging.  
-- [ ] **Automated version bump tool** (`bump_version.py`) that updates `APP_VERSION` in `app.py` and creates a new section in `CHANGELOG.md`.  
+- [x] **Automated version bump tool** (`bump_version.py`) that updates `APP_VERSION` in `app.py` and creates a new section in `CHANGELOG.md` (v2.3.1).  
 
 ---
 

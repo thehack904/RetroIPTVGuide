@@ -1,10 +1,13 @@
-APP_VERSION = "v2.3.0"
+APP_VERSION = "v2.3.1"
+APP_RELEASE_DATE = "2025-09-26"
 
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
 import re
+import sys
+import platform
 import os
 import datetime
 import requests
@@ -13,6 +16,8 @@ from urllib.parse import urlparse   # added
 import socket                       # added
 import ipaddress                    # added
 from datetime import datetime, timezone, timedelta
+
+APP_START_TIME = datetime.now()
 
 # ------------------- Config -------------------
 app = Flask(__name__)
@@ -363,6 +368,36 @@ def delete_user():
         users = [row[0] for row in c.fetchall()]
     return render_template("delete_user.html", current_tuner=get_current_tuner(), users=users)
 
+@app.route("/about")
+@login_required  # optional
+def about():
+    python_version = sys.version.split()[0]
+    os_info = platform.platform()
+    install_path = os.getcwd()
+    db_path = os.path.join(install_path, "app.db")
+    log_path = "/var/log/iptv" if os.name != "nt" else os.path.join(install_path, "logs")
+
+    # calculate uptime
+    uptime_delta = datetime.now() - APP_START_TIME
+    days, seconds = uptime_delta.days, uptime_delta.seconds
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    seconds = seconds % 60
+    uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
+
+    info = {
+        "version": APP_VERSION,
+        "release_date": APP_RELEASE_DATE,
+        "python_version": python_version,
+        "os_info": os_info,
+        "install_path": install_path,
+        "db_path": db_path,
+        "log_path": log_path,
+        "uptime": uptime_str
+    }
+    return render_template("about.html", info=info)
+
+
 @app.route('/change_tuner', methods=['GET', 'POST'])
 @login_required
 def change_tuner():
@@ -481,7 +516,9 @@ def view_logs():
 
     log_event(current_user.username, "Accessed logs page")
     entries = []
+    log_size = 0
     if os.path.exists(LOG_PATH):
+        log_size = os.path.getsize(LOG_PATH)
         with open(LOG_PATH, "r") as f:
             for line in f:
                 parts = line.strip().split(" | ")
@@ -490,7 +527,30 @@ def view_logs():
                     entries.append((user, action, timestamp))
                 else:
                     entries.append(("system", line.strip(), ""))
-    return render_template("logs.html", entries=entries, current_tuner=get_current_tuner())
+
+    return render_template(
+        "logs.html",
+        entries=entries,
+        current_tuner=get_current_tuner(),
+        log_size=log_size
+    )
+
+@app.route("/clear_logs")
+@login_required
+def clear_logs():
+    if current_user.username != "admin":
+        flash("Unauthorized: only admin can clear logs.", "error")
+        return redirect(url_for("view_logs"))
+
+    try:
+        # Truncate the log file instead of deleting it
+        with open(LOG_PATH, "w"):
+            pass
+        flash("✅ Logs cleared successfully.", "success")
+    except Exception as e:
+        flash(f"⚠️ Error clearing logs: {e}", "error")
+
+    return redirect(url_for("view_logs"))
 
 # ------------------- Constants -------------------
 SCALE = 5

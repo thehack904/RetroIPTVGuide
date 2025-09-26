@@ -1,5 +1,7 @@
 # RetroIPTVGuide
 
+![Version](https://img.shields.io/badge/version-v2.3.1-blue)
+
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but should support any `.m3u` and `.xml` IPTV source.  
 
@@ -10,7 +12,7 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - [Roadmap](ROADMAP.md)
 - [License](LICENSE)
 
-## ✨ Features (v2.0.0)
+## ✨ Features (v2.3.1)
 - 🔑 **User Authentication**
   - Login/logout system with hashed passwords.
   - Admin and regular user accounts.
@@ -28,14 +30,21 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - 📑 **Logging**
   - Activity log (`activity.log`) records authentication events, tuner changes, playback, and admin actions.
   - Admin-only **Logs page** with real-time log viewing.
+  - **Log file size display with color coding (v2.3.1)**.
+  - **Admin-only “Clear Logs” button to truncate logs (v2.3.1)**.
 - 🎨 **UI Enhancements**
   - Unified header across all pages (Guide, Logs, Add User, Delete User, Change Password, Change Tuner).
   - Active tuner display + live clock in header.
   - Dark/Light theme toggle (stored in browser localStorage).
+  - **New About Page under Settings menu (v2.3.1)** — shows version, Python, OS, uptime, paths.
 - ⚙️ **System**
   - Automatic initialization of `users.db` and `tuners.db` on first run.
   - SQLite databases use WAL mode for better concurrency.
   - Preloads tuner/channel/guide data from DB on startup.
+  - **Cross-platform installer (Linux/Windows) (v2.3.0)**.
+  - **Uninstaller script (v2.3.0)**.
+  - **Automated version bump tool (`bump_version.py`) (v2.3.1)**.
+
 
 ## 🌐 Browser Compatibility
 This project is designed to work with **all major browsers**.  

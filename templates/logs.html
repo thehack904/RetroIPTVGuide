@@ -79,7 +79,42 @@
 </div>
 
 <h2>User Activity Logs</h2>
+
+{% if log_size %}
+  {% set size_kb = log_size / 1024 %}
+  {% set size_mb = size_kb / 1024 %}
+  <p style="text-align:center; margin-bottom:10px;">
+    <strong>Log size:</strong>
+    <span style="color:
+      {% if size_mb > 100 %}
+        red
+      {% elif size_mb > 1 %}
+        orange
+      {% else %}
+        green
+      {% endif %}
+    ; font-weight:bold;">
+      {% if size_mb >= 1 %}
+        {{ size_mb | round(2) }} MB
+      {% elif size_kb >= 1 %}
+        {{ size_kb | round(2) }} KB
+      {% else %}
+        {{ log_size }} bytes
+      {% endif %}
+    </span>
+  </p>
+{% endif %}
+
+{% if current_user.username == 'admin' %}
+  <form action="{{ url_for('clear_logs') }}" method="get" style="text-align:center; margin:10px 0;">
+    <button type="submit" style="padding:6px 12px; background:#c00; color:#fff; border:none; border-radius:4px; cursor:pointer;">
+      Clear Logs
+    </button>
+  </form>
+{% endif %}
+
 <table id="logsTable">
+
     <thead>
         <tr>
             <th data-col="0">User</th>

@@ -1,21 +1,39 @@
 # 📑 Changelog
 
-All notable changes to this project will be documented here.  
-Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).  
-This project follows [Semantic Versioning](https://semver.org/).  
+All notable changes to this project will be documented here. 
+Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
+This project follows [Semantic Versioning](https://semver.org/). 
 
 ---
 
 ## [Unreleased]
 
-- Planned: add `.m3u8` tuner support.  
-- Planned: move logs to SQLite DB.  
-- Planned: log filtering and pagination.  
+- Planned: add `.m3u8` tuner support. 
+- Planned: move logs to SQLite DB. 
+- Planned: log filtering and pagination. 
 
 ---
-## v2.3.0
 
-### 2025-09-26
+## v2.3.1 - 2025-09-26
+
+### Added
+- **About Page**:
+  - New `/about` route under Settings.
+  - Shows dynamic system info: version, release date, Python version, OS, install path, database path, logs path, uptime.
+- **Admin Log Management**:
+  - Log file size shown on Logs page (human-readable + color-coded).
+  - Admin-only “Clear Logs” button added to truncate activity log.
+- **Automated Version Bump Tool**:
+  - Added `bump_version.py` to sync `APP_VERSION` in app.py with CHANGELOG.md.
+  - Inserts new version section under `[Unreleased]`.
+  - Optional `--commit` flag to auto-commit changes.
+  
+### Notes
+- These features are improvements for admin usability.
+
+---
+
+## v2.3.0 - 2025-09-26
 #### Added
 - **Installer Enhancements**:
   - Added logging with timestamped log files (`install_YYYY-MM-DD_HH-MM-SS.log`).
@@ -25,6 +43,10 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Added `uninstall.sh` with environment detection and privilege checks.
   - Linux/WSL: removes service, logs, `iptv` user, and venv.
   - Windows (Git Bash): stops Flask if running, deletes venv, reminds user to manually delete project folder.
+- **About Page**:
+  - New `/about` route under Settings menu.
+  - Displays dynamic system info: version, release date, Python version, OS, install path, database path, log path, and uptime.
+  - Data is pulled from `app.py` constants and runtime environment, no manual edits required.
 
 #### Notes
 - **Windows validation pending**: Installer and uninstaller are implemented but require verification on Windows; tracked in ROADMAP “Priority Suggestions”.
