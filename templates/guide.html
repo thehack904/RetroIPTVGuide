@@ -22,6 +22,49 @@
         .dropdown-content a:hover { background:#0af; color:#fff; }
         .dropdown:hover .dropdown-content { display:block; }
 
+        /* Submenu (fly-out for Themes) */
+        .submenu {
+            position: relative;
+        }
+        .submenu > a {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .submenu-content {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 100%; /* fly out to the right */
+            background-color: #333;
+            min-width: 160px;
+            border-radius: 3px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        .submenu-content li a {
+            padding: 10px 14px;
+            display: block;
+            color: #eee;
+            text-decoration: none;
+        }
+        .submenu-content li a:hover {
+            background-color: #0af;
+            color: #fff;
+        }
+        .submenu:hover .submenu-content {
+            display: block;
+        }
+
+		/* Remove default list bullets and padding for all dropdowns & submenus */
+		.dropdown-content,
+		.submenu ul,
+		.submenu-content {
+		    list-style: none;
+		    margin: 0;
+		    padding: 0;
+		}
+
         /* Player row: Program Info (left) | Video (right) */
         .player { display:flex; gap:16px; padding:12px; }
         .summary { flex:1; }
@@ -79,6 +122,93 @@
         body.light .program { background:#ddd; border-color:#aaa; color:#000; }
         body.light .program.now { background:#cfe8cf; border-color:#090; }
         body.light .now-line { background:#090; }
+		
+		/* Retro 90s TV Guide theme */
+		body.retro-tvguide { background:#f2f2f2; color:#000; font-family:"Arial Black","Helvetica",sans-serif; }
+		body.retro-tvguide .header { background:#cc0000; color:#fff; }
+		body.retro-tvguide #video { background:#000; }
+		body.retro-tvguide .summary { color:#111; }
+		body.retro-tvguide .chan-col { background:#e6e6e6; border-color:#cc0000; }
+		body.retro-tvguide .grid-col { background:#f9f9f9; }
+		body.retro-tvguide .chan-header,
+		body.retro-tvguide .time-header-wrap { background:#cc0000; color:#fff; border-color:#990000; }
+		body.retro-tvguide .time-cell { color:#000; border-color:#bbb; }
+		body.retro-tvguide .chan-name { color:#000; border-color:#cc0000; font-weight:bold; }
+		body.retro-tvguide .program { background:#fff; border-color:#cc0000; color:#000; }
+		body.retro-tvguide .program.now { background:#cc0000; border-color:#990000; color:#fff; font-weight:bold; }
+		body.retro-tvguide .now-line { background:#ff0000; } /* bright red NOW line */
+		
+		/* Retro AOL / CompuServe Theme */
+		body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
+		body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
+		body.retro-aol #video { background:#000; }
+		body.retro-aol .summary { color:#e0e0e0; }
+		body.retro-aol .chan-col { background:#355f5f; border-color:#33cccc; }
+		body.retro-aol .grid-col { background:#3b6b6b; }
+		body.retro-aol .chan-header,
+		body.retro-aol .time-header-wrap { background:#004466; color:#ffcc00; border-color:#33cccc; }
+		body.retro-aol .time-cell { color:#ffcc00; border-color:#1a3d3d; }
+		body.retro-aol .chan-name { color:#ffffff; border-color:#33cccc; font-weight:bold; }
+		body.retro-aol .program { background:#406d6d; border-color:#33cccc; color:#ffffff; }
+		body.retro-aol .program.now { background:#33cccc; border-color:#004466; color:#000; font-weight:bold; }
+		body.retro-aol .now-line { background:#ffcc00; }
+		
+		/* Retro MSN TV / WebTV Theme */
+		body.retro-webtv { background:#dcdcdc; color:#001f3f; font-family:"Verdana","Arial",sans-serif; }
+		body.retro-webtv .header { background:#4b0082; color:#ffffff; border-bottom:2px solid #003399; }
+		body.retro-webtv #video { background:#000; }
+		body.retro-webtv .summary { color:#222; }
+		body.retro-webtv .chan-col { background:#e6e6e6; border-color:#4b0082; }
+		body.retro-webtv .grid-col { background:#f5f5f5; }
+		body.retro-webtv .chan-header,
+		body.retro-webtv .time-header-wrap { background:#4b0082; color:#fff; border-color:#003399; }
+		body.retro-webtv .time-cell { color:#001f3f; border-color:#999; }
+		body.retro-webtv .chan-name { color:#001f3f; border-color:#4b0082; font-weight:bold; }
+		body.retro-webtv .program { background:#ffffff; border-color:#4b0082; color:#001f3f; }
+		body.retro-webtv .program.now { background:#003399; border-color:#001f3f; color:#fff; font-weight:bold; }
+		body.retro-webtv .now-line { background:#00f; } /* bright blue NOW line */
+		
+		/* Retro TV Guide Channel (2000) Theme */
+		body.retro-tvguide2000 { background:#002b80; color:#ffffff; font-family:"Verdana","Arial Black",sans-serif; }
+		body.retro-tvguide2000 .header { background:#001a4d; color:#ffffff; border-bottom:2px solid #003399; }
+		body.retro-tvguide2000 #video { background:#000; }
+		body.retro-tvguide2000 .summary { color:#fff; }
+		body.retro-tvguide2000 .chan-col { background:#cc0000; border-color:#990000; color:#fff; font-weight:bold; }
+		body.retro-tvguide2000 .grid-col { background:#1a3faa; }
+		body.retro-tvguide2000 .chan-header,
+		body.retro-tvguide2000 .time-header-wrap { background:#001a4d; color:#ffffff; border-color:#0044cc; }
+		body.retro-tvguide2000 .time-cell { color:#ffffff; border-color:#0044cc; }
+		body.retro-tvguide2000 .chan-name { color:#ffffff; border-color:#003399; font-weight:bold; }
+		body.retro-tvguide2000 .program { background:#1a3faa; border:1px solid #ffffff; color:#ffffff; }
+		body.retro-tvguide2000 .program.now { background:#009933; border:1px solid #ffffff; color:#000; font-weight:bold; }
+		body.retro-tvguide2000 .now-line { background:#ffff00; } /* yellow line */
+		
+		/* Retro TV Guide Magazine Theme */
+		body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
+		body.retro-magazine .header { background:#ffffff; color:#000; border-bottom:2px solid #000; font-weight:bold; }
+		body.retro-magazine .header .links > a,
+		body.retro-magazine .header .links > .dropdown > .dropbtn,
+		body.retro-magazine .header .links > span,
+		body.retro-magazine .header .links > #clock { background:#ffffff !important; color:#000000 !important; }
+		body.retro-magazine .header .links > a:hover,
+		body.retro-magazine .header .links > .dropdown:hover > .dropbtn { background:#e0e0e0 !important; color:#000000 !important; }
+		body.retro-magazine .dropdown-content { background:#ffffff !important; color:#000000 !important; border:1px solid #000 !important; box-shadow:none !important; }
+		body.retro-magazine .dropdown-content a { background:#ffffff !important; color:#000000 !important; }
+		body.retro-magazine .dropdown-content a:hover { background:#e0e0e0 !important; color:#000000 !important; }
+		body.retro-magazine #video { background:#000; }
+		body.retro-magazine .summary { color:#000; }
+		body.retro-magazine .chan-col { background:#fff; border:1px solid #000; color:#000; font-weight:bold; }
+		body.retro-magazine .grid-col { background:#fff; }
+		body.retro-magazine .chan-header,
+		body.retro-magazine .time-header-wrap { background:#fff; color:#000; border:1px solid #000; font-weight:bold; }
+		body.retro-magazine .time-cell { color:#000; border:1px solid #000; font-weight:bold; }
+		body.retro-magazine .chan-name { color:#000; border:1px solid #000; font-weight:bold; }
+		body.retro-magazine .program { background:#fff; border:1px solid #000; color:#000; font-size:14px; }
+		body.retro-magazine .program.now { background:#e0e0e0; border:2px solid #000; color:#000; font-weight:bold; }
+		body.retro-magazine .now-line { background:#000; height:3px; }
+		body.retro-magazine #current-tuner { color:#000000 !important; font-weight:bold; }
+
+		
     </style>
 </head>
 <body>
@@ -107,7 +237,18 @@
                 <li><a href="{{ url_for('about') }}">About</a></li>
                 {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
-                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+				<li class="submenu">
+				  <a href="#">Themes</a>
+				  <ul class="submenu-content">
+				    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
+				    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
+				    <li><a href="#" onclick="setTheme('retro-tvguide'); return false;">Retro TV Guide</a></li>
+					<li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
+					<li><a href="#" onclick="setTheme('retro-webtv'); return false;">MSN TV / WebTV</a></li>
+					<li><a href="#" onclick="setTheme('retro-tvguide2000'); return false;">TV Guide Channel (2000)</a></li>
+					<li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
+				  </ul>
+				</li>
             </div>
         </div>
 
@@ -262,16 +403,21 @@ document.addEventListener("DOMContentLoaded", () => {
     setInterval(updateNowLine, 60000);
 });
 
-function toggleTheme() {
+function setTheme(theme) {
     const body = document.body;
-    if (body.classList.contains("dark")) {
-        body.classList.replace("dark", "light");
-        localStorage.setItem("theme", "light");
-    } else {
-        body.classList.replace("light", "dark");
-        localStorage.setItem("theme", "dark");
-    }
+    // Remove all possible theme classes
+    body.classList.remove("light", "dark", "retro-tvguide", "retro-aol", "retro-webtv", "retro-tvguide2000", "retro-magazine");
+    // Add the new one
+    body.classList.add(theme);
+    // Save it for next load
+    localStorage.setItem("theme", theme);
 }
+
+// On load, apply saved theme or default
+document.addEventListener("DOMContentLoaded", () => {
+    const savedTheme = localStorage.getItem("theme") || "dark";
+    setTheme(savedTheme);
+});
 
 function updateClock() {
     const now = new Date();
