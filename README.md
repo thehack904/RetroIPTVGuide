@@ -77,6 +77,12 @@ The backend server should be installed on a **Debian/Ubuntu machine** for best c
 ## 📺 Video Pop Out on Desktop
 ![Desktop Pop Out](docs/screenshots/video_breakout_desktop.png)
 
+## 📺 TV Guide Magazine Theme
+![TV Guide Theme](docs/screenshots/TV_Guide_Theme.png)
+
+## 📺 AOL / CompuServe Theme
+![AOL / CompuServe Theme](docs/screenshots/AOL_Compuserve_Theme.png)
+
 ---
 
 ## 🤝 Contributing
