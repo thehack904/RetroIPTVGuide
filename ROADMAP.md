@@ -35,6 +35,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Show last login time in admin panel.  
 
 ### 5. UI/UX Improvements
+- [x] Unified theming across all templates (Light, Dark, AOL/CompuServe, TV Guide Magazine) (v2.3.2)
 - [ ] Unify CSS across all templates (minimize inline styles).  
 - [ ] Make guide responsive (mobile/tablet view).  
 - [ ] Add dark/light theme auto-detect from browser/system.  
@@ -79,6 +80,7 @@ These are **not yet implemented**, but provide a development path for future rel
 ---
 
 ## ✅ Completed
+- [x] Unified theming across all admin/user pages with Themes submenu and persistent setTheme logic (v2.3.2)
 - [x] Tuner add/remove via UI (v2.3.0).  
 - [x] Tuner rename via UI (v2.3.0).  
 - [x] Tuner delete via UI (v2.3.0).  

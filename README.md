@@ -1,6 +1,6 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v2.3.1-blue)
+![Version](https://img.shields.io/badge/version-v2.3.2-blue)
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but should support any `.m3u` and `.xml` IPTV source.  
@@ -12,7 +12,7 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - [Roadmap](ROADMAP.md)
 - [License](LICENSE)
 
-## ✨ Features (v2.3.1)
+## ✨ Features (v2.3.2)
 - 🔑 **User Authentication**
   - Login/logout system with hashed passwords.
   - Admin and regular user accounts.
@@ -35,7 +35,12 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - 🎨 **UI Enhancements**
   - Unified header across all pages (Guide, Logs, Add User, Delete User, Change Password, Change Tuner).
   - Active tuner display + live clock in header.
-  - Dark/Light theme toggle (stored in browser localStorage).
+  - **Themes submenu** with multiple options:
+    - Light
+    - Dark
+    - AOL/CompuServe
+    - TV Guide Magazine
+  - Theme persistence stored in browser localStorage, applied instantly across all pages.
   - **New About Page under Settings menu (v2.3.1)** — shows version, Python, OS, uptime, paths.
 - ⚙️ **System**
   - Automatic initialization of `users.db` and `tuners.db` on first run.

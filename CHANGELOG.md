@@ -14,6 +14,28 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [2.3.2] - 2025-09-26
+### Added
+- Introduced unified **Themes submenu** (Light, Dark, AOL/CompuServe, TV Guide Magazine) across all admin and user pages.
+
+### Changed
+- Replaced old `toggleTheme()` logic with a centralized `setTheme(theme)` function.
+- Applied consistent **Retro AOL** and **Retro TV Guide Magazine** CSS rules to all major templates:
+  - `about.html`
+  - `add_user.html`
+  - `delete_user.html`
+  - `change_tuner.html`
+  - `logs.html`
+  - `change_password.html`
+
+### Fixed
+- Theme persistence issues: selected theme now applies instantly and consistently on every page.
+- AOL and Magazine themes now update **immediately** on About and other pages (previously only visible after navigating away).
+
+
+---
+
+
 ## v2.3.1 - 2025-09-26
 
 ### Added
