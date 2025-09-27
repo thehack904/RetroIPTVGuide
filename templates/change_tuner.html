@@ -34,6 +34,75 @@
         body.dark .box { background:#222; }
         body.light { background:#fff; color:#000; }
         body.light .box { background:#f3f3f3; }
+    
+        /* Submenu (fly-out for Themes) */
+        .submenu {
+            position: relative;
+        }
+        .submenu > a {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .submenu-content {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 100%; /* fly out to the right */
+            background-color: #333;
+            min-width: 160px;
+            border-radius: 3px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        .submenu-content li a {
+            padding: 10px 14px;
+            display: block;
+            color: #eee;
+            text-decoration: none;
+        }
+        .submenu-content li a:hover {
+            background-color: #0af;
+            color: #fff;
+        }
+        .submenu:hover .submenu-content {
+            display: block;
+        }
+
+        /* Remove default list bullets and padding for all dropdowns & submenus */
+        .dropdown-content,
+        .submenu ul,
+        .submenu-content {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Retro AOL / CompuServe Theme */
+        body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
+        body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
+        body.retro-aol .box { background:#355f5f; color:#fff; }
+        body.retro-aol select, body.retro-aol input { border:1px solid #33cccc; background:#406d6d; color:#fff; }
+        body.retro-aol button.primary { background:#33cccc; color:#000; }
+        body.retro-aol button.primary:hover { background:#1a8080; color:#fff; }
+
+        /* Retro TV Guide Magazine Theme */
+        body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
+        body.retro-magazine .header { background:#ffffff; color:#000; border-bottom:2px solid #000; font-weight:bold; }
+        body.retro-magazine .header .links > a,
+        body.retro-magazine .header .links > .dropdown > .dropbtn,
+        body.retro-magazine .header .links > span,
+        body.retro-magazine .header .links > #clock { background:#ffffff !important; color:#000000 !important; }
+        body.retro-magazine .header .links > a:hover,
+        body.retro-magazine .header .links > .dropdown:hover > .dropbtn { background:#e0e0e0 !important; color:#000000 !important; }
+        body.retro-magazine .dropdown-content { background:#ffffff !important; color:#000000 !important; border:1px solid #000 !important; box-shadow:none !important; }
+        body.retro-magazine .dropdown-content a { background:#ffffff !important; color:#000000 !important; }
+        body.retro-magazine .dropdown-content a:hover { background:#e0e0e0 !important; color:#000000 !important; }
+        body.retro-magazine .box { background:#fff; border:1px solid #000; color:#000; }
+        body.retro-magazine select, body.retro-magazine input { border:1px solid #000; background:#fff; color:#000; }
+        body.retro-magazine button.primary { background:#000; color:#fff; }
+        body.retro-magazine button.primary:hover { background:#333; color:#fff; }
+
     </style>
 </head>
 <body>
@@ -58,7 +127,15 @@
                 <a href="{{ url_for('view_logs') }}">Logs</a>
                 {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
-                <a href="#" onclick="toggleTheme(); return false;">Toggle Theme</a>
+                <li class="submenu">
+      <a href="#">Themes</a>
+      <ul class="submenu-content">
+        <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
+        <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
+        <li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
+        <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
+      </ul>
+    </li>
             </div>
         </div>
         <a href="{{ url_for('logout') }}">LOGOUT</a>
@@ -152,7 +229,7 @@ function populateUrls(tuner) {
 
 document.addEventListener("DOMContentLoaded", () => {
     const saved = localStorage.getItem("theme") || "dark";
-    document.body.classList.add(saved);
+    setTheme(saved);
     updateClock();
     setInterval(updateClock, 1000);
     // Initialize update form with first tuner’s URLs
@@ -160,15 +237,11 @@ document.addEventListener("DOMContentLoaded", () => {
     populateUrls(firstTuner);
 });
 
-function toggleTheme() {
+function setTheme(theme) {
     const body = document.body;
-    if (body.classList.contains("dark")) {
-        body.classList.replace("dark", "light");
-        localStorage.setItem("theme", "light");
-    } else {
-        body.classList.replace("light", "dark");
-        localStorage.setItem("theme", "dark");
-    }
+    body.classList.remove("light", "dark", "retro-tvguide", "retro-aol", "retro-webtv", "retro-tvguide2000", "retro-magazine");
+    body.classList.add(theme);
+    localStorage.setItem("theme", theme);
 }
 function updateClock() {
     const now = new Date();
