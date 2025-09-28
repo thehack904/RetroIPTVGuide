@@ -64,6 +64,7 @@ The web interface has been tested on:
 - **Ubuntu (desktop/server)**  
 - **iOS (mobile/tablet)**
 - **MacOS**
+- **Windows**
 
 ## 🛠️ Installation Platform
 The backend server should be installed on a **Debian/Ubuntu machine** for best compatibility.  
