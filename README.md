@@ -63,7 +63,7 @@ It has been tested on:
 The web interface has been tested on:  
 - **Ubuntu (desktop/server)**  
 - **iOS (mobile/tablet)**
-- **Android (Samsung Mobile Phone)
+- **Android (Samsung Mobile Phone)**
 - **MacOS**
 - **Windows**
 
