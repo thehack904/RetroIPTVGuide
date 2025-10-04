@@ -1,7 +1,9 @@
+$VERSION = "3.0.0"
 <# 
 RetroIPTVGuide Windows Installer
 Clean version with only prerequisite checks and service setup
 #>
+
 
 # === Start Transcript ===
 $logDir = "$PSScriptRoot\logs"

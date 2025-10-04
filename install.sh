@@ -93,37 +93,6 @@ if [[ "$ENVIRONMENT" == "LINUX" || "$ENVIRONMENT" == "WSL" ]]; then
     fi
 fi
 
-echo ""
-echo "============================================================"
-echo " RetroIPTVGuide Installer Agreement "
-echo "============================================================"
-echo ""
-echo "This installer will perform the following actions:" 
-echo "  - Detect whether you are running on Linux or WSL"
-echo "  - Ensure the script is run with sudo"
-echo "  - Create dedicated system user 'iptv' (if not already present)"
-echo "  - Ensure python3-venv package is installed"
-echo "  - Copy project files into /home/iptv/iptv-server"
-echo "  - Create and configure a Python virtual environment"
-echo "  - Upgrade pip and install requirements"
-echo "  - Create and enable the iptv-server systemd service"
-echo "  - Start the iptv-server service"
-echo ""
-echo "By continuing, you acknowledge and agree that:"
-echo "  - This software should ONLY be run on internal networks."
-echo "  - It must NOT be exposed to the public Internet."
-echo "  - You accept all risks; the author provides NO WARRANTY."
-echo "  - The author is NOT responsible for any damage, data loss,"
-echo "    or security vulnerabilities created by this installation."
-echo ""
-read -p "Do you agree to these terms? (yes/no): " agreement
-
-if [ "$agreement" != "yes" ]; then
-    echo "Installation aborted by user."
-    exit 1
-fi
-
-
 # Variables
 APP_USER="iptv"
 APP_HOME="/home/$APP_USER"
@@ -215,14 +184,6 @@ else
     echo "Unsupported environment: $OSTYPE"
     exit 1
 fi
-
-echo ""
-echo "Installation complete!"
-echo "End time: $(date)"
-echo "Access the server in your browser at: http://<your-server-ip>:5000"
-echo "Default login: admin / strongpassword123"
-echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
-echo ""
 }
 
 if [ "$ENVIRONMENT" = "GITBASH" ]; then

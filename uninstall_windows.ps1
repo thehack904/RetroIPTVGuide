@@ -1,3 +1,4 @@
+$VERSION = "3.0.0"
 # RetroIPTVGuide Windows Uninstaller
 # ==================================
 

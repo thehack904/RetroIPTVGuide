@@ -1,18 +1,18 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v2.3.2-blue)
+![Version](https://img.shields.io/badge/version-v3.0.0-blue)
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but should support any `.m3u` and `.xml` IPTV source.  
 
-⚠️ **Note:** This is an initial BETA release. It is not recommended for direct Internet/public-facing deployments.
+⚠️ **Note:** This is still a BETA release. It is not recommended for direct Internet/public-facing deployments.
 
 - [Installation / Uninstall Guide](INSTALL.md)
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 - [License](LICENSE)
 
-## ✨ Features (v2.3.2)
+## ✨ Features (v3.0.0)
 - 🔑 **User Authentication**
   - Login/logout system with hashed passwords.
   - Admin and regular user accounts.
@@ -41,15 +41,16 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
     - AOL/CompuServe
     - TV Guide Magazine
   - Theme persistence stored in browser localStorage, applied instantly across all pages.
-  - **New About Page under Settings menu (v2.3.1)** — shows version, Python, OS, uptime, paths.
+  - **About Page under Settings menu** — shows version, Python, OS, uptime, paths.
 - ⚙️ **System**
   - Automatic initialization of `users.db` and `tuners.db` on first run.
   - SQLite databases use WAL mode for better concurrency.
   - Preloads tuner/channel/guide data from DB on startup.
-  - **Cross-platform installer (Linux/Windows) (v2.3.0)**.
-  - **Uninstaller script (v2.3.0)**.
-  - **Automated version bump tool (`bump_version.py`) (v2.3.1)**.
+  - **Cross-platform installers (Linux/Windows)**.
+  - **Uninstaller scripts (Linux/Windows)**.
+  - **Automated version bump tool (`bump_version.py`)**.
 
+---
 
 ## 🌐 Browser Compatibility
 This project is designed to work with **all major browsers**.  
@@ -63,11 +64,15 @@ It has been tested on:
 The web interface has been tested on:  
 - **Ubuntu (desktop/server)**  
 - **iOS (mobile/tablet)**
-- **MacOS**
-- **Windows**
+- **Android (Samsung Mobile Phone)**
+- **macOS**
+- **Windows 10/11**
 
 ## 🛠️ Installation Platform
-The backend server should be installed on a **Debian/Ubuntu machine** for best compatibility.  
+- **Debian Based Linux (desktop/server)**
+- **Windows 10/11**
+
+## 📺 Screenshots
 
 ## 📺 Guide Page
 ![Guide Screenshot](docs/screenshots/guide.png)
