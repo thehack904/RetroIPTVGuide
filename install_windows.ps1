@@ -1,19 +1,17 @@
-<#  install_windows.ps1
-    Windows bootstrap for RetroIPTVGuide
-    - Prefer WSL if installed
-    - Else fallback to Git Bash
-    - Check/install Git + Python if missing
-    - Force Git Bash to cd into script root before cloning
-    - All output logged to file
+<# 
+RetroIPTVGuide Windows Installer
+Clean version with only prerequisite checks and service setup
 #>
 
-$LogDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-$TimeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$LogFile = Join-Path $LogDir "install_$TimeStamp.log"
+# === Start Transcript ===
+$logDir = "$PSScriptRoot\logs"
+if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Force -Path $logDir | Out-Null }
+$logFile = Join-Path $logDir ("install_{0:yyyyMMdd_HHmmss}.log" -f (Get-Date))
+Start-Transcript -Path $logFile -Append
+Write-Host "=== RetroIPTVGuide Windows Installer ===" -ForegroundColor Cyan
+Write-Host "Log file: $logFile" -ForegroundColor Gray
 
-Start-Transcript -Path $LogFile -Force
-
+# --- Ensure Admin Privileges ---
 # Elevation check
 $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $IsAdmin) {
@@ -23,536 +21,298 @@ if (-not $IsAdmin) {
     exit
 }
 
-Write-Host "=== RetroIPTVGuide Windows Installer Bootstrap ===" -ForegroundColor Cyan
-Write-Host "Timestamp: $(Get-Date)"
-Write-Host "Log file: $LogFile"
-Write-Host "OS: $([System.Environment]::OSVersion.VersionString)"
+Write-Host ""
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host " RetroIPTVGuide Installer Agreement " -ForegroundColor Cyan
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host ""
+Write-Host "This installer will perform the following actions:" -ForegroundColor White
+Write-Output "  - Bootstraps / Installs Chocolatey"
+Write-Output "  - Installs dependencies: python, git, nssm"
+Write-Output "  - Registers Windows App Paths for python/python3"
+Write-Output "  - Adds Python to Git Bash (~/.bashrc)"
+Write-Output "  - Clones RetroIPTVGuide into the same folder as the installer"
+Write-Output "  - Runs install.sh via Git Bash"
+Write-Output "  - Creates an NSSM service to run venv\\Scripts\\python.exe app.py"
+Write-Output "  - Open Windows Firewall port 5000 for RetroIPTVGuide Service"
+Write-Output "  - Starts the RetroIPTVGuide service"
+Write-Host ""
+Write-Host "By continuing, you acknowledge and agree that:" -ForegroundColor White
+Write-Output "  - This software should ONLY be run on internal networks."
+Write-Output "  - It must NOT be exposed to the public Internet."
+Write-Output "  - You accept all risks; the author provides NO WARRANTY."
+Write-Output "  - The author is NOT responsible for any damage, data loss,"
+Write-Output "    or security vulnerabilities created by this installation."
+Write-Host ""
+Write-Host "Do you agree to these terms? (yes/no)" -ForegroundColor Yellow
 
-# Elevation check
-$IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
-if (-not $IsAdmin) {
-  Write-Host "Re-launching with Administrator privileges..." -ForegroundColor Yellow
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
+$agreement = Read-Host "Type yes or no"
+Write-Output "User response to agreement: $agreement"
 
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path $pythonExe -Parent   # <-- this gives Scripts
-$pythonRoot = Split-Path $pythonDir -Parent  # <-- this gives Python312 folder
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonRoot"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-  Stop-Transcript
-  Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList "-NoProfile","-ExecutionPolicy","Bypass","-File","`"$PSCommandPath`""
-  exit
-}
-
-function CmdExists($name) { Get-Command $name -ErrorAction SilentlyContinue | Out-Null }
-
-# Step 1: Prefer WSL
-$HasWslExe = CmdExists "wsl.exe"
-if ($HasWslExe) {
-  $distros = & wsl.exe -l -q 2>$null
-  if ($LASTEXITCODE -eq 0 -and $distros -and $distros.Trim().Length -gt 0) {
-    Write-Host "WSL distribution detected. Installing inside WSL..." -ForegroundColor Cyan
-    wsl.exe -- bash -lc "git clone -b windows https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && chmod +x install.sh && ./install.sh"
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
-
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-    Stop-Transcript
-    exit $LASTEXITCODE
-  } else {
-    Write-Host "WSL present but no Linux distro installed." -ForegroundColor Yellow
-    try {
-      wsl.exe --install -d Ubuntu
-      Write-Host "Ubuntu installation initiated. Please reboot when prompted, then re-run this script." -ForegroundColor Green
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
-
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-      Stop-Transcript
-      exit 0
-    } catch {
-      Write-Warning "Automatic WSL install failed. Install WSL manually, then rerun."
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
-
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-      Stop-Transcript
-      exit 1
-    }
-  }
-}
-
-# Step 2: Fallback to Git Bash
-Write-Host "WSL not available. Falling back to Git Bash..." -ForegroundColor Yellow
-$GitBashPath = "$Env:ProgramFiles\Git\bin\bash.exe"
-if (-not (Test-Path $GitBashPath)) { $GitBashPath = "$Env:ProgramFiles(x86)\Git\bin\bash.exe" }
-
-if (-not (Test-Path $GitBashPath)) {
-  Write-Host "Git for Windows not found. Attempting to install..." -ForegroundColor Yellow
-
-  if (CmdExists "winget") {
-    winget install -e --id Git.Git --silent
-  } elseif (CmdExists "choco") {
-    choco install git -y
-  } else {
-    # Fallback: direct download + silent install
-    try {
-      $Installer = "$env:TEMP\GitInstaller.exe"
-      Write-Host "Downloading Git for Windows installer..." -ForegroundColor Cyan
-      Invoke-WebRequest -Uri "https://github.com/git-for-windows/git/releases/download/v2.47.0.windows.1/Git-2.47.0-64-bit.exe" -OutFile $Installer
-      Write-Host "Running Git installer silently..." -ForegroundColor Cyan
-      Start-Process -FilePath $Installer -ArgumentList "/VERYSILENT","/NORESTART" -Wait
-    } catch {
-      Write-Error "Automatic Git install failed. Please install Git manually: https://git-scm.com/download/win"
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
-
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-      Stop-Transcript
-      exit 1
-    }
-  }
-
-  # Re-check after install
-  $GitBashPath = "$Env:ProgramFiles\Git\bin\bash.exe"
-  if (-not (Test-Path $GitBashPath)) { $GitBashPath = "$Env:ProgramFiles(x86)\Git\bin\bash.exe" }
-  if (-not (Test-Path $GitBashPath)) {
-    Write-Error "Git Bash still not found after install attempt."
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
-} else {
-    $activation = "source venv/Scripts/activate"
-}
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
-
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
-    }
-}
-
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
-
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
-}
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
-
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
+if ($agreement.ToLower() -ne "yes") {
+    Write-Host "Installation aborted by user." -ForegroundColor Red
     Stop-Transcript
     exit 1
-  }
 }
 
-# Step 3: Ensure Python exists
-function PythonExists {
-  (CmdExists "python") -or (CmdExists "py") -or (CmdExists "python3")
+# --- Chocolatey ---
+Write-Host "Checking for Chocolatey..." -ForegroundColor Cyan
+$choco = Get-Command choco -ErrorAction SilentlyContinue
+if (-not $choco) {
+    Write-Host "Installing Chocolatey..." -ForegroundColor Yellow
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine")
 }
 
-if (-not (PythonExists)) {
-  Write-Host "Python not found. Attempting to install..." -ForegroundColor Yellow
-  if (CmdExists "winget") {
-    winget install -e --id Python.Python.3.12
-  } elseif (CmdExists "choco") {
-    choco install python -y
-  } else {
-    try {
-      $PyInstaller = "$env:TEMP\PythonInstaller.exe"
-      Write-Host "Downloading Python installer..." -ForegroundColor Cyan
-      Invoke-WebRequest -Uri "https://www.python.org/ftp/python/3.12.6/python-3.12.6-amd64.exe" -OutFile $PyInstaller
-      Write-Host "Running Python installer silently..." -ForegroundColor Cyan
-      Start-Process -FilePath $PyInstaller -ArgumentList "/quiet","InstallAllUsers=1","PrependPath=1","Include_test=0" -Wait
-    } catch {
-      Write-Error "Python install failed. Please install manually: https://www.python.org/downloads/"
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
+# --- Python ---
+Write-Host "Checking for Python..." -ForegroundColor Cyan
+if (choco list | Select-String -Pattern "^python3 ") {
+    Write-Host "Python3 is installed"
 } else {
-    $activation = "source venv/Scripts/activate"
+    Write-Host "Python3 not found, installing..."
+    choco install python3 -y
 }
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
 
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
+# --- Fix Python alias stubs from Microsoft Store ---
+$aliases = @(
+  "$env:LOCALAPPDATA\Microsoft\WindowsApps\python.exe",
+  "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.exe",
+  "$env:LOCALAPPDATA\Microsoft\WindowsApps\python3.*.exe"
+)
+
+foreach ($alias in $aliases) {
+    if (Test-Path $alias) {
+        try {
+            Remove-Item $alias -Force
+            Write-Host "Removed Microsoft Store alias: $alias" -ForegroundColor Yellow
+        } catch {
+            Write-Warning "Failed to remove alias ${alias}: $_"
+        }
     }
 }
 
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
+# --- Ensure Chocolatey shims directory comes first in PATH ---
+$chocoBin = "C:\ProgramData\chocolatey\bin"
+$currentPath = [System.Environment]::GetEnvironmentVariable("PATH", "Machine")
 
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
+if (-not ($currentPath -split ";" | ForEach-Object { $_.Trim() } | Where-Object { $_ -eq $chocoBin })) {
+    $newPath = "$chocoBin;$currentPath"
+    [System.Environment]::SetEnvironmentVariable("PATH", $newPath, "Machine")
+    Write-Host "Updated PATH to prioritize Chocolatey bin: $chocoBin" -ForegroundColor Green
 } else {
-    Write-Warning "NSSM not available. Skipping service setup."
+    Write-Host "Chocolatey bin already in PATH." -ForegroundColor Green
 }
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
 
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
-
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
-      Stop-Transcript
-      exit 1
+# --- Add registry App Paths aliases for python/python3 ---
+try {
+    $pythonExe = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+    if (-not $pythonExe) {
+        $pythonExe = "C:\Python313\python.exe"  # fallback if not resolved via PATH
     }
-  }
+
+    if (Test-Path $pythonExe) {
+        New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python.exe" -Force | Out-Null
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python.exe" -Name "(Default)" -Value $pythonExe
+
+        New-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python3.exe" -Force | Out-Null
+        Set-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python3.exe" -Name "(Default)" -Value $pythonExe
+
+        Write-Host "Registered App Path aliases: python, python3 -> $pythonExe" -ForegroundColor Green
+    } else {
+        Write-Warning "Python executable not found for alias registration."
+    }
+} catch {
+    Write-Warning "Failed to register python/python3 aliases in App Paths: $_"
 }
 
-# Step 4: Run RetroIPTVGuide installer under Git Bash (force cd into script root)
-Write-Host "Running installer under Git Bash..." -ForegroundColor Cyan
-& "$GitBashPath" -lc "cd '$PSScriptRoot' && git clone -b windows https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && chmod +x install.sh && ./install.sh"
-# --- PATCH BLOCK 1: Activation instructions ---
-if ($env:ComSpec -like "*cmd.exe") {
-    $activation = ".\venv\Scripts\activate.bat"
-} elseif ($PSVersionTable.PSEdition -eq "Core" -or $host.Name -like "*PowerShell*") {
-    $activation = ".\venv\Scripts\Activate.ps1"
+
+# --- Ensure Chocolatey is installed ---
+if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+    Write-Host "Installing Chocolatey..." -ForegroundColor Cyan
+    Set-ExecutionPolicy Bypass -Scope Process -Force
+    [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+    Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
 } else {
-    $activation = "source venv/Scripts/activate"
+    Write-Host "Chocolatey already installed." -ForegroundColor Green
 }
-Write-Host "=== Installation complete. Activate venv with ===" -ForegroundColor Green
-Write-Host $activation -ForegroundColor Cyan
 
-# --- PATCH BLOCK 2: NSSM service setup ---
-$nssmPath = "C:\nssm\nssm.exe"
-if (-not (Test-Path $nssmPath)) {
-    try {
-        Write-Host "Downloading nssm..." -ForegroundColor Yellow
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
-        Invoke-WebRequest -Uri "https://nssm.cc/release/nssm-2.24.zip" -OutFile $nssmZip
-        Expand-Archive $nssmZip -DestinationPath "C:\nssm" -Force
-        $nssmPath = "C:\nssm\nssm-2.24\win64\nssm.exe"
-    } catch {
-        Write-Warning "Failed to download/extract nssm automatically. Install from https://nssm.cc/ and rerun service setup."
-        $nssmPath = $null
+# --- Ensure dependencies ---
+$packages = @("python3", "nssm", "git")
+
+foreach ($pkg in $packages) {
+    $installed = choco list --limit-output | Select-String -Pattern "^$pkg "
+    if (-not $installed) {
+        Write-Host "Installing $pkg..." -ForegroundColor Cyan
+        choco install $pkg -y | Out-Null
+    } else {
+        Write-Host "$pkg already installed." -ForegroundColor Green
     }
 }
 
-if ($nssmPath -and (Test-Path $nssmPath)) {
-    $TargetDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
-    $pythonExe = Join-Path $TargetDir "venv\Scripts\python.exe"
-    $appPath = Join-Path $TargetDir "app.py"
+Write-Host "All dependencies installed." -ForegroundColor Green
 
-    Write-Host "Setting up RetroIPTVGuide Windows Service..." -ForegroundColor Yellow
-    & $nssmPath install RetroIPTVGuide $pythonExe $appPath
-    & $nssmPath set RetroIPTVGuide Start SERVICE_AUTO_START
-    & $nssmPath start RetroIPTVGuide
-    Write-Host "RetroIPTVGuide service installed and started." -ForegroundColor Green
-} else {
-    Write-Warning "NSSM not available. Skipping service setup."
+# --- Ensure Python aliases point to correct installed version ---
+try {
+    $pythonExePath = (Get-Command python3.exe -ErrorAction SilentlyContinue).Source
+    if (-not $pythonExePath) {
+        $pythonExePath = (Get-Command python.exe -ErrorAction SilentlyContinue).Source
+    }
+
+    if ($pythonExePath) {
+        Write-Host "Found Python executable at $pythonExePath" -ForegroundColor Cyan
+
+        # Persist App Path so Windows resolves python/python3 correctly
+        $aliases = @("python.exe", "python3.exe")
+        foreach ($alias in $aliases) {
+            $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\$alias"
+            if (-not (Test-Path $regPath)) {
+                New-Item -Path $regPath -Force | Out-Null
+            }
+            Set-ItemProperty -Path $regPath -Name "(Default)" -Value $pythonExePath
+            Set-ItemProperty -Path $regPath -Name "Path" -Value (Split-Path $pythonExePath)
+        }
+
+        Write-Host "Registered App Path aliases: python, python3 -> $pythonExePath" -ForegroundColor Green
+    } else {
+        Write-Warning "Python executable not found in PATH. Aliases not created."
+    }
+} catch {
+    Write-Warning "Failed to configure Python aliases: $_"
+}
+
+# --- Ensure Python aliases point to correct installed version ---
+try {
+    # Look up Python installation folder from Chocolatey
+    $pythonPkg = choco list | Select-String -Pattern "^python3 "
+    if ($pythonPkg) {
+        # Most choco python3 installs under C:\Python3xx
+        $pythonDir = Get-ChildItem "C:\Python*" -Directory | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        $pythonExePath = Join-Path $pythonDir.FullName "python.exe"
+
+        if (Test-Path $pythonExePath) {
+            Write-Host "Found Python executable at $pythonExePath" -ForegroundColor Cyan
+
+            # Persist App Path so Windows resolves python/python3 correctly
+            $aliases = @("python.exe", "python3.exe")
+            foreach ($alias in $aliases) {
+                $regPath = "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\$alias"
+                if (-not (Test-Path $regPath)) {
+                    New-Item -Path $regPath -Force | Out-Null
+                }
+                Set-ItemProperty -Path $regPath -Name "(Default)" -Value $pythonExePath
+                Set-ItemProperty -Path $regPath -Name "Path" -Value $pythonDir.FullName
+            }
+
+            Write-Host "Registered App Path aliases: python, python3 -> $pythonExePath" -ForegroundColor Green
+
+            # --- Add Python to Git Bash PATH via ~/.bashrc ---
+            $gitBashHome = Join-Path $env:USERPROFILE ".bashrc"
+            $bashrcLine = "export PATH=""/c/$($pythonDir.Name):/c/$($pythonDir.Name)/Scripts:`$PATH"""
+
+            if (Test-Path $gitBashHome) {
+                if (-not (Select-String -Path $gitBashHome -Pattern $pythonDir.Name -Quiet)) {
+                    Add-Content -Path $gitBashHome -Value $bashrcLine
+                    Write-Host "Added Python to Git Bash PATH in .bashrc" -ForegroundColor Yellow
+                }
+            } else {
+                Set-Content -Path $gitBashHome -Value $bashrcLine
+                Write-Host "Created .bashrc and added Python PATH for Git Bash" -ForegroundColor Yellow
+            }
+
+        } else {
+            Write-Warning "Python executable not found in expected location."
+        }
+    } else {
+        Write-Warning "Python not installed by Chocolatey, skipping alias setup."
+    }
+} catch {
+    Write-Warning "Failed to configure Python aliases: $_"
+}
+
+
+
+
+
+# --- Clone RetroIPTVGuide ---
+$installDir = "$PSScriptRoot\RetroIPTVGuide"
+if (Test-Path $installDir) { Remove-Item -Recurse -Force $installDir }
+# Resolve Git path
+$gitExe = (Get-Command git.exe -ErrorAction SilentlyContinue).Source
+if (-not $gitExe) { $gitExe = "C:\Program Files\Git\bin\git.exe" }
+if (-not (Test-Path $gitExe)) { $gitExe = "C:\Program Files (x86)\Git\bin\git.exe" }
+
+if (-not (Test-Path $gitExe)) {
+    Write-Error "Git executable not found even after installation. Please verify Git installation."
+    exit 1
+}
+
+# Clone the repository
+#& $gitExe clone -b windows https://github.com/thehack904/RetroIPTVGuide.git $installDir
+
+# --- Run install.sh using Git Bash ---
+try {
+    $gitBash = "C:\Program Files\Git\bin\bash.exe"
+    #$repoDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
+	$repoDir = $PSScriptRoot
+
+    if (Test-Path $gitBash -PathType Leaf) {
+        if (Test-Path (Join-Path $repoDir "install.sh")) {
+            Write-Host "Running install.sh with Git Bash..." -ForegroundColor Cyan
+            & "$gitBash" --login -i -c "cd '$repoDir' && chmod +x install.sh && ./install.sh"
+        } else {
+            Write-Warning "install.sh not found in $repoDir"
+        }
+    } else {
+        Write-Warning "Git Bash not found at $gitBash. Skipping install.sh"
+    }
+} catch {
+    Write-Warning "Failed to run install.sh in Git Bash: $_"
 }
 
 # --- PATCH: Open firewall port for RetroIPTVGuide ---
 Write-Host "Opening Windows Firewall port 5000 for RetroIPTVGuide..." -ForegroundColor Yellow
 netsh advfirewall firewall add rule name="RetroIPTVGuide" dir=in action=allow protocol=TCP localport=5000 | Out-Null
 
-# --- END PATCH ---
-# --- PATCH: Record Python version and path ---
-$pythonExe = (Get-Command python.exe).Source
-$pythonDir = Split-Path (Split-Path $pythonExe -Parent) -Parent  # parent folder of Scripts
-$pythonVer = (& $pythonExe --version).Split()[1]
+# --- Configure NSSM service for RetroIPTVGuide ---
+try {
+    $nssm = "C:\ProgramData\chocolatey\bin\nssm.exe"
+    #$repoDir = Join-Path $PSScriptRoot "RetroIPTVGuide"
+	$repoDir = $PSScriptRoot
+    $venvPython = Join-Path $repoDir "venv\Scripts\python.exe"
+    $appPy = Join-Path $repoDir "app.py"
 
-$logDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
-$verFile = Join-Path $logDir "python_version.txt"
+    if ((Test-Path $nssm -PathType Leaf) -and (Test-Path $venvPython) -and (Test-Path $appPy)) {
+        Write-Host "Setting up NSSM service for RetroIPTVGuide..." -ForegroundColor Cyan
 
-"Version=$pythonVer" | Out-File $verFile -Encoding ascii
-"Path=$pythonDir"   | Out-File $verFile -Encoding ascii -Append
-# --- END PATCH ---
+        # Install the service to directly run venv python + app.py
+        & $nssm install RetroIPTVGuide $venvPython $appPy
+
+        # Set service parameters
+        & $nssm set RetroIPTVGuide Start SERVICE_AUTO_START
+        & $nssm set RetroIPTVGuide AppDirectory $repoDir
+
+        Write-Host "NSSM service 'RetroIPTVGuide' installed successfully." -ForegroundColor Green
+
+        # Start the service right away
+        Start-Service RetroIPTVGuide
+        Write-Host "Service 'RetroIPTVGuide' started." -ForegroundColor Green
+    } else {
+        Write-Warning "NSSM, venv python, or app.py not found. Could not create service."
+    }
+} catch {
+    Write-Warning "Failed to configure NSSM service: $_"
+}
+
+echo ""
+Write-Host "Installation complete!" -ForegroundColor Cyan
+echo "End time: $(date)"
+echo "Access the server in your browser at: http://<your-server-ip>:5000"
+echo "Default login: admin / strongpassword123"
+echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
+echo ""
+
+# === Done ===
 Stop-Transcript
-Write-Host "Press any key to exit..." -ForegroundColor Cyan
-Pause
-
-exit $LASTEXITCODE
+pause

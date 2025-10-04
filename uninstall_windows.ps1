@@ -1,322 +1,189 @@
-<# uninstall_windows.ps1
-    Complete uninstaller for RetroIPTVGuide
-    - Stops and removes Windows Service
-    - Removes RetroIPTVGuide repo + venv
-    - Removes Git Bash (if installed)
-    - Removes Python (if installed)
-    - Removes logs after transcript
-#>
+# RetroIPTVGuide Windows Uninstaller
+# ==================================
 
-$LogDir = Join-Path $PSScriptRoot "logs"
-if (-not (Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
-$TimeStamp = Get-Date -Format "yyyyMMdd_HHmmss"
-$LogFile = Join-Path $LogDir "uninstall_$TimeStamp.log"
+
+
+# Setup logging
+$LogDir = "$PSScriptRoot\logs"
+if (!(Test-Path $LogDir)) { New-Item -ItemType Directory -Force -Path $LogDir | Out-Null }
+$Timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
+$LogFile = "$LogDir\uninstall_$Timestamp.log"
 
 Start-Transcript -Path $LogFile -Force
+Write-Host "=== RetroIPTVGuide Windows Uninstaller ===" -ForegroundColor Cyan
+Write-Host "Timestamp: $(Get-Date)" -ForegroundColor Cyan
+Write-Host "Log file: $LogFile" -ForegroundColor Cyan
 
 # Elevation check
 $IsAdmin = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $IsAdmin) {
     Write-Host "Re-launching with Administrator privileges..." -ForegroundColor Yellow
-# --- PATCH: Corrected Python uninstall using version + path file ---
-$pythonVerFile = Join-Path $PSScriptRoot "logs\python_version.txt"
-if (Test-Path $pythonVerFile) {
-    $lines = Get-Content $pythonVerFile
-    $pythonVersion = ($lines | Where-Object { $_ -like "Version=*" }) -replace "Version=", ""
-    $pythonPath    = ($lines | Where-Object { $_ -like "Path=*" }) -replace "Path=", ""
-
-    Write-Host "Attempting to uninstall Python $pythonVersion from $pythonPath..." -ForegroundColor Yellow
-
-    $uninstaller = Join-Path $pythonPath "uninstall.exe"
-    if (Test-Path $uninstaller) {
-        & $uninstaller /quiet | Out-Null
-        Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
-    } else {
-        Write-Warning "Uninstaller not found at $uninstaller. Trying registry lookup..."
-        $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-        $pythonKey = Get-ChildItem $uninstallKey | Where-Object {
-            $_.GetValue("DisplayName") -like "Python $pythonVersion*"
-        } | Select-Object -First 1
-        if ($pythonKey) {
-            $uninstallString = $pythonKey.GetValue("UninstallString", $null)
-            if ($uninstallString) {
-                Write-Host "Running registry uninstall for Python $pythonVersion..." -ForegroundColor Yellow
-                & cmd.exe /c $uninstallString /quiet | Out-Null
-                Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
-            } else {
-                Write-Warning "Registry entry found but no uninstall string for Python $pythonVersion."
-            }
-        } else {
-            Write-Warning "No registry entry found for Python $pythonVersion."
-        }
-    }
-} else {
-    Write-Host "No python_version.txt found, falling back to existing uninstall logic..." -ForegroundColor Yellow
-}
-# --- END PATCH ---
-# --- PATCH: Corrected Python uninstall with cleanup ---
-$pythonVerFile = Join-Path $PSScriptRoot "logs\python_version.txt"
-if (Test-Path $pythonVerFile) {
-    $lines = Get-Content $pythonVerFile
-    $pythonVersion = ($lines | Where-Object { $_ -like "Version=*" }) -replace "Version=", ""
-    $pythonPath    = ($lines | Where-Object { $_ -like "Path=*" }) -replace "Path=", ""
-
-    Write-Host "Attempting to uninstall Python $pythonVersion from $pythonPath..." -ForegroundColor Yellow
-
-    $uninstaller = Join-Path $pythonPath "uninstall.exe"
-    if (Test-Path $uninstaller) {
-        & $uninstaller /quiet | Out-Null
-        Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
-    } else {
-        Write-Warning "Uninstaller not found at $uninstaller. Trying registry lookup..."
-        $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-        $pythonKey = Get-ChildItem $uninstallKey | Where-Object {
-            $_.GetValue("DisplayName") -like "Python $pythonVersion*"
-        } | Select-Object -First 1
-        if ($pythonKey) {
-            $uninstallString = $pythonKey.GetValue("UninstallString", $null)
-            if ($uninstallString) {
-                Write-Host "Running registry uninstall for Python $pythonVersion..." -ForegroundColor Yellow
-                & cmd.exe /c $uninstallString /quiet | Out-Null
-                Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
-                if (Test-Path $pythonPath) {
-                    try {
-                        Remove-Item -Recurse -Force $pythonPath
-                        Write-Host "Removed leftover Python directory: $pythonPath" -ForegroundColor Green
-                    } catch {
-                        Write-Warning "Could not remove Python directory $pythonPath: $_"
-                    }
-                }
-            } else {
-                Write-Warning "Registry entry found but no uninstall string for Python $pythonVersion."
-            }
-        } else {
-            Write-Warning "No registry entry found for Python $pythonVersion."
-        }
-    }
-} else {
-    Write-Host "No python_version.txt found, falling back to existing uninstall logic..." -ForegroundColor Yellow
-}
-# --- END PATCH ---
     Stop-Transcript
     Start-Process -FilePath "powershell.exe" -Verb RunAs -ArgumentList "-ExecutionPolicy Bypass -File `"$PSCommandPath`""
     exit
 }
 
-Write-Host "=== RetroIPTVGuide Complete Uninstaller ===" -ForegroundColor Cyan
-Write-Host "Timestamp: $(Get-Date)"
-Write-Host "Log file: $LogFile"
-
-# Stop and remove service
-$service = Get-Service -Name "RetroIPTVGuide" -ErrorAction SilentlyContinue
-if ($service) {
-    try {
-        if ($service.Status -eq "Running") {
-            Stop-Service -Name "RetroIPTVGuide" -Force
-        }
-        $nssmPath = "C:\nssm\nssm.exe"
-        if (Test-Path $nssmPath) {
-            & $nssmPath remove RetroIPTVGuide confirm
-            Write-Host "RetroIPTVGuide service removed." -ForegroundColor Green
-        } else {
-            sc.exe delete RetroIPTVGuide | Out-Null
-            Write-Host "RetroIPTVGuide service removed via sc.exe." -ForegroundColor Green
-        }
-    } catch {
-        Write-Warning "Could not remove RetroIPTVGuide service automatically."
-    }
-} else {
-    Write-Host "RetroIPTVGuide service not found." -ForegroundColor Yellow
-}
-
-# Candidate paths
-$CandidateDirs = @(
-    (Join-Path $PSScriptRoot "RetroIPTVGuide"),
-    (Join-Path $env:USERPROFILE "RetroIPTVGuide"),
-    (Join-Path ($env:HOMEDRIVE + $env:HOMEPATH) "RetroIPTVGuide"),
-    (Join-Path $env:USERPROFILE "Desktop\RetroIPTVGuide"),
-    "C:\RetroIPTVGuide"
-)
-
-foreach ($dir in $CandidateDirs) {
-    if (Test-Path $dir) {
-        try {
-            Remove-Item -Recurse -Force $dir
-            Write-Host "Removed RetroIPTVGuide folder: $dir" -ForegroundColor Green
-            break
-        } catch {
-            Write-Error "Failed to remove $dir"
-        }
-    }
-}
-
-# Remove venv
-$venvDirs = @(
-    (Join-Path $PSScriptRoot "venv"),
-    (Join-Path $env:USERPROFILE "venv"),
-    (Join-Path ($env:HOMEDRIVE + $env:HOMEPATH) "venv")
-)
-foreach ($vdir in $venvDirs) {
-    if (Test-Path $vdir) {
-        try {
-            Remove-Item -Recurse -Force $vdir
-            Write-Host "Removed venv: $vdir" -ForegroundColor Green
-        } catch {
-            Write-Error "Failed to remove venv: $vdir"
-        }
-    }
-}
-
-# Attempt to remove Git Bash
-$gitUninstall = Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
-    Get-ItemProperty | Where-Object { $_.DisplayName -like "Git*" }
-if ($gitUninstall -and $gitUninstall.UninstallString) {
-    try {
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c",$gitUninstall.UninstallString,"/VERYSILENT","/NORESTART" -Wait
-        Write-Host "Git Bash uninstalled." -ForegroundColor Green
-    } catch {
-        Write-Warning "Could not uninstall Git Bash automatically."
-    }
-} else {
-    Write-Host "Git Bash not found." -ForegroundColor Yellow
-}
-
-# Attempt to remove Python
-$pyUninstall = Get-ChildItem "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall" -ErrorAction SilentlyContinue |
-    Get-ItemProperty | Where-Object { $_.DisplayName -like "Python*" }
-if ($pyUninstall -and $pyUninstall.UninstallString) {
-    try {
-        Start-Process -FilePath "cmd.exe" -ArgumentList "/c",$pyUninstall.UninstallString,"/quiet" -Wait
-        Write-Host "Python uninstalled." -ForegroundColor Green
-    } catch {
-        Write-Warning "Could not uninstall Python automatically."
-    }
-} else {
-    Write-Host "Python not found." -ForegroundColor Yellow
-}
-
-# --- PATCH: Stop and remove RetroIPTVGuide service, firewall rule, and NSSM ---
-if (Get-Service RetroIPTVGuide -ErrorAction SilentlyContinue) {
-    Write-Host "Stopping RetroIPTVGuide service..." -ForegroundColor Yellow
-    Stop-Service RetroIPTVGuide -Force -ErrorAction SilentlyContinue
-}
-
-$nssmPath = "C:\nssm\nssm.exe"
-if (Test-Path $nssmPath) {
-    Write-Host "Removing RetroIPTVGuide service..." -ForegroundColor Yellow
-    & $nssmPath remove RetroIPTVGuide confirm
-}
-
-Write-Host "Removing Windows Firewall port rule for RetroIPTVGuide..." -ForegroundColor Yellow
-netsh advfirewall firewall delete rule name="RetroIPTVGuide" | Out-Null
-
-if (Test-Path "C:\nssm") {
-    Write-Host "Removing NSSM installation..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force "C:\nssm"
-}
-
-# --- PATCH: Stop and remove RetroIPTVGuide service, firewall rule, and NSSM ---
-if (Get-Service RetroIPTVGuide -ErrorAction SilentlyContinue) {
-    Write-Host "Stopping RetroIPTVGuide service..." -ForegroundColor Yellow
-    Stop-Service RetroIPTVGuide -Force -ErrorAction SilentlyContinue
-}
-
-# Try NSSM first
-$nssmPath = "C:\nssm\nssm.exe"
-if (Test-Path $nssmPath) {
-    Write-Host "Removing RetroIPTVGuide service via NSSM..." -ForegroundColor Yellow
-    & $nssmPath remove RetroIPTVGuide confirm
-}
-
-# Always try SC as a fallback to ensure service deletion
-Write-Host "Ensuring RetroIPTVGuide service is deleted..." -ForegroundColor Yellow
-sc.exe delete RetroIPTVGuide | Out-Null
-
-Write-Host "Removing Windows Firewall port rule for RetroIPTVGuide..." -ForegroundColor Yellow
-netsh advfirewall firewall delete rule name="RetroIPTVGuide" | Out-Null
-
-if (Test-Path "C:\nssm") {
-    Write-Host "Removing NSSM installation..." -ForegroundColor Yellow
-    Remove-Item -Recurse -Force "C:\nssm"
-}
-# --- END PATCH ---
-
-# --- END PATCH ---
-# --- PATCH: Python uninstall using version + path file ---
-$pythonVerFile = Join-Path $PSScriptRoot "logs\python_version.txt"
-if (Test-Path $pythonVerFile) {
-    $lines = Get-Content $pythonVerFile
-    $pythonVersion = ($lines | Where-Object { $_ -like "Version=*" }) -replace "Version=", ""
-    $pythonPath    = ($lines | Where-Object { $_ -like "Path=*" }) -replace "Path=", ""
-
-    Write-Host "Attempting to uninstall Python $pythonVersion from $pythonPath..." -ForegroundColor Yellow
-
-	$uninstaller = Join-Path $pythonPath "uninstall.exe"
-	if (-not (Test-Path $uninstaller)) {
-		# fallback: use Modify/Repair entry in registry if uninstall.exe missing
-		$uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-		$pythonKey = Get-ChildItem $uninstallKey | Where-Object {
-			$_.GetValue("DisplayName") -like "Python $pythonVersion*"
-		}
-		if ($pythonKey) {
-			$uninstallString = $pythonKey.GetValue("UninstallString", $null)
-			if ($uninstallString) {
-				Write-Host "Running registry uninstall for Python $pythonVersion..." -ForegroundColor Yellow
-				& cmd.exe /c $uninstallString /quiet | Out-Null
-			}
-		}
-	}
-
-} else {
-    Write-Host "No python_version.txt found, falling back to existing uninstall logic..." -ForegroundColor Yellow
-}
-# --- END PATCH ---
-# --- PATCH: Corrected Python uninstall using version + path file ---
-$pythonVerFile = Join-Path $PSScriptRoot "logs\python_version.txt"
-if (Test-Path $pythonVerFile) {
-    $lines = Get-Content $pythonVerFile
-    $pythonVersion = ($lines | Where-Object { $_ -like "Version=*" }) -replace "Version=", ""
-    $pythonPath    = ($lines | Where-Object { $_ -like "Path=*" }) -replace "Path=", ""
-
-    Write-Host "Attempting to uninstall Python $pythonVersion from $pythonPath..." -ForegroundColor Yellow
-
-    $uninstaller = Join-Path $pythonPath "uninstall.exe"
-    if (Test-Path $uninstaller) {
-        & $uninstaller /quiet | Out-Null
-        Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
+# Stop and remove RetroIPTVGuide service via NSSM
+$serviceName = "RetroIPTVGuide"
+try {
+    if (Get-Service -Name $serviceName -ErrorAction SilentlyContinue) {
+        Write-Host "Stopping service $serviceName..." -ForegroundColor Yellow
+        Stop-Service $serviceName -Force -ErrorAction SilentlyContinue
+        Write-Host "Removing service $serviceName..." -ForegroundColor Yellow
+        & nssm remove $serviceName confirm
     } else {
-        Write-Warning "Uninstaller not found at $uninstaller. Trying registry lookup..."
-        $uninstallKey = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall"
-        $pythonKey = Get-ChildItem $uninstallKey | Where-Object {
-            $_.GetValue("DisplayName") -like "Python $pythonVersion*"
-        } | Select-Object -First 1
-        if ($pythonKey) {
-            $uninstallString = $pythonKey.GetValue("UninstallString", $null)
-            if ($uninstallString) {
-                Write-Host "Running registry uninstall for Python $pythonVersion..." -ForegroundColor Yellow
-                & cmd.exe /c $uninstallString /quiet | Out-Null
-                Write-Host "Python $pythonVersion uninstalled successfully." -ForegroundColor Green
-            } else {
-                Write-Warning "Registry entry found but no uninstall string for Python $pythonVersion."
-            }
-        } else {
-            Write-Warning "No registry entry found for Python $pythonVersion."
-        }
+        Write-Host "Service $serviceName not found." -ForegroundColor DarkYellow
     }
-} else {
-    Write-Host "No python_version.txt found, falling back to existing uninstall logic..." -ForegroundColor Yellow
+} catch {
+    Write-Warning "Error while removing $serviceName service: $_"
 }
-# --- END PATCH ---
-Stop-Transcript
-Write-Host "Press any key to exit..." -ForegroundColor Cyan
-Pause
 
-# Clean logs after transcript ends
-#if (Test-Path $LogDir) {
+# Remove firewall rule
+try {
+    Write-Host "Removing Windows Firewall port rule for RetroIPTVGuide..." -ForegroundColor Yellow
+    netsh advfirewall firewall delete rule name="RetroIPTVGuide"
+} catch {
+    Write-Warning "Could not remove firewall rule: $_"
+}
+
+# Remove RetroIPTVGuide installation folder
+#$installDir = "$PSScriptRoot"
+#if (Test-Path $installDir) {
+#    Write-Host "Removing install directory $installDir..." -ForegroundColor Yellow
 #    try {
-#        Remove-Item -Recurse -Force $LogDir
-#        Write-Host "Removed logs folder: $LogDir" -ForegroundColor Green
+#        Remove-Item -Recurse -Force $installDir
+#        Write-Host "Install directory removed." -ForegroundColor Green
 #    } catch {
-#        Write-Warning "Failed to remove logs folder: $LogDir"
+#        Write-Warning "Could not remove ${installDir}: $_"
+#    }
+#} else {
+#    Write-Host "Install directory not found: $installDir" -ForegroundColor DarkYellow
+#}
+
+## Optional cleanup of dependencies installed by Chocolatey
+#function Uninstall-ChocoPackage($pkgName) {
+#    if (Get-Command choco.exe -ErrorAction SilentlyContinue) {
+#        $installed = choco list | Select-String -Pattern "^$pkgName"
+#        if ($installed) {
+#            Write-Host "Uninstalling $pkgName via Chocolatey..." -ForegroundColor Yellow
+#            choco uninstall $pkgName -y | Out-Null
+#        } else {
+#            Write-Host "$pkgName not found in Chocolatey, skipping." -ForegroundColor DarkYellow
+#        }
+#    } else {
+#        Write-Host "Chocolatey not found, cannot uninstall $pkgName." -ForegroundColor DarkYellow
 #    }
 #}
+#
+#Uninstall-ChocoPackage "python"
+#Uninstall-ChocoPackage "python3"
+#Uninstall-ChocoPackage "nssm"
+#Uninstall-ChocoPackage "git"
+#Uninstall-ChocoPackage "git.install"
+
+# Improved Chocolatey uninstall function
+function Uninstall-ChocoPackagePrefix($pkgPrefix) {
+    if (Get-Command choco.exe -ErrorAction SilentlyContinue) {
+        $installed = choco list | ForEach-Object { ($_ -split ' ')[0] } | Where-Object { $_ -like "$pkgPrefix*" }
+        if ($installed) {
+            foreach ($pkg in $installed) {
+                Write-Host "Uninstalling $pkg via Chocolatey..." -ForegroundColor Yellow
+                choco uninstall $pkg -y | Out-Null
+            }
+        } else {
+            Write-Host "No packages found with prefix '$pkgPrefix', skipping." -ForegroundColor DarkYellow
+        }
+    } else {
+        Write-Host "Chocolatey not found, cannot uninstall packages with prefix '$pkgPrefix'." -ForegroundColor DarkYellow
+    }
+}
+
+# Remove all Python variants + NSSM + Git
+Uninstall-ChocoPackagePrefix "python"
+Uninstall-ChocoPackagePrefix "nssm"
+Uninstall-ChocoPackagePrefix "git"
+
+
+# --- Remove registry App Paths aliases for python/python3 ---
+try {
+    if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python.exe") {
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python.exe" -Recurse -Force
+        Write-Host "Removed App Path alias: python.exe" -ForegroundColor Yellow
+    }
+    if (Test-Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python3.exe") {
+        Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\App Paths\python3.exe" -Recurse -Force
+        Write-Host "Removed App Path alias: python3.exe" -ForegroundColor Yellow
+    }
+} catch {
+    Write-Warning "Failed to remove python/python3 App Path aliases: $_"
+}
+
+# --- Optionally restore Microsoft Store stubs (App Execution Aliases) ---
+$windowsApps = "$env:LOCALAPPDATA\Microsoft\WindowsApps"
+$stubTargets = @(
+    "python.exe",
+    "python3.exe"
+)
+
+foreach ($stub in $stubTargets) {
+    $stubPath = Join-Path $windowsApps $stub
+    if (-not (Test-Path $stubPath)) {
+        try {
+            # Recreate as a zero-byte placeholder to mimic default behavior
+            New-Item -Path $stubPath -ItemType File -Force | Out-Null
+            Write-Host "Restored Microsoft Store alias stub: $stubPath" -ForegroundColor Yellow
+        } catch {
+            Write-Warning "Failed to restore Store alias ${stub}: $_"
+        }
+    }
+}
+
+Write-Host ""
+Write-Host "Would you like to completely uninstall ALL remaining Chocolatey packages and Chocolatey itself?" -ForegroundColor Yellow
+$fullUninstall = Read-Host "Type yes or no"
+Write-Output "User response to full uninstall prompt: $fullUninstall"
+
+if ($fullUninstall.ToLower() -eq "yes") {
+    try {
+        Write-Host ""
+        Write-Host "Proceeding with full removal of all Chocolatey packages..." -ForegroundColor Red
+
+        # Capture installed packages
+        $rawInstalled = & choco list 2>$null
+        if ($rawInstalled -is [string]) { $rawInstalled = $rawInstalled -split "`r?`n" }
+
+        $installed = $rawInstalled | Where-Object {
+            ($_ -notmatch "^Chocolatey v") -and
+            ($_ -notmatch "Did you know Pro") -and
+            ($_ -notmatch "Features\? Learn more") -and
+            ($_ -notmatch "Package Synchronizer") -and
+            ($_ -notmatch "packages installed") -and
+            ($_ -ne "")
+        }
+
+        # Extract package names (first token of each line)
+        $pkgNames = $installed | ForEach-Object { ($_ -split " ")[0] }
+
+        if ($pkgNames) {
+            foreach ($pkg in $pkgNames) {
+                Write-Host "Uninstalling $pkg ..." -ForegroundColor Cyan
+                choco uninstall -y $pkg | Out-Null
+            }
+        }
+
+        # Finally uninstall Chocolatey itself
+        Write-Host "Uninstalling Chocolatey..." -ForegroundColor Cyan
+        choco uninstall -y chocolatey | Out-Null
+
+        Write-Host "Full Chocolatey removal complete." -ForegroundColor Green
+        Write-Output "Full Chocolatey removal complete."
+    } catch {
+        Write-Warning "Failed to completely remove all Chocolatey packages: $_"
+    }
+} else {
+    Write-Host "Leaving remaining Chocolatey packages and Chocolatey itself installed." -ForegroundColor Cyan
+}
+
+Stop-Transcript
+Write-Host "=== Uninstallation complete ===" -ForegroundColor Cyan
+pause
