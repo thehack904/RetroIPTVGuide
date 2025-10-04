@@ -67,6 +67,8 @@ The web interface has been tested on:
 - **Android (Samsung Mobile Phone)**
 - **macOS**
 - **Windows 10/11**
+- **MacOS**
+- **Windows**
 
 ## 🛠️ Installation Platform
 - **Debian Based Linux (desktop/server)**
