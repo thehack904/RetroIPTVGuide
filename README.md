@@ -30,8 +30,8 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - 📑 **Logging**
   - Activity log (`activity.log`) records authentication events, tuner changes, playback, and admin actions.
   - Admin-only **Logs page** with real-time log viewing.
-  - **Log file size display with color coding (v2.3.1)**.
-  - **Admin-only “Clear Logs” button to truncate logs (v2.3.1)**.
+  - Log file size display with color coding.
+  - Admin-only “Clear Logs” button to truncate logs.
 - 🎨 **UI Enhancements**
   - Unified header across all pages (Guide, Logs, Add User, Delete User, Change Password, Change Tuner).
   - Active tuner display + live clock in header.
@@ -46,9 +46,9 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
   - Automatic initialization of `users.db` and `tuners.db` on first run.
   - SQLite databases use WAL mode for better concurrency.
   - Preloads tuner/channel/guide data from DB on startup.
-  - **Cross-platform installers (Linux/Windows)**.
-  - **Uninstaller scripts (Linux/Windows)**.
-  - **Automated version bump tool (`bump_version.py`)**.
+  - **Cross-platform installers (Linux/Windows) (v3.0.0)**.
+  - **Uninstaller scripts (Linux/Windows)  (v3.0.0)**.
+  - **Automated version bump tool (`bump_version.py`) (v3.0.0)**.
 
 ---
 
