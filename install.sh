@@ -93,6 +93,42 @@ if [[ "$ENVIRONMENT" == "LINUX" || "$ENVIRONMENT" == "WSL" ]]; then
     fi
 fi
 
+echo ""
+echo "============================================================"
+echo " RetroIPTVGuide Installer Agreement "
+echo "============================================================"
+echo ""
+echo "This installer will perform the following actions:" 
+echo "  - Detect whether you are running on Linux, WSL, or Git Bash"
+echo "  - On Linux/WSL:"
+echo "      * Ensure the script is run with sudo"
+echo "      * Create dedicated system user 'iptv' (if not already present)"
+echo "      * Ensure python3-venv package is installed"
+echo "      * Copy project files into /home/iptv/iptv-server"
+echo "      * Create and configure a Python virtual environment"
+echo "      * Upgrade pip and install requirements"
+echo "      * Create and enable the iptv-server systemd service"
+echo "      * Start the iptv-server service"
+echo "  - On Git Bash (Windows):"
+echo "      * Verify Python is installed (via bootstrap)"
+echo "      * Create and configure a Python virtual environment"
+echo "      * Upgrade pip if outdated, then install requirements"
+echo "      * Virtual environment setup complete (Windows service manager handles app start)"
+echo ""
+echo "By continuing, you acknowledge and agree that:"
+echo "  - This software should ONLY be run on internal networks."
+echo "  - It must NOT be exposed to the public Internet."
+echo "  - You accept all risks; the author provides NO WARRANTY."
+echo "  - The author is NOT responsible for any damage, data loss,"
+echo "    or security vulnerabilities created by this installation."
+echo ""
+read -p "Do you agree to these terms? (yes/no): " agreement
+
+if [ "$agreement" != "yes" ]; then
+    echo "Installation aborted by user."
+    exit 1
+fi
+
 # Variables
 APP_USER="iptv"
 APP_HOME="/home/$APP_USER"
