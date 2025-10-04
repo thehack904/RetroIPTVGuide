@@ -45,7 +45,10 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 6. Cross-platform
 - [ ] Create installable container.  
 - [ ] Create MacOS install/executable.
-- [x] Create Microsoft Windows install/executable (basic support via Git Bash + PowerShell bootstrap) (v2.3.0)  
+- [x] Create Microsoft Windows install/executable (full support via PowerShell + NSSM service) (v3.0.0)
+- [x] Add uninstall_windows.ps1 and uninstall.bat (v3.0.0)
+- [x] Windows installer now bootstraps Chocolatey, installs Python, Git, NSSM, and configures service (v3.0.0)
+- [x] Windows uninstaller cleans service, firewall rule, and optionally removes Chocolatey (v3.0.0)  
   - [ ] Validate/test installer fully on Windows environments
 
 ### 7. New Features
@@ -74,7 +77,7 @@ These are **not yet implemented**, but provide a development path for future rel
 ## 📅 Priority Suggestions
 - Short term: (none — unified UI headers already completed in v2.0.0).  
 - Medium term: log filtering (still pending).  
-- Medium term: Validate installer/uninstaller on Windows (pending).  
+- Medium term: Test and harden installer/uninstaller on mixed Windows environments (v3.0.0 complete, further refinements planned).  
 - Long term: .m3u8 support, DB logs, recording functionality.  
 
 ---
@@ -92,3 +95,8 @@ These are **not yet implemented**, but provide a development path for future rel
 - [x] Cross-platform `uninstall.sh` with sudo/admin checks and safe cleanup (v2.3.0).  
 - [x] Basic Windows installer support (Git Bash + PowerShell bootstrap) (v2.3.0).  
 
+
+
+## ✅ Completed (v3.0.0)
+- [x] Full Windows installer/uninstaller support with NSSM service, firewall rule, and Chocolatey integration (v3.0.0).
+- [x] Documentation updates (README.md, INSTALL.md) to reflect Windows support (v3.0.0).

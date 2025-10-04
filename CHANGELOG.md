@@ -14,6 +14,34 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## [3.0.0] - 2025-10-03
+### Added
+- **Windows Support**:
+  - New `install_windows.ps1` and `install.bat` for automated setup.
+  - New `uninstall_windows.ps1` and `uninstall.bat` for clean removal.
+  - NSSM service created to run `venv\Scripts\python.exe app.py` automatically.
+  - Windows installer bootstraps Chocolatey, installs `python`, `git`, and `nssm`.
+  - Windows uninstaller removes the service, deletes firewall rule for port 5000, and lists remaining Chocolatey packages (with option to remove all).
+- **Cross-platform Installer Enhancements**:
+  - `install.sh` improved to detect Linux, WSL, or Git Bash environments.
+  - Added pip upgrade check instead of always forcing upgrade.
+  - Unified handling of venv paths for Linux (`bin/`) and Windows (`Scripts/`).
+- **bump_version.py**:
+  - Now also updates `install_windows.ps1`, `uninstall_windows.ps1`, and `uninstall.sh`.
+  - Automatically inserts `APP_VERSION`/`VERSION` if missing.
+
+### Changed
+- **Documentation**:
+  - Updated `README.md` with Windows one-liner install.
+  - Updated `INSTALL.md` with new Windows instructions and update steps.
+- **Uninstall Scripts**:
+  - Windows uninstall output cleaned to avoid duplicate Chocolatey lists.
+  - Linux/WSL uninstall script improved to fully remove `iptv-server` systemd service and venv.
+
+### Fixed
+- Consistent logging of user agreement and installer actions.
+- Ensured firewall rule removal on Windows during uninstall.
+
 ## [2.3.2] - 2025-09-26
 ### Added
 - Introduced unified **Themes submenu** (Light, Dark, AOL/CompuServe, TV Guide Magazine) across all admin and user pages.
