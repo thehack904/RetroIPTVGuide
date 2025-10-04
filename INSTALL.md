@@ -47,7 +47,7 @@ sudo ./install.sh
 Run this one-liner from an **Administrator PowerShell** prompt:
 
 ```powershell
-Invoke-WebRequest https://github.com/thehack904/RetroIPTVGuide/archive/refs/heads/main.zip -OutFile RetroIPTVGuide.zip ; tar -xf RetroIPTVGuide.zip ; cd RetroIPTVGuide-windows ; .\install.bat
+Invoke-WebRequest https://github.com/thehack904/RetroIPTVGuide/archive/refs/heads/main.zip -OutFile RetroIPTVGuide.zip ; tar -xf RetroIPTVGuide.zip ; cd RetroIPTVGuide-main ; .\install.bat
 ```
 
 **What the installer does (Windows):**
