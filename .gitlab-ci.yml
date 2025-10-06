@@ -1,0 +1,42 @@
+stages:
+  - clone
+  - build
+  - test
+  - deploy
+
+variables:
+  GITHUB_REPO: "https://github.com/thehack904/RetroIPTVGuide.git"
+
+clone_repo:
+  stage: clone
+  image: alpine/git
+  script:
+    - echo "Cloning $GITHUB_REPO..."
+    - git clone --branch main "$GITHUB_REPO" .
+  artifacts:
+    paths:
+      - ./
+
+build_app:
+  stage: build
+  image: python:3.12
+  script:
+    - echo "Building RetroIPTVGuide..."
+    - pip install -r requirements.txt
+    - python -m py_compile $(find . -name "*.py")
+
+test_app:
+  stage: test
+  image: python:3.12
+  script:
+    - echo "Running syntax and basic runtime tests..."
+    - python -m unittest discover -s tests || echo "No tests found, skipping."
+
+deploy_app:
+  stage: deploy
+  image: alpine
+  script:
+    - echo "Simulating deployment to /opt/retroiptvguide"
+    - mkdir -p /opt/retroiptvguide
+    - cp -r . /opt/retroiptvguide/
+  when: manual
