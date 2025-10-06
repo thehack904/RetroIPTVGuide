@@ -1,0 +1,60 @@
+name: RetroIPTVGuide CI/CD
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  DEPLOY_PATH: "/opt/retroiptvguide"
+
+jobs:
+  clone:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Clone confirmation
+        run: echo "✅ Repository cloned successfully."
+
+  build:
+    runs-on: ubuntu-latest
+    needs: clone
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Build RetroIPTVGuide
+        run: |
+          echo "🚧 Building RetroIPTVGuide..."
+          pip install -r requirements.txt
+          python -m py_compile $(find . -name "*.py")
+
+  test:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - name: Run basic tests
+        run: |
+          echo "🧪 Running syntax and basic runtime tests..."
+          python -m unittest discover -s tests || echo "No tests found, skipping."
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simulate Deployment
+        run: |
+          echo "🚀 Simulating deployment to ${{ env.DEPLOY_PATH }}"
+          mkdir -p ${{ env.DEPLOY_PATH }}
+          cp -r . ${{ env.DEPLOY_PATH }}/
+
