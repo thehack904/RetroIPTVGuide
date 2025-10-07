@@ -1,4 +1,4 @@
-APP_VERSION = "v3.0.0"
+APP_VERSION = "v3.0.1"
 APP_RELEASE_DATE = "2025-09-26"
 
 from flask import Flask, render_template, request, redirect, url_for, flash
@@ -225,6 +225,11 @@ def parse_m3u(m3u_url):
 # ------------------- XMLTV EPG Parsing -------------------
 def parse_epg(xml_url):
     programs = {}
+    
+    # ✅ Handle when user pastes same .m3u for XML
+    if xml_url.lower().endswith(('.m3u', '.m3u8')):
+        return programs  # empty, fallback will fill it later
+        
     try:
         r = requests.get(xml_url, timeout=15)
         r.raise_for_status()
@@ -261,6 +266,23 @@ def parse_epg(xml_url):
         programs[cid].append({'title': title, 'desc': desc, 'start': start, 'stop': stop})
     return programs
 
+# ------------------- EPG Fallback Helper -------------------
+def apply_epg_fallback(channels, epg):
+    """Ensure each channel has at least one program entry, even if missing in XML."""
+    for ch in channels:
+        tvg_id = ch.get('tvg_id')
+        if not tvg_id:
+            continue
+        if tvg_id not in epg or not epg[tvg_id]:
+            epg[tvg_id] = [{
+                'title': 'No Guide Data Available',
+                'desc': '',
+                'start': None,
+                'stop': None
+            }]
+    return epg
+
+
 # ------------------- Routes -------------------
 @app.route('/')
 def home():
@@ -282,6 +304,8 @@ def login():
             global cached_channels, cached_epg
             cached_channels = parse_m3u(m3u_url)
             cached_epg = parse_epg(xml_url)
+            # ✅ Apply “No Guide Data Available” fallback
+            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
             return redirect(url_for('guide'))
         else:
             log_event(username if username else "unknown", "Failed login attempt")
@@ -414,6 +438,16 @@ def change_tuner():
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
             flash(f"Active tuner switched to {new_tuner}")
 
+            # ✅ Refresh cached guide data immediately
+            global cached_channels, cached_epg
+            tuners = get_tuners()
+            m3u_url = tuners[new_tuner]["m3u"]
+            xml_url = tuners[new_tuner]["xml"]
+            cached_channels = parse_m3u(m3u_url)
+            cached_epg = parse_epg(xml_url)
+            # ✅ Apply “No Guide Data Available” fallback
+            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+
         elif action == "update_urls":
             tuner = request.form["tuner"]
             xml_url = request.form["xml_url"]
@@ -485,6 +519,18 @@ def guide():
     total_width = slots * SLOT_MINUTES * SCALE
     minutes_from_start = (now - grid_start).total_seconds() / 60.0
     now_offset = int(minutes_from_start * SCALE)
+    
+    # --- DEBUG: Show alignment between M3U and EPG ---
+    #print("\n=== DEBUG: Cached Channels and EPG Keys ===")
+    #print("First 5 channel IDs from M3U:")
+    #for ch in cached_channels[:5]:
+    #    print("  ", ch.get('tvg_id'))
+
+    #print("\nFirst 5 EPG keys:")
+    #for key in list(cached_epg.keys())[:5]:
+    #    print("  ", key)
+    #print("==========================================\n")
+
 
     return render_template(
         'guide.html',

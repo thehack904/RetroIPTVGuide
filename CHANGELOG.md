@@ -1,4 +1,4 @@
-# 📑 Changelog
+# đź“‘ Changelog
 
 All notable changes to this project will be documented here. 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
@@ -13,6 +13,34 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: log filtering and pagination. 
 
 ---
+
+## [v3.0.1] - 2025-10-07
+### Added
+- **EPG Fallback System**  
+  - Channels without XMLTV data now display “No Guide Data Available”.  
+  - Added `apply_epg_fallback()` helper to ensure all channels have at least one program entry.  
+  - Fallback automatically applied after login and tuner switch.
+- **Invalid XML Detection**  
+  - If a user enters the same `.m3u` URL for both M3U and XML, the system treats it as invalid XML and loads fallback placeholders instead.
+- **Visual Placeholders**  
+  - `guide.html` updated to render gray, italicized “No Guide Data Available” banners in program grid.  
+  - Works across all existing Light/Dark/Retro themes.
+
+### Changed
+- **Tuner Switching Behavior**  
+  - Active tuner now refreshes immediately without requiring logout/relogin.  
+  - Cached channel/EPG data reloaded dynamically when tuner changes.
+- **Login Page UI**  
+  - Redesigned with floating centered box, shadow, and right-aligned RetroIPTVGuide logo.
+
+### Fixed
+- **EPG Cache Sync**  
+  - Prevented guide from displaying outdated EPG after tuner change.  
+  - Corrected case where missing XML data produced empty grid.
+
+
+---
+
 
 ## [3.0.0] - 2025-10-03
 ### Added
@@ -72,7 +100,7 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Shows dynamic system info: version, release date, Python version, OS, install path, database path, logs path, uptime.
 - **Admin Log Management**:
   - Log file size shown on Logs page (human-readable + color-coded).
-  - Admin-only “Clear Logs” button added to truncate activity log.
+  - Admin-only â€śClear Logsâ€ť button added to truncate activity log.
 - **Automated Version Bump Tool**:
   - Added `bump_version.py` to sync `APP_VERSION` in app.py with CHANGELOG.md.
   - Inserts new version section under `[Unreleased]`.
@@ -99,7 +127,7 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Data is pulled from `app.py` constants and runtime environment, no manual edits required.
 
 #### Notes
-- **Windows validation pending**: Installer and uninstaller are implemented but require verification on Windows; tracked in ROADMAP “Priority Suggestions”.
+- **Windows validation pending**: Installer and uninstaller are implemented but require verification on Windows; tracked in ROADMAP â€śPriority Suggestionsâ€ť.
 
 ---
 
@@ -119,7 +147,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 
 
-## [v2.0.0] – 2025-09-24
+## [v2.0.0] â€“ 2025-09-24
 ### Added
 - Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
   - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.
@@ -157,7 +185,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [v1.x.x] – 2025-09-01 → 2025-09-23
+## [v1.x.x] â€“ 2025-09-01 â†’ 2025-09-23
 ### Added
 - Initial IPTV Flask application with:  
   - User authentication (login/logout, password change).  

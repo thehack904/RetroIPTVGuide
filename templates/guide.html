@@ -208,6 +208,15 @@
 		body.retro-magazine .now-line { background:#000; height:3px; }
 		body.retro-magazine #current-tuner { color:#000000 !important; font-weight:bold; }
 
+		/* Placeholder when no guide data exists */
+		.program.no-guide {
+			font-style: italic;
+			color: #999;
+			background: #2a2a2a;
+			border: 1px dashed #555;
+		}
+
+
 		
     </style>
 </head>
@@ -299,22 +308,35 @@
         </div>
         <div class="grid-col">
             <div class="grid-content">
-                {% set cid = ch.tvg_id %}
-                {% for prog in epg.get(cid, []) %}
-                    {% if prog.start and prog.stop %}
-                        {% set left = ((prog.start - grid_start).total_seconds()/60) * SCALE %}
-                        {% set calc_width = (prog.stop - prog.start).total_seconds()/60 * SCALE %}
-                        {% set width = 24 if calc_width < 24 else calc_width %}
-                        <div class="program {% if prog.start <= now <= prog.stop %}now{% endif %}"
-                             style="left:{{ left }}px; width:{{ width }}px;"
-                             data-start="{{ prog.start.isoformat() }}"
-                             data-stop="{{ prog.stop.isoformat() }}"
-                             data-title="{{ prog.title }}"
-                             data-desc="{{ prog.desc }}">
-                            {{ prog.title }}
-                        </div>
-                    {% endif %}
-                {% endfor %}
+			{% set cid = ch.tvg_id %}
+			{% set channel_epg = epg[cid] if cid in epg else [] %}
+			{% if channel_epg|length == 0 %}
+				<div class="program no-guide"
+					style="left:0px; width:{{ 60 * SCALE }}px;">
+					No Guide Data Available
+				</div>
+			{% else %}
+				{% for prog in channel_epg %}
+					{% if prog.title == 'No Guide Data Available' %}
+						<div class="program no-guide"
+							style="left:0px; width:{{ 60 * SCALE }}px;">
+							{{ prog.title }}
+						</div>
+					{% elif prog.start and prog.stop %}
+						{% set left = ((prog.start - grid_start).total_seconds()/60) * SCALE %}
+						{% set calc_width = (prog.stop - prog.start).total_seconds()/60 * SCALE %}
+						{% set width = 24 if calc_width < 24 else calc_width %}
+						<div class="program {% if prog.start <= now <= prog.stop %}now{% endif %}"
+							style="left:{{ left }}px; width:{{ width }}px;"
+							data-start="{{ prog.start.isoformat() }}"
+							data-stop="{{ prog.stop.isoformat() }}"
+							data-title="{{ prog.title }}"
+							data-desc="{{ prog.desc }}">
+							{{ prog.title }}
+						</div>
+					{% endif %}
+				{% endfor %}
+			{% endif %}
             </div>
         </div>
     </div>

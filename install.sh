@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="2.1.0"
+VERSION="3.0.1"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="install_${TIMESTAMP}.log"
 
@@ -220,6 +220,14 @@ else
     echo "Unsupported environment: $OSTYPE"
     exit 1
 fi
+
+echo ""
+echo "Installation complete!"
+echo "End time: $(date)"
+echo "Access the server in your browser at: http://<your-server-ip>:5000"
+echo "Default login: admin / strongpassword123"
+echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
+echo ""
 }
 
 if [ "$ENVIRONMENT" = "GITBASH" ]; then
