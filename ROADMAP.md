@@ -10,7 +10,7 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 1. Tuner Management
 - [x] Add ability to **add/remove tuners** from the UI (v2.3.0).
 - [x] Add ability to rename tuners via the UI (v2.3.0).  
-- [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
+- [ ] Support for **.m3u8 single-channel playlists** as tuner sources (planned v3.1.0).  
   - Option A: Special-case `.m3u8` handling in parser.  
   - Option B: Add explicit `hls` column to `tuners.db`.  
 - [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).  
@@ -26,8 +26,8 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 3. Guide & Playback
 - [ ] Add **search/filter box** to guide for channels/programs.  
 - [ ] Add ability to set **favorites** for quick channel access.  
+- [x] Add fallback message (“No Guide Data Available”) for channels missing EPG info (v3.0.1).  
 - [ ] Add **reminders/notifications** for upcoming programs.  
-- [ ] (Future) Support recording/saving streams for offline playback.
 
 ### 4. User Management
 - [ ] Add role-based access control (admin, regular user, read-only).  
