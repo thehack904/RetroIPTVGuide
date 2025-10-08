@@ -81,7 +81,7 @@ Default login: **admin / strongpassword123**
 
 #### Quick update (one-liner)
 ```bash
-sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl restart iptv-server.service
+sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart iptv-server.service
 ```
 or
 
