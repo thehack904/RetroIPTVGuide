@@ -48,28 +48,20 @@ for arg in "$@"; do
   esac
 done
 
-# --- Helpers ---
+# --- Helper functions ---
 set_gpu_mem() {
   local val="$1"
   if command -v raspi-config >/dev/null 2>&1; then
     sudo raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE"
   else
-    # Fallback: edit/append gpu_mem in /boot/config.txt
     sudo sed -i -E 's/^\s*gpu_mem\s*=.*/gpu_mem='"$val"'/g' "$CONFIG_FILE" 2>/dev/null || true
     if ! grep -qE '^\s*gpu_mem\s*=' "$CONFIG_FILE" 2>/dev/null; then
       echo "gpu_mem=$val" | sudo tee -a "$CONFIG_FILE" >/dev/null
     fi
   fi
 }
-
-ensure_owned_by_iptv() {
-  sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-}
-
-pip_install_as_iptv() {
-  local cmd="$1"
-  sudo -u "$APP_USER" bash -lc "$cmd"
-}
+ensure_owned_by_iptv() { sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"; }
+pip_install_as_iptv()   { sudo -u "$APP_USER" bash -lc "$1"; }
 
 #====================== INSTALL ======================#
 install_app() {
@@ -80,6 +72,7 @@ install_app() {
   echo ""
   echo "This installer will perform the following actions:"
   echo "  - Detect Raspberry Pi model (3, 4, or newer)"
+  echo "  - Check storage, RAM, and swap configuration"
   echo "  - Install dependencies (Python3, ffmpeg, etc.)"
   echo "  - Create system user 'iptv' (if not present)"
   echo "  - Clone RetroIPTVGuide into /home/iptv/iptv-server"
@@ -98,54 +91,62 @@ install_app() {
     echo "[Auto-agree] Terms accepted via --agree flag."
   else
     read -p "Do you agree to these terms? (yes/no): " agreement
-    if [ "$agreement" != "yes" ]; then
-      echo "Installation aborted by user."
-      exit 1
-    fi
+    [[ "$agreement" != "yes" ]] && echo "Installation aborted." && exit 1
     echo "Agreement accepted. Continuing..."
   fi
   echo ""
 
   # Detect Pi model
   PI_MODEL=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "Unknown Model")
-  if echo "$PI_MODEL" | grep -q "Raspberry Pi 5"; then
-    PI_TYPE="pi5"
-  elif echo "$PI_MODEL" | grep -q "Raspberry Pi 4"; then
-    PI_TYPE="pi4"
-  elif echo "$PI_MODEL" | grep -q "Raspberry Pi 3"; then
-    PI_TYPE="pi3"
-  else
-    PI_TYPE="unknown"
-  fi
+  case "$PI_MODEL" in
+    *"Raspberry Pi 5"*) PI_TYPE="pi5" ;;
+    *"Raspberry Pi 4"*) PI_TYPE="pi4" ;;
+    *"Raspberry Pi 3"*) PI_TYPE="pi3" ;;
+    *) PI_TYPE="unknown" ;;
+  esac
   echo "Detected board: $PI_MODEL ($PI_TYPE)"
   echo ""
 
-  # Create system user
+  # Check SD card and swap
+  echo "Checking storage and memory..."
+  ROOT_DEV=$(df / | tail -1 | awk '{print $1}')
+  SD_SIZE=$(df -h / | awk 'NR==2 {print $2}')
+  MEM_TOTAL=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
+  SWAP_TOTAL=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo)
+  echo "Root device: $ROOT_DEV"
+  echo "Storage size: $SD_SIZE"
+  echo "RAM: ${MEM_TOTAL}MB | Swap: ${SWAP_TOTAL}MB"
+  if [ "$MEM_TOTAL" -lt 1000 ] && [ "$SWAP_TOTAL" -lt 400 ]; then
+    echo "⚠️  Warning: <1GB RAM and <400MB swap — increase swap to 1GB for stability:"
+    echo "   sudo dphys-swapfile swapoff && sudo sed -i 's/^CONF_SWAPSIZE=.*/CONF_SWAPSIZE=1024/' /etc/dphys-swapfile && sudo dphys-swapfile setup && sudo dphys-swapfile swapon"
+  fi
+  if df -BG / | awk 'NR==2 {exit ($2<8)}'; then
+    echo "⚠️  Warning: Root filesystem smaller than 8GB — limited space for logs/updates."
+  fi
+  echo ""
+
+  # Create user if needed
   if ! id "$APP_USER" &>/dev/null; then
     echo "Creating user '$APP_USER'..."
     sudo useradd -m -r -s /usr/sbin/nologin "$APP_USER"
   fi
-
-  # Prepare app dir
   sudo mkdir -p "$APP_DIR"
   ensure_owned_by_iptv
 
-  # Update & deps (apt-get, script-safe)
+  # Update & deps
   echo "Installing dependencies..."
   sudo apt-get update -y
   sudo apt-get dist-upgrade -y
-  sudo apt-get install -y git python3 python3-venv python3-pip ffmpeg mesa-utils v4l-utils
-  # raspi-config is standard on Raspberry Pi OS; on Ubuntu it may be missing (we handle fallback in set_gpu_mem)
-  sudo apt-get install -y raspi-config || true
+  sudo apt-get install -y git python3 python3-venv python3-pip ffmpeg mesa-utils v4l-utils raspi-config || true
 
-  # Clone / update repo
+  # Clone or update repo
   if [ ! -d "$APP_DIR/.git" ]; then
     sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
   else
     ( cd "$APP_DIR" && sudo -u "$APP_USER" git pull )
   fi
 
-  # Python venv & deps (as iptv user)
+  # Python venv setup
   if [ ! -d "$APP_DIR/venv" ]; then
     sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
   fi
@@ -155,15 +156,13 @@ install_app() {
   else
     pip_install_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install Flask"
   fi
-
-  # Ensure DB/data dirs if app expects them
   sudo -u "$APP_USER" mkdir -p "$APP_DIR/data" || true
 
-  # GPU memory per model (headless safe)
+  # GPU memory by model
   echo "Configuring GPU memory..."
   case "$PI_TYPE" in
     pi4|pi5) set_gpu_mem 256 ;;
-    pi3|unknown|*) set_gpu_mem 128 ;;
+    pi3|*)   set_gpu_mem 128 ;;
   esac
 
   # systemd service
@@ -184,7 +183,6 @@ Environment=FLASK_RUN_HOST=0.0.0.0
 [Install]
 WantedBy=multi-user.target
 EOF
-
   sudo systemctl daemon-reload
   sudo systemctl enable retroiptvguide
   sudo systemctl restart retroiptvguide
@@ -220,19 +218,16 @@ EOF
   fi
   echo ""
 
-  # Optional reboot prompt
-  if [ "$AUTO_YES" = true ]; then
-    # For unattended runs, perform a quick service check and skip reboot by default
-    systemctl is-active --quiet retroiptvguide && echo "Service is active." || echo "Warning: service not active."
-  else
-    read -t 10 -p "Reboot now to ensure GPU memory takes effect? (Y/n, default Y in 10s): " R || R="Y"
+  # Optional reboot
+  if [ "$AUTO_YES" = false ]; then
+    read -t 10 -p "Reboot now to apply GPU memory? (Y/n, default Y in 10s): " R || R="Y"
     R=${R:-Y}
     if [[ "$R" =~ ^[Yy]$ ]]; then
       echo "Rebooting..."
       sleep 2
       sudo reboot
     else
-      echo "Reboot skipped. Run 'sudo reboot' later to apply GPU memory if changed."
+      echo "Reboot skipped. Run 'sudo reboot' later if GPU memory changed."
     fi
   fi
 }
