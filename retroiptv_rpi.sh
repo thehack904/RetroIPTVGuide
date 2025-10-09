@@ -52,12 +52,24 @@ done
 set_gpu_mem() {
   local val="$1"
   if command -v raspi-config >/dev/null 2>&1; then
-    sudo raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE"
+    # Quietly apply GPU memory change and suppress unrelated warnings
+    sudo raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE" 2>/dev/null || true
+
+    # Verify it was written correctly
+    local current_val
+    current_val=$(grep -E "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | tail -n1 | cut -d'=' -f2)
+    if [ "$current_val" = "$val" ]; then
+      echo "✅ Verified: GPU memory successfully set to ${val}MB" | tee -a "$LOG_FILE"
+    else
+      echo "⚠️  Warning: Could not confirm gpu_mem=$val in $CONFIG_FILE" | tee -a "$LOG_FILE"
+    fi
   else
+    # Manual fallback if raspi-config missing
     sudo sed -i -E 's/^\s*gpu_mem\s*=.*/gpu_mem='"$val"'/g' "$CONFIG_FILE" 2>/dev/null || true
     if ! grep -qE '^\s*gpu_mem\s*=' "$CONFIG_FILE" 2>/dev/null; then
       echo "gpu_mem=$val" | sudo tee -a "$CONFIG_FILE" >/dev/null
     fi
+    echo "✅ Fallback: gpu_mem set manually to ${val}MB" | tee -a "$LOG_FILE"
   fi
 }
 ensure_owned_by_iptv() { sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"; }
