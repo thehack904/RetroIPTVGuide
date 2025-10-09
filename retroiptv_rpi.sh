@@ -122,15 +122,15 @@ EOF
   case "$PI_TYPE" in
     pi3)
       sudo raspi-config nonint do_gldriver G1
-      sudo raspi-config nonint do_memory_split 128
+      sudo raspi-config nonint set_config_var gpu_mem 128 /boot/config.txt
       grep -q "dtoverlay=vc4-fkms-v3d" "$CONFIG_FILE" || echo "dtoverlay=vc4-fkms-v3d" | sudo tee -a "$CONFIG_FILE"
       ;;
     pi4)
       sudo raspi-config nonint do_gldriver G2
-      sudo raspi-config nonint do_memory_split 256
+      sudo raspi-config nonint set_config_var gpu_mem 256 /boot/config.txt
       grep -q "dtoverlay=vc4-kms-v3d" "$CONFIG_FILE" || echo "dtoverlay=vc4-kms-v3d" | sudo tee -a "$CONFIG_FILE"
       ;;
-    *) sudo raspi-config nonint do_memory_split 128 ;;
+    *) sudo raspi-config nonint set_config_var gpu_mem 128 /boot/config.txt ;;
   esac
 
   echo ""
