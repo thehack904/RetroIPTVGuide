@@ -100,3 +100,15 @@ These are **not yet implemented**, but provide a development path for future rel
 ## ✅ Completed (v3.0.0)
 - [x] Full Windows installer/uninstaller support with NSSM service, firewall rule, and Chocolatey integration (v3.0.0).
 - [x] Documentation updates (README.md, INSTALL.md) to reflect Windows support (v3.0.0).
+
+### Installer Enhancement: Kiosk vs Headless Mode (Planned)
+**Target Version:** v3.2.0  
+**Status:** Planned  
+**Effort:** Medium  
+
+- Add an interactive mode selector to the Raspberry Pi installer.
+- Headless mode → install to `/home/iptv/iptv-server` with service user `iptv`.
+- Kiosk mode → install to `/opt/RetroIPTVGuide` and auto-launch Chromium in fullscreen displaying RetroIPTVGuide.
+- Support command-line flags: `--mode kiosk` or `--mode headless` for non-interactive installs.
+- Ensure logs and services are properly separated between modes.
+
