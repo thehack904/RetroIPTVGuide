@@ -205,6 +205,21 @@ EOF
   echo "Full log saved to: $LOG_FILE"
   echo ""
 
+  # --- Post-install verification ---
+  echo "Verifying service status..."
+  sleep 3
+  if systemctl is-active --quiet retroiptvguide; then
+    echo "✅ Service is active."
+    if curl -fs http://localhost:5000 >/dev/null 2>&1; then
+      echo "✅ Web interface responding on port 5000."
+    else
+      echo "⚠️  Service active, but no HTTP response. Check logs in $LOG_FILE."
+    fi
+  else
+    echo "❌ Service not active. Run: sudo systemctl status retroiptvguide"
+  fi
+  echo ""
+
   # Optional reboot prompt
   if [ "$AUTO_YES" = true ]; then
     # For unattended runs, perform a quick service check and skip reboot by default
