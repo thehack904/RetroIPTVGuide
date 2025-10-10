@@ -1,6 +1,6 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v3.1.0-blue)
+![Version](https://img.shields.io/badge/version-DEV-red)
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
