@@ -251,6 +251,33 @@ Verifying service status..."
   else
     echo "❌ Service not active. Run: sudo systemctl status ${SERVICE_NAME}"
   fi
+  
+  # --- Install management script globally ---
+  LOCAL_SCRIPT_PATH="/usr/local/bin/retroiptv_linux.sh"
+  
+  echo ""
+  echo "=== Installing management script to $LOCAL_SCRIPT_PATH ..."
+  
+  # Copy the current script to /usr/local/bin
+  if [ -f "$0" ]; then
+  cp "$0" "$LOCAL_SCRIPT_PATH"
+  else
+  # In case running from stdin via curl, pull fresh copy from GitHub
+  curl -sSLo "$LOCAL_SCRIPT_PATH" \
+  	"https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_linux.sh"
+  fi
+  
+  chmod +x "$LOCAL_SCRIPT_PATH"
+  chown root:root "$LOCAL_SCRIPT_PATH"
+  
+  # Optional short alias
+  ln -sf "$LOCAL_SCRIPT_PATH" /usr/local/bin/retroiptv
+  
+  echo "✅ Installed management script globally. You can now run:"
+  echo "   sudo retroiptv_linux.sh uninstall --yes"
+  echo "   or simply: sudo retroiptv uninstall --yes"
+  echo ""
+  
 
   echo ""
   echo "============================================================"
