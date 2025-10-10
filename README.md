@@ -1,6 +1,6 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v3.0.1-blue)
+![Version](https://img.shields.io/badge/version-v3.1.0-blue)
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
@@ -14,7 +14,19 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 
 ---
 
-## ✨ Features (v3.0.1)
+## ✨ Features (v3.1.0)
+
+### 🆕 Raspberry Pi Headless Support
+- Full **Raspberry Pi installer (`retroiptv_rpi.sh`)** added.  
+- Detects Pi 3 / 4 / 5 hardware and automatically sets GPU memory (128MB / 256MB).  
+- Installs to `/home/iptv/iptv-server` using system user `iptv`.  
+- Configures Python virtual environment and creates a systemd service `retroiptvguide`.  
+- Logs everything to `/var/log/retroiptvguide/install-TIMESTAMP.log`.  
+- Supports `--yes` (skip confirmations) and `--agree` (auto-accept license).  
+- Post-install check verifies Flask service on port 5000.  
+- Optional reboot prompt applies GPU memory changes.  
+
+---
 
 ### 🔑 User Authentication
 - Login/logout system with hashed passwords.
@@ -62,9 +74,12 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 - Automatic initialization of `users.db` and `tuners.db` on first run.
 - SQLite databases use WAL mode for better concurrency.
 - Preloads tuner/channel/guide data from DB on startup.
-- **Cross-platform installers (Linux/Windows)**.
-- **Uninstaller scripts (Linux/Windows)**.
-- **Automated version bump tool (`bump_version.py`)**.
+- **Cross-platform installers:**  
+  - Linux / WSL (`install.sh`)  
+  - Windows (`install_windows.ps1`)  
+  - Raspberry Pi (`retroiptv_rpi.sh`)  
+- **Uninstaller scripts for all platforms**
+- **Automated version bump tool (`bump_version.py`)** — now updates both `install.sh` and `retroiptv_rpi.sh`.
 
 ---
 
@@ -72,6 +87,7 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 
 | Version | Date | Key Features |
 |----------|------|---------------|
+| **v3.1.0** | 2025-10-09 | Raspberry Pi installer, verified GPU setup, improved HTTP service check |
 | **v3.0.1** | 2025-10-07 | EPG fallback system, tuner refresh fix, login redesign |
 | **v3.0.0** | 2025-10-03 | Windows installer/uninstaller, cross-platform setup, unified UI |
 | **v2.3.x** | 2025-09 | Unified theming, About page, installer logging, tuner rename/delete |
@@ -94,6 +110,7 @@ RetroIPTVGuide is compatible with all modern browsers:
 - **Ubuntu 24.04 (desktop/server)**
 - **TrueNAS SCALE (Docker/Podman)**
 - **Windows 10 / 11**
+- **Raspberry Pi 3B+ / 4 / 5 (Raspberry Pi OS Bookworm)**
 - **macOS Monterey / Ventura**
 - **iOS (mobile/tablet)**
 - **Android (Samsung / Pixel)**
@@ -103,7 +120,8 @@ RetroIPTVGuide is compatible with all modern browsers:
 ## 🛠️ Installation Platforms
 - Debian-based Linux (Ubuntu, Pop!\_OS, Mint)
 - Windows 10/11 (via PowerShell + NSSM)
-- MacOS (manual install or future installer support)
+- Raspberry Pi 3 / 4 / 5 (Headless OS, `retroiptv_rpi.sh`)
+- macOS (manual install or future installer support)
 
 ---
 
@@ -154,8 +172,8 @@ See [ROADMAP.md](ROADMAP.md) for full details.
 - **Repo:** [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide)
 - **Maintainer:** J.H.  
 - **License:** [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)  
-- **Version:** v3.0.1  
-- **Release Date:** 2025-10-07  
+- **Version:** v3.1.0  
+- **Release Date:** 2025-10-09  
 
 ---
 
