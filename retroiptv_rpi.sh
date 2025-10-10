@@ -27,9 +27,24 @@ EOF
 ) || true
 
 echo "==========================================================================="
-echo "                   RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
+echo "             RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
 echo "==========================================================================="
 echo ""
+
+# ============================================================
+# Self-extract if running from a pipe
+# ============================================================
+# Detect if the script is being run from stdin (no $0 path)
+if [ -p /dev/stdin ] || [ "$0" = "bash" ] || [ "$0" = "-bash" ]; then
+  TMP_SCRIPT="/tmp/retroiptv_rpi.sh"
+  echo "Detected piped execution. Saving to $TMP_SCRIPT ..."
+  cat > "$TMP_SCRIPT"
+  chmod +x "$TMP_SCRIPT"
+  echo "Re-executing from file..."
+  exec sudo bash "$TMP_SCRIPT" "$@"
+  exit 0
+fi
+
 
 # ============================================================
 # Argument Parsing
