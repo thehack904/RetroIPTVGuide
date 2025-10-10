@@ -123,7 +123,11 @@ Default login: **admin / strongpassword123**
 ```bash
 sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart iptv-server.service
 ```
-or
+
+### Raspberry Pi
+```bash
+sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart retroiptvguide.service
+```
 
 ### Windows 10 / 11
 ```powershell
@@ -149,13 +153,12 @@ This will:
 
 ### Linux / WSL
 ```bash
-sudo chmod +x uninstall.sh
-sudo ./uninstall.sh
+sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && sudo bash /home/iptv/iptv-server/uninstall.sh
 ```
 
 ### Raspberry Pi
 ```bash
-sudo ./retroiptv_rpi.sh uninstall --yes
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s uninstall --yes
 ```
 
 ### Windows
