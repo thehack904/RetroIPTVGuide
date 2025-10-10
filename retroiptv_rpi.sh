@@ -7,6 +7,7 @@ VERSION="3.1.0"  # RetroIPTVGuide Raspberry Pi installer version
 
 
 # --- Banner ---
+(
 cat <<'EOF'
 ░█████████                ░██                        ░██████░█████████  ░██████████░██    ░██   ░██████             ░██       ░██            
 ░██     ░██               ░██                          ░██  ░██     ░██     ░██    ░██    ░██  ░██   ░██                      ░██            
@@ -17,10 +18,12 @@ cat <<'EOF'
 ░██     ░██  ░███████      ░████ ░██       ░███████  ░██████░██             ░██       ░███      ░█████░█  ░█████░██ ░██ ░█████░██  ░███████  
                                                                                                                                              
 EOF
+) || true
 echo "==========================================================================="
 echo "                   RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
 echo "==========================================================================="
 echo ""
+
 
 # ============================================================
 # Initialization
@@ -41,6 +44,8 @@ LOG_FILE="$LOG_DIR/install-$TIMESTAMP.log"
 ACTION="$1"; shift || true
 AUTO_YES=false
 AUTO_AGREE=false
+echo "ACTION = $ACTION"
+
 
 for arg in "$@"; do
   case "$arg" in
