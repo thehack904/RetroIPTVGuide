@@ -146,23 +146,31 @@ TMP_CLONE_DIR="/tmp/retroiptvguide"
 
 mkdir -p "$APP_DIR"
 
+# Always work in /tmp for cloning to avoid user/sudo confusion
+cd /tmp
+
 if [ ! -f "requirements.txt" ]; then
   if command -v git >/dev/null 2>&1; then
     echo "Project files not found locally — cloning RetroIPTVGuide (dev branch)..."
     rm -rf "$TMP_CLONE_DIR"
     git clone --depth 1 -b dev https://github.com/thehack904/RetroIPTVGuide.git "$TMP_CLONE_DIR"
-    SCRIPT_DIR="$TMP_CLONE_DIR"
+    SCRIPT_DIR="$(realpath "$TMP_CLONE_DIR")"
   else
     echo "ERROR: requirements.txt not found and git is not installed."
     echo "Please install git or run this script from within a cloned RetroIPTVGuide repo."
     exit 1
   fi
 else
-  SCRIPT_DIR="$(pwd)"
+  SCRIPT_DIR="$(realpath "$(pwd)")"
 fi
 
 echo "Copying project files from: $SCRIPT_DIR"
-rsync -a --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/"
+rsync -a --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/" || {
+  echo "❌ ERROR: rsync failed to copy project files."
+  echo "Check that $SCRIPT_DIR exists and is accessible."
+  exit 1
+}
+
 
 
   echo "\n=== Copying project files..."
