@@ -273,13 +273,13 @@ uninstall_linux() {
   systemctl stop ${SERVICE_NAME}.service 2>/dev/null || true
   systemctl disable ${SERVICE_NAME}.service 2>/dev/null || true
 
-  echo "\n=== Removing systemd unit ..."
+  echo "=== Removing systemd unit ..."
   if [[ -f "$SYSTEMD_FILE" ]]; then
     rm -f "$SYSTEMD_FILE"
     systemctl daemon-reload
   fi
 
-  echo "\n=== Removing logs and user..."
+  echo "=== Removing logs and user..."
   rm -rf "$LOG_DIR_LINUX" 2>/dev/null || true
   if id "$APP_USER" &>/dev/null; then
     userdel -r "$APP_USER" || true
