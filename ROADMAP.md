@@ -10,7 +10,7 @@ These are **not yet implemented**, but provide a development path for future rel
 ### 1. Tuner Management
 - [x] Add ability to **add/remove tuners** from the UI (v2.3.0).
 - [x] Add ability to rename tuners via the UI (v2.3.0).  
-- [ ] Support for **.m3u8 single-channel playlists** as tuner sources (planned v3.1.0).  
+- [ ] Support for **.m3u8 single-channel playlists** as tuner sources (planned v3.2.0).  
   - Option A: Special-case `.m3u8` handling in parser.  
   - Option B: Add explicit `hls` column to `tuners.db`.  
 - [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).  
@@ -22,6 +22,7 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Add system health checks (e.g., tuner reachability, XMLTV freshness) to logs.  
 - [x] **Admin log management**: add button/route to clear logs (with confirmation) (v2.3.1).
 - [x] Display log file size on logs page (v2.3.1)
+- [x] Post-install HTTP service verification added in Pi installer (v3.1.0)
 
 ### 3. Guide & Playback
 - [ ] Add **search/filter box** to guide for channels/programs.  
@@ -39,17 +40,22 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Unify CSS across all templates (minimize inline styles).  
 - [ ] Make guide responsive (mobile/tablet view).  
 - [ ] Add dark/light theme auto-detect from browser/system.  
-- [ ] Frozen header Timeline to prevent scrolling with channel listing
+- [ ] Frozen header Timeline to prevent scrolling with channel listing  
 - [x] About page under Settings menu (v2.3.1)
 
 ### 6. Cross-platform
-- [ ] Create installable container.  
-- [ ] Create MacOS install/executable.
-- [x] Create Microsoft Windows install/executable (full support via PowerShell + NSSM service) (v3.0.0)
-- [x] Add uninstall_windows.ps1 and uninstall.bat (v3.0.0)
-- [x] Windows installer now bootstraps Chocolatey, installs Python, Git, NSSM, and configures service (v3.0.0)
+- [x] Create installable container.  
+- [ ] Create MacOS install/executable.  
+- [x] Create Microsoft Windows install/executable (full support via PowerShell + NSSM service) (v3.0.0)  
+- [x] Add uninstall_windows.ps1 and uninstall.bat (v3.0.0)  
+- [x] Windows installer bootstraps Chocolatey, installs Python, Git, NSSM, and configures service (v3.0.0)  
 - [x] Windows uninstaller cleans service, firewall rule, and optionally removes Chocolatey (v3.0.0)  
-  - [ ] Validate/test installer fully on Windows environments
+  - [ ] Validate/test installer fully on Windows environments  
+- [x] **Add Raspberry Pi headless installer (v3.1.0)**  
+  - Detects Pi 3 / 4 / 5 models and sets GPU memory dynamically  
+  - Installs under `/home/iptv/iptv-server` using user `iptv`  
+  - Adds post-install HTTP verification and log summary  
+  - Logs full install to `/var/log/retroiptvguide/install-TIMESTAMP.log`
 
 ### 7. New Features
 - [ ] Add the ability to have an auto play video stream upon login from a specific channel (Ersatz currently) to act similar to the 90/2000's tv guide that played "Commercials" until a channel was selected.  
@@ -59,28 +65,36 @@ These are **not yet implemented**, but provide a development path for future rel
 - [ ] Add **safety checks** in `add_tuner()`:
   - Prevent inserting duplicate tuner names.
   - Validate XML/M3U URLs are not empty before committing to DB.
+- [x] Add **GPU verification** after `raspi-config` call (v3.1.0).
+- [x] Suppress `rfkill` Wi-Fi message during GPU configuration (v3.1.0).
+- [x] Post-install adaptive HTTP check loop (15s poll) (v3.1.0).
 
 ---
 
 ## ⚙️ Technical Improvements
-- [x] Add uninstall.sh (v2.3.0)  
-  - [ ] Validate/test uninstall script fully on Windows environments
-- [ ] Add https support  
+- [x] Add uninstall.sh (v2.3.0).  
+  - [ ] Validate/test uninstall script fully on Windows environments.  
+- [ ] Add HTTPS support.  
 - [ ] Refactor tuner handling to rely only on DB (remove in-memory fallback).  
 - [ ] Add migrations for DB changes (via Alembic or custom script).  
 - [ ] Containerize app (Dockerfile + Compose for deployment).  
 - [ ] Add test suite for tuner parsing, authentication, and logging.  
-- [x] **Automated version bump tool** (`bump_version.py`) that updates `APP_VERSION` in `app.py` and creates a new section in `CHANGELOG.md` (v2.3.1).  
+- [x] **Automated version bump tool** (`bump_version.py`) now updates:  
+  - `APP_VERSION` in `app.py`  
+  - `install.sh`  
+  - `retroiptv_rpi.sh`  
+  - Adds new section in `CHANGELOG.md` (v3.1.0).  
 
 ---
 
 ## 📅 Priority Suggestions
-- Short term: (none — unified UI headers already completed in v2.0.0).  
-- Medium term: log filtering (still pending).  
-- Medium term: Test and harden installer/uninstaller on mixed Windows environments (v3.0.0 complete, further refinements planned).  
-- Long term: .m3u8 support, DB logs, recording functionality.  
+- Short term: finalize Pi installer documentation and verify GPU/swap checks (v3.1.x).  
+- Medium term: `.m3u8` tuner support and DB-based logs (v3.2.x).  
+- Long term: full HTTPS and container deployment.  
 
-## 💻🥧 Installer Enhancement: Kiosk vs Headless Mode (Planned)
+---
+
+## 🍓 Installer Enhancement: Kiosk vs Headless Mode (Planned)
 **Target Version:** v3.2.0  
 **Status:** Planned  
 **Effort:** Medium  
@@ -93,20 +107,18 @@ These are **not yet implemented**, but provide a development path for future rel
 
 ---
 
-## ✅ Completed
-- [x] Unified theming across all admin/user pages with Themes submenu and persistent setTheme logic (v2.3.2)
-- [x] Tuner add/remove via UI (v2.3.0).  
-- [x] Tuner rename via UI (v2.3.0).  
-- [x] Tuner delete via UI (v2.3.0).  
-- [x] Tuner URL validation (v2.0.0).  
-- [x] Unified UI headers across templates (v2.0.0).  
-- [x] Installer logging (timestamped log files) (v2.3.0).  
-- [x] Environment detection in `install.sh` (Linux, WSL, Git Bash) (v2.3.0).  
-- [x] Unified cross-platform `install.sh` (v2.3.0).  
-- [x] Cross-platform `uninstall.sh` with sudo/admin checks and safe cleanup (v2.3.0).  
-- [x] Basic Windows installer support (Git Bash + PowerShell bootstrap) (v2.3.0).  
+## ✅ Completed (v3.1.0)
+- [x] **Raspberry Pi headless installer completed** (`retroiptv_rpi.sh`).  
+- [x] Aligned Pi installer with Debian/Windows structure.  
+- [x] Added logging to `/var/log/retroiptvguide/`.  
+- [x] Added adaptive HTTP service verification.  
+- [x] Added GPU verification with silent `raspi-config` call.  
+- [x] Added system resource check (SD card size, RAM, swap).  
+- [x] Integrated `--yes` and `--agree` installer flags.  
+- [x] Verified functionality on Pi 3 and Pi 4.  
 
+---
 
 ## ✅ Completed (v3.0.0)
-- [x] Full Windows installer/uninstaller support with NSSM service, firewall rule, and Chocolatey integration (v3.0.0).
-- [x] Documentation updates (README.md, INSTALL.md) to reflect Windows support (v3.0.0).
+- [x] Full Windows installer/uninstaller support with NSSM service, firewall rule, and Chocolatey integration.  
+- [x] Documentation updates (README.md, INSTALL.md) to reflect Windows support.  
