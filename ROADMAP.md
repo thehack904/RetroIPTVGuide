@@ -80,6 +80,17 @@ These are **not yet implemented**, but provide a development path for future rel
 - Medium term: Test and harden installer/uninstaller on mixed Windows environments (v3.0.0 complete, further refinements planned).  
 - Long term: .m3u8 support, DB logs, recording functionality.  
 
+## 💻🥧 Installer Enhancement: Kiosk vs Headless Mode (Planned)
+**Target Version:** v3.2.0  
+**Status:** Planned  
+**Effort:** Medium  
+
+- Add an interactive mode selector to the Raspberry Pi installer.
+- Headless mode → install to `/home/iptv/iptv-server` with service user `iptv`.
+- Kiosk mode → install to `/opt/RetroIPTVGuide` and auto-launch Chromium in fullscreen displaying RetroIPTVGuide.
+- Support command-line flags: `--mode kiosk` or `--mode headless` for non-interactive installs.
+- Ensure logs and services are properly separated between modes.
+
 ---
 
 ## ✅ Completed
@@ -94,7 +105,6 @@ These are **not yet implemented**, but provide a development path for future rel
 - [x] Unified cross-platform `install.sh` (v2.3.0).  
 - [x] Cross-platform `uninstall.sh` with sudo/admin checks and safe cleanup (v2.3.0).  
 - [x] Basic Windows installer support (Git Bash + PowerShell bootstrap) (v2.3.0).  
-
 
 
 ## ✅ Completed (v3.0.0)
