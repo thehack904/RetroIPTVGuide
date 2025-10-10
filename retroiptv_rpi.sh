@@ -29,6 +29,9 @@ echo ""
 # Initialization
 # ============================================================
 set -e
+set -o pipefail
+trap '' PIPE
+
 
 APP_USER="iptv"
 APP_DIR="/home/$APP_USER/iptv-server"
