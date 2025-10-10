@@ -141,10 +141,14 @@ install_linux() {
   chown -R $APP_USER:$APP_USER "$APP_HOME"
 
 # --- Ensure project files are available ---
+APP_DIR="/home/$APP_USER/iptv-server"
+TMP_CLONE_DIR="/tmp/retroiptvguide"
+
+mkdir -p "$APP_DIR"
+
 if [ ! -f "requirements.txt" ]; then
   if command -v git >/dev/null 2>&1; then
     echo "Project files not found locally — cloning RetroIPTVGuide (dev branch)..."
-    TMP_CLONE_DIR="/tmp/retroiptvguide"
     rm -rf "$TMP_CLONE_DIR"
     git clone --depth 1 -b dev https://github.com/thehack904/RetroIPTVGuide.git "$TMP_CLONE_DIR"
     SCRIPT_DIR="$TMP_CLONE_DIR"
@@ -157,8 +161,9 @@ else
   SCRIPT_DIR="$(pwd)"
 fi
 
-# Copy from source to destination
-rsync -a --exclude 'venv' \"$SCRIPT_DIR/\" \"$APP_DIR/\"
+echo "Copying project files from: $SCRIPT_DIR"
+rsync -a --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/"
+
 
   echo "\n=== Copying project files..."
   rsync -a --exclude 'venv' ./ "$APP_DIR/"
