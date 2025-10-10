@@ -94,13 +94,6 @@ curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads
 - Minimum 8 GB SD card and 1 GB RAM (512 MB swap recommended)  
 - SSH or console access with sudo  
 
-**Access**
-```
-http://<pi-ip>:5000
-```
-Default login: `admin / strongpassword123`  
-⚠️ This is a **BETA** build for internal network use only.
-
 ---
 
 ## Access
@@ -112,6 +105,7 @@ http://<server-ip>:5000
 ```
 
 Default login: **admin / strongpassword123**
+⚠️ This is a **BETA** build for internal network use only.
 
 ---
 
@@ -153,7 +147,7 @@ This will:
 
 ### Linux / WSL
 ```bash
-sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && sudo bash /home/iptv/iptv-server/uninstall.sh
+sudo -u iptv bash -H -c "cd /home/iptv/iptv-server" && sudo bash /home/iptv/iptv-server/uninstall.sh
 ```
 
 ### Raspberry Pi
