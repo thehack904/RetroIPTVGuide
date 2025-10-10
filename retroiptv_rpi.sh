@@ -31,20 +31,6 @@ echo "             RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
 echo "==========================================================================="
 echo ""
 
-# ============================================================
-# Self-extract if running from a pipe
-# ============================================================
-# Detect if the script is being run from stdin (no $0 path)
-if [ -p /dev/stdin ] || [ "$0" = "bash" ] || [ "$0" = "-bash" ]; then
-  TMP_SCRIPT="/tmp/retroiptv_rpi.sh"
-  echo "Detected piped execution. Saving to $TMP_SCRIPT ..."
-  cat > "$TMP_SCRIPT"
-  chmod +x "$TMP_SCRIPT"
-  echo "Re-executing from file..."
-  exec sudo bash "$TMP_SCRIPT" "$@"
-  exit 0
-fi
-
 
 # ============================================================
 # Argument Parsing
@@ -52,7 +38,6 @@ fi
 AUTO_YES=false
 AUTO_AGREE=false
 
-# First parse flags (so we catch --yes/--agree before shift)
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) AUTO_YES=true ;;
@@ -60,8 +45,8 @@ for arg in "$@"; do
   esac
 done
 
-# Then capture action
 ACTION="$1"; shift || true
+
 echo "ACTION = $ACTION"
 echo "AUTO_YES = $AUTO_YES"
 echo "AUTO_AGREE = $AUTO_AGREE"
@@ -83,7 +68,18 @@ setup_logging() {
 }
 
 ensure_self_install() {
-  local src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+  # Resolve the source path of this script, if it's a real file
+  local src
+  src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+
+  # If running via a pipe or an unknown source, skip self-install gracefully
+  if [ "$src" = "bash" ] || [ "$src" = "-bash" ] || [ "$src" = "" ] || [ ! -f "$src" ]; then
+    echo "Detected piped/unknown source; skipping self-install to $SELF_LINK"
+    echo ""
+    return 0
+  fi
+
+  # Install/update launcher if needed
   if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
     cp "$src" "$SELF_LINK"
     chmod +x "$SELF_LINK"
@@ -91,6 +87,7 @@ ensure_self_install() {
     echo ""
   fi
 }
+
 
 ensure_user() {
   id "$APP_USER" &>/dev/null || useradd -m -r -s /usr/sbin/nologin "$APP_USER"
