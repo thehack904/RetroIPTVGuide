@@ -6,13 +6,38 @@ VERSION="3.1.0"  # RetroIPTVGuide Raspberry Pi installer version
 # License: CC BY-NC-SA 4.0
 
 # ============================================================
-# Initialization and Banner
+# Pipe-safe self-extract: if running from stdin, save to /tmp and re-exec
+# ============================================================
+if [ -p /dev/stdin ] && { [ "$0" = "bash" ] || [ "$0" = "-bash" ]; }; then
+  TMP_SCRIPT="/tmp/retroiptv_rpi.sh.$$"
+  echo "Detected piped execution. Saving to $TMP_SCRIPT and re-executing..."
+  cat > "$TMP_SCRIPT"
+  chmod +x "$TMP_SCRIPT"
+  exec sudo bash "$TMP_SCRIPT" "$@"
+  exit 0
+fi
+
+# ============================================================
+# Initialization and Constants
 # ============================================================
 set -e
 set -o pipefail
 trap '' PIPE
 
-# --- Banner ---
+APP_USER="iptv"
+APP_DIR="/home/$APP_USER/iptv-server"
+SERVICE_NAME="retroiptvguide"
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+CONFIG_FILE="/boot/config.txt"
+SELF_LINK="/usr/local/bin/retroiptv"
+
+TIMESTAMP="$(date +"%Y%m%d-%H%M%S")"
+LOG_DIR="/var/log/retroiptvguide"
+LOG_FILE="$LOG_DIR/install-$TIMESTAMP.log"
+
+# ============================================================
+# Banner
+# ============================================================
 (
 cat <<'EOF'
 ░█████████                ░██                        ░██████░█████████  ░██████████░██    ░██   ░██████             ░██       ░██            
@@ -31,7 +56,6 @@ echo "             RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
 echo "==========================================================================="
 echo ""
 
-
 # ============================================================
 # Argument Parsing
 # ============================================================
@@ -46,40 +70,40 @@ for arg in "$@"; do
 done
 
 ACTION="$1"; shift || true
-
 echo "ACTION = $ACTION"
 echo "AUTO_YES = $AUTO_YES"
 echo "AUTO_AGREE = $AUTO_AGREE"
-
 
 # ============================================================
 # Utility Functions
 # ============================================================
 require_root() {
-  [ "$EUID" -ne 0 ] && { echo "Please run as root."; exit 1; }
+  if [ "$EUID" -ne 0 ]; then
+    echo "Please run as root (use sudo)."
+    exit 1
+  fi
 }
 
 setup_logging() {
-  mkdir -p "$LOG_DIR"
-  chmod 755 "$LOG_DIR"
-  exec > >(tee -a "$LOG_FILE") 2>&1
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  chmod 755 "$LOG_DIR" 2>/dev/null || true
+  if command -v tee >/dev/null 2>&1; then
+    { exec > >(tee -a "$LOG_FILE") 2>&1; } || exec >>"$LOG_FILE" 2>&1
+  else
+    exec >>"$LOG_FILE" 2>&1
+  fi
   echo "Log file: $LOG_FILE"
   echo ""
 }
 
 ensure_self_install() {
-  # Resolve the source path of this script, if it's a real file
   local src
   src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-
-  # If running via a pipe or an unknown source, skip self-install gracefully
   if [ "$src" = "bash" ] || [ "$src" = "-bash" ] || [ "$src" = "" ] || [ ! -f "$src" ]; then
     echo "Detected piped/unknown source; skipping self-install to $SELF_LINK"
     echo ""
     return 0
   fi
-
-  # Install/update launcher if needed
   if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
     cp "$src" "$SELF_LINK"
     chmod +x "$SELF_LINK"
@@ -88,31 +112,23 @@ ensure_self_install() {
   fi
 }
 
-
 ensure_user() {
   id "$APP_USER" &>/dev/null || useradd -m -r -s /usr/sbin/nologin "$APP_USER"
 }
-
 chown_appdir() { chown -R "$APP_USER:$APP_USER" "$APP_DIR"; }
 pip_as_iptv() { sudo -u "$APP_USER" bash -lc "$*"; }
 
 detect_pi_type() {
   local model
   model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "Unknown Model")
-  if echo "$model" | grep -q "Raspberry Pi 5"; then
-    PI_TYPE="pi5"
-  elif echo "$model" | grep -q "Raspberry Pi 4"; then
-    PI_TYPE="pi4"
-  elif echo "$model" | grep -q "Raspberry Pi 3"; then
-    PI_TYPE="pi3"
-  else
-    PI_TYPE="unknown"
-  fi
+  if echo "$model" | grep -q "Raspberry Pi 5"; then PI_TYPE="pi5"
+  elif echo "$model" | grep -q "Raspberry Pi 4"; then PI_TYPE="pi4"
+  elif echo "$model" | grep -q "Raspberry Pi 3"; then PI_TYPE="pi3"
+  else PI_TYPE="unknown"; fi
   echo "Detected board: $model ($PI_TYPE)"
   echo ""
 }
 
-# Silent raspi-config + verify gpu_mem
 set_gpu_mem() {
   local val="$1"
   if command -v raspi-config >/dev/null 2>&1; then
@@ -129,9 +145,7 @@ set_gpu_mem() {
     fi
   else
     sed -i -E 's/^\s*gpu_mem\s*=.*/gpu_mem='"$val"'/g' "$CONFIG_FILE" 2>/dev/null || true
-    if ! grep -qE '^\s*gpu_mem\s*=' "$CONFIG_FILE" 2>/dev/null; then
-      echo "gpu_mem=$val" >> "$CONFIG_FILE"
-    fi
+    if ! grep -qE '^\s*gpu_mem\s*=' "$CONFIG_FILE" 2>/dev/null; then echo "gpu_mem=$val" >> "$CONFIG_FILE"; fi
     echo "✅ Fallback: gpu_mem set to ${val}MB"
   fi
 }
@@ -201,7 +215,7 @@ do_install() {
   echo "  - Detect Raspberry Pi model and set GPU memory"
   echo "  - Install dependencies (Python3, ffmpeg, etc.)"
   echo "  - Create system user 'iptv' and setup venv"
-  echo "  - Configure and enable ${SERVICE_NAME} service"
+  echo "  - Configure and enable ${SERVICE_NAME:-retroiptvguide} service"
   echo ""
 
   if [ "$AUTO_AGREE" = false ]; then
@@ -262,19 +276,11 @@ do_uninstall() {
   echo "============================================================"
   require_root
   setup_logging
-
-  if [ "$AUTO_YES" = false ]; then
-    read -p "Proceed with uninstallation? (yes/no): " C
-    [ "$C" = "yes" ] || { echo "Aborted."; exit 1; }
-  fi
-
   systemctl stop "$SERVICE_NAME" 2>/dev/null || true
   systemctl disable "$SERVICE_NAME" 2>/dev/null || true
   rm -f "$SERVICE_FILE"
   systemctl daemon-reload
-
   rm -rf "$APP_DIR"
-
   echo ""
   echo "============================================================"
   echo " Uninstallation Complete "
@@ -291,11 +297,9 @@ do_update() {
   echo "============================================================"
   require_root
   setup_logging
-
   sudo -u "$APP_USER" bash -H -c "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
   systemctl daemon-reload
   systemctl restart "${SERVICE_NAME}.service"
-
   echo ""
   echo "============================================================"
   echo " Update Complete "
@@ -324,4 +328,3 @@ case "$ACTION" in
   update) do_update ;;
   *) print_usage; exit 1 ;;
 esac
-
