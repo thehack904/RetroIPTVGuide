@@ -1,7 +1,9 @@
 #!/bin/bash
 set -e
 
-VERSION="3.0.1"
+VERSION="3.1.0"  # RetroIPTVGuide installer version
+# RetroIPTVGuide Debian/Ubuntu Installer
+# License: CC BY-NC-SA 4.0
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="install_${TIMESTAMP}.log"
 
