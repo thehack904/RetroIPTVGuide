@@ -68,20 +68,28 @@ SYSTEMD_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 LOG_DIR_LINUX="/var/log/iptv"
 
 usage() {
-  echo -e "\033[1;33mRetroIPTVGuide Unified Installer/Uninstaller (v$VERSION)\033[0m\n"
+  SCRIPT_NAME=$(basename "$0")
+
+  echo -e "\033[1;33mRetroIPTVGuide Unified Installer/Updater/Uninstaller (v$VERSION)\033[0m\n"
   echo -e "Usage:"
-  echo -e "  \033[1;32msudo $0 install [--agree|-a] [--yes|-y]\033[0m   Install RetroIPTVGuide"
-  echo -e "  \033[1;32msudo $0 uninstall [--yes|-y]\033[0m             Uninstall RetroIPTVGuide"
-  echo -e "  \033[1;32m$0 --help\033[0m                                Show this help\n"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME install [--agree|-a] [--yes|-y]\033[0m   Install RetroIPTVGuide"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME uninstall [--yes|-y]\033[0m             Uninstall RetroIPTVGuide"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME update\033[0m                            Update RetroIPTVGuide from GitHub"
+  echo -e "  \033[1;32m$SCRIPT_NAME --help\033[0m                                Show this help\n"
+
   echo "Flags:"
   echo "  --agree, -a    Automatically agree to the license terms"
   echo "  --yes, -y      Run non-interactively, auto-proceed on all prompts"
   echo ""
+
   echo "Examples:"
-  echo -e "  \033[1;36msudo $0 install --agree --yes\033[0m"
-  echo -e "  \033[1;36msudo $0 uninstall --yes\033[0m\n"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME install --agree --yes\033[0m"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME uninstall --yes\033[0m"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME update\033[0m\n"
+
   echo "License: CC BY-NC-SA 4.0"
 }
+
 
 agree_terms() {
   if [[ "$AGREE_TERMS" == true ]]; then
@@ -326,15 +334,42 @@ uninstall_linux() {
   echo ""
 }
 
+update_linux() {
+  echo ""
+  echo "=== Updating RetroIPTVGuide from GitHub ==="
+  echo "Working directory: /home/$APP_USER/iptv-server"
+  if [ ! -d "$APP_DIR/.git" ]; then
+    echo "❌ ERROR: $APP_DIR is not a valid Git repository."
+    echo "Cannot update automatically. Please reinstall or clone manually."
+    exit 1
+  fi
+
+  echo "Fetching latest code from origin/main..."
+  sudo -u $APP_USER bash -H -c "cd $APP_DIR && git fetch --all && git reset --hard origin/main" | tee -a "$LOGFILE"
+
+  echo "Reloading and restarting service..."
+  systemctl daemon-reload
+  systemctl restart $SERVICE_NAME.service
+
+  if systemctl is-active --quiet $SERVICE_NAME; then
+    echo "✅ Update complete. Service restarted successfully."
+  else
+    echo "⚠️  Update applied but service is not active. Run: sudo systemctl status $SERVICE_NAME"
+  fi
+
+  echo ""
+  echo "Full log saved to: $LOGFILE"
+  echo ""
+}
+
+
 case "$ACTION" in
-  install)
-    install_linux ;;
-  uninstall)
-    uninstall_linux ;;
-  -h|--help|help)
-    usage ;;
-  *)
-    usage ;;
+  install) install_linux ;;
+  uninstall) uninstall_linux ;;
+  update) update_linux ;;
+  -h|--help|help) usage ;;
+  *) usage ;;
 esac
+
 
 echo "End time: $(date)"
