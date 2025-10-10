@@ -5,6 +5,12 @@ VERSION="3.1.0"  # RetroIPTVGuide Raspberry Pi installer version
 # Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log
 # License: CC BY-NC-SA 4.0
 
+# ============================================================
+# Initialization and Banner
+# ============================================================
+set -e
+set -o pipefail
+trap '' PIPE
 
 # --- Banner ---
 (
@@ -19,19 +25,19 @@ cat <<'EOF'
                                                                                                                                              
 EOF
 ) || true
+
 echo "==========================================================================="
 echo "                   RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
 echo "==========================================================================="
 echo ""
 
-
 # ============================================================
-# Initialization
+# Argument Parsing
 # ============================================================
-set -e
-set -o pipefail
-trap '' PIPE
-
+ACTION="$1"; shift || true
+AUTO_YES=false
+AUTO_AGREE=false
+echo "ACTION = $ACTION"  # Debug output; safe to remove later
 
 APP_USER="iptv"
 APP_DIR="/home/$APP_USER/iptv-server"
@@ -43,12 +49,6 @@ SELF_LINK="/usr/local/bin/retroiptv"
 TIMESTAMP="$(date +"%Y%m%d-%H%M%S")"
 LOG_DIR="/var/log/retroiptvguide"
 LOG_FILE="$LOG_DIR/install-$TIMESTAMP.log"
-
-ACTION="$1"; shift || true
-AUTO_YES=false
-AUTO_AGREE=false
-echo "ACTION = $ACTION"
-
 
 for arg in "$@"; do
   case "$arg" in
