@@ -136,7 +136,7 @@ install_linux() {
     apt-get install -y python3-venv
   fi
 
-  echo "\n=== Preparing application directory: $APP_DIR"
+  echo "=== Preparing application directory: $APP_DIR"
   mkdir -p "$APP_DIR"
   chown -R $APP_USER:$APP_USER "$APP_HOME"
 
