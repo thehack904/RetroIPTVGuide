@@ -1,4 +1,4 @@
-APP_VERSION = "v3.0.1"
+APP_VERSION = "v3.1.0"
 APP_RELEASE_DATE = "2025-09-26"
 
 from flask import Flask, render_template, request, redirect, url_for, flash
