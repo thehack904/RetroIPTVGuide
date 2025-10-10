@@ -268,11 +268,11 @@ Verifying service status..."
   
   # Copy the current script to /usr/local/bin
   if [ -f "$0" ]; then
-  cp "$0" "$LOCAL_SCRIPT_PATH"
+    cp "$0" "$LOCAL_SCRIPT_PATH"
   else
-  # In case running from stdin via curl, pull fresh copy from GitHub
-  curl -sSLo "$LOCAL_SCRIPT_PATH" \
-  	"https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_linux.sh"
+    # In case running from stdin via curl, pull fresh copy from GitHub
+    curl -sSLo "$LOCAL_SCRIPT_PATH" \
+      "https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_linux.sh"
   fi
   
   chmod +x "$LOCAL_SCRIPT_PATH"
@@ -282,10 +282,10 @@ Verifying service status..."
   ln -sf "$LOCAL_SCRIPT_PATH" /usr/local/bin/retroiptv
   
   echo "✅ Installed management script globally. You can now run:"
-  echo "   sudo retroiptv_linux.sh uninstall --yes"
-  echo "   or simply: sudo retroiptv uninstall --yes"
+  echo "   sudo retroiptv install --agree --yes"
+  echo "   sudo retroiptv update"
+  echo "   sudo retroiptv uninstall --yes"
   echo ""
-  
 
   echo ""
   echo "============================================================"
