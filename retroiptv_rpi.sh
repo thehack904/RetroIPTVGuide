@@ -34,28 +34,23 @@ echo ""
 # ============================================================
 # Argument Parsing
 # ============================================================
-ACTION="$1"; shift || true
 AUTO_YES=false
 AUTO_AGREE=false
-echo "ACTION = $ACTION"  # Debug output; safe to remove later
 
-APP_USER="iptv"
-APP_DIR="/home/$APP_USER/iptv-server"
-SERVICE_NAME="retroiptvguide"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-CONFIG_FILE="/boot/config.txt"
-SELF_LINK="/usr/local/bin/retroiptv"
-
-TIMESTAMP="$(date +"%Y%m%d-%H%M%S")"
-LOG_DIR="/var/log/retroiptvguide"
-LOG_FILE="$LOG_DIR/install-$TIMESTAMP.log"
-
+# First parse flags (so we catch --yes/--agree before shift)
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) AUTO_YES=true ;;
     --agree|-a) AUTO_AGREE=true ;;
   esac
 done
+
+# Then capture action
+ACTION="$1"; shift || true
+echo "ACTION = $ACTION"
+echo "AUTO_YES = $AUTO_YES"
+echo "AUTO_AGREE = $AUTO_AGREE"
+
 
 # ============================================================
 # Utility Functions
