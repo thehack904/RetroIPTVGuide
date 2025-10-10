@@ -220,15 +220,27 @@ EOF
   sleep 3
   if systemctl is-active --quiet retroiptvguide; then
     echo "✅ Service is active."
-    if curl -fs http://localhost:5000 >/dev/null 2>&1; then
-      echo "✅ Web interface responding on port 5000."
-    else
-      echo "⚠️  Service active, but no HTTP response. Check logs in $LOG_FILE."
+    echo "Waiting for web interface to start..."
+    local wait_time=0
+    local max_wait=15
+    while [ $wait_time -lt $max_wait ]; do
+      if curl -fs http://localhost:5000 >/dev/null 2>&1; then
+        echo "✅ Web interface responding on port 5000 (after ${wait_time}s)."
+        echo "✅ Verified: HTTP response received." | tee -a "$LOG_FILE"
+        break
+      fi
+      sleep 2
+      wait_time=$((wait_time+2))
+    done
+    if [ $wait_time -ge $max_wait ]; then
+      echo "⚠️  Service active, but no HTTP response after ${max_wait}s. Check logs in $LOG_FILE."
+      echo "⚠️  Possible slow startup on first run (SQLite or dependencies still initializing)." | tee -a "$LOG_FILE"
     fi
   else
     echo "❌ Service not active. Run: sudo systemctl status retroiptvguide"
   fi
   echo ""
+
 
   # Optional reboot
   if [ "$AUTO_YES" = false ]; then
