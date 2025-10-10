@@ -1,4 +1,4 @@
-# đź“‘ Changelog
+## Changelog
 
 All notable changes to this project will be documented here. 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
@@ -11,6 +11,30 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: add `.m3u8` tuner support. 
 - Planned: move logs to SQLite DB. 
 - Planned: log filtering and pagination. 
+
+---
+## v3.1.0 - 2025-10-09
+### Added
+- New **RetroIPTVGuide Raspberry Pi headless installer** (`retroiptv_rpi.sh`)  
+  - Detects Raspberry Pi 3 / 4 / 5 models and auto-configures GPU memory  
+  - Creates dedicated `iptv` user and installs to `/home/iptv/iptv-server`  
+  - Logs all activity to `/var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log`  
+  - Adds `--yes` and `--agree` flags for fully unattended installs  
+  - Includes automatic environment checks for SD card size, RAM, and swap  
+
+### Changed
+- **Installer alignment:**  
+  - Raspberry Pi installer now mirrors Debian / Windows structure  
+  - Replaced all `apt` usage with `apt-get` for stable scripting  
+  - Added verified, silenced `set_gpu_mem()` function that suppresses `rfkill` Wi-Fi warnings  
+  - Enhanced post-install verification loop (up to 15 s) to confirm Flask web service readiness  
+- **bump_version.py:** now updates both `install.sh` and `retroiptv_rpi.sh` versions automatically  
+- Unified version tagging across all installers (`VERSION="x.y.z"` format)
+
+### Fixed
+- Eliminated false-positive Wi-Fi “blocked by rfkill” messages during GPU configuration  
+- Corrected early-trigger HTTP service check timing on slower Pi 3/4 boards  
+- Ensured consistent permissions and ownership under `/home/iptv`
 
 ---
 
