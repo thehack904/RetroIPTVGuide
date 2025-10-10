@@ -118,7 +118,7 @@ agree_terms() {
 install_linux() {
   agree_terms
 
-  echo "\n=== Creating system user ($APP_USER) if needed..."
+  echo "=== Creating system user ($APP_USER) if needed..."
   if id "$APP_USER" &>/dev/null; then
     echo "User $APP_USER already exists."
     if [[ "$AUTO_YES" != true ]]; then
@@ -130,7 +130,7 @@ install_linux() {
     echo "Created system user: $APP_USER"
   fi
 
-  echo "\n=== Ensuring python3-venv is installed..."
+  echo "=== Ensuring python3-venv is installed..."
   if ! dpkg -s python3-venv >/dev/null 2>&1; then
     apt-get update
     apt-get install -y python3-venv
@@ -173,22 +173,22 @@ rsync -a --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/" || {
 
 
 
-  echo "\n=== Copying project files..."
+  echo "=== Copying project files..."
   rsync -a --exclude 'venv' ./ "$APP_DIR/"
   chown -R $APP_USER:$APP_USER "$APP_DIR"
 
   if [[ -d "$APP_DIR/venv" && "$AUTO_YES" == true ]]; then
     echo "Existing venv detected — auto-reusing (--yes)."
   else
-    echo "\n=== Creating Python virtual environment..."
+    echo "=== Creating Python virtual environment..."
     sudo -u $APP_USER python3 -m venv "$APP_DIR/venv"
   fi
 
-  echo "\n=== Installing Python dependencies..."
+  echo "=== Installing Python dependencies..."
   sudo -u $APP_USER "$APP_DIR/venv/bin/pip" install --upgrade pip
   sudo -u $APP_USER "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
 
-  echo "\n=== Writing systemd service: $SYSTEMD_FILE"
+  echo "=== Writing systemd service: $SYSTEMD_FILE"
   cat > "$SYSTEMD_FILE" <<EOF
 [Unit]
 Description=IPTV Flask Server (RetroIPTVGuide)
@@ -205,7 +205,7 @@ Restart=always
 WantedBy=multi-user.target
 EOF
 
-  echo "\n=== Enabling and starting service..."
+  echo "=== Enabling and starting service..."
   systemctl daemon-reload
   systemctl enable ${SERVICE_NAME}.service
   systemctl restart ${SERVICE_NAME}.service
@@ -269,7 +269,7 @@ Verifying service status..."
 }
 
 uninstall_linux() {
-  echo "\n=== Stopping and disabling ${SERVICE_NAME}.service ..."
+  echo "=== Stopping and disabling ${SERVICE_NAME}.service ..."
   systemctl stop ${SERVICE_NAME}.service 2>/dev/null || true
   systemctl disable ${SERVICE_NAME}.service 2>/dev/null || true
 
@@ -310,4 +310,4 @@ case "$ACTION" in
     usage ;;
 esac
 
-echo "\nEnd time: $(date)"
+echo "End time: $(date)"
