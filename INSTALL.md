@@ -70,12 +70,12 @@ Invoke-WebRequest https://github.com/thehack904/RetroIPTVGuide/archive/refs/head
 
 #### Interactive install
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_rpi.sh | sudo bash -s install
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s install
 ```
 
 #### Unattended / non-interactive
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_rpi.sh | sudo bash -s install --yes --agree
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s install --yes --agree
 ```
 
 **What the installer does (Raspberry Pi):**
