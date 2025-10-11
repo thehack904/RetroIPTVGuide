@@ -1,44 +1,27 @@
-#!/bin/bash
-VERSION="3.1.0"  # RetroIPTVGuide Raspberry Pi installer version
-# RetroIPTVGuide Raspberry Pi Installer (Headless, Pi3/4/5)
-# Installs to /home/iptv/iptv-server for consistency with Debian/Windows
-# Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log
-# License: CC BY-NC-SA 4.0
+#!/usr/bin/env bash
+# retroiptv_linux.sh — Unified installer/uninstaller for RetroIPTVGuide (Linux only)
+# Version: 3.1.0
+# License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
+#
+# Usage:
+#   sudo ./retroiptv_linux.sh install [--agree|-a] [--yes|-y]
+#   sudo ./retroiptv_linux.sh uninstall [--yes|-y]
+#   ./retroiptv_linux.sh --help
+#
+# Notes:
+# - Designed for Debian/Ubuntu-based Linux systems.
+# - Run with sudo for full install/uninstall.
 
-# ============================================================
-# Pipe-safe self-extract: if running from stdin, save to /tmp and re-exec
-# ============================================================
-if [ -p /dev/stdin ] && { [ "$0" = "bash" ] || [ "$0" = "-bash" ]; }; then
-  TMP_SCRIPT="/tmp/retroiptv_rpi.sh.$$"
-  echo "Detected piped execution. Saving to $TMP_SCRIPT and re-executing..."
-  cat > "$TMP_SCRIPT"
-  chmod +x "$TMP_SCRIPT"
-  exec sudo bash "$TMP_SCRIPT" "$@"
-  exit 0
-fi
-
-# ============================================================
-# Initialization and Constants
-# ============================================================
 set -e
-set -o pipefail
-trap '' PIPE
 
-APP_USER="iptv"
-APP_DIR="/home/$APP_USER/iptv-server"
-SERVICE_NAME="retroiptvguide"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-CONFIG_FILE="/boot/config.txt"
-SELF_LINK="/usr/local/bin/retroiptv"
+VERSION="3.1.0"
+TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
+LOGFILE="retroiptv_${TIMESTAMP}.log"
 
-TIMESTAMP="$(date +"%Y%m%d-%H%M%S")"
-LOG_DIR="/var/log/retroiptvguide"
-LOG_FILE="$LOG_DIR/install-$TIMESTAMP.log"
+# Log everything to file + console
+exec > >(tee -a "$LOGFILE") 2>&1
 
-# ============================================================
-# Banner
-# ============================================================
-(
+# --- Banner ---
 cat <<'EOF'
 ░█████████                ░██                        ░██████░█████████  ░██████████░██    ░██   ░██████             ░██       ░██            
 ░██     ░██               ░██                          ░██  ░██     ░██     ░██    ░██    ░██  ░██   ░██                      ░██            
@@ -49,117 +32,64 @@ cat <<'EOF'
 ░██     ░██  ░███████      ░████ ░██       ░███████  ░██████░██             ░██       ░███      ░█████░█  ░█████░██ ░██ ░█████░██  ░███████  
                                                                                                                                              
 EOF
-) || true
-
 echo "==========================================================================="
-echo "             RetroIPTVGuide  |  Raspberry Pi Edition (Headless)"
+echo "                   RetroIPTVGuide  |  Linux Edition (Headless)"
 echo "==========================================================================="
 echo ""
 
-# ============================================================
-# Argument Parsing
-# ============================================================
-AUTO_YES=false
+echo "=== RetroIPTVGuide Unified Script (v$VERSION) ==="
+echo "Start time: $(date)"
+echo "Log file: $LOGFILE"
+
+# --- Parse Arguments ---
+ACTION="$1"
+shift || true
 AGREE_TERMS=false
+AUTO_YES=false
 
 for arg in "$@"; do
   case "$arg" in
-    --yes|-y) AUTO_YES=true ;;
     --agree|-a) AGREE_TERMS=true ;;
+    --yes|-y) AUTO_YES=true ;;
   esac
 done
 
-ACTION="$1"; shift || true
+# --- Environment Check ---
+if [[ $(id -u) -ne 0 ]]; then
+  echo "ERROR: This script must be run as root (use sudo)."
+  exit 1
+fi
 
-# ============================================================
-# Utility Functions
-# ============================================================
-require_root() {
-  if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root (use sudo)."
-    exit 1
-  fi
-}
+APP_USER="iptv"
+APP_HOME="/home/$APP_USER"
+APP_DIR="$APP_HOME/iptv-server"
+SERVICE_NAME="iptv-server"
+SYSTEMD_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+LOG_DIR_LINUX="/var/log/iptv"
 
-setup_logging() {
-  mkdir -p "$LOG_DIR" 2>/dev/null || true
-  chmod 755 "$LOG_DIR" 2>/dev/null || true
-  if command -v tee >/dev/null 2>&1; then
-    { exec > >(tee -a "$LOG_FILE") 2>&1; } || exec >>"$LOG_FILE" 2>&1
-  else
-    exec >>"$LOG_FILE" 2>&1
-  fi
-  echo "Log file: $LOG_FILE"
+usage() {
+  SCRIPT_NAME=$(basename "$0")
+
+  echo -e "\033[1;33mRetroIPTVGuide Unified Installer/Updater/Uninstaller (v$VERSION)\033[0m\n"
+  echo -e "Usage:"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME install [--agree|-a] [--yes|-y]\033[0m   Install RetroIPTVGuide"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME uninstall [--yes|-y]\033[0m             Uninstall RetroIPTVGuide"
+  echo -e "  \033[1;32msudo $SCRIPT_NAME update\033[0m                            Update RetroIPTVGuide from GitHub"
+  echo -e "  \033[1;32m$SCRIPT_NAME --help\033[0m                                Show this help\n"
+
+  echo "Flags:"
+  echo "  --agree, -a    Automatically agree to the license terms"
+  echo "  --yes, -y      Run non-interactively, auto-proceed on all prompts"
   echo ""
+
+  echo "Examples:"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME install --agree --yes\033[0m"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME uninstall --yes\033[0m"
+  echo -e "  \033[1;36msudo $SCRIPT_NAME update\033[0m\n"
+
+  echo "License: CC BY-NC-SA 4.0"
 }
 
-ensure_self_install() {
-  local src
-  src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-  if [ "$src" = "bash" ] || [ "$src" = "-bash" ] || [ "$src" = "" ] || [ ! -f "$src" ]; then
-    echo "Detected piped/unknown source; skipping self-install to $SELF_LINK"
-    echo ""
-    return 0
-  fi
-  if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
-    cp "$src" "$SELF_LINK"
-    chmod +x "$SELF_LINK"
-    echo "Installed launcher: $SELF_LINK"
-    echo ""
-  fi
-}
-
-ensure_user() {
-  id "$APP_USER" &>/dev/null || useradd -m -r -s /usr/sbin/nologin "$APP_USER"
-}
-chown_appdir() { chown -R "$APP_USER:$APP_USER" "$APP_DIR"; }
-pip_as_iptv() { sudo -u "$APP_USER" bash -lc "$*"; }
-
-detect_pi_type() {
-  local model
-  model=$(tr -d '\0' < /proc/device-tree/model 2>/dev/null || echo "Unknown Model")
-  if echo "$model" | grep -q "Raspberry Pi 5"; then PI_TYPE="pi5"
-  elif echo "$model" | grep -q "Raspberry Pi 4"; then PI_TYPE="pi4"
-  elif echo "$model" | grep -q "Raspberry Pi 3"; then PI_TYPE="pi3"
-  else PI_TYPE="unknown"; fi
-  echo "Detected board: $model ($PI_TYPE)"
-  echo ""
-}
-
-set_gpu_mem() {
-  local val="$1"
-  export RASPI_CONFIG_NONINTERACTIVE=1
-  if command -v raspi-config >/dev/null 2>&1; then
-    (
-      exec 1>/dev/null 2>/dev/null
-      raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE" 2>/dev/null || true
-    )
-    local current_val
-    current_val=$(grep -E "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | tail -n1 | cut -d'=' -f2)
-    if [ "$current_val" = "$val" ]; then
-      echo "✅ Verified: gpu_mem set to ${val}MB"
-    else
-      echo "⚠️  Warning: Could not confirm gpu_mem=$val in $CONFIG_FILE"
-    fi
-  else
-    sed -i -E 's/^\s*gpu_mem\s*=.*/gpu_mem='"$val"'/g' "$CONFIG_FILE" 2>/dev/null || true
-    if ! grep -qE '^\s*gpu_mem\s*=' "$CONFIG_FILE" 2>/dev/null; then echo "gpu_mem=$val" >> "$CONFIG_FILE"; fi
-    echo "✅ Fallback: gpu_mem set to ${val}MB"
-  fi
-}
-
-interactive_resource_check() {
-  echo "Checking storage and memory..."
-  local sd_size mem_total swap_total
-  sd_size=$(df -h / | awk 'NR==2 {print $2}')
-  mem_total=$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)
-  swap_total=$(awk '/SwapTotal/ {print int($2/1024)}' /proc/meminfo)
-  echo "Storage: $sd_size | RAM: ${mem_total}MB | Swap: ${swap_total}MB"
-  if [ "$mem_total" -lt 1000 ] && [ "$swap_total" -lt 400 ]; then
-    echo "⚠️  Low RAM/swap — recommend increasing swap to 1GB for stability."
-  fi
-  echo ""
-}
 
 agree_terms() {
   if [[ "$AGREE_TERMS" == true ]]; then
@@ -177,7 +107,7 @@ agree_terms() {
   echo "  - Ensure python3-venv package is installed"
   echo "  - Copy project files into /home/iptv/iptv-server"
   echo "  - Create a Python virtual environment & install dependencies"
-  echo "  - Create, enable, and start the ${SERVICE_NAME} systemd service"
+  echo "  - Create, enable, and start the iptv-server systemd service"
   echo ""
   echo "By continuing, you acknowledge and agree that:"
   echo "  - This software should ONLY be run on internal networks."
@@ -193,122 +123,253 @@ agree_terms() {
   fi
 }
 
-# ============================================================
-# Actions
-# ============================================================
-do_install() {
+install_linux() {
   agree_terms
-  require_root
-  setup_logging
-  ensure_self_install
-  detect_pi_type
-  [ "$AUTO_YES" = true ] || interactive_resource_check
 
-  echo "Installing dependencies..."
-  apt-get update -y && apt-get install -y git python3 python3-venv python3-pip ffmpeg mesa-utils v4l-utils raspi-config
-
-  ensure_user
-  mkdir -p "$APP_DIR"
-  chown_appdir
-
-  if [ ! -d "$APP_DIR/.git" ]; then
-    sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
+  echo "=== Creating system user ($APP_USER) if needed..."
+  if id "$APP_USER" &>/dev/null; then
+    echo "User $APP_USER already exists."
+    if [[ "$AUTO_YES" != true ]]; then
+      read -p "Reuse existing user $APP_USER? (yes/no): " reuse
+      [[ "$reuse" != "yes" ]] && exit 1
+    fi
   else
-    (cd "$APP_DIR" && sudo -u "$APP_USER" git pull)
+    adduser --system --home "$APP_HOME" --group "$APP_USER"
+    echo "Created system user: $APP_USER"
   fi
 
-  sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
-  chown -R "$APP_USER:$APP_USER" "/home/$APP_USER" || true
-  pip_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install --upgrade pip && pip install -r '$APP_DIR/requirements.txt'"
+  echo "=== Ensuring python3-venv is installed..."
+  if ! dpkg -s python3-venv >/dev/null 2>&1; then
+    apt-get update
+    apt-get install -y python3-venv
+  fi
 
-  echo "Configuring GPU memory..."
-  case "$PI_TYPE" in
-    pi4|pi5) set_gpu_mem 256 ;;
-    pi3) set_gpu_mem 128 ;;
-    *) set_gpu_mem 128 ;;
-  esac
+  echo "=== Preparing application directory: $APP_DIR"
+  mkdir -p "$APP_DIR"
+  chown -R $APP_USER:$APP_USER "$APP_HOME"
 
-  echo "Creating systemd service..."
-  cat > "$SERVICE_FILE" <<EOF
+# --- Ensure project files are available ---
+APP_DIR="/home/$APP_USER/iptv-server"
+TMP_CLONE_DIR="/tmp/retroiptvguide"
+
+mkdir -p "$APP_DIR"
+
+# Always work in /tmp for cloning to avoid user/sudo confusion
+cd /tmp
+
+if [ ! -f "requirements.txt" ]; then
+  if command -v git >/dev/null 2>&1; then
+    echo "Project files not found locally — cloning RetroIPTVGuide (dev branch)..."
+    rm -rf "$TMP_CLONE_DIR"
+    git clone --depth 1 -b dev https://github.com/thehack904/RetroIPTVGuide.git "$TMP_CLONE_DIR"
+    SCRIPT_DIR="$(realpath "$TMP_CLONE_DIR")"
+  else
+    echo "ERROR: requirements.txt not found and git is not installed."
+    echo "Please install git or run this script from within a cloned RetroIPTVGuide repo."
+    exit 1
+  fi
+else
+  SCRIPT_DIR="$(realpath "$(pwd)")"
+fi
+
+echo "Copying project files from: $SCRIPT_DIR"
+rsync -a --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/" || {
+  echo "❌ ERROR: rsync failed to copy project files."
+  echo "Check that $SCRIPT_DIR exists and is accessible."
+  exit 1
+}
+
+
+
+  echo "=== Copying project files..."
+  rsync -a --exclude 'venv' ./ "$APP_DIR/"
+  chown -R $APP_USER:$APP_USER "$APP_DIR"
+
+  if [[ -d "$APP_DIR/venv" && "$AUTO_YES" == true ]]; then
+    echo "Existing venv detected — auto-reusing (--yes)."
+  else
+    echo "=== Creating Python virtual environment..."
+    sudo -u $APP_USER python3 -m venv "$APP_DIR/venv"
+  fi
+
+  echo "=== Installing Python dependencies..."
+  sudo -u $APP_USER "$APP_DIR/venv/bin/pip" install --upgrade pip
+  sudo -u $APP_USER "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+
+  echo "=== Writing systemd service: $SYSTEMD_FILE"
+  cat > "$SYSTEMD_FILE" <<EOF
 [Unit]
-Description=RetroIPTVGuide Flask Server
+Description=IPTV Flask Server (RetroIPTVGuide)
 After=network.target
 
 [Service]
 User=$APP_USER
+Group=$APP_USER
 WorkingDirectory=$APP_DIR
 ExecStart=$APP_DIR/venv/bin/python app.py
 Restart=always
-Environment=FLASK_RUN_PORT=5000
-Environment=FLASK_RUN_HOST=0.0.0.0
 
 [Install]
 WantedBy=multi-user.target
 EOF
+
+  echo "=== Enabling and starting service..."
   systemctl daemon-reload
-  systemctl enable "$SERVICE_NAME"
-  systemctl restart "$SERVICE_NAME"
+  systemctl enable ${SERVICE_NAME}.service
+  systemctl restart ${SERVICE_NAME}.service
+
+  echo "
+Verifying service status..."
+  sleep 3
+  if systemctl is-active --quiet ${SERVICE_NAME}; then
+    echo "✅ Service is active."
+    echo "Waiting for web interface to start..."
+    wait_time=0
+    max_wait=15
+
+    if command -v curl >/dev/null 2>&1; then
+      while [ $wait_time -lt $max_wait ]; do
+        if curl -fs http://127.0.0.1:5000 >/dev/null 2>&1; then
+          echo "✅ Web interface responding on port 5000 (after ${wait_time}s)."
+          echo "✅ Verified: HTTP response received." | tee -a "$LOGFILE"
+          break
+        fi
+        sleep 2
+        wait_time=$((wait_time+2))
+      done
+    elif command -v wget >/dev/null 2>&1; then
+      while [ $wait_time -lt $max_wait ]; do
+        if wget -q --spider http://127.0.0.1:5000 2>/dev/null; then
+          echo "✅ Web interface responding on port 5000 (after ${wait_time}s)."
+          echo "✅ Verified: HTTP response received." | tee -a "$LOGFILE"
+          break
+        fi
+        sleep 2
+        wait_time=$((wait_time+2))
+      done
+    else
+      echo "⚠️  Neither curl nor wget found; skipping HTTP check."
+      wait_time=$max_wait
+    fi
+
+    if [ $wait_time -ge $max_wait ]; then
+      echo "⚠️  Service active, but no HTTP response after ${max_wait}s. Check logs in $LOGFILE."
+      echo "⚠️  Possible slow startup on first run (SQLite or dependencies still initializing)." | tee -a "$LOGFILE"
+    fi
+  else
+    echo "❌ Service not active. Run: sudo systemctl status ${SERVICE_NAME}"
+  fi
+  
+  # --- Install management script globally ---
+  LOCAL_SCRIPT_PATH="/usr/local/bin/retroiptv_linux.sh"
+  
+  echo ""
+  echo "=== Installing management script to $LOCAL_SCRIPT_PATH ..."
+  
+  # Copy the current script to /usr/local/bin
+  if [ -f "$0" ]; then
+    cp "$0" "$LOCAL_SCRIPT_PATH"
+  else
+    # In case running from stdin via curl, pull fresh copy from GitHub
+    curl -sSLo "$LOCAL_SCRIPT_PATH" \
+      "https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/dev/retroiptv_linux.sh"
+  fi
+  
+  chmod +x "$LOCAL_SCRIPT_PATH"
+  chown root:root "$LOCAL_SCRIPT_PATH"
+  
+  # Optional short alias
+  ln -sf "$LOCAL_SCRIPT_PATH" /usr/local/bin/retroiptv
+  
+  echo "✅ Installed management script globally. You can now run:"
+  echo "   sudo retroiptv install --agree --yes"
+  echo "   sudo retroiptv update"
+  echo "   sudo retroiptv uninstall --yes"
+  echo ""
 
   echo ""
   echo "============================================================"
   echo " Installation Complete "
   echo "============================================================"
-  echo "Access in your browser: http://$(hostname -I | awk '{print $1}'):5000"
+  echo "End time: $(date)"
+  echo "Access in browser: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "GPU accel: $PI_TYPE"
-  echo "Service: ${SERVICE_NAME}"
+  echo "NOTE: BETA build — internal network use only."
+  echo "Service: $SERVICE_NAME"
+  echo "User: $APP_USER"
   echo "Install path: $APP_DIR"
+  echo ""
+  echo "Full log saved to: $LOGFILE"
   echo ""
 }
 
-do_uninstall() {
-  require_root
-  setup_logging
-  systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-  systemctl disable "$SERVICE_NAME" 2>/dev/null || true
-  rm -f "$SERVICE_FILE"
-  systemctl daemon-reload
-  rm -rf "$APP_DIR"
+uninstall_linux() {
+  echo "=== Stopping and disabling ${SERVICE_NAME}.service ..."
+  systemctl stop ${SERVICE_NAME}.service 2>/dev/null || true
+  systemctl disable ${SERVICE_NAME}.service 2>/dev/null || true
+
+  echo "=== Removing systemd unit ..."
+  if [[ -f "$SYSTEMD_FILE" ]]; then
+    rm -f "$SYSTEMD_FILE"
+    systemctl daemon-reload
+  fi
+
+  echo "=== Removing logs and user..."
+  rm -rf "$LOG_DIR_LINUX" 2>/dev/null || true
+  if id "$APP_USER" &>/dev/null; then
+    userdel -r "$APP_USER" || true
+  elif [[ -d "$APP_HOME" ]]; then
+    rm -rf "$APP_HOME"
+  fi
+
   echo ""
   echo "============================================================"
   echo " Uninstallation Complete "
   echo "============================================================"
   echo "End time: $(date)"
-  echo "Log file: $LOG_FILE"
+  echo "User: $APP_USER"
+  echo "Service: $SERVICE_NAME"
+  echo "Removed directories: $APP_HOME, $LOG_DIR_LINUX"
+  echo "Full log saved to: $LOGFILE"
   echo ""
 }
 
-do_update() {
-  require_root
-  setup_logging
-  sudo -u "$APP_USER" bash -H -c "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
+update_linux() {
+  echo ""
+  echo "=== Updating RetroIPTVGuide from GitHub ==="
+  echo "Working directory: /home/$APP_USER/iptv-server"
+  if [ ! -d "$APP_DIR/.git" ]; then
+    echo "❌ ERROR: $APP_DIR is not a valid Git repository."
+    echo "Cannot update automatically. Please reinstall or clone manually."
+    exit 1
+  fi
+
+  echo "Fetching latest code from origin/main..."
+  sudo -u $APP_USER bash -H -c "cd $APP_DIR && git fetch --all && git reset --hard origin/main" | tee -a "$LOGFILE"
+
+  echo "Reloading and restarting service..."
   systemctl daemon-reload
-  systemctl restart "${SERVICE_NAME}.service"
+  systemctl restart $SERVICE_NAME.service
+
+  if systemctl is-active --quiet $SERVICE_NAME; then
+    echo "✅ Update complete. Service restarted successfully."
+  else
+    echo "⚠️  Update applied but service is not active. Run: sudo systemctl status $SERVICE_NAME"
+  fi
+
   echo ""
-  echo "============================================================"
-  echo " Update Complete "
-  echo "============================================================"
-  echo "Service restarted: ${SERVICE_NAME}"
-  echo "Log file: $LOG_FILE"
+  echo "Full log saved to: $LOGFILE"
   echo ""
 }
 
-print_usage() {
-  echo "Usage: sudo $0 {install|uninstall|update} [--yes|-y] [--agree|-a]"
-  echo ""
-  echo "Examples:"
-  echo "  sudo $0 install --agree"
-  echo "  sudo $0 update"
-  echo "  sudo $0 uninstall --yes"
-  echo ""
-}
 
-# ============================================================
-# Main
-# ============================================================
 case "$ACTION" in
-  install) do_install ;;
-  uninstall) do_uninstall ;;
-  update) do_update ;;
-  *) print_usage; exit 1 ;;
+  install) install_linux ;;
+  uninstall) uninstall_linux ;;
+  update) update_linux ;;
+  -h|--help|help) usage ;;
+  *) usage ;;
 esac
+
+
+echo "End time: $(date)"
