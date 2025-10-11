@@ -18,18 +18,9 @@ Clone the repository and run the installer. Choose the command based on your OS.
 
 ### Linux / WSL
 
-#### Option 1: One-liner (quick setup)
+#### One-liner (quick setup)
 ```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && sudo chmod +x install.sh && sudo ./install.sh
-```
-or
-
-#### Option 2: Multi-line (step-by-step)
-```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git
-cd RetroIPTVGuide
-sudo chmod +x install.sh
-sudo ./install.sh
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_linux.sh -o /tmp/retroiptv_linux.sh && sudo bash /tmp/retroiptv_linux.sh install --agree --yes
 ```
 
 **What the installer does (Linux/WSL):**
@@ -149,13 +140,12 @@ This will:
 
 ### Linux / WSL
 ```bash
-sudo chmod +x uninstall.sh
-sudo ./uninstall.sh
+**PlaceHolder**
 ```
 
 ### Raspberry Pi
 ```bash
-sudo ./retroiptv_rpi.sh uninstall --yes
+**PlaceHolder**
 ```
 
 ### Windows
