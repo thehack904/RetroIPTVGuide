@@ -169,7 +169,7 @@ From an Administrator PowerShell prompt:
 .\uninstall_windows.ps1
 ```
 
-#### Uninstalling
+#### Docker
 ```bash
 docker compose down -v
 ```
