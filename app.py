@@ -133,6 +133,14 @@ def init_tuners_db():
                 "Tuner 2": {
                     "m3u": "http://iptv2.lan:8500/iptv/channels.m3u",
                     "xml": "http://iptv2.lan:8500/iptv/xmltv.xml"
+                },
+                "Plex": {
+                    "m3u": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_plex.m3u",
+                    "xml": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_plex.m3u"
+                },
+                "Tubi": {
+                    "m3u": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_tubi.m3u",
+                    "xml": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_tubi.m3u"
                 }
             }
             for name, urls in defaults.items():
