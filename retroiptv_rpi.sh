@@ -13,7 +13,7 @@ if [ -p /dev/stdin ] && { [ "$0" = "bash" ] || [ "$0" = "-bash" ]; }; then
   echo "Detected piped execution. Saving to $TMP_SCRIPT and re-executing..."
   cat > "$TMP_SCRIPT"
   chmod +x "$TMP_SCRIPT"
-  exec sudo bash "$TMP_SCRIPT" "$@"
+  exec sudo "$TMP_SCRIPT" "$@"
   exit 0
 fi
 
@@ -60,19 +60,16 @@ echo ""
 # Argument Parsing
 # ============================================================
 AUTO_YES=false
-AUTO_AGREE=false
+AGREE_TERMS=false
 
 for arg in "$@"; do
   case "$arg" in
     --yes|-y) AUTO_YES=true ;;
-    --agree|-a) AUTO_AGREE=true ;;
+    --agree|-a) AGREE_TERMS=true ;;
   esac
 done
 
 ACTION="$1"; shift || true
-echo "ACTION = $ACTION"
-echo "AUTO_YES = $AUTO_YES"
-echo "AUTO_AGREE = $AUTO_AGREE"
 
 # ============================================================
 # Utility Functions
@@ -104,15 +101,14 @@ setup_logging() {
 ensure_self_install() {
   local src
   src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-  if [ "$src" = "bash" ] || [ "$src" = "-bash" ] || [ "$src" = "" ] || [ ! -f "$src" ]; then
-    echo "Detected piped/unknown source; skipping self-install to $SELF_LINK"
-    echo ""
-    return 0
-  fi
-  if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
-    cp "$src" "$SELF_LINK"
-    chmod +x "$SELF_LINK"
-    echo "Installed launcher: $SELF_LINK"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
+      install -m 0755 "$src" "$SELF_LINK"
+      echo "Installed/updated launcher: $SELF_LINK"
+      echo ""
+    fi
+  else
+    echo "Skipping self-install (unknown source)."
     echo ""
   fi
 }
@@ -136,10 +132,11 @@ detect_pi_type() {
 
 set_gpu_mem() {
   local val="$1"
+  export RASPI_CONFIG_NONINTERACTIVE=1
   if command -v raspi-config >/dev/null 2>&1; then
     (
       exec 1>/dev/null 2>/dev/null
-      raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE" || true
+      raspi-config nonint set_config_var gpu_mem "$val" "$CONFIG_FILE" 2>/dev/null || true
     )
     local current_val
     current_val=$(grep -E "^gpu_mem=" "$CONFIG_FILE" 2>/dev/null | tail -n1 | cut -d'=' -f2)
@@ -167,6 +164,38 @@ interactive_resource_check() {
   fi
   echo ""
 }
+
+agree_terms() {
+  echo ""
+  echo "============================================================"
+  echo " RetroIPTVGuide Installer Agreement "
+  echo "============================================================"
+  echo ""
+  echo "This installer will perform the following actions:"
+  echo "  - Create system user 'iptv' if not already present"
+  echo "  - Ensure python3-venv package is installed"
+  echo "  - Copy project files into /home/iptv/iptv-server"
+  echo "  - Create a Python virtual environment & install dependencies"
+  echo "  - Create, enable, and start the ${SERVICE_NAME} systemd service"
+  echo ""
+  echo "By continuing, you acknowledge and agree that:"
+  echo "  - This software should ONLY be run on internal networks."
+  echo "  - It must NOT be exposed to the public Internet."
+  echo "  - You accept all risks; the author provides NO WARRANTY."
+  echo "  - The author is NOT responsible for any damage, data loss,"
+  echo "    or security vulnerabilities created by this installation."
+  echo ""
+
+  if [[ "$AGREE_TERMS" == true ]]; then
+    echo "✅  --agree flag detected; continuing automatically."
+    echo ""
+    return
+  fi
+
+  read -p "Do you agree to these terms? (yes/no): " agreement
+  [[ "$agreement" == "yes" ]] || { echo "Installation aborted by user."; exit 1; }
+}
+
 
 write_service() {
   cat > "$SERVICE_FILE" <<EOF
@@ -215,19 +244,7 @@ post_install_verify() {
 # Actions
 # ============================================================
 do_install() {
-  echo ""
-  echo "This installer will perform the following actions:"
-  echo "  - Detect Raspberry Pi model and set GPU memory"
-  echo "  - Install dependencies (Python3, ffmpeg, etc.)"
-  echo "  - Create system user 'iptv' and setup venv"
-  echo "  - Configure and enable ${SERVICE_NAME:-retroiptvguide} service"
-  echo ""
-
-  if [ "$AUTO_AGREE" = false ]; then
-    read -p "Do you agree to these terms? (yes/no): " A
-    [ "$A" = "yes" ] || { echo "Aborted."; exit 1; }
-  fi
-
+  agree_terms
   require_root
   setup_logging
   ensure_self_install
@@ -239,7 +256,10 @@ do_install() {
 
   ensure_user
   mkdir -p "$APP_DIR"
+  mkdir -p "/home/$APP_USER/.cache/pip"
+  chown -R "$APP_USER:$APP_USER" "/home/$APP_USER"
   chown_appdir
+
 
   if [ ! -d "$APP_DIR/.git" ]; then
     sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
@@ -248,6 +268,7 @@ do_install() {
   fi
 
   sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
+  chown -R "$APP_USER:$APP_USER" "/home/$APP_USER" || true
   pip_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install --upgrade pip && pip install -r '$APP_DIR/requirements.txt'"
 
   echo "Configuring GPU memory..."
@@ -272,13 +293,35 @@ do_install() {
   echo "Install path: $APP_DIR"
   echo ""
   post_install_verify
+  
+  echo "=== Installing management script to $SELF_LINK ..."
+  if [ -x "$SELF_LINK" ]; then
+    echo "✅ Installed management script globally. You can now run:"
+    echo "   sudo retroiptv install --agree --yes"
+    echo "   sudo retroiptv update"
+    echo "   sudo retroiptv uninstall --yes"
+  else
+    echo "⚠️  Launcher not found at $SELF_LINK (check permissions)"
+  fi
+  echo ""
+  
+  echo "============================================================"
+  echo " Installation Complete "
+  echo "============================================================"
+  echo "End time: $(date)"
+  echo "Access in browser: http://$(hostname -I | awk '{print $1}'):5000"
+  echo "Default login: admin / strongpassword123"
+  echo "NOTE: BETA build — internal network use only."
+  echo "Service: ${SERVICE_NAME}"
+  echo "User: ${APP_USER}"
+  echo "Install path: ${APP_DIR}"
+  echo ""
+  echo "Full log saved to: ${LOG_FILE}"
+  echo ""
+
 }
 
 do_uninstall() {
-  echo ""
-  echo "============================================================"
-  echo " Uninstaller Started "
-  echo "============================================================"
   require_root
   setup_logging
   systemctl stop "$SERVICE_NAME" 2>/dev/null || true
@@ -296,10 +339,6 @@ do_uninstall() {
 }
 
 do_update() {
-  echo ""
-  echo "============================================================"
-  echo " Update Started "
-  echo "============================================================"
   require_root
   setup_logging
   sudo -u "$APP_USER" bash -H -c "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
