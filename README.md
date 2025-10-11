@@ -1,9 +1,10 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v3.1.0-blue)
+![Version](https://img.shields.io/badge/version-v3.2.0-blue)
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
+Now includes **Docker and TrueNAS SCALE deployment support** for easy installation and persistence.
 
 ⚠️ **Note:** This is still a BETA release. It is not recommended for direct Internet/public-facing deployments.
 
@@ -14,17 +15,30 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 
 ---
 
-## ✨ Features (v3.1.0)
+## 🚀 Containerized Deployment (v3.2.0)
 
-### 🆕 Raspberry Pi Headless Support
-- Full **Raspberry Pi installer (`retroiptv_rpi.sh`)** added.  
-- Detects Pi 3 / 4 / 5 hardware and automatically sets GPU memory (128MB / 256MB).  
-- Installs to `/home/iptv/iptv-server` using system user `iptv`.  
-- Configures Python virtual environment and creates a systemd service `retroiptvguide`.  
-- Logs everything to `/var/log/retroiptvguide/install-TIMESTAMP.log`.  
-- Supports `--yes` (skip confirmations) and `--agree` (auto-accept license).  
-- Post-install check verifies Flask service on port 5000.  
-- Optional reboot prompt applies GPU memory changes.  
+### 🐳 Docker
+```bash
+docker pull ghcr.io/thehack904/retroiptvguide:latest
+docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
+```
+Access the web interface at:  
+`http://<server-ip>:5000`
+
+### 🧩 TrueNAS SCALE App
+- Upload the provided `retroiptvguide-3.2.0.zip` chart.
+- Repository: `ghcr.io/thehack904/retroiptvguide`
+- Tag: `latest`
+- Exposes port `5000`.
+
+---
+
+## ✨ Features (v3.2.0)
+
+- Official **Docker / TrueNAS** support with persistent volumes.
+- Automatic build/publish to **GHCR** via GitHub Actions.
+- Same RetroIPTVGuide web interface and EPG features from v3.1.x.
+- Backward compatible with Linux, Windows, and Raspberry Pi installs.
 
 ---
 
@@ -87,6 +101,7 @@ It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https:
 
 | Version | Date | Key Features |
 |----------|------|---------------|
+| **v3.2.0** | 2025-10-11 | Containerized Deployment / TrueNAS Scale App installer |
 | **v3.1.0** | 2025-10-09 | Raspberry Pi installer, verified GPU setup, improved HTTP service check |
 | **v3.0.1** | 2025-10-07 | EPG fallback system, tuner refresh fix, login redesign |
 | **v3.0.0** | 2025-10-03 | Windows installer/uninstaller, cross-platform setup, unified UI |
@@ -108,7 +123,7 @@ RetroIPTVGuide is compatible with all modern browsers:
 
 ## 💻 Tested Devices & Operating Systems
 - **Ubuntu 24.04 (desktop/server)**
-- **TrueNAS SCALE (Docker/Podman)**
+- **TrueNAS SCALE (Docker)**
 - **Windows 10 / 11**
 - **Raspberry Pi 3B+ / 4 / 5 (Raspberry Pi OS Bookworm)**
 - **macOS Monterey / Ventura**
@@ -121,7 +136,7 @@ RetroIPTVGuide is compatible with all modern browsers:
 - Debian-based Linux (Ubuntu, Pop!\_OS, Mint)
 - Windows 10/11 (via PowerShell + NSSM)
 - Raspberry Pi 3 / 4 / 5 (Headless OS, `retroiptv_rpi.sh`)
-- macOS (manual install or future installer support)
+- Docker (Generic Linux / macOS / Windows)
 
 ---
 
@@ -172,8 +187,8 @@ See [ROADMAP.md](ROADMAP.md) for full details.
 - **Repo:** [RetroIPTVGuide](https://github.com/thehack904/RetroIPTVGuide)
 - **Maintainer:** J.H.  
 - **License:** [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)  
-- **Version:** v3.1.0  
-- **Release Date:** 2025-10-09  
+- **Version:** v3.2.0  
+- **Release Date:** 2025-10-11  
 
 ---
 

@@ -1,4 +1,4 @@
-VERSION="3.1.0"
+VERSION="3.2.0"
 #!/usr/bin/env bash
 # RetroIPTVGuide uninstall script
 # Run with sudo on Linux; run from Administrator shell on Windows
@@ -33,7 +33,7 @@ if [[ "$ENVIRONMENT" == "LINUX" || "$ENVIRONMENT" == "WSL" ]]; then
         exit 1
     fi
 elif [[ "$ENVIRONMENT" == "GITBASH" ]]; then
-    # Git Bash doesn’t expose EUID reliably, just warn the user
+    # Git Bash doesnâ€™t expose EUID reliably, just warn the user
     echo "NOTE: On Windows, ensure Git Bash is running with Administrator privileges."
 fi
 

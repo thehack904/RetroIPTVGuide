@@ -13,6 +13,27 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: log filtering and pagination. 
 
 ---
+
+## [v3.2.0] - 2025-10-11
+### Added
+- **Containerization & TrueNAS Deployment Support**
+  - Added official Dockerfile and `docker-compose.yml` for cross‑platform container deployments.
+  - Added **TrueNAS SCALE App chart** with persistent volume mapping (`/config`, `/logs`, `/data`).
+  - Added GitHub Actions workflow for automatic GHCR image builds.
+  - Docker image published at:  
+    `ghcr.io/thehack904/retroiptvguide:latest`
+- Integrated automatic build‑and‑push pipeline using GitHub Actions and GHCR_PAT authentication.
+- Added healthcheck and restart policies in Docker configuration.
+
+### Changed
+- Documentation updated for container installation (Docker/TrueNAS) as the new primary method.
+- Legacy Python and system installers moved to “manual install” section.
+
+### Fixed
+- Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
+- Fixed workflow permissions with explicit `packages: write` and PAT authentication.
+---
+
 ## v3.1.0 - 2025-10-09
 ### Added
 - New **RetroIPTVGuide Raspberry Pi headless installer** (`retroiptv_rpi.sh`)  
