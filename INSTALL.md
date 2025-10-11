@@ -97,8 +97,19 @@ RetroIPTVGuide v3.2.0 introduces **official Docker and TrueNAS SCALE App support
 
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git
-cd RetroIPTVGuide
+cd RetroIPTVGuide/docker
+cp .env.example .env
 docker compose up -d
+```
+
+
+## 🐳 Quick Docker Run
+
+The fastest way to launch **RetroIPTVGuide v3.2.0**:
+
+```bash
+docker pull ghcr.io/thehack904/retroiptvguide:latest
+docker run -d   --name retroiptvguide   -p 5000:5000   -e TZ=America/Chicago   -e SECRET_KEY=$(openssl rand -hex 32)   -v $(pwd)/config:/app/config   -v $(pwd)/logs:/app/logs   -v $(pwd)/data:/app/data   ghcr.io/thehack904/retroiptvguide:latest
 ```
 
 ---

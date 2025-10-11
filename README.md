@@ -1,6 +1,30 @@
 # RetroIPTVGuide
 
-![Version](https://img.shields.io/badge/version-v3.2.0-blue)
+<p align="center">
+  <a href="https://github.com/thehack904/RetroIPTVGuide">
+    <img src="https://img.shields.io/badge/version-v3.2.0-blue?style=for-the-badge" alt="Version">
+  </a>
+  <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
+    <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
+  </a>
+  <a href="https://github.com/thehack904/RetroIPTVGuide/actions/workflows/docker-publish.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/thehack904/RetroIPTVGuide/docker-publish.yml?style=for-the-badge&logo=github" alt="Build Status">
+  </a>
+  <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+    <img src="https://img.shields.io/badge/license-CC--BY--NC--SA%204.0-lightgrey?style=for-the-badge" alt="License">
+  </a>
+</p>
+
+
+---
+
+## 📦 Image Information
+
+| Registry | Image | Architectures | Updated |
+|-----------|--------|----------------|----------|
+| **GitHub Container Registry** | `ghcr.io/thehack904/retroiptvguide:latest` | amd64 / arm64 | Automatically via CI/CD |
+
+---
 
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
@@ -14,7 +38,6 @@ Now includes **Docker and TrueNAS SCALE deployment support** for easy installati
 - [License](LICENSE)
 
 ---
-
 ## 🚀 Containerized Deployment (v3.2.0)
 
 ### 🐳 Docker
