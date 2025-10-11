@@ -87,14 +87,19 @@ require_root() {
 setup_logging() {
   mkdir -p "$LOG_DIR" 2>/dev/null || true
   chmod 755 "$LOG_DIR" 2>/dev/null || true
-  if command -v tee >/dev/null 2>&1; then
-    { exec > >(tee -a "$LOG_FILE") 2>&1; } || exec >>"$LOG_FILE" 2>&1
+
+  # If running under bash, use process substitution
+  if [ -n "$BASH_VERSION" ]; then
+    exec > >(tee -a "$LOG_FILE") 2>&1
   else
+    # Fallback for dash/sh — append both stdout and stderr manually
     exec >>"$LOG_FILE" 2>&1
   fi
+
   echo "Log file: $LOG_FILE"
   echo ""
 }
+
 
 ensure_self_install() {
   local src
