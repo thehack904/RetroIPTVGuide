@@ -88,9 +88,9 @@ These are **not yet implemented**, but provide a development path for future rel
 ---
 
 ## 📅 Priority Suggestions
-- Short term: finalize Pi installer documentation and verify GPU/swap checks (v3.1.x).  
-- Medium term: `.m3u8` tuner support and DB-based logs (v3.2.x).  
-- Long term: full HTTPS and container deployment.  
+- Short term: finalize Docker image testing across TrueNAS and generic Linux.
+- Medium term: implement `.m3u8` tuner and DB log storage (v3.3.x).
+- Long term: HTTPS support and mobile UI redesign.
 
 ---
 
@@ -106,6 +106,12 @@ These are **not yet implemented**, but provide a development path for future rel
 - Ensure logs and services are properly separated between modes.
 
 ---
+## ✅ Completed (v3.2.0)
+- [x] **Containerization & TrueNAS Deployment Support**
+  - Dockerfile and docker‑compose finalized for GHCR.
+  - TrueNAS SCALE App chart added for persistent deployment.
+  - CI/CD publishing pipeline via GitHub Actions and GHCR_PAT.
+  - Updated documentation (INSTALL, README, CHANGELOG).
 
 ## ✅ Completed (v3.1.0)
 - [x] **Raspberry Pi headless installer completed** (`retroiptv_rpi.sh`).  

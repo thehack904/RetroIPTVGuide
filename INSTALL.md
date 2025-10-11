@@ -1,11 +1,11 @@
 # Installation Guide
 
-**Version:** v3.1.0  
-**Last Updated:** 2025-10-09  
+**Version:** v3.2.0  
+**Last Updated:** 2025-10-11  
 
 ## Requirements
 - Python 3.10+ (Linux) / Python 3.12+ (Windows)
-- **Linux (Debian/Ubuntu with systemd)**, **Windows 10/11**, or **Raspberry Pi 3 / 4 / 5 (Headless OS)**
+- **Linux (Debian/Ubuntu with systemd)**, **Windows 10/11**, or **Raspberry Pi 3 / 4 / 5 (Headless OS) / Docker**
 - Administrative privileges:
   - **Linux/WSL/Raspberry Pi:** run install/uninstall with `sudo`
   - **Windows:** run from an Administrator **PowerShell** session
@@ -18,18 +18,9 @@ Clone the repository and run the installer. Choose the command based on your OS.
 
 ### Linux / WSL
 
-#### Option 1: One-liner (quick setup)
+#### One-liner
 ```bash
 git clone https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && sudo chmod +x install.sh && sudo ./install.sh
-```
-or
-
-#### Option 2: Multi-line (step-by-step)
-```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git
-cd RetroIPTVGuide
-sudo chmod +x install.sh
-sudo ./install.sh
 ```
 
 **What the installer does (Linux/WSL):**
@@ -96,6 +87,22 @@ curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads
 
 ---
 
+## 🚀 Containerized Deployment
+
+RetroIPTVGuide v3.2.0 introduces **official Docker and TrueNAS SCALE App support**, allowing one‑click installation and persistent storage.
+
+### 🧱 Docker (Generic Linux / macOS / Windows)
+
+#### Using Docker Compose
+
+```bash
+git clone https://github.com/thehack904/RetroIPTVGuide.git
+cd RetroIPTVGuide
+docker compose up -d
+```
+
+---
+
 ## Access
 
 Once installed, open your browser:
@@ -112,8 +119,6 @@ Default login: **admin / strongpassword123**
 ## 🔄 Updating
 
 ### Linux / WSL
-
-#### Quick update (one-liner)
 ```bash
 sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart iptv-server.service
 ```
@@ -127,19 +132,11 @@ sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git res
 ```powershell
 git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
 ```
-or
 
-#### Step-by-step
-```powershell
-git fetch --all
-git reset --hard origin/main
-Restart-Service RetroIPTVGuide
+#### Docker
+```bash
+docker compose pull && docker compose up -d
 ```
-
-This will:
-- Fetch the latest code from GitHub  
-- Reset your repo to the latest `windows` branch  
-- Restart the RetroIPTVGuide service (installed via NSSM)  
 
 ---
 
@@ -159,6 +156,11 @@ curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads
 From an Administrator PowerShell prompt:
 ```powershell
 .\uninstall_windows.ps1
+```
+
+#### Uninstalling
+```bash
+docker compose down -v
 ```
 
 **Each uninstaller stops its service, removes environment files, and cleans logs.**
