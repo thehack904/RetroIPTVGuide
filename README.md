@@ -158,7 +158,7 @@ RetroIPTVGuide is compatible with all modern browsers:
 ## 🛠️ Installation Platforms
 - Debian-based Linux (Ubuntu, Pop!\_OS, Mint)
 - Windows 10/11 (via PowerShell + NSSM)
-- Raspberry Pi 3 / 4 / 5 (Headless OS, `retroiptv_rpi.sh`)
+- Raspberry Pi 3 / 4 / 5 (Headless OS)
 - Docker (Generic Linux / macOS / Windows)
 
 ---
