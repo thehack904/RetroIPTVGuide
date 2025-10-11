@@ -161,11 +161,6 @@ interactive_resource_check() {
 }
 
 agree_terms() {
-  if [[ "$AGREE_TERMS" == true ]]; then
-    echo "User pre-agreed to license terms via flag (--agree)."
-    return
-  fi
-
   echo ""
   echo "============================================================"
   echo " RetroIPTVGuide Installer Agreement "
@@ -185,12 +180,17 @@ agree_terms() {
   echo "  - The author is NOT responsible for any damage, data loss,"
   echo "    or security vulnerabilities created by this installation."
   echo ""
-  read -p "Do you agree to these terms? (yes/no): " agreement
-  if [[ "$agreement" != "yes" ]]; then
-    echo "Installation aborted by user."
-    exit 1
+
+  if [[ "$AGREE_TERMS" == true ]]; then
+    echo "✅  --agree flag detected; continuing automatically."
+    echo ""
+    return
   fi
+
+  read -p "Do you agree to these terms? (yes/no): " agreement
+  [[ "$agreement" == "yes" ]] || { echo "Installation aborted by user."; exit 1; }
 }
+
 
 write_service() {
   cat > "$SERVICE_FILE" <<EOF
@@ -251,7 +251,10 @@ do_install() {
 
   ensure_user
   mkdir -p "$APP_DIR"
+  mkdir -p "/home/$APP_USER/.cache/pip"
+  chown -R "$APP_USER:$APP_USER" "/home/$APP_USER"
   chown_appdir
+
 
   if [ ! -d "$APP_DIR/.git" ]; then
     sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
@@ -285,9 +288,32 @@ do_install() {
   echo "Install path: $APP_DIR"
   echo ""
   post_install_verify
+  
+  echo "=== Installing management script to $SELF_LINK ..."
+  if [ -x "$SELF_LINK" ]; then
+    echo "✅ Installed management script globally. You can now run:"
+    echo "   sudo retroiptv install --agree --yes"
+    echo "   sudo retroiptv update"
+    echo "   sudo retroiptv uninstall --yes"
+  else
+    echo "⚠️  Launcher not found at $SELF_LINK (check permissions)"
+  fi
+  echo ""
+  
+  echo "============================================================"
+  echo " Installation Complete "
+  echo "============================================================"
+  echo "End time: $(date)"
+  echo "Access in browser: http://$(hostname -I | awk '{print $1}'):5000"
+  echo "Default login: admin / strongpassword123"
+  echo "NOTE: BETA build — internal network use only."
+  echo "Service: ${SERVICE_NAME}"
+  echo "User: ${APP_USER}"
+  echo "Install path: ${APP_DIR}"
+  echo ""
+  echo "Full log saved to: ${LOG_FILE}"
+  echo ""
 
-  # Show quick usage at end
-  print_usage
 }
 
 do_uninstall() {
