@@ -13,7 +13,7 @@ if [ -p /dev/stdin ] && { [ "$0" = "bash" ] || [ "$0" = "-bash" ]; }; then
   echo "Detected piped execution. Saving to $TMP_SCRIPT and re-executing..."
   cat > "$TMP_SCRIPT"
   chmod +x "$TMP_SCRIPT"
-  exec sudo bash "$TMP_SCRIPT" "$@"
+  exec sudo "$TMP_SCRIPT" "$@"
   exit 0
 fi
 
@@ -96,15 +96,14 @@ setup_logging() {
 ensure_self_install() {
   local src
   src="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-  if [ "$src" = "bash" ] || [ "$src" = "-bash" ] || [ "$src" = "" ] || [ ! -f "$src" ]; then
-    echo "Detected piped/unknown source; skipping self-install to $SELF_LINK"
-    echo ""
-    return 0
-  fi
-  if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
-    cp "$src" "$SELF_LINK"
-    chmod +x "$SELF_LINK"
-    echo "Installed launcher: $SELF_LINK"
+  if [ -n "$src" ] && [ -f "$src" ]; then
+    if [ ! -x "$SELF_LINK" ] || ! cmp -s "$src" "$SELF_LINK"; then
+      install -m 0755 "$src" "$SELF_LINK"
+      echo "Installed/updated launcher: $SELF_LINK"
+      echo ""
+    fi
+  else
+    echo "Skipping self-install (unknown source)."
     echo ""
   fi
 }
@@ -193,6 +192,49 @@ agree_terms() {
   fi
 }
 
+write_service() {
+  cat > "$SERVICE_FILE" <<EOF
+[Unit]
+Description=RetroIPTVGuide Flask Server
+After=network.target
+
+[Service]
+User=$APP_USER
+WorkingDirectory=$APP_DIR
+ExecStart=$APP_DIR/venv/bin/python app.py
+Restart=always
+Environment=FLASK_RUN_PORT=5000
+Environment=FLASK_RUN_HOST=0.0.0.0
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload
+  systemctl enable "$SERVICE_NAME"
+}
+
+post_install_verify() {
+  echo "Verifying service status..."
+  sleep 3
+  if systemctl is-active --quiet "$SERVICE_NAME"; then
+    echo "✅ Service is active."
+    echo "Waiting for web interface to start..."
+    local wait_time=0 max_wait=15
+    while [ $wait_time -lt $max_wait ]; do
+      if curl -fs http://localhost:5000 >/dev/null 2>&1; then
+        echo "✅ Web interface responding on port 5000 (after ${wait_time}s)."
+        break
+      fi
+      sleep 2
+      wait_time=$((wait_time+2))
+    done
+    [ $wait_time -ge $max_wait ] && echo "⚠️  Service active, but no HTTP response after ${max_wait}s."
+  else
+    echo "❌ Service not active. Check logs."
+  fi
+  echo ""
+}
+
 # ============================================================
 # Actions
 # ============================================================
@@ -229,24 +271,7 @@ do_install() {
   esac
 
   echo "Creating systemd service..."
-  cat > "$SERVICE_FILE" <<EOF
-[Unit]
-Description=RetroIPTVGuide Flask Server
-After=network.target
-
-[Service]
-User=$APP_USER
-WorkingDirectory=$APP_DIR
-ExecStart=$APP_DIR/venv/bin/python app.py
-Restart=always
-Environment=FLASK_RUN_PORT=5000
-Environment=FLASK_RUN_HOST=0.0.0.0
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  systemctl daemon-reload
-  systemctl enable "$SERVICE_NAME"
+  write_service
   systemctl restart "$SERVICE_NAME"
 
   echo ""
@@ -259,6 +284,10 @@ EOF
   echo "Service: ${SERVICE_NAME}"
   echo "Install path: $APP_DIR"
   echo ""
+  post_install_verify
+
+  # Show quick usage at end
+  print_usage
 }
 
 do_uninstall() {
