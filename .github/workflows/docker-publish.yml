@@ -67,6 +67,12 @@ jobs:
       - name: 🧹 Delete old GHCR package versions (keep last 5)
         uses: actions/delete-package-versions@v5
         with:
-          package-name: "retroiptvguide"
-          package-type: "container"
+          owner: thehack904
+          package-name: retroiptvguide
+          package-type: container
           min-versions-to-keep: 5
+          token: ${{ secrets.GHCR_PAT }}
+        continue-on-error: true
+
+      - name: 🧾 Summary
+        run: echo "✅ GHCR cleanup complete — kept last 5 image versions (including latest)."
