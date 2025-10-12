@@ -125,21 +125,43 @@ jobs:
     env:
       USER: thehack904
       REPO: retroiptvguide
+      USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
       TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
     steps:
       - name: 🧹 Remove old Docker Hub tags (keep 5)
         run: |
-          TAGS=$(curl -s -H "Authorization: Bearer ${TOKEN}" \
-            "https://hub.docker.com/v2/repositories/${USER}/${REPO}/tags/?page_size=100" \
-            | jq -r '.results[].name')
+          echo "🔑 Authenticating with Docker Hub API..."
+          AUTH_RESP=$(curl -s -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"username\": \"${USERNAME}\", \"password\": \"${TOKEN}\"}" \
+            https://hub.docker.com/v2/users/login/)
+          JWT=$(echo $AUTH_RESP | jq -r .token)
+
+          if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then
+            echo "❌ Authentication failed — could not get JWT token."
+            exit 1
+          fi
+
+          echo "✅ Authenticated successfully."
+
+          TAGS=$(curl -s -H "Authorization: JWT ${JWT}" \
+            "https://hub.docker.com/v2/repositories/${USER}/${REPO}/tags/?page_size=100" |
+            jq -r '.results[].name')
+
+          if [ -z "$TAGS" ]; then
+            echo "⚠️ No tags found — skipping cleanup."
+            exit 0
+          fi
 
           COUNT=0
           for TAG in $TAGS; do
             COUNT=$((COUNT+1))
             if [ $COUNT -gt 5 ]; then
               echo "🧹 Deleting $TAG ..."
-              curl -s -X DELETE -H "Authorization: Bearer ${TOKEN}" \
+              curl -s -X DELETE -H "Authorization: JWT ${JWT}" \
                 "https://hub.docker.com/v2/repositories/${USER}/${REPO}/tags/${TAG}/" >/dev/null
             fi
           done
+
           echo "✅ Docker Hub cleanup complete — kept 5 newest tags."
+
