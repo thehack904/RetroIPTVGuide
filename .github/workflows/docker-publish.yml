@@ -9,12 +9,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }} # We'll lowercase it below
+  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
-
     permissions:
       contents: read
       packages: write
@@ -30,17 +29,17 @@ jobs:
           IMAGE_NAME_LOWER=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           echo "IMAGE_NAME_LOWER=${IMAGE_NAME_LOWER}" >> $GITHUB_ENV
 
-      - name: 🔑 Log in to GitHub Container Registry (using PAT)
+      - name: 🏗️ Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # -------------------- GHCR --------------------
+      - name: 🔑 Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: 🏗️ Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # 1️⃣ Multi-arch build & push to GHCR
       - name: 🧱 Build and Push multi-arch image to GHCR
         uses: docker/build-push-action@v6
         with:
@@ -55,13 +54,23 @@ jobs:
             org.opencontainers.image.description=RetroIPTVGuide Flask + SQLite Web App
             org.opencontainers.image.licenses=CC-BY-NC-SA-4.0
 
-      # 2️⃣ Single-arch (amd64) build for Docker Hub
+      - name: 🧹 Cleanup local images
+        run: docker image prune -af || true
+
+      # -------------------- Docker Hub --------------------
+      - name: 🐳 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: 🧱 Build and Push single-arch image to Docker Hub
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           platforms: linux/amd64
+          provenance: false
           tags: |
             thehack904/retroiptvguide:latest
             thehack904/retroiptvguide:${{ github.ref_name }}
@@ -70,26 +79,22 @@ jobs:
             org.opencontainers.image.description=RetroIPTVGuide Flask + SQLite Web App
             org.opencontainers.image.licenses=CC-BY-NC-SA-4.0
 
-
-      - name: 🧹 Cleanup local images
-        run: docker image prune -af || true
-
-      - name: 🐳 Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: 📦 Push image to Docker Hub
+      # -------------------- Post-Build Summary --------------------
+      - name: 🧾 Post-build summary
         run: |
-          echo "🧭 Tagging image for Docker Hub..."
-          docker tag ghcr.io/thehack904/retroiptvguide:latest thehack904/retroiptvguide:latest
-          docker tag ghcr.io/thehack904/retroiptvguide:${{ github.ref_name }} thehack904/retroiptvguide:${{ github.ref_name }}
-          echo "🚀 Pushing images to Docker Hub..."
-          docker push thehack904/retroiptvguide:latest
-          docker push thehack904/retroiptvguide:${{ github.ref_name }}
-          echo "✅ Docker Hub push complete."
+          echo ""
+          echo "✅ GHCR and Docker Hub builds complete."
+          echo "🧩 Published image tags:"
+          echo "   ghcr.io/thehack904/retroiptvguide:latest"
+          echo "   ghcr.io/thehack904/retroiptvguide:${{ github.ref_name }}"
+          echo "   thehack904/retroiptvguide:latest"
+          echo "   thehack904/retroiptvguide:${{ github.ref_name }}"
+          echo ""
+          echo "🔗 Docker Hub: https://hub.docker.com/r/thehack904/retroiptvguide/tags"
+          echo "🔗 GHCR:       https://github.com/thehack904?tab=packages&repo_name=RetroIPTVGuide"
+          echo ""
 
+  # -------------------- GHCR Cleanup --------------------
   cleanup-ghcr:
     name: 🧽 Cleanup old GHCR images
     runs-on: ubuntu-latest
