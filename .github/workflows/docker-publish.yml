@@ -45,6 +45,7 @@ jobs:
         with:
           context: .
           push: true
+          load: true                # 👈 adds this line to keep a local copy
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}
