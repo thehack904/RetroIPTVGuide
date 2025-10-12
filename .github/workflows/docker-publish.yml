@@ -40,20 +40,36 @@ jobs:
       - name: 🏗️ Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: 🧱 Build and Push Docker image to GHCR
+      # 1️⃣ Multi-arch build & push to GHCR
+      - name: 🧱 Build and Push multi-arch image to GHCR
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          load: true                # 👈 adds this line to keep a local copy
+          platforms: linux/amd64,linux/arm64
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:latest
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_LOWER }}:${{ github.ref_name }}
-          platforms: linux/amd64,linux/arm64
           labels: |
             org.opencontainers.image.source=${{ github.repositoryUrl }}
             org.opencontainers.image.description=RetroIPTVGuide Flask + SQLite Web App
             org.opencontainers.image.licenses=CC-BY-NC-SA-4.0
+
+      # 2️⃣ Single-arch (amd64) build for Docker Hub
+      - name: 🧱 Build and Push single-arch image to Docker Hub
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: |
+            thehack904/retroiptvguide:latest
+            thehack904/retroiptvguide:${{ github.ref_name }}
+          labels: |
+            org.opencontainers.image.source=${{ github.repositoryUrl }}
+            org.opencontainers.image.description=RetroIPTVGuide Flask + SQLite Web App
+            org.opencontainers.image.licenses=CC-BY-NC-SA-4.0
+
 
       - name: 🧹 Cleanup local images
         run: docker image prune -af || true
