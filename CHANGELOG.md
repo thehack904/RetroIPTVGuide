@@ -1,4 +1,4 @@
-# đź“‘ Changelog
+## Changelog
 
 All notable changes to this project will be documented here. 
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
@@ -11,6 +11,51 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Planned: add `.m3u8` tuner support. 
 - Planned: move logs to SQLite DB. 
 - Planned: log filtering and pagination. 
+
+---
+
+## [v3.2.0] - 2025-10-11
+### Added
+- **Containerization & TrueNAS Deployment Support**
+  - Added official Dockerfile and `docker-compose.yml` for cross‑platform container deployments.
+  - Added **TrueNAS SCALE App chart** with persistent volume mapping (`/config`, `/logs`, `/data`).
+  - Added GitHub Actions workflow for automatic GHCR image builds.
+  - Docker image published at:  
+    `ghcr.io/thehack904/retroiptvguide:latest`
+- Integrated automatic build‑and‑push pipeline using GitHub Actions and GHCR_PAT authentication.
+- Added healthcheck and restart policies in Docker configuration.
+
+### Changed
+- Documentation updated for container installation (Docker/TrueNAS) as the new primary method.
+- Legacy Python and system installers moved to “manual install” section.
+
+### Fixed
+- Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
+- Fixed workflow permissions with explicit `packages: write` and PAT authentication.
+---
+
+## v3.1.0 - 2025-10-09
+### Added
+- New **RetroIPTVGuide Raspberry Pi headless installer** (`retroiptv_rpi.sh`)  
+  - Detects Raspberry Pi 3 / 4 / 5 models and auto-configures GPU memory  
+  - Creates dedicated `iptv` user and installs to `/home/iptv/iptv-server`  
+  - Logs all activity to `/var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log`  
+  - Adds `--yes` and `--agree` flags for fully unattended installs  
+  - Includes automatic environment checks for SD card size, RAM, and swap  
+
+### Changed
+- **Installer alignment:**  
+  - Raspberry Pi installer now mirrors Debian / Windows structure  
+  - Replaced all `apt` usage with `apt-get` for stable scripting  
+  - Added verified, silenced `set_gpu_mem()` function that suppresses `rfkill` Wi-Fi warnings  
+  - Enhanced post-install verification loop (up to 15 s) to confirm Flask web service readiness  
+- **bump_version.py:** now updates both `install.sh` and `retroiptv_rpi.sh` versions automatically  
+- Unified version tagging across all installers (`VERSION="x.y.z"` format)
+
+### Fixed
+- Eliminated false-positive Wi-Fi “blocked by rfkill” messages during GPU configuration  
+- Corrected early-trigger HTTP service check timing on slower Pi 3/4 boards  
+- Ensured consistent permissions and ownership under `/home/iptv`
 
 ---
 

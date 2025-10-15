@@ -1,5 +1,5 @@
-APP_VERSION = "v3.0.1"
-APP_RELEASE_DATE = "2025-09-26"
+APP_VERSION = "v3.2.0"
+APP_RELEASE_DATE = "2025-10-11"
 
 from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -133,6 +133,14 @@ def init_tuners_db():
                 "Tuner 2": {
                     "m3u": "http://iptv2.lan:8500/iptv/channels.m3u",
                     "xml": "http://iptv2.lan:8500/iptv/xmltv.xml"
+                },
+                "Plex": {
+                    "m3u": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_plex.m3u",
+                    "xml": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_plex.m3u"
+                },
+                "Tubi": {
+                    "m3u": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_tubi.m3u",
+                    "xml": "https://raw.githubusercontent.com/iptv-org/iptv/refs/heads/master/streams/us_tubi.m3u"
                 }
             }
             for name, urls in defaults.items():

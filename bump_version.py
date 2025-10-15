@@ -13,12 +13,16 @@ from datetime import datetime
 import subprocess
 from pathlib import Path
 
+# --- FILE TARGETS ---
 APP_FILE = Path("app.py")
 CHANGELOG_FILE = Path("CHANGELOG.md")
 INSTALL_WIN = Path("install_windows.ps1")
 UNINSTALL_WIN = Path("uninstall_windows.ps1")
 UNINSTALL_SH = Path("uninstall.sh")
+INSTALL_SH = Path("install.sh")
+RPI_INSTALL_SH = Path("retroiptv_rpi.sh")
 
+# -------------------------------------------------------
 def update_app_py(new_version: str):
     """Update APP_VERSION in app.py, add if missing"""
     content = APP_FILE.read_text().splitlines()
@@ -80,7 +84,6 @@ def update_script_version(file: Path, new_version: str, is_bash: bool):
     updated = []
     found = False
 
-    # Regex for version line
     if is_bash:
         pattern = re.compile(r'^\s*VERSION\s*=\s*".*"')
         replacement = f'VERSION="{new_version}"'
@@ -96,7 +99,6 @@ def update_script_version(file: Path, new_version: str, is_bash: bool):
             updated.append(line)
 
     if not found:
-        # Insert at top
         updated.insert(0, replacement)
         print(f"ℹ️  VERSION not found in {file}, added at top")
 
@@ -107,8 +109,14 @@ def git_commit(new_version: str):
     """Commit changes with git"""
     try:
         subprocess.run(
-            ["git", "add", str(APP_FILE), str(CHANGELOG_FILE),
-             str(INSTALL_WIN), str(UNINSTALL_WIN), str(UNINSTALL_SH)],
+            ["git", "add",
+             str(APP_FILE),
+             str(CHANGELOG_FILE),
+             str(INSTALL_WIN),
+             str(UNINSTALL_WIN),
+             str(UNINSTALL_SH),
+             str(INSTALL_SH),
+             str(RPI_INSTALL_SH)],
             check=True
         )
         subprocess.run(
@@ -130,14 +138,15 @@ def main():
     update_app_py(new_version)
     update_changelog(new_version)
 
-    # Update other scripts
+    # Update all installers/uninstallers
     update_script_version(INSTALL_WIN, new_version, is_bash=False)
     update_script_version(UNINSTALL_WIN, new_version, is_bash=False)
     update_script_version(UNINSTALL_SH, new_version, is_bash=True)
+    update_script_version(INSTALL_SH, new_version, is_bash=True)
+    update_script_version(RPI_INSTALL_SH, new_version, is_bash=True)
 
     if do_commit:
         git_commit(new_version)
 
 if __name__ == "__main__":
     main()
-
