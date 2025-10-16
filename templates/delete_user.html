@@ -82,6 +82,34 @@
             padding: 0;
         }
 
+		/* Dark theme */
+        body.dark { background:#111; color:#ddd; }
+        body.dark .header { background:#222; }
+        body.dark #video { background:#000; }
+        body.dark .summary { color:#ccc; }
+        body.dark .chan-col { background:#1a1a1a; border-color:#333; }
+        body.dark .grid-col { background:#181818; }
+        body.dark .chan-header, body.dark .time-header-wrap { background:#222; border-color:#444; }
+        body.dark .time-cell { color:#bbb; border-color:#333; }
+        body.dark .chan-name { color:#fff; border-color:#333; }
+        body.dark .program { background:#3a3a3a; border-color:#555; color:#eee; }
+        body.dark .program.now { background:#2d5030; border-color:#47a447; }
+        body.dark .now-line { background:#0f0; }
+
+        /* Light theme */
+        body.light { background:#fff; color:#000; }
+        body.light .header { background:#222; }
+        body.light #video { background:#fff; }
+        body.light .summary { color:#000; }
+        body.light .chan-col { background:#f9f9f9; border-color:#ccc; }
+        body.light .grid-col { background:#fafafa; }
+        body.light .chan-header, body.light .time-header-wrap { background:#ddd; border-color:#bbb; }
+        body.light .time-cell { color:#000; border-color:#ccc; }
+        body.light .chan-name { color:#000; border-color:#ccc; }
+        body.light .program { background:#ddd; border-color:#aaa; color:#000; }
+        body.light .program.now { background:#cfe8cf; border-color:#090; }
+        body.light .now-line { background:#090; }
+		
         /* Retro AOL / CompuServe Theme */
         body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
         body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
@@ -106,6 +134,58 @@
         body.retro-magazine select { border:1px solid #000; background:#fff; color:#000; }
         body.retro-magazine button.danger { background:#000; color:#fff; }
         body.retro-magazine button.danger:hover { background:#333; color:#fff; }
+		
+		/* DirecTV Guide Theme */
+		body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+		body.directv .header { background:linear-gradient(to bottom,#1d72ff,#003a8c); border-bottom:2px solid #001f66; }
+		body.directv .header .links > a, body.directv .header .links > .dropdown > .dropbtn, body.directv .header .links > span, body.directv .header .links > div#clock { color:#ffffff !important; font-weight:bold !important; text-shadow:1px 1px 2px #000 !important; }
+		body.directv .header .links > a:hover, body.directv .header .links > .dropdown:hover > .dropbtn { background:#003f9e !important; color:#ffd802 !important; }
+		body.directv .dropdown-content, body.directv .submenu-content { background:#003a8c !important; border:1px solid #0070ff !important; box-shadow:0 4px 8px rgba(0,0,0,.4) !important; }
+		body.directv .dropdown-content a, body.directv .submenu-content li a { color:#ffffff !important; font-weight:bold !important; }
+		body.directv .dropdown-content a:hover, body.directv .submenu-content li a:hover { background:#0070ff !important; color:#fff !important; }
+		body.directv .dropdown-content .submenu > a { color:#fff !important; padding-right:28px !important; position:relative; }
+		body.directv .dropdown-content .submenu > a::after { content:"▸"; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#fff; }
+		body.directv .dropdown-content .submenu:hover > a { background:#0070ff !important; color:#fff !important; }
+		body.directv .summary, body.directv #program-info { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; border:1px solid #004bdb; }
+		body.directv .time-header-wrap { background:#002b80; color:#d8ebff; border-bottom:2px solid #001f66; }
+		body.directv .time-cell { background:#002b80; color:#b9dcff; border-color:#001f66; font-weight:bold; }
+		body.directv .chan-col { background:#001f66; border-right:1px solid #004bdb; color:#fff; font-weight:bold; text-shadow:1px 1px 2px #000; }
+		body.directv .chan-header { background:linear-gradient(to bottom,#0b3b8c,#3c8dff); color:#fff; border-color:#003b91; }
+		body.directv .grid-col { background:#001f66; }
+		body.directv .program { background:#003a8c; border:1px solid #004bdb; color:#fff; border-radius:2px; }
+		body.directv .program.now { background:#ffd802; border:1px solid #caa600; color:#000; font-weight:bold; box-shadow:none; }
+		body.directv .program:hover { background:linear-gradient(to right,#1d67d9,#7fbfff); color:#fff; }
+		body.directv .now-line { background:#ffcc00; }
+		body.directv .footer { background:linear-gradient(to top,#001f66,#004bdb); color:#fff; border-top:2px solid #003580; padding:5px 10px; font-size:0.9em; }
+		body.directv .footer .dot-red { color:#ff3c3c; } body.directv .footer .dot-green { color:#00cc00; } body.directv .footer .dot-yellow { color:#ffd700; } body.directv .footer .dot-blue { color:#4ca9ff; }
+		body.directv #video { background:#000; border:2px solid #004bdb; box-shadow:0 0 6px rgba(0,0,0,0.6); }
+		body.directv #clock::before { content:"TV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+
+		
+		/* Comcast Guide Theme */
+		body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+		body.comcast .header { background:linear-gradient(to bottom,#0055cc,#001b50); border-bottom:2px solid #003090; }
+		body.comcast .header .links > a, body.comcast .header .links > .dropdown > .dropbtn, body.comcast .header .links > span, body.comcast .header .links > div#clock { color:#ffffff !important; font-weight:bold !important; text-shadow:1px 1px 2px #000 !important; }
+		body.comcast .header .links > a:hover, body.comcast .header .links > .dropdown:hover > .dropbtn { background:#003890 !important; color:#ffcc00 !important; }
+		body.comcast .dropdown-content, body.comcast .submenu-content { background:#002a70 !important; border:1px solid #0044cc !important; box-shadow:0 4px 8px rgba(0,0,0,.4) !important; }
+		body.comcast .dropdown-content a, body.comcast .submenu-content li a { color:#ffffff !important; font-weight:bold !important; }
+		body.comcast .dropdown-content a:hover, body.comcast .submenu-content li a:hover { background:#0044cc !important; color:#fff !important; }
+		body.comcast .summary, body.comcast #program-info { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; border:1px solid #003090; }
+		body.comcast .time-header-wrap { background:#003890; color:#bcd8ff; border-bottom:2px solid #002b80; }
+		body.comcast .time-cell { background:#003890; color:#ffffff; border-color:#002b80; font-weight:bold; }
+		body.comcast .chan-col { background:#001b50; border-right:1px solid #0044cc; color:#fff; font-weight:bold; text-shadow:1px 1px 2px #000; }
+		body.comcast .chan-header { background:#002a70; color:#fff; border-color:#0044cc; }
+		body.comcast .grid-col { background:#002a70; }
+		body.comcast .program { background:#003890; border:1px solid #0044cc; color:#fff; border-radius:2px; }
+		body.comcast .program.now { background:#ffffff; border:1px solid #cccccc; color:#000; font-weight:bold; }
+		body.comcast .program:hover { background:#0044cc; color:#fff; }
+		body.comcast .now-line { background:#ffcc00; }
+		body.comcast #video { background:#000; border:2px solid #0044cc; box-shadow:0 0 8px rgba(0,0,0,.6); }
+		body.comcast .footer { background:linear-gradient(to top,#001b50,#0044cc); color:#fff; border-top:2px solid #002b80; padding:5px 10px; font-size:0.9em; }
+		body.comcast .footer .dot-red { color:#ff3c3c; } body.comcast .footer .dot-green { color:#00cc00; } body.comcast .footer .dot-yellow { color:#ffd700; } body.comcast .footer .dot-blue { color:#4ca9ff; }
+		body.comcast #clock::before { content:"TV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+
+
 
     </style>
 </head>
@@ -140,6 +220,8 @@
         <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
         <li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
         <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
+		<li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
+		<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>			
       </ul>
     </li>
             </div>
@@ -180,7 +262,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 function setTheme(theme) {
     const body = document.body;
-    body.classList.remove("light", "dark", "retro-tvguide", "retro-aol", "retro-webtv", "retro-tvguide2000", "retro-magazine");
+    body.classList.remove("light", "dark", "retro-tvguide", "retro-aol", "retro-webtv", "retro-tvguide2000", "retro-magazine", "directv", "comcast");
     body.classList.add(theme);
     localStorage.setItem("theme", theme);
 }

@@ -1,4 +1,4 @@
-VERSION="3.2.0"
+VERSION="3.3.0"
 #!/usr/bin/env bash
 # RetroIPTVGuide uninstall script
 # Run with sudo on Linux; run from Administrator shell on Windows
