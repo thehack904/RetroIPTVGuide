@@ -446,7 +446,7 @@ case "$ACTION" in
   update) update_linux ;;
   -h|--help|help) usage ;;
   *) usage ;;
-}
+esac
 
 echo "End time: $(date)"
 
