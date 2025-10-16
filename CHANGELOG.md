@@ -14,7 +14,25 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [v3.2.0] - 2025-10-11
+## v3.3.0 - 2025-10-15
+### Added
+
+- Introduced **Comcast Theme** — a faithful recreation of the mid-2000s Comcast digital cable guide.  
+  - Authentic deep-blue gradient backgrounds and bright blue grid tones.  
+  - White-on-blue typography and yellow “Now Playing” program highlight.  
+  - Red “TV Guide” badge in the top-right corner for a nostalgic touch.  
+  - Refined dropdown and submenu styling to match the original Comcast on-screen menu look.
+
+- Updated **DirecTV Theme** — redesigned for accuracy based on live reference captures.  
+  - Corrected deep-blue gradient palette (`#001a66 → #003a8c`) with crisp white text.  
+  - Reworked highlight color for active program tiles (`#ffd802`).  
+  - Adjusted gradients and contrast in the header, info panel, and time bar for better readability.  
+  - Clean white-and-blue hover effects with authentic DirecTV brightness and contrast levels.  
+  - Added matching **red “TV Guide” badge** for uniform branding with Comcast.
+
+---
+
+## v3.2.0 - 2025-10-11
 ### Added
 - **Containerization & TrueNAS Deployment Support**
   - Added official Dockerfile and `docker-compose.yml` for cross‑platform container deployments.
@@ -32,6 +50,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
 - Fixed workflow permissions with explicit `packages: write` and PAT authentication.
+
 ---
 
 ## v3.1.0 - 2025-10-09
@@ -83,9 +102,7 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Prevented guide from displaying outdated EPG after tuner change.  
   - Corrected case where missing XML data produced empty grid.
 
-
 ---
-
 
 ## [3.0.0] - 2025-10-03
 ### Added
@@ -114,6 +131,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Consistent logging of user agreement and installer actions.
 - Ensured firewall rule removal on Windows during uninstall.
+
+---
 
 ## [2.3.2] - 2025-09-26
 ### Added
@@ -190,9 +209,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Fixed alignment of tuner forms with consistent dropdowns and validation.
 - Ensured flash messages and logging work consistently across all tuner operations.
 
-
-
-## [v2.0.0] â€“ 2025-09-24
+## [v2.0.0] 2025-09-24
 ### Added
 - Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
   - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.

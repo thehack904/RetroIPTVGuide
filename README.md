@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-v3.2.0-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-v3.3.0-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
@@ -100,7 +100,9 @@ Access the web interface at:
   - Light  
   - Dark  
   - AOL/CompuServe  
-  - TV Guide Magazine  
+  - TV Guide Magazine
+  - DirecTV (v.3.3.0)
+  - Comcast (v.3.3.0)
 - Theme persistence stored in browser localStorage, applied instantly across all pages.
 - **About Page under Settings** — shows version, Python, OS, uptime, and paths.
 - **Login Page Redesign (v3.0.1)**:
@@ -124,6 +126,7 @@ Access the web interface at:
 
 | Version | Date | Key Features |
 |----------|------|---------------|
+| **v3.3.0** | 2025-10-15 | Add Themes DirecTV / Comcast |
 | **v3.2.0** | 2025-10-11 | Containerized Deployment / TrueNAS Scale App installer |
 | **v3.1.0** | 2025-10-09 | Raspberry Pi installer, verified GPU setup, improved HTTP service check |
 | **v3.0.1** | 2025-10-07 | EPG fallback system, tuner refresh fix, login redesign |
