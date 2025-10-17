@@ -1,4 +1,4 @@
-$VERSION = "3.3.0"
+$VERSION = "3.4.0-testing"
 <# 
 RetroIPTVGuide Windows Installer
 Clean version with only prerequisite checks and service setup

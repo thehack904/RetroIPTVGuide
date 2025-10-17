@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-VERSION="3.3.0"
+VERSION="3.4.0-testing"
 # RetroIPTVGuide Debian/Ubuntu Installer
 # License: CC BY-NC-SA 4.0
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")

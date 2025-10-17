@@ -14,6 +14,14 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v3.4.0-testing - 2025-10-17
+### Added
+- (empty)
+
+### Fixed
+- (empty)
+
+---
 ## v3.3.0 - 2025-10-15
 ### Added
 
@@ -32,7 +40,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v3.2.0 - 2025-10-11
+
+## [v3.2.0] - 2025-10-11
 ### Added
 - **Containerization & TrueNAS Deployment Support**
   - Added official Dockerfile and `docker-compose.yml` for cross‑platform container deployments.
@@ -50,7 +59,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
 - Fixed workflow permissions with explicit `packages: write` and PAT authentication.
-
 ---
 
 ## v3.1.0 - 2025-10-09
@@ -102,7 +110,9 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Prevented guide from displaying outdated EPG after tuner change.  
   - Corrected case where missing XML data produced empty grid.
 
+
 ---
+
 
 ## [3.0.0] - 2025-10-03
 ### Added
@@ -131,8 +141,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Consistent logging of user agreement and installer actions.
 - Ensured firewall rule removal on Windows during uninstall.
-
----
 
 ## [2.3.2] - 2025-09-26
 ### Added
@@ -209,7 +217,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Fixed alignment of tuner forms with consistent dropdowns and validation.
 - Ensured flash messages and logging work consistently across all tuner operations.
 
-## [v2.0.0] 2025-09-24
+
+
+## [v2.0.0] â€“ 2025-09-24
 ### Added
 - Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
   - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.
