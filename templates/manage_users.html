@@ -1,0 +1,165 @@
+<!doctype html>
+<html>
+<head>
+    <title>Manage Users</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin:0; }
+        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
+        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
+            display:flex; align-items:center; justify-content:center; padding:0 12px;
+            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
+        }
+        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+        .dropdown { position:relative; }
+        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+        .dropdown-content {
+            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
+            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
+        }
+        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+        .dropdown-content a:hover { background:#0af; color:#fff; }
+        .dropdown:hover .dropdown-content { display:block; }
+
+        .container { max-width:600px; margin:60px auto; padding:20px; border-radius:8px; }
+        form { margin-bottom:20px; }
+        input, select { width:100%; padding:8px; margin:5px 0; border-radius:4px; box-sizing:border-box; }
+        button { width:100%; padding:10px; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }
+        button.add { background:#0a0; color:#fff; }
+        button.add:hover { background:#070; }
+        button.danger { background:#c00; color:#fff; }
+        button.danger:hover { background:#900; }
+        button.warn { background:#d2691e; color:#fff; }
+        button.warn:hover { background:#a0522d; }
+
+        table { width:100%; border-collapse:collapse; margin-top:15px; }
+        th, td { border-bottom:1px solid #444; padding:8px; text-align:left; }
+        td.actions { display:flex; gap:8px; }
+
+        body.dark { background:#111; color:#eee; }
+        body.dark .container { background:#222; }
+        body.dark input, body.dark select { background:#333; color:#eee; border:1px solid #444; }
+
+        body.light { background:#fff; color:#000; }
+        body.light .container { background:#f3f3f3; }
+        body.light input, body.light select { background:#fff; color:#000; border:1px solid #aaa; }
+
+        body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
+        body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
+        body.retro-aol .container { background:#355f5f; color:#fff; }
+
+        body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
+        body.retro-magazine .container { background:#fff; border:1px solid #000; color:#000; }
+
+        body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+        body.directv .container { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; }
+
+        body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+        body.comcast .container { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="links">
+        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+        <a href="{{ url_for('guide') }}">HOME</a>
+        {% if current_user is defined and current_user.username == 'admin' %}
+        <!-- ✅ Added next to USER ADMIN -->
+		<a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
+        {% endif %}
+
+        <div class="dropdown" id="settingsMenu">
+            <button class="dropbtn">SETTINGS ▾</button>
+            <div class="dropdown-content">
+                {% if current_user is defined and current_user.username == 'admin' %}
+                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+                <a href="{{ url_for('view_logs') }}">Logs</a>
+                <li><a href="{{ url_for('about') }}">About</a></li>
+                {% endif %}
+                <a href="{{ url_for('change_password') }}">Change Password</a>
+				<li class="submenu">
+				  <a href="#">Themes</a>
+				  <ul class="submenu-content">
+				    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
+				    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
+					<li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
+					<li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
+					<li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
+					<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
+				  </ul>
+				</li>
+            </div>
+        </div>
+
+        <a href="{{ url_for('logout') }}">LOGOUT</a>
+    </div>
+    <div id="clock" class="clock">--:-- --</div>
+</div>
+
+<div class="container">
+    <h2>Manage Users</h2>
+    <form method="POST">
+        <h3>Add New User</h3>
+        <input type="hidden" name="action" value="add">
+        <input type="text" name="username" placeholder="Username" required>
+        <input type="password" name="password" placeholder="Password" required>
+        <button class="add" type="submit">Add User</button>
+    </form>
+
+    <h3>Existing Users</h3>
+    <table>
+        <tr><th>Username</th><th>Actions</th></tr>
+        {% for user in users %}
+        <tr>
+            <td>{{ user }}</td>
+            <td class="actions">
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="username" value="{{ user }}">
+                    <input type="hidden" name="action" value="delete">
+                    <button class="danger" type="submit">Delete</button>
+                </form>
+                <form method="POST" style="display:inline;">
+                    <input type="hidden" name="username" value="{{ user }}">
+                    <input type="hidden" name="action" value="signout">
+                    <button class="warn" type="submit">Sign Out All</button>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        {% for msg in messages %}
+          <p style="color:yellow;">{{ msg }}</p>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const saved = localStorage.getItem("theme") || "dark";
+    setTheme(saved);
+    updateClock();
+    setInterval(updateClock, 1000);
+});
+function setTheme(theme){
+    const body=document.body;
+    body.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv","retro-tvguide2000","retro-magazine","directv","comcast");
+    body.classList.add(theme);
+    localStorage.setItem("theme",theme);
+}
+function updateClock(){
+    const now=new Date();
+    const el=document.getElementById('clock');
+    if(el){
+        el.textContent=now.toLocaleString([],{
+            weekday:'short',month:'short',day:'numeric',
+            hour:'2-digit',minute:'2-digit',second:'2-digit'
+        });
+    }
+}
+</script>
+</body>
+</html>

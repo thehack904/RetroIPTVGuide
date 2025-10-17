@@ -232,7 +232,7 @@
 		body.directv .footer { background:linear-gradient(to top,#001f66,#004bdb); color:#fff; border-top:2px solid #003580; padding:5px 10px; font-size:0.9em; }
 		body.directv .footer .dot-red { color:#ff3c3c; } body.directv .footer .dot-green { color:#00cc00; } body.directv .footer .dot-yellow { color:#ffd700; } body.directv .footer .dot-blue { color:#4ca9ff; }
 		body.directv #video { background:#000; border:2px solid #004bdb; box-shadow:0 0 6px rgba(0,0,0,0.6); }
-		body.directv #clock::before { content:"TV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+		body.directv #clock::before { content:"IPTV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
 
 		
 		/* Comcast Guide Theme */
@@ -256,9 +256,9 @@
 		body.comcast #video { background:#000; border:2px solid #0044cc; box-shadow:0 0 8px rgba(0,0,0,.6); }
 		body.comcast .footer { background:linear-gradient(to top,#001b50,#0044cc); color:#fff; border-top:2px solid #002b80; padding:5px 10px; font-size:0.9em; }
 		body.comcast .footer .dot-red { color:#ff3c3c; } body.comcast .footer .dot-green { color:#00cc00; } body.comcast .footer .dot-yellow { color:#ffd700; } body.comcast .footer .dot-blue { color:#4ca9ff; }
-		body.comcast #clock::before { content:"TV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+		body.comcast #clock::before { content:"IPTV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+		
 
-	
 		/* Placeholder when no guide data exists */
 		.program.no-guide {
 			font-style: italic;
@@ -266,29 +266,21 @@
 			background: #2a2a2a;
 			border: 1px dashed #555;
 		}
-
-
-		
+	
     </style>
 </head>
 <body>
 <div class="header">
-    <!-- Left: menu block -->
     <div class="links">
         <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
         <a href="{{ url_for('guide') }}">HOME</a>
 
         {% if current_user is defined and current_user.username == 'admin' %}
-        <div class="dropdown">
-            <button class="dropbtn">USER ADMIN ▾</button>
-            <div class="dropdown-content">
-                <a href="{{ url_for('add_user_route') }}">New User</a>
-                <a href="{{ url_for('delete_user') }}">Delete User</a>
-            </div>
-        </div>
+        <!-- ✅ Added next to USER ADMIN -->
+		<a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
         {% endif %}
 
-        <div class="dropdown">
+        <div class="dropdown" id="settingsMenu">
             <button class="dropbtn">SETTINGS ▾</button>
             <div class="dropdown-content">
                 {% if current_user is defined and current_user.username == 'admin' %}
@@ -303,12 +295,9 @@
 				    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
 				    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
 					<li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
-				    <!-- ><li><a href="#" onclick="setTheme('retro-tvguide'); return false;">Retro TV Guide</a></li>
-					<li><a href="#" onclick="setTheme('retro-webtv'); return false;">MSN TV / WebTV</a></li>
-					<li><a href="#" onclick="setTheme('retro-tvguide2000'); return false;">TV Guide Channel (2000)</a></li> -->
 					<li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
 					<li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
-					<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>					
+					<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
 				  </ul>
 				</li>
             </div>
@@ -317,9 +306,9 @@
         <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
 
-    <!-- Right: live clock -->
     <div id="clock" class="clock">--:-- --</div>
 </div>
+
 
 <!-- Player row: summary left, video right -->
 <div class="player">
@@ -327,7 +316,8 @@
         <h3>Program Info</h3>
         <p>Click a channel on the left to start playback.</p>
     </div>
-    <video id="video" controls></video>
+    <!-- <video id="video" controls></video> -->
+	<video id="video" controls playsinline preload="metadata" tabindex="0"></video>
 </div>
 
 <!-- Guide grid -->
@@ -513,7 +503,51 @@ function updateNowLine() {
     const nl = document.getElementById('nowLine');
     if (nl) nl.style.left = (minutesFromStart * scale) + "px";
 }
+
+
 </script>
+
+<!-- Android / Fire / Google TV detection -->
+<script>
+// Simplify menu for Android/Fire/Google TV browsers
+(function(){
+  const ua = navigator.userAgent || "";
+  const isTV = /AFT|Silk|Android\sTV|GoogleTV|MiBOX|BRAVIA|Shield|TCL|Hisense|Puffin|TV\sBro/i.test(ua);
+  if (!isTV) return;
+
+  console.log("RetroIPTVGuide: Simplifying menu for TV mode");
+
+  // Hide "User Admin" and "Settings"
+  document.getElementById("userAdminMenu")?.remove();
+  document.getElementById("settingsMenu")?.remove();
+  document.getElementById("manageUsersMenu")?.remove();
+
+  // Remove the HOME link
+  const homeLink = document.querySelector('.header .links a[href*="guide"]');
+  if (homeLink) homeLink.remove();
+
+  // Insert simplified Themes dropdown
+  const linksContainer = document.querySelector(".header .links");
+  if (linksContainer){
+    const themesMenu = document.createElement("div");
+    themesMenu.className = "dropdown";
+    themesMenu.innerHTML = `
+      <button class="dropbtn">THEMES ▾</button>
+      <div class="dropdown-content">
+        <a href="#" onclick="setTheme('light');return false;">Light</a>
+        <a href="#" onclick="setTheme('dark');return false;">Dark</a>
+        <a href="#" onclick="setTheme('retro-aol');return false;">AOL / CompuServe</a>
+        <a href="#" onclick="setTheme('retro-magazine');return false;">TV Guide Magazine</a>
+        <a href="#" onclick="setTheme('directv');return false;">DirecTV</a>
+        <a href="#" onclick="setTheme('comcast');return false;">Comcast</a>
+      </div>`;
+    // Place Themes before Logout link
+    const logoutLink = document.querySelector('.header .links a[href*="logout"]');
+    linksContainer.insertBefore(themesMenu, logoutLink);
+  }
+})();
+</script>
+
+
 </body>
 </html>
-
