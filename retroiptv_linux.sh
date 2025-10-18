@@ -231,8 +231,24 @@ uninstall_linux(){
   fi
 
   echo "Removing user/group..."
-  id "$APP_USER" &>/dev/null && userdel -r "$APP_USER" 2>/dev/null || true
-  getent group "$APP_USER" >/dev/null && groupdel "$APP_USER" 2>/dev/null || true
+
+# Stop processes that may still run as iptv
+pkill -u "$APP_USER" 2>/dev/null || true
+
+# Remove system user and home directory if it exists
+if id "$APP_USER" &>/dev/null; then
+  echo " - Deleting user '$APP_USER' and home directory"
+  userdel -r "$APP_USER" 2>/dev/null || true
+else
+  echo " - User '$APP_USER' not found, skipping"
+fi
+
+# Remove group if it still exists
+if getent group "$APP_USER" >/dev/null 2>&1; then
+  echo " - Deleting group '$APP_USER'"
+  groupdel "$APP_USER" 2>/dev/null || true
+fi
+
 
   echo ""
   echo "============================================================"
