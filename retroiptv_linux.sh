@@ -204,12 +204,47 @@ uninstall_linux(){
   [[ -d "/opt/retroiptvguide" ]] && { echo "Removing /opt/retroiptvguide ..."; rm -rf /opt/retroiptvguide; }
   [[ -d "$APP_HOME/iptv-server" ]] && { echo "Removing $APP_HOME/iptv-server ..."; rm -rf "$APP_HOME/iptv-server"; }
 
+  echo "Reverting firewall and SELinux changes (if applicable)..."
+
+  # --- Firewalld ---
+  if command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld; then
+    echo " - Removing TCP port 5000 rule from firewalld"
+    firewall-cmd --permanent --remove-port=5000/tcp 2>/dev/null || true
+    firewall-cmd --reload 2>/dev/null || true
+  fi
+
+  # --- UFW ---
+  if command -v ufw >/dev/null 2>&1; then
+    if ufw status | grep -q "5000/tcp"; then
+      echo " - Removing TCP port 5000 rule from UFW"
+      ufw delete allow 5000/tcp >/dev/null 2>&1 || true
+    fi
+  fi
+
+  # --- SELinux ---
+  if command -v semanage >/dev/null 2>&1; then
+    echo " - Removing SELinux http_port_t mapping for TCP/5000"
+    semanage port -d -t http_port_t -p tcp 5000 2>/dev/null || true
+  fi
+
   echo "Removing user/group..."
   id "$APP_USER" &>/dev/null && userdel -r "$APP_USER" 2>/dev/null || true
   getent group "$APP_USER" >/dev/null && groupdel "$APP_USER" 2>/dev/null || true
 
-  echo "✅ Uninstall complete. Logs saved to $LOGFILE."
+  echo ""
+  echo "============================================================"
+  echo " Uninstallation Complete "
+  echo "============================================================"
+  echo "Removed:"
+  echo "  - Systemd service and unit file"
+  echo "  - Application directories (/opt/retroiptvguide or /home/iptv/iptv-server)"
+  echo "  - Firewall rules (firewalld/UFW) for TCP 5000"
+  echo "  - SELinux port context (if previously set)"
+  echo "  - User and group 'iptv'"
+  echo ""
+  echo "✅ Uninstall complete. Full log saved to $LOGFILE."
 }
+
 
 case "$ACTION" in
   install) install_linux ;;
