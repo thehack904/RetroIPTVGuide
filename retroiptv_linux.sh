@@ -125,7 +125,10 @@ clone_or_stage_project(){
 
 make_venv_and_install(){
   echo "Setting up virtualenv..."
-  sudo -u "$APP_USER" python3 -m ensurepip --upgrade 2>/dev/null || true
+  # Fedora/RHEL may need ensurepip to activate venv properly; Debian doesn't
+  if [[ ! "$DISTRO_ID" =~ (debian|ubuntu|raspbian) ]]; then
+    sudo -u "$APP_USER" python3 -m ensurepip --upgrade 2>/dev/null || true
+  fi
   sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv" || \
     { sudo -u "$APP_USER" python3 -m pip install --user virtualenv; sudo -u "$APP_USER" "$APP_HOME/.local/bin/virtualenv" "$APP_DIR/venv"; }
   sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
