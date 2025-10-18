@@ -172,7 +172,11 @@ install_linux(){
   ensure_packages; ensure_user; clone_or_stage_project; make_venv_and_install; write_systemd_service
   rhel_firewall_selinux; start_and_verify
   echo "Installed to: $APP_DIR"
+  echo "End time: $(date)"
   echo "Access at: http://$(hostname -I | awk '{print $1}'):5000"
+  echo "Default login: admin / strongpassword123"
+  echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
+  echo "Installation complete!"
 }
 
 update_linux(){
