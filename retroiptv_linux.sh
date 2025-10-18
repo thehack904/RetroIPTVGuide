@@ -8,11 +8,11 @@ TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
 
-echo.
+echo ""
 echo "=============================="
 echo "---* USING TESTING BRANCH *---"
 echo "=============================="
-echo.
+echo ""
 
 # --- Banner ---
 cat <<'EOF'
