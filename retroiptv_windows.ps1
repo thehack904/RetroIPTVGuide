@@ -31,9 +31,10 @@ param(
 # Globals & Paths
 # -------------------------------
 $ErrorActionPreference = 'Stop'
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "3.1.0"
+$VERSION = "3.4.0i-testing"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -278,9 +279,9 @@ function Verify-ServiceAndHttp {
       try {
         $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
-          Write-Ok "✅ Web interface responding on port $Port (after $waitTime seconds)."
-          Add-Log "✅ Verified: HTTP response received after $waitTime seconds."
-          break
+           Write-Ok "✅ Web interface responding on port $Port (after $waitTime seconds)."
+           Add-Log "✅ Verified: HTTP response received after $waitTime seconds."
+           return  # stop the function immediately after success
         }
       } catch { }
       Start-Sleep -Seconds 2
@@ -393,6 +394,10 @@ try {
   Write-ErrorMsg "❌ An error occurred: $($_.Exception.Message)"
   exit 1
 } finally {
-  try { Stop-Transcript | Out-Null } catch {}
+  try {
+    Stop-Transcript | Out-Null
+    Start-Sleep -Milliseconds 200
+  } catch {}
 }
+
 
