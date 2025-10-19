@@ -508,4 +508,12 @@ try {
         Stop-Transcript | Out-Null
         Start-Sleep -Milliseconds 200
     } catch {}
+
+    Write-Host ""
+    Write-Host "============================================================" -ForegroundColor Cyan
+    Write-Host "RetroIPTVGuide process complete." -ForegroundColor Green
+    Write-Host "You may review the log above or press ENTER to close this window." -ForegroundColor Yellow
+    Write-Host "============================================================"
+    Read-Host
 }
+
