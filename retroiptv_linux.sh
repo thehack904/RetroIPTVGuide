@@ -124,7 +124,7 @@ ensure_user(){
 clone_or_stage_project(){
   mkdir -p "$APP_DIR"; chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
   TMP="/tmp/retroiptvguide"; rm -rf "$TMP"
-  git clone --depth 1 -b dev https://github.com/thehack904/RetroIPTVGuide.git "$TMP"
+  git clone --depth 1 -b main https://github.com/thehack904/RetroIPTVGuide.git "$TMP"
   rsync -a --delete --exclude 'venv' "$TMP/" "$APP_DIR/"
   chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
 }
