@@ -81,13 +81,13 @@ if (-not $env:OS -or $env:OS -notmatch 'Windows_NT') {
 try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 $banner = @"
-░█████████                ░██                        ░██████░█████████  ░██████████░██    ░██   ░██████             ░██       ░██            
-░██     ░██               ░██                          ░██  ░██     ░██     ░██    ░██    ░██  ░██   ░██                      ░██            
-░██     ░██  ░███████  ░████████ ░██░████  ░███████    ░██  ░██     ░██     ░██    ░██    ░██ ░██        ░██    ░██ ░██ ░████████  ░███████  
-░█████████  ░██    ░██    ░██    ░███     ░██    ░██   ░██  ░█████████      ░██    ░██    ░██ ░██  █████ ░██    ░██ ░██░██    ░██ ░██    ░██ 
-░██   ░██   ░█████████    ░██    ░██      ░██    ░██   ░██  ░██             ░██     ░██  ░██  ░██     ██ ░██    ░██ ░██░██    ░██ ░█████████ 
-░██    ░██  ░██           ░██    ░██      ░██    ░██   ░██  ░██             ░██      ░██░██    ░██  ░███ ░██   ░███ ░██░██   ░███ ░██        
-░██     ░██  ░███████      ░████ ░██       ░███████  ░██████░██             ░██       ░███      ░█████░█  ░█████░██ ░██ ░█████░██  ░███████  
+¦¦¦¦¦¦¦¦¦¦                ¦¦¦                        ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦¦¦¦¦    ¦¦¦   ¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦            
+¦¦¦     ¦¦¦               ¦¦¦                          ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦  ¦¦¦   ¦¦¦                      ¦¦¦            
+¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦    ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦        ¦¦¦    ¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
+¦¦¦¦¦¦¦¦¦¦  ¦¦¦    ¦¦¦    ¦¦¦    ¦¦¦¦     ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦¦¦¦¦¦¦¦      ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦  ¦¦¦¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦    ¦¦¦ 
+¦¦¦   ¦¦¦   ¦¦¦¦¦¦¦¦¦¦    ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦     ¦¦¦  ¦¦¦  ¦¦¦     ¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦¦¦¦¦¦¦¦ 
+¦¦¦    ¦¦¦  ¦¦¦           ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦      ¦¦¦¦¦¦    ¦¦¦  ¦¦¦¦ ¦¦¦   ¦¦¦¦ ¦¦¦¦¦¦   ¦¦¦¦ ¦¦¦        
+¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦      ¦¦¦¦¦ ¦¦¦       ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦¦      ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
 "@
 
 Write-Host $banner -ForegroundColor Cyan
@@ -270,7 +270,7 @@ function Verify-ServiceAndHttp {
 
   $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
   if ($svc -and $svc.Status -eq 'Running') {
-    Write-Ok "✅ Service is active."
+    Write-Ok "? Service is active."
     Write-Info "Waiting for web interface to start..."
 
     $waitTime = 0
@@ -279,8 +279,8 @@ function Verify-ServiceAndHttp {
       try {
         $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
         if ($response.StatusCode -eq 200) {
-           Write-Ok "✅ Web interface responding on port $Port (after $waitTime seconds)."
-           Add-Log "✅ Verified: HTTP response received after $waitTime seconds."
+           Write-Ok "? Web interface responding on port $Port (after $waitTime seconds)."
+           Add-Log "? Verified: HTTP response received after $waitTime seconds."
            return  # stop the function immediately after success
         }
       } catch { }
@@ -289,12 +289,12 @@ function Verify-ServiceAndHttp {
     }
 
     if ($waitTime -ge $maxWait) {
-      Write-Warn "⚠️  Service active, but no HTTP response after ${maxWait}s. Check logs in $logFile."
-      Write-Warn "⚠️  Possible slow startup on first run (SQLite or dependencies still initializing)."
-      Add-Log  "⚠️  No HTTP response after $maxWait seconds."
+      Write-Warn "??  Service active, but no HTTP response after ${maxWait}s. Check logs in $logFile."
+      Write-Warn "??  Possible slow startup on first run (SQLite or dependencies still initializing)."
+      Add-Log  "??  No HTTP response after $maxWait seconds."
     }
   } else {
-    Write-ErrorMsg "❌ Service not active. Run: Get-Service -Name $ServiceName | Format-List *"
+    Write-ErrorMsg "? Service not active. Run: Get-Service -Name $ServiceName | Format-List *"
   }
 }
 
@@ -391,7 +391,7 @@ try {
     'uninstall' { Do-Uninstall }
   }
 } catch {
-  Write-ErrorMsg "❌ An error occurred: $($_.Exception.Message)"
+  Write-ErrorMsg "? An error occurred: $($_.Exception.Message)"
   exit 1
 } finally {
   try {
