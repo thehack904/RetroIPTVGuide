@@ -10,7 +10,7 @@ exec > >(tee -a "$LOGFILE") 2>&1
 
 echo ""
 echo "=============================="
-echo "---* USING TESTING BRANCH *---"
+echo "---* USING MAIN BRANCH *---"
 echo "=============================="
 echo ""
 
