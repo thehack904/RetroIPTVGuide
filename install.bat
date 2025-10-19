@@ -1,6 +1,7 @@
 rem @echo off
 rem powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_windows.ps1"
 @echo off
+mode con: cols=160 lines=50
 
 REM ============================================================
 REM RetroIPTVGuide Windows Unified Installer / Uninstaller
@@ -8,7 +9,29 @@ REM Version: 3.4.0-testing
 REM License: Creative Commons BY-NC-SA 4.0
 REM ============================================================
 
+:: ============================================================
+::  Ask to Restart CMD as Administrator (bulletproof version)
+:: ============================================================
 
+:: Check admin rights
+net session >nul 2>&1
+if %errorlevel%==0 (
+    echo Running as Administrator.
+    goto :continue
+)
+
+echo.
+echo WARNING: This install script is NOT running as Administrator.
+set /p choice=Do you want to restart this script as Administrator? (Y/N): 
+if /i "%choice%"=="Y" (
+    echo Relaunching with elevated privileges...
+    powershell -Command "Start-Process -FilePath 'cmd.exe' -ArgumentList '/c cd /d \"%CD%\" && \"%~f0\"' -Verb RunAs"
+    exit /b
+) else (
+    echo Continuing without elevation...
+)
+
+:continue
 setlocal
 set "VERSION=3.4.0-testing"
 set "REPO_URL=https://github.com/thehack904/RetroIPTVGuide.git"
@@ -21,13 +44,14 @@ color 0A
 cls
 
 echo.
-echo Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦                Â¦Â¦Â¦                        Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦               Â¦Â¦Â¦                          Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦   Â¦Â¦Â¦                      Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦        Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
-echo Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦
-echo Â¦Â¦Â¦   Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
-echo Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦           Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦       Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
+echo.
+echo ¦¦¦¦¦¦¦¦¦¦                ¦¦¦                        ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦¦¦¦¦    ¦¦¦   ¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦
+echo ¦¦¦     ¦¦¦               ¦¦¦                          ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦  ¦¦¦   ¦¦¦                      ¦¦¦
+echo ¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦    ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦        ¦¦¦    ¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦
+echo ¦¦¦¦¦¦¦¦¦¦  ¦¦¦    ¦¦¦    ¦¦¦    ¦¦¦¦     ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦¦¦¦¦¦¦¦      ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦  ¦¦¦¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦    ¦¦¦
+echo ¦¦¦   ¦¦¦   ¦¦¦¦¦¦¦¦¦¦    ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦     ¦¦¦  ¦¦¦  ¦¦¦     ¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦¦¦¦¦¦¦¦
+echo ¦¦¦    ¦¦¦  ¦¦¦           ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦      ¦¦¦¦¦¦    ¦¦¦  ¦¦¦¦ ¦¦¦   ¦¦¦¦ ¦¦¦¦¦¦   ¦¦¦¦ ¦¦¦
+echo ¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦      ¦¦¦¦¦ ¦¦¦       ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦¦      ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦
 echo.
 echo ============================================================
 echo   RetroIPTVGuide  ^|  Windows Edition (Headless Installer)
@@ -108,12 +132,12 @@ if not exist "%INSTALL_DIR%" (
       if exist "%INSTALL_DIR%\retroiptv_windows.ps1" (
         echo Repository extracted successfully.
       ) else (
-        echo âŒ Extraction failed. Please verify GitHub structure or try again.
+        echo Extraction failed. Please verify GitHub structure or try again.
         pause
         exit /b
       )
     ) else (
-      echo âŒ Failed to download ZIP file from GitHub.
+      echo Failed to download ZIP file from GitHub.
       pause
       exit /b
     )
@@ -135,20 +159,15 @@ if not exist "%PS1_FILE%" (
 REM Optional: warn if not elevated
 net session >nul 2>&1
 if errorlevel 1 (
-  echo ??  Not running as Administrator. If the installer needs elevation,
+  echo.
+  echo     Not running as Administrator. The installer needs elevation,
   echo     right-click this .bat and choose "Run as administrator".
   echo.
+  pause
+  exit
 )
 
 :menu
-echo.
-echo Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦                Â¦Â¦Â¦                        Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦               Â¦Â¦Â¦                          Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦   Â¦Â¦Â¦                      Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦        Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
-echo Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦
-echo Â¦Â¦Â¦   Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
-echo Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦           Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦
-echo Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦       Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦
 echo.
 echo ============================================================
 echo   RetroIPTVGuide Windows Installer Menu  (v%VERSION%)
@@ -162,6 +181,8 @@ echo.
 
 if "%choice%"=="1" (
   echo Launching PowerShell installer...
+  echo.
+  echo.
   powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1_FILE%" install
   echo.
   echo Installation process complete. Review log output above for details.
