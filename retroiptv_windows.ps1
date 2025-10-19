@@ -20,12 +20,34 @@ This script:
 #>
 
 param(
-  [Parameter(Mandatory=$true)][ValidateSet('install','uninstall')] $Action,
+  [Parameter(Mandatory=$false)]
+  [ValidateSet('install','uninstall')]
+  [string] $Action,
+
   [switch] $yes,
   [switch] $y,
   [switch] $agree,
   [switch] $a
 )
+
+# --- Elevation check with confirmation ---
+if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    Write-Host ""
+    Write-Host "[ELEVATION] This installer needs administrator rights to continue." -ForegroundColor Yellow
+    $resp = Read-Host "Do you want to relaunch as Administrator? (yes/no)"
+    if ($resp -match '^(y|yes)$') {
+        Write-Host "?? Relaunching with elevated privileges..."
+        Start-Process -FilePath "powershell.exe" `
+            -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" `
+            -Verb RunAs
+        exit
+    } else {
+        Write-Host "? Operation cancelled — administrator rights required." -ForegroundColor Red
+        exit 1
+    }
+}
+
+
 
 # -------------------------------
 # Globals & Paths
@@ -33,7 +55,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "3.4.0i-testing"
+$VERSION = "3.4.0-testing"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -82,14 +104,39 @@ try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 ""
 $banner = @"
-Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶                Â¶Â¶Â¶                        Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶   Â¶Â¶Â¶Â¶Â¶Â¶Â¶             Â¶Â¶Â¶       Â¶Â¶Â¶            
-Â¶Â¶Â¶     Â¶Â¶Â¶               Â¶Â¶Â¶                          Â¶Â¶Â¶  Â¶Â¶Â¶     Â¶Â¶Â¶     Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶  Â¶Â¶Â¶   Â¶Â¶Â¶                      Â¶Â¶Â¶            
-Â¶Â¶Â¶     Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶  Â¶Â¶Â¶     Â¶Â¶Â¶     Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶        Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  
-Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶Â¶     Â¶Â¶Â¶    Â¶Â¶Â¶   Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶      Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶ Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶    Â¶Â¶Â¶ 
-Â¶Â¶Â¶   Â¶Â¶Â¶   Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶    Â¶Â¶Â¶      Â¶Â¶Â¶    Â¶Â¶Â¶   Â¶Â¶Â¶  Â¶Â¶Â¶             Â¶Â¶Â¶     Â¶Â¶Â¶  Â¶Â¶Â¶  Â¶Â¶Â¶     Â¶Â¶ Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶ 
-Â¶Â¶Â¶    Â¶Â¶Â¶  Â¶Â¶Â¶           Â¶Â¶Â¶    Â¶Â¶Â¶      Â¶Â¶Â¶    Â¶Â¶Â¶   Â¶Â¶Â¶  Â¶Â¶Â¶             Â¶Â¶Â¶      Â¶Â¶Â¶Â¶Â¶Â¶    Â¶Â¶Â¶  Â¶Â¶Â¶Â¶ Â¶Â¶Â¶   Â¶Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶   Â¶Â¶Â¶Â¶ Â¶Â¶Â¶        
-Â¶Â¶Â¶     Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶      Â¶Â¶Â¶Â¶Â¶ Â¶Â¶Â¶       Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶             Â¶Â¶Â¶       Â¶Â¶Â¶Â¶      Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶ Â¶Â¶Â¶ Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  Â¶Â¶Â¶Â¶Â¶Â¶Â¶Â¶  
+¶¶¶¶¶¶¶¶¶¶                ¶¶¶                        ¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶¶¶¶¶¶¶    ¶¶¶   ¶¶¶¶¶¶¶             ¶¶¶       ¶¶¶            
+¶¶¶     ¶¶¶               ¶¶¶                          ¶¶¶  ¶¶¶     ¶¶¶     ¶¶¶    ¶¶¶    ¶¶¶  ¶¶¶   ¶¶¶                      ¶¶¶            
+¶¶¶     ¶¶¶  ¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶¶ ¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶    ¶¶¶  ¶¶¶     ¶¶¶     ¶¶¶    ¶¶¶    ¶¶¶ ¶¶¶        ¶¶¶    ¶¶¶ ¶¶¶ ¶¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶  
+¶¶¶¶¶¶¶¶¶¶  ¶¶¶    ¶¶¶    ¶¶¶    ¶¶¶¶     ¶¶¶    ¶¶¶   ¶¶¶  ¶¶¶¶¶¶¶¶¶¶      ¶¶¶    ¶¶¶    ¶¶¶ ¶¶¶  ¶¶¶¶¶ ¶¶¶    ¶¶¶ ¶¶¶¶¶¶    ¶¶¶ ¶¶¶    ¶¶¶ 
+¶¶¶   ¶¶¶   ¶¶¶¶¶¶¶¶¶¶    ¶¶¶    ¶¶¶      ¶¶¶    ¶¶¶   ¶¶¶  ¶¶¶             ¶¶¶     ¶¶¶  ¶¶¶  ¶¶¶     ¶¶ ¶¶¶    ¶¶¶ ¶¶¶¶¶¶    ¶¶¶ ¶¶¶¶¶¶¶¶¶¶ 
+¶¶¶    ¶¶¶  ¶¶¶           ¶¶¶    ¶¶¶      ¶¶¶    ¶¶¶   ¶¶¶  ¶¶¶             ¶¶¶      ¶¶¶¶¶¶    ¶¶¶  ¶¶¶¶ ¶¶¶   ¶¶¶¶ ¶¶¶¶¶¶   ¶¶¶¶ ¶¶¶        
+¶¶¶     ¶¶¶  ¶¶¶¶¶¶¶¶      ¶¶¶¶¶ ¶¶¶       ¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶¶¶             ¶¶¶       ¶¶¶¶      ¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶¶ ¶¶¶ ¶¶¶¶¶¶¶¶¶  ¶¶¶¶¶¶¶¶  
 "@
+
+try {
+    # Set console width/height (character columns x lines)
+    $cols = 145
+    $lines = 45
+    mode con: cols=$cols lines=$lines | Out-Null
+
+    Start-Sleep -Milliseconds 200
+
+    # Move/resize only if running under classic PowerShell console
+    $hwnd = (Get-Process -Id $PID).MainWindowHandle
+    if ($hwnd -ne 0) {
+        Add-Type @"
+        using System;
+        using System.Runtime.InteropServices;
+        public static class Win32 {
+            [DllImport("user32.dll")]
+            public static extern bool MoveWindow(IntPtr hwnd, int x, int y, int width, int height, bool repaint);
+        }
+"@
+    }
+} catch {
+    Write-Host "[WARN] Could not resize PowerShell window: $($_.Exception.Message)" -ForegroundColor Yellow
+}
+
 
 Write-Host $banner -ForegroundColor Cyan
 Write-Title "==========================================================================="
@@ -317,11 +364,7 @@ function Verify-ServiceAndHttp {
         $resp.Close()
         Add-Log "- HTTP verified on port $Port"
     } catch {
-<<<<<<< HEAD
         Write-Warn "--  TCP open but HTTP verification failed likely still initializing Flask."
-=======
-        Write-Warn "--  TCP open but HTTP verification failed â€šÃ„Ã® likely still initializing Flask."
->>>>>>> 44bfcef3180585f3a7ff1ecf04a3da5902f70336
         Add-Log "--  TCP open but HTTP verification failed."
     }
 }
@@ -373,78 +416,96 @@ function Do-Install {
 # UNINSTALL
 # -------------------------------
 function Do-Uninstall {
-  if (-not ($yes -or $y)) {
-    if (-not (Confirm-YesNo "Proceed with uninstall of RetroIPTVGuide service and local environment?")) {
-      Write-Warn "Uninstall aborted by user."
-      exit 1
+    Write-Host ""
+    Write-Title "============================================================"
+    Write-Title " RetroIPTVGuide Uninstaller"
+    Write-Title "============================================================"
+    Write-Info  ("Start time: {0}" -f (Get-Date))
+    Write-Host ""
+
+    if (-not ($yes -or $y)) {
+        if (-not (Confirm-YesNo "Proceed with uninstall of RetroIPTVGuide service and local environment?")) {
+            Write-Warn "Uninstall aborted by user."
+            Write-Host ""
+            Write-Host "Press ENTER to close this window..." -ForegroundColor Yellow
+            Read-Host
+            exit 1
+        }
+    } else {
+        Write-Info "Auto-confirmed via --yes."
     }
-  } else {
-    Write-Info "Auto-confirmed via --yes."
-  }
 
-  # Remove service
-  Ensure-Choco            # ensures nssm remains callable
-  Ensure-ChocoPkg "nssm"  # just in case
-  Remove-ServiceSafe -Name $ServiceName
+	# Make sure nssm is callable, quietly
+	try {
+		if (-not (Get-Command nssm.exe -ErrorAction SilentlyContinue)) {
+			choco install nssm -y | Out-Null
+		}
+	} catch {}
+	Remove-ServiceSafe -Name $ServiceName
 
-  # Remove venv & optional artifacts
-  if (Test-Path $VenvDir) {
-    Write-Info "Removing virtual environment ($VenvDir)..."
-    try { Remove-Item -Recurse -Force $VenvDir } catch {}
-  }
 
-  # Optionally offer to clean logs
-  $logsDir = Join-Path $ScriptDir "logs"
-  if ((Test-Path $logsDir) -and -not ($yes -or $y)) {
-    if (Confirm-YesNo "Remove log files in '$logsDir'?") {
-      try { Remove-Item -Recurse -Force $logsDir } catch {}
-      Write-Ok "Logs removed."
+    # Remove venv & optional artifacts
+    if (Test-Path $VenvDir) {
+        Write-Info "Removing virtual environment ($VenvDir)..."
+        try { Remove-Item -Recurse -Force $VenvDir } catch {}
     }
-  }
 
-  Write-Title ""
-  Write-Title "============================================================"
-  Write-Title " Uninstallation Complete"
-  Write-Title "============================================================"
-  Write-Ok    "All requested components removed."
-  Write-Info  ("End time: {0}" -f (Get-Date))
-  Write-Title "============================================================"
+    # Optionally offer to clean logs
+    $logsDir = Join-Path $ScriptDir "logs"
+    if ((Test-Path $logsDir) -and -not ($yes -or $y)) {
+        if (Confirm-YesNo "Remove log files in '$logsDir'?") {
+            try { Remove-Item -Recurse -Force $logsDir } catch {}
+            Write-Ok "Logs removed."
+        }
+    }
+
+    Write-Host ""
+    Write-Title "============================================================"
+    Write-Title " Uninstallation Complete"
+    Write-Title "============================================================"
+    Write-Ok    "All requested components removed."
+    Write-Info  ("End time: {0}" -f (Get-Date))
+    Write-Title "============================================================"
+    Write-Host ""
+    Write-Host "RetroIPTVGuide has been successfully removed from this system." -ForegroundColor Cyan
+    Write-Host ""
+    Write-Host "Press ENTER to close this window..." -ForegroundColor Yellow
+    Read-Host
 }
+
+
+if (-not $Action) {
+    Write-Host ""
+    Write-Host "RetroIPTVGuide Windows Installer Menu" -ForegroundColor Cyan
+    Write-Host "==========================================================="
+    Write-Host "[1] Install RetroIPTVGuide"
+    Write-Host "[2] Uninstall RetroIPTVGuide"
+    Write-Host "[3] Exit"
+    Write-Host "==========================================================="
+    $choice = Read-Host "Select an option (1-3)"
+    switch ($choice) {
+        '1' { $Action = 'install' }
+        '2' { $Action = 'uninstall' }
+        '3' { Write-Host "Exiting..." ; exit }
+        default { Write-Host "Invalid selection." ; exit }
+    }
+}
+
 
 # -------------------------------
 # Dispatch
 # -------------------------------
 try {
-<<<<<<< HEAD
     switch ($Action) {
         'install'   { Do-Install }
         'uninstall' { Do-Uninstall }
     }
-}
-catch {
-    Write-ErrorMsg ("- An error occurred: {0}" -f $_.Exception.Message)
+} catch {
+    Write-ErrorMsg "- An error occurred: $($_.Exception.Message)"
     exit 1
-}
-finally {
+} finally {
     try {
         Stop-Transcript | Out-Null
         Start-Sleep -Milliseconds 200
-    }
-    catch {
-        # ignore transcript close errors
-    }
-=======
-  switch ($Action) {
-    'install'   { Do-Install }
-    'uninstall' { Do-Uninstall }
-  }
-} catch {
-  Write-ErrorMsg "- An error occurred: $($_.Exception.Message)"
-  exit 1
-} finally {
-  try {
-    Stop-Transcript | Out-Null
-    Start-Sleep -Milliseconds 200
-  } catch {}
->>>>>>> 44bfcef3180585f3a7ff1ecf04a3da5902f70336
+    } catch {}
 }
