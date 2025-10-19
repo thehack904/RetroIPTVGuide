@@ -63,17 +63,38 @@ if not exist "%INSTALL_DIR%" (
   echo.
   echo ============================================================
   echo   RetroIPTVGuide not found in "%~dp0".
-  echo   Attempting to clone or download from GitHub...
+  echo   Attempting to obtain files from GitHub...
   echo ============================================================
   echo.
 
-  REM Check if Git is installed
+  REM ------------------------------------------------------------
+  REM  Ensure Git is available (install via Chocolatey if missing)
+  REM ------------------------------------------------------------
   where git >nul 2>&1
-  if %ERRORLEVEL%==0 (
-    echo Git detected. Cloning repository...
-    git clone --branch testing --depth 1 "%REPO_URL%" "%INSTALL_DIR%"
+  if errorlevel 1 (
+    echo Git not found. Checking for Chocolatey...
+    where choco >nul 2>&1
+    if errorlevel 1 (
+      echo Installing Chocolatey...
+      powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+        "Set-ExecutionPolicy Bypass -Scope Process -Force; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))"
+    )
+    echo Installing Git via Chocolatey...
+    choco install -y git >nul 2>&1
+    REM Refresh PATH so git.exe becomes immediately visible
+    set "PATH=%PATH%;C:\ProgramData\chocolatey\bin"
+  )
+
+  REM ------------------------------------------------------------
+  REM  Attempt to clone using Git; if it fails, use ZIP fallback
+  REM ------------------------------------------------------------
+  echo Cloning repository from GitHub...
+  git clone --branch testing --depth 1 "%REPO_URL%" "%INSTALL_DIR%" >nul 2>&1
+
+  if exist "%INSTALL_DIR%\retroiptv_windows.ps1" (
+    echo Repository cloned successfully.
   ) else (
-    echo Git not found. Downloading ZIP instead...
+    echo Clone failed or incomplete. Attempting ZIP download instead...
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
       "Invoke-WebRequest -Uri '%ZIP_URL%' -OutFile '%TEMP%\RetroIPTVGuide.zip' -UseBasicParsing"
     if exist "%TEMP%\RetroIPTVGuide.zip" (
@@ -82,13 +103,21 @@ if not exist "%INSTALL_DIR%" (
         "Expand-Archive -Path '%TEMP%\RetroIPTVGuide.zip' -DestinationPath '%~dp0' -Force"
       ren "%~dp0RetroIPTVGuide-testing" "RetroIPTVGuide" >nul 2>&1
       del "%TEMP%\RetroIPTVGuide.zip" >nul 2>&1
+      if exist "%INSTALL_DIR%\retroiptv_windows.ps1" (
+        echo Repository extracted successfully.
+      ) else (
+        echo ❌ Extraction failed. Please verify GitHub structure or try again.
+        pause
+        exit /b
+      )
     ) else (
-      echo ? Failed to download ZIP file from GitHub.
+      echo ❌ Failed to download ZIP file from GitHub.
       pause
       exit /b
     )
   )
 )
+
 
 REM ------------------------------------------------------------
 REM  Step 2: Verify that PS1 file exists now
