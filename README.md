@@ -14,12 +14,16 @@
     <img src="https://img.shields.io/badge/license-CC--BY--NC--SA%204.0-lightgrey?style=for-the-badge" alt="License">
   </a>
 </p>
-----
+
+---
+
 Welcome to **RetroIPTVGuide**, a lightweight self-hosted IPTV + EPG web interface inspired by classic cable TV guides — built for modern home labs, retro media setups, and Android/Fire/Google TV screens.
+
 RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.  
+
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
+
 Includes **Docker and TrueNAS SCALE deployment** for easy installation and persistence.
-----
 
 ## 🚀 Features
 - 🧰 Unified installers for Linux, Raspberry Pi, and Windows
@@ -43,7 +47,7 @@ Includes **Docker and TrueNAS SCALE deployment** for easy installation and persi
 - [Roadmap](ROADMAP.md)
 - [License](LICENSE)
 
-----
+---
 
 
 ## 🛠 Installation
@@ -69,6 +73,7 @@ curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retro
 ```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh | sudo bash -s install --agree --yes
 ```
+
 ### 🪟 Windows (PowerShell)
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
@@ -102,7 +107,10 @@ sudo retroiptv_rpi.sh update --yes
 ```
 
 ### 🪟 Windows
-**Currently on track for v.4.0.1 release**
+**Alignment with Linux/Pi currently on track for v4.0.1 release**
+```powershell
+git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
+```
 
 ---
 
@@ -142,6 +150,7 @@ sudo retroiptv_rpi.sh uninstall --yes
 ![AOL Theme](docs/screenshots/AOL_Compuserve_Theme.png)
 
 ---
+
 ## 🤝 Contributing
 
 Contributions are welcome! Here’s how you can help:
@@ -160,6 +169,7 @@ All contributions will be reviewed before merging into the main branch.
 - **Maintainer:** @thehack904
 
 See [ROADMAP.md](ROADMAP.md) for full details.
+
 ---
 
 ## 💡 Tip
