@@ -1,7 +1,7 @@
 rem @echo off
 rem powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install_windows.ps1"
 @echo off
-chcp 65001 >nul
+
 REM ============================================================
 REM RetroIPTVGuide Windows Unified Installer / Uninstaller
 REM Version: 3.4.0-testing
