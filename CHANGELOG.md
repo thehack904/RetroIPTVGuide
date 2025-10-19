@@ -4,6 +4,36 @@ All notable changes to this project will be documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
 This project follows [Semantic Versioning](https://semver.org/). 
 
+
+## v4.0.0 — 2025-10-19
+**Status:** Public Release (Feature Complete)
+
+### Major Changes
+- Introduced unified cross-platform installers:
+  - `retroiptv_linux.sh` replaces all legacy shell installers
+  - `retroiptv_windows.ps1` adds native PowerShell support
+  - `retroiptv_rpi.sh` updated for Ubuntu 24.04.2 ARM builds
+- Added Android/Fire/Google TV mode with glowing CRT-style header and TV-optimized layout
+- Added `manage_users.html` for integrated user creation, management, and deletion
+- Updated `app.py` for unified configuration handling, improved session persistence, and tuner logic cleanup
+- Modernized UI templates: `guide.html`, `login.html`, `about.html`, `logs.html`, `change_password.html`, and `change_tuner.html`
+- Refreshed `CHANGELOG.md`, `README.md`, and `ROADMAP.md` to match unified architecture
+
+### Removed / Consolidated
+- Removed legacy install/uninstall scripts (`install.*`, `uninstall.*`, `iptv-server.service`)
+- Consolidated multiple user templates (`add_user.html`, `new_user.html`, etc.) into `manage_users.html`
+
+### Known Limitations
+- HTTPS mode remains experimental (local/internal network use recommended)
+- Android TV session persistence under further testing
+- Performance optimization ongoing for large EPG datasets
+
+### Upcoming Development
+- Optional HTTPS + token authentication
+- Per-user tuner assignment system
+- PlutoTV / custom tuner aggregation features
+- Enhanced guide refresh logic for long-running sessions
+
 ---
 
 ## [Unreleased]
@@ -32,7 +62,8 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v3.2.0 - 2025-10-11
+
+## [v3.2.0] - 2025-10-11
 ### Added
 - **Containerization & TrueNAS Deployment Support**
   - Added official Dockerfile and `docker-compose.yml` for cross‑platform container deployments.
@@ -50,7 +81,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
 - Fixed workflow permissions with explicit `packages: write` and PAT authentication.
-
 ---
 
 ## v3.1.0 - 2025-10-09
@@ -102,7 +132,9 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Prevented guide from displaying outdated EPG after tuner change.  
   - Corrected case where missing XML data produced empty grid.
 
+
 ---
+
 
 ## [3.0.0] - 2025-10-03
 ### Added
@@ -131,8 +163,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Consistent logging of user agreement and installer actions.
 - Ensured firewall rule removal on Windows during uninstall.
-
----
 
 ## [2.3.2] - 2025-09-26
 ### Added
@@ -209,7 +239,9 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Fixed alignment of tuner forms with consistent dropdowns and validation.
 - Ensured flash messages and logging work consistently across all tuner operations.
 
-## [v2.0.0] 2025-09-24
+
+
+## [v2.0.0] â€“ 2025-09-24
 ### Added
 - Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
   - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.

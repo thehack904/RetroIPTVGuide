@@ -1,7 +1,7 @@
-APP_VERSION = "v3.3.0"
+APP_VERSION = "v4.0.0"
 APP_RELEASE_DATE = "2025-10-11"
 
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -22,6 +22,8 @@ APP_START_TIME = datetime.now()
 # ------------------- Config -------------------
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # replace with a fixed key in production
+app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
+
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
@@ -301,8 +303,10 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
+        remember = 'remember' in request.form  # ✅ new: detect Save Session checkbox
         user = get_user(username)
         if user and check_password_hash(user.password_hash, password):
+            login_user(user, remember=remember)  # ✅ persist login if checked
             login_user(user)
             log_event(username, "Logged in")
             tuners = get_tuners()
@@ -326,6 +330,14 @@ def logout():
     log_event(current_user.username, "Logged out")
     logout_user()
     return redirect(url_for('login'))
+
+def revoke_user_sessions(username):
+    # Placeholder: later this can use a session-tracking table or Redis
+    # For now, it clears any "remember" cookie or stored flag
+    session_key = f"user_session_{username}"
+    if session_key in session:
+        session.pop(session_key, None)
+    log_event("admin", f"Revoked sessions for {username}")
 
 @app.route('/change_password', methods=['GET','POST'])
 @login_required
@@ -399,6 +411,69 @@ def delete_user():
         c.execute('SELECT username FROM users WHERE username != "admin"')
         users = [row[0] for row in c.fetchall()]
     return render_template("delete_user.html", current_tuner=get_current_tuner(), users=users)
+
+@app.route('/manage_users', methods=['GET', 'POST'])
+@login_required
+def manage_users():
+    ua = request.headers.get('User-Agent', '').lower()
+
+    # Detect Android / Fire / Google TV browsers
+    tv_patterns = ['silk', 'aft', 'android tv', 'googletv', 'mibox', 'bravia', 'shield', 'tcl', 'hisense', 'puffin', 'tv bro']
+    is_tv = any(p in ua for p in tv_patterns)
+
+    # Restrict access
+    if current_user.username != 'admin' or is_tv:
+        # Log unauthorized or TV-based attempt
+        log_event(current_user.username, f"Unauthorized attempt to access /manage_users from UA: {ua}")
+        flash("Unauthorized access.")
+        return redirect(url_for('guide'))
+
+    # ---- Normal admin logic below ----
+    with sqlite3.connect(DATABASE, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute('SELECT username FROM users WHERE username != "admin"')
+        users = [row[0] for row in c.fetchall()]
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+        if action == 'add':
+            if not username or not password:
+                flash("Please provide both username and password.")
+            else:
+                try:
+                    with sqlite3.connect(DATABASE, timeout=10) as conn:
+                        c = conn.cursor()
+                        c.execute('INSERT INTO users (username, password) VALUES (?, ?)',
+                                  (username, generate_password_hash(password)))
+                        conn.commit()
+                    log_event(current_user.username, f"Added user {username}")
+                    flash(f"✅ User '{username}' added successfully.")
+                except sqlite3.IntegrityError:
+                    flash("⚠️ Username already exists.")
+
+        elif action == 'delete':
+            if username == 'admin':
+                flash("❌ Cannot delete the admin account.")
+            else:
+                with sqlite3.connect(DATABASE, timeout=10) as conn:
+                    c = conn.cursor()
+                    c.execute('DELETE FROM users WHERE username=?', (username,))
+                    conn.commit()
+                log_event(current_user.username, f"Deleted user {username}")
+                flash(f"🗑 Deleted user '{username}'.")
+
+        elif action == 'signout':
+            revoke_user_sessions(username)
+            log_event(current_user.username, f"Revoked sessions for {username}")
+            flash(f"🚪 Signed out all active logins for '{username}'.")
+
+        return redirect(url_for('manage_users'))
+
+    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner())
+
 
 @app.route("/about")
 @login_required  # optional
@@ -571,6 +646,7 @@ def view_logs():
     log_event(current_user.username, "Accessed logs page")
     entries = []
     log_size = 0
+
     if os.path.exists(LOG_PATH):
         log_size = os.path.getsize(LOG_PATH)
         with open(LOG_PATH, "r") as f:
@@ -578,9 +654,15 @@ def view_logs():
                 parts = line.strip().split(" | ")
                 if len(parts) == 3:
                     user, action, timestamp = parts
-                    entries.append((user, action, timestamp))
+                    log_type = "security" if any(
+                        x in action.lower() for x in
+                        ["unauthorized", "revoked", "failed", "denied"]
+                    ) else "activity"
+                    entries.append((user, action, timestamp, log_type))
                 else:
-                    entries.append(("system", line.strip(), ""))
+                    entries.append(("system", line.strip(), "", "activity"))
+    else:
+        entries = [("system", "No log file found.", "", "activity")]
 
     return render_template(
         "logs.html",
@@ -589,22 +671,20 @@ def view_logs():
         log_size=log_size
     )
 
-@app.route("/clear_logs")
+
+
+@app.route('/clear_logs', methods=['POST'])
 @login_required
 def clear_logs():
-    if current_user.username != "admin":
-        flash("Unauthorized: only admin can clear logs.", "error")
-        return redirect(url_for("view_logs"))
+    if current_user.username != 'admin':
+        flash("Unauthorized access.")
+        return redirect(url_for('view_logs'))
 
-    try:
-        # Truncate the log file instead of deleting it
-        with open(LOG_PATH, "w"):
-            pass
-        flash("✅ Logs cleared successfully.", "success")
-    except Exception as e:
-        flash(f"⚠️ Error clearing logs: {e}", "error")
+    open(LOG_PATH, "w").close()  # clear the file
+    log_event("admin", "Cleared log file")
+    flash("🧹 Logs cleared successfully.")
+    return redirect(url_for('view_logs'))
 
-    return redirect(url_for("view_logs"))
 
 # ------------------- Constants -------------------
 SCALE = 5

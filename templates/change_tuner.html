@@ -189,36 +189,34 @@
     <div class="links">
         <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
         <a href="{{ url_for('guide') }}">HOME</a>
-        {% if current_user.username == 'admin' %}
-        <div class="dropdown">
-            <button class="dropbtn">USER ADMIN ▾</button>
-            <div class="dropdown-content">
-                <a href="{{ url_for('add_user_route') }}">New User</a>
-                <a href="{{ url_for('delete_user') }}">Delete User</a>
-            </div>
-        </div>
+        {% if current_user is defined and current_user.username == 'admin' %}
+        <!-- ✅ Added next to USER ADMIN -->
+		<a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
         {% endif %}
-        <div class="dropdown">
+
+        <div class="dropdown" id="settingsMenu">
             <button class="dropbtn">SETTINGS ▾</button>
             <div class="dropdown-content">
-                {% if current_user.username == 'admin' %}
+                {% if current_user is defined and current_user.username == 'admin' %}
                 <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
                 <a href="{{ url_for('view_logs') }}">Logs</a>
+                <li><a href="{{ url_for('about') }}">About</a></li>
                 {% endif %}
                 <a href="{{ url_for('change_password') }}">Change Password</a>
-                <li class="submenu">
-      <a href="#">Themes</a>
-      <ul class="submenu-content">
-        <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
-        <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
-        <li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
-        <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
-		<li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
-		<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>			
-      </ul>
-    </li>
+				<li class="submenu">
+				  <a href="#">Themes</a>
+				  <ul class="submenu-content">
+				    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
+				    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
+					<li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
+					<li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide Magazine</a></li>
+					<li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
+					<li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
+				  </ul>
+				</li>
             </div>
         </div>
+
         <a href="{{ url_for('logout') }}">LOGOUT</a>
     </div>
     <div id="clock" class="clock">--:-- --</div>
