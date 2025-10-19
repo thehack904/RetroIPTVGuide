@@ -1,9 +1,11 @@
 # Installation Guide
 
-**Version:** v3.2.0  
-**Last Updated:** 2025-10-11  
+**Version:** v4.0.0  
+**Last Updated:** 2025-10-19  
 
-## Requirements
+---
+
+## 🧰 Requirements
 - Python 3.10+ (Linux) / Python 3.12+ (Windows)
 - **Linux (Debian/Ubuntu with systemd)**, **Windows 10/11**, or **Raspberry Pi 3 / 4 / 5 (Headless OS) / Docker**
 - Administrative privileges:
@@ -12,96 +14,9 @@
 
 ---
 
-## Installation
-
-Clone the repository and run the installer. Choose the command based on your OS.
-
-### Linux / WSL
-
-#### One-liner
-```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git && cd RetroIPTVGuide && sudo chmod +x install.sh && sudo ./install.sh
-```
-
-**What the installer does (Linux/WSL):**
-- Detects Linux/WSL environment  
-- Ensures script is run with sudo  
-- Creates a system user `iptv`  
-- Installs into `/home/iptv/iptv-server`  
-- Ensures `python3-venv` is installed  
-- Creates Python virtual environment and installs dependencies  
-- Creates and enables the `iptv-server` systemd service  
-- Starts the service  
-- Logs the install to `install_YYYY-MM-DD_HH-MM-SS.log`
-
----
-
-### Windows 10 / 11
-
-Run this one-liner from an **Administrator PowerShell** prompt:
-
-```powershell
-Invoke-WebRequest https://github.com/thehack904/RetroIPTVGuide/archive/refs/heads/main.zip -OutFile RetroIPTVGuide.zip ; tar -xf RetroIPTVGuide.zip ; cd RetroIPTVGuide-main ; .\install.bat
-```
-
-**What the installer does (Windows):**
-- Bootstraps Chocolatey (if missing)  
-- Installs dependencies: `python`, `git`, `nssm`  
-- Registers Windows App Paths for `python` / `python3`  
-- Adds Python to Git Bash (`~/.bashrc`)  
-- Clones RetroIPTVGuide and runs `install.sh` under Git Bash to set up venv + requirements  
-- Creates an NSSM service to run `venv\Scripts\python.exe app.py`  
-- Opens Windows Firewall port 5000  
-- Starts the RetroIPTVGuide service  
-- Logs the install to `install_YYYY-MM-DD_HH-MM-SS.log`
-
----
-
-### Raspberry Pi 3 / 4 / 5 (Headless Edition)
-
-#### Interactive install
-```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s install
-```
-
-#### Unattended / non-interactive
-```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s install --yes --agree
-```
-
-**What the installer does (Raspberry Pi):**
-- Detects Pi model (3 / 4 / 5)  
-- Installs required packages (`python3-venv`, `ffmpeg`, `git`, etc.) using `apt-get`  
-- Creates user `iptv` and installs into `/home/iptv/iptv-server`  
-- Configures GPU memory automatically (128 MB on Pi 3 / 256 MB on Pi 4/5)  
-- Sets up Python virtual environment and dependencies  
-- Creates systemd service `retroiptvguide`  
-- Performs post-install HTTP check (localhost:5000) with up-to-15 s polling  
-- Logs all activity to `/var/log/retroiptvguide/install-TIMESTAMP.log`  
-- Optionally reboots to apply GPU memory changes  
-
-**Requirements**
-- Raspberry Pi OS (Bookworm or later)  
-- Minimum 8 GB SD card and 1 GB RAM (512 MB swap recommended)  
-- SSH or console access with sudo  
-
----
-
-## 🚀 Containerized Deployment
-
-RetroIPTVGuide v3.2.0 introduces **official Docker and TrueNAS SCALE App support**, allowing one‑click installation and persistent storage.
+## 🛠 Installation
 
 ### 🧱 Docker (Generic Linux / macOS / Windows)
-
-#### Using Docker Compose
-
-```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git
-cd RetroIPTVGuide/docker
-cp .env.example .env
-docker compose up -d
-```
-
 
 ## 🐳 Quick Docker Run
 
@@ -112,34 +27,90 @@ docker pull ghcr.io/thehack904/retroiptvguide:latest
 docker run -d   --name retroiptvguide   -p 5000:5000   -e TZ=America/Chicago   -e SECRET_KEY=$(openssl rand -hex 32)   -v $(pwd)/config:/app/config   -v $(pwd)/logs:/app/logs   -v $(pwd)/data:/app/data   ghcr.io/thehack904/retroiptvguide:latest
 ```
 
+#### Using Docker Compose
+
+```bash
+git clone https://github.com/thehack904/RetroIPTVGuide.git
+cd RetroIPTVGuide/docker
+cp .env.example .env
+docker compose up -d
+```
+
+### 🐧 Linux
+#### Automated
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh | sudo bash -s install --agree --yes
+```
+
+#### Manual
+```bash
+wget https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh
+sudo bash ./retroiptv_linux.sh install
+```
+
 ---
 
-## Access
-
-Once installed, open your browser:
-
-```
-http://<server-ip>:5000
+### 🍓 Raspberry Pi
+#### Automated
+```bash
+curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh | sudo bash -s install --agree --yes
 ```
 
-Default login: **admin / strongpassword123**
-⚠️ This is a **BETA** build for internal network use only.
+#### Manual
+```bash
+wget https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh
+sudo bash ./retroiptv_rpi.sh install
+```
+
+---
+
+### 🪟 Windows (PowerShell)
+#### Automated
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.ps1 -OutFile retroiptv_windows.ps1
+.\retroiptv_windows.ps1 install
+```
+
+#### Manual
+1. Download `retroiptv_windows.ps1` from the GitHub repository.  
+2. Open **PowerShell as Administrator**.  
+3. Navigate to the folder containing the script.  
+4. Run:
+   ```powershell
+   Set-ExecutionPolicy Bypass -Scope Process -Force
+   .\retroiptv_windows.ps1 install
+   ```
+
+---
+
+## 🌐 Access
+After installation:
+```
+🌐 RetroIPTVGuide Web Interface: http://<server-ip>:5000
+🔑 Default Login: admin / strongpassword123
+```
+
+> ⚠️ **Beta Notice:**  
+> This version is feature-complete and stable, but still displays a *Beta* disclaimer during installation for liability protection.  
+> Do not expose your instance directly to the public Internet.
 
 ---
 
 ## 🔄 Updating
 
-### Linux / WSL
+### 🐧 Linux
 ```bash
-sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart iptv-server.service
+sudo retroiptv_linux.sh update
 ```
 
-### Raspberry Pi
+### 🍓 Raspberry Pi
 ```bash
-sudo -u iptv bash -H -c "cd /home/iptv/iptv-server && git fetch --all && git reset --hard origin/main" && sudo systemctl daemon-reload && sudo systemctl restart retroiptvguide.service
+sudo retroiptv_rpi.sh update
 ```
 
-### Windows 10 / 11
+### 🪟 Windows
+**Alignment with Linux/Pi currently on track for v4.0.1 release**
 ```powershell
 git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
 ```
@@ -151,23 +122,21 @@ docker compose pull && docker compose up -d
 
 ---
 
-## Uninstallation
+## 📘 Uninstall
 
-### Linux / WSL
+### 🐧 Linux
 ```bash
-sudo -u iptv bash -H -c "cd /home/iptv/iptv-server" && sudo bash /home/iptv/iptv-server/uninstall.sh
+sudo retroiptv_linux.sh uninstall
 ```
 
-### Raspberry Pi
+### 🍓 Raspberry Pi
 ```bash
-curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/retroiptv_rpi.sh | sudo bash -s uninstall --yes
+sudo retroiptv_rpi.sh uninstall
 ```
 
-### Windows
-From an Administrator PowerShell prompt:
-```powershell
-.\uninstall_windows.ps1
-```
+### 🪟 Windows
+1. Double-click or right-click on `retroiptv_windows.bat` and select **Run as Administrator**  
+2. Select **Uninstall**
 
 #### Docker
 ```bash
@@ -178,10 +147,12 @@ docker compose down -v
 ⚠️ To completely remove the project, manually delete the project folder after uninstalling.
 ---
 
-## License
-Licensed under CC BY-NC-SA 4.0. See `LICENSE` for details.
+## ⚙️ Notes
+- All installers log activity with timestamps (stored in the same directory or `/var/log/retroiptvguide/`).  
+- Uninstallers remove services and dependencies cleanly but preserve user data unless explicitly deleted.  
+- These scripts are intended for **local or internal networks only**.
 
 ---
 
-⚠️ **Initial BETA Notice**  
-This project is currently in **BETA** and should **not** be exposed directly to the Internet or used in production without additional hardening.
+## License
+Licensed under **CC BY-NC-SA 4.0**. See `LICENSE` for details.

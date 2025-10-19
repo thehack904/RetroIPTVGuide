@@ -5,14 +5,34 @@ Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 This project follows [Semantic Versioning](https://semver.org/). 
 
 
-## v4.0.0 - 2025-10-19
-### Added
-- (empty)
+## v4.0.0 — 2025-10-19
+**Status:** Public Release (Feature Complete)
 
-### Fixed
-- (empty)
+### Major Changes
+- Introduced unified cross-platform installers:
+  - `retroiptv_linux.sh` replaces all legacy shell installers
+  - `retroiptv_windows.ps1` adds native PowerShell support
+  - `retroiptv_rpi.sh` updated for Ubuntu 24.04.2 ARM builds
+- Added Android/Fire/Google TV mode with glowing CRT-style header and TV-optimized layout
+- Added `manage_users.html` for integrated user creation, management, and deletion
+- Updated `app.py` for unified configuration handling, improved session persistence, and tuner logic cleanup
+- Modernized UI templates: `guide.html`, `login.html`, `about.html`, `logs.html`, `change_password.html`, and `change_tuner.html`
+- Refreshed `CHANGELOG.md`, `README.md`, and `ROADMAP.md` to match unified architecture
 
----
+### Removed / Consolidated
+- Removed legacy install/uninstall scripts (`install.*`, `uninstall.*`, `iptv-server.service`)
+- Consolidated multiple user templates (`add_user.html`, `new_user.html`, etc.) into `manage_users.html`
+
+### Known Limitations
+- HTTPS mode remains experimental (local/internal network use recommended)
+- Android TV session persistence under further testing
+- Performance optimization ongoing for large EPG datasets
+
+### Upcoming Development
+- Optional HTTPS + token authentication
+- Per-user tuner assignment system
+- PlutoTV / custom tuner aggregation features
+- Enhanced guide refresh logic for long-running sessions
 
 ---
 
@@ -24,14 +44,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v3.4.0-testing - 2025-10-17
-### Added
-- (empty)
-
-### Fixed
-- (empty)
-
----
 ## v3.3.0 - 2025-10-15
 ### Added
 
