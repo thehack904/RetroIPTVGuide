@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="3.4.0-testing"
+VERSION="4.0.0"
 # RetroIPTVGuide Raspberry Pi Installer (Headless, Pi3/4/5)
 # Installs to /home/iptv/iptv-server for consistency with Debian/Windows
 # Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log

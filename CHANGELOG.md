@@ -4,6 +4,16 @@ All notable changes to this project will be documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
 This project follows [Semantic Versioning](https://semver.org/). 
 
+
+## v4.0.0 - 2025-10-19
+### Added
+- (empty)
+
+### Fixed
+- (empty)
+
+---
+
 ---
 
 ## [Unreleased]
