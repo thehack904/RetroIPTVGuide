@@ -31,7 +31,6 @@ param(
 # Globals & Paths
 # -------------------------------
 $ErrorActionPreference = 'Stop'
-[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
 $VERSION = "3.4.0i-testing"
@@ -64,8 +63,9 @@ function Confirm-YesNo($Prompt) {
 }
 
 function Add-Log($text) {
-  Add-Content -Path $logFile -Value $text
+  Write-Host $text
 }
+
 
 # -------------------------------
 # Environment guard (Windows only)
@@ -80,6 +80,7 @@ if (-not $env:OS -or $env:OS -notmatch 'Windows_NT') {
 # -------------------------------
 try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
+""
 $banner = @"
 ¦¦¦¦¦¦¦¦¦¦                ¦¦¦                        ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦¦¦¦¦    ¦¦¦   ¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦            
 ¦¦¦     ¦¦¦               ¦¦¦                          ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦  ¦¦¦   ¦¦¦                      ¦¦¦            
@@ -264,39 +265,63 @@ function Remove-ServiceSafe {
 # HTTP verification (mirrors Linux)
 # -------------------------------
 function Verify-ServiceAndHttp {
-  Write-Info ""
-  Write-Info "Verifying service status..."
-  Start-Sleep -Seconds 3
+    param(
+        [int]$MaxWaitSeconds = 60,
+        [int]$PollIntervalSeconds = 2
+    )
 
-  $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
-  if ($svc -and $svc.Status -eq 'Running') {
-    Write-Ok "? Service is active."
-    Write-Info "Waiting for web interface to start..."
+    Write-Info ""
+    Write-Info "Verifying service status..."
+    Start-Sleep -Seconds 2
 
-    $waitTime = 0
-    $maxWait  = 15
-    while ($waitTime -lt $maxWait) {
-      try {
-        $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop
-        if ($response.StatusCode -eq 200) {
-           Write-Ok "? Web interface responding on port $Port (after $waitTime seconds)."
-           Add-Log "? Verified: HTTP response received after $waitTime seconds."
-           return  # stop the function immediately after success
-        }
-      } catch { }
-      Start-Sleep -Seconds 2
-      $waitTime += 2
+    $svc = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+    if (-not $svc -or $svc.Status -ne 'Running') {
+        Write-ErrorMsg "- Service not active. Run: Get-Service -Name $ServiceName | Format-List *"
+        return
     }
 
-    if ($waitTime -ge $maxWait) {
-      Write-Warn "??  Service active, but no HTTP response after ${maxWait}s. Check logs in $logFile."
-      Write-Warn "??  Possible slow startup on first run (SQLite or dependencies still initializing)."
-      Add-Log  "??  No HTTP response after $maxWait seconds."
+    Write-Ok "- Service is active."
+    Write-Info "Waiting for TCP port $Port to accept connections..."
+
+    $end = (Get-Date).AddSeconds($MaxWaitSeconds)
+    $tcpConnected = $false
+
+    while ((Get-Date) -lt $end) {
+        try {
+            $client = New-Object System.Net.Sockets.TcpClient
+            $ar = $client.BeginConnect("127.0.0.1", $Port, $null, $null)
+            if ($ar.AsyncWaitHandle.WaitOne(1500, $false)) {
+                $client.EndConnect($ar)
+                $client.Close()
+                $tcpConnected = $true
+                Write-Ok "- TCP port $Port is accepting connections."
+                break
+            }
+            $client.Close()
+        } catch { }
+        Start-Sleep -Seconds $PollIntervalSeconds
     }
-  } else {
-    Write-ErrorMsg "? Service not active. Run: Get-Service -Name $ServiceName | Format-List *"
-  }
+
+    if (-not $tcpConnected) {
+        Write-Warn "--  Port $Port did not open within $MaxWaitSeconds s."
+        return
+    }
+
+    # optional lightweight HTTP confirmation
+    Write-Info "Confirming HTTP response..."
+    try {
+        $req = [Net.WebRequest]::Create("http://127.0.0.1:$Port/")
+        $req.Timeout = 3000
+        $resp = $req.GetResponse()
+        Write-Ok "- HTTP responded: $($resp.StatusDescription)"
+        $resp.Close()
+        Add-Log "- HTTP verified on port $Port"
+    } catch {
+        Write-Warn "--  TCP open but HTTP verification failed — likely still initializing Flask."
+        Add-Log "--  TCP open but HTTP verification failed."
+    }
 }
+
 
 # -------------------------------
 # INSTALL
@@ -391,7 +416,7 @@ try {
     'uninstall' { Do-Uninstall }
   }
 } catch {
-  Write-ErrorMsg "? An error occurred: $($_.Exception.Message)"
+  Write-ErrorMsg "- An error occurred: $($_.Exception.Message)"
   exit 1
 } finally {
   try {
@@ -399,5 +424,3 @@ try {
     Start-Sleep -Milliseconds 200
   } catch {}
 }
-
-
