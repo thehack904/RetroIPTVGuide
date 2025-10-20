@@ -68,8 +68,8 @@ sudo bash ./retroiptv_rpi.sh install
 #### Automated
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.ps1 -OutFile retroiptv_windows.ps1
-.\retroiptv_windows.ps1 install
+Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
+.\retroiptv_windows.bat install
 ```
 
 #### Manual
@@ -79,7 +79,7 @@ Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/ma
 4. Run:
    ```powershell
    Set-ExecutionPolicy Bypass -Scope Process -Force
-   .\retroiptv_windows.ps1 install
+   .\retroiptv_windows.bat install
    ```
 
 ---
