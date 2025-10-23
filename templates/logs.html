@@ -2,73 +2,9 @@
 <html>
 <head>
     <title>Activity Log</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin:0; }
-        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
-        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
-        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
-            display:flex; align-items:center; justify-content:center; padding:0 12px;
-            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
-        }
-        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
-        .dropdown { position:relative; }
-        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
-        .dropdown-content {
-            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
-            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
-        }
-        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
-        .dropdown-content a:hover { background:#0af; color:#fff; }
-        .dropdown:hover .dropdown-content { display:block; }
-
-        .container { max-width:800px; margin:60px auto; padding:20px; border-radius:8px; }
-        table { width:100%; border-collapse:collapse; margin-top:15px; }
-        th, td { border-bottom:1px solid #444; padding:8px; text-align:left; }
-        th { background:#333; color:#fff; }
-        tr:nth-child(even) { background:#222; }
-
-        /* Highlight for security events */
-        .security { background:#330000; color:#ff6666; }
-
-        /* Filter button bar */
-        .filter-bar { text-align:center; margin:10px; }
-        .filter-bar button { padding:6px 12px; margin:0 4px; border:none; border-radius:4px; background:#0a0a0a; color:#fff; cursor:pointer; font-weight:bold; }
-        .filter-bar button:hover { background:#0af; color:#000; }
-
-        /* Theme support */
-        body.dark { background:#111; color:#eee; }
-        body.dark .container { background:#222; }
-        body.dark table { color:#fff; }
-
-        body.light { background:#fff; color:#000; }
-        body.light .container { background:#f3f3f3; color:#000; }
-        body.light table { color:#000; }
-
-        body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
-        body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
-        body.retro-aol .container { background:#355f5f; color:#fff; }
-
-		body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
-		body.retro-magazine .header { background:#ffffff; color:#000; border-bottom:2px solid #000; font-weight:bold; }
-		body.retro-magazine .header .links > a,
-		body.retro-magazine .header .links > .dropdown > .dropbtn,
-		body.retro-magazine .header .links > span,
-		body.retro-magazine .header .links > #clock { background:#ffffff !important; color:#000000 !important; }
-		body.retro-magazine .header .links > a:hover,
-		body.retro-magazine .header .links > .dropdown:hover > .dropbtn { background:#e0e0e0 !important; color:#000000 !important; }
-		body.retro-magazine table,body.retro-magazine th,body.retro-magazine td{color:#000;}body.retro-magazine tr:nth-child(even){background:#000;}body.retro-magazine tr:nth-child(even) td{color:#fff;}body.retro-magazine th{background:#000;color:#fff;}
-		body.retro-magazine tr.security td,body.retro-magazine .security td{background:#800000;color:#fff!important;}
-
-        body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-		body.directv .header { background:linear-gradient(to bottom,#1d72ff,#003a8c); border-bottom:2px solid #001f66; }
-        body.directv .container { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; }
-
-        body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-		body.comcast .header { background:linear-gradient(to bottom,#0055cc,#001b50); border-bottom:2px solid #003090; }
-        body.comcast .container { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; }
-
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
 </head>
+<body>
 <body>
 <div class="header">
     <div class="links">

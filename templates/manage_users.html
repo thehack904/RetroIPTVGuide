@@ -2,62 +2,9 @@
 <html>
 <head>
     <title>Manage Users</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin:0; }
-        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
-        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
-        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
-            display:flex; align-items:center; justify-content:center; padding:0 12px;
-            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
-        }
-        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
-        .dropdown { position:relative; }
-        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
-        .dropdown-content {
-            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
-            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
-        }
-        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
-        .dropdown-content a:hover { background:#0af; color:#fff; }
-        .dropdown:hover .dropdown-content { display:block; }
-
-        .container { max-width:600px; margin:60px auto; padding:20px; border-radius:8px; }
-        form { margin-bottom:20px; }
-        input, select { width:100%; padding:8px; margin:5px 0; border-radius:4px; box-sizing:border-box; }
-        button { width:100%; padding:10px; border:none; border-radius:4px; font-weight:bold; cursor:pointer; }
-        button.add { background:#0a0; color:#fff; }
-        button.add:hover { background:#070; }
-        button.danger { background:#c00; color:#fff; }
-        button.danger:hover { background:#900; }
-        button.warn { background:#d2691e; color:#fff; }
-        button.warn:hover { background:#a0522d; }
-
-        table { width:100%; border-collapse:collapse; margin-top:15px; }
-        th, td { border-bottom:1px solid #444; padding:8px; text-align:left; }
-        td.actions { display:flex; gap:8px; }
-
-        body.dark { background:#111; color:#eee; }
-        body.dark .container { background:#222; }
-        body.dark input, body.dark select { background:#333; color:#eee; border:1px solid #444; }
-
-        body.light { background:#fff; color:#000; }
-        body.light .container { background:#f3f3f3; }
-        body.light input, body.light select { background:#fff; color:#000; border:1px solid #aaa; }
-
-        body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
-        body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
-        body.retro-aol .container { background:#355f5f; color:#fff; }
-
-        body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
-        body.retro-magazine .container { background:#fff; border:1px solid #000; color:#000; }
-
-        body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-        body.directv .container { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; }
-
-        body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-        body.comcast .container { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
 </head>
+<body>
 <body>
 <div class="header">
     <div class="links">

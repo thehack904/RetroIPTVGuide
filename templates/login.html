@@ -2,19 +2,9 @@
 <html>
 <head>
     <title>Login</title>
-    <style>
-        body {font-family:Arial,sans-serif;margin:0;height:100vh;display:flex;justify-content:center;align-items:center;background-color:#d8d7d3;position:relative;}
-        .logo {position:absolute;top:10%;right:10%;max-width:250px;height:auto;}
-        .box {padding:20px;border-radius:8px;width:300px;box-sizing:border-box;background:#fff;border:1px solid #ccc;box-shadow:0 8px 20px rgba(0,0,0,0.25);}
-        input {width:100%;padding:8px;margin:5px 0;border-radius:4px;border:1px solid #aaa;box-sizing:border-box;}
-        button {width:100%;padding:10px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;}
-        button.primary {background:#06c;color:#fff;}
-        button.primary:hover {background:#049;}
-        .remember {display:none;align-items:center;margin-top:8px;}
-        .remember input[type="checkbox"]{margin-right:6px;}
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='base.css') }}">
 </head>
-<body>
+<body class="login-page">
 <a href="https://github.com/thehack904/RetroIPTVGuide" target="_blank" title="View on GitHub">
     <img src="{{ url_for('static', filename='logo.png') }}" alt="RetroIPTVGuide Logo" class="logo">
 </a>
