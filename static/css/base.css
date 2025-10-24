@@ -1,0 +1,343 @@
+/* Make the page itself non-scrollable so only the guide area scrolls */
+html, body { height: 100%; overflow: hidden; }
+
+/* Header + menus */
+body { font-family: Arial, sans-serif; margin:0; }
+.header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
+.header .links { display:flex; align-items:center; height:100%; gap:10px; }
+.header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock { display:flex; align-items:center; justify-content:center; padding:0 12px; color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px; }
+.header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
+.dropdown { position:relative; }
+.dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
+.dropdown-content { display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px; border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3); }
+.dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
+.dropdown-content a:hover { background:#0af; color:#fff; }
+.dropdown:hover .dropdown-content { display:block; }
+
+/* Submenu (fly-out for Themes) */
+.submenu { position: relative; }
+.submenu > a { display: flex; justify-content: space-between; align-items: center; }
+.submenu-content { display: none; position: absolute; top: 0; left: 100%; background-color: #333; min-width: 160px; border-radius: 3px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+.submenu-content li a { padding: 10px 14px; display: block; color: #eee; text-decoration: none; }
+.submenu-content li a:hover { background-color: #0af; color: #fff; }
+.submenu:hover .submenu-content { display: block; }
+
+/* Remove default list bullets and padding for all dropdowns & submenus */
+.dropdown-content,
+.submenu ul,
+.submenu-content { list-style: none; margin: 0; padding: 0; }
+
+/* Player row: Program Info (left) | Video (right) */
+.player { display:flex; gap:16px; padding:12px; }
+.summary { flex:1; }
+#video  { width:620px; height:350px; }
+
+/* === REPLACE the existing "Guide grid" block with the code below === */
+
+/* Guide grid */
+.guide-outer { height: calc(100vh - 420px); overflow-y: auto; padding-bottom: 80px; position: relative; }
+.guide-row { display:flex; }
+.chan-col { width: 200px; flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
+
+/* NOTE: grid-col now allows vertical scrolling but we hide visual scrollbars by default */
+.grid-col { position:relative; flex:1; overflow-x:auto; overflow-y:auto; z-index:1;
+/* Firefox: hide scrollbar */ scrollbar-width: none;
+/* IE10+ */ -ms-overflow-style: none; }
+
+/* hide webkit scrollbars by default */
+.grid-col::-webkit-scrollbar { width: 0; height: 0; }
+
+/* keep headers same */
+.chan-header { height: 34px; border-bottom:1px solid; position:sticky; top:0; z-index:5; }
+.time-header-wrap { position:sticky; top:0; z-index:6; border-bottom:1px solid; }
+
+/* Use CSS variable for per-cell width; keep both flex-basis and width in sync */
+.time-cell { flex: 0 0 var(--timecell-width); width: var(--timecell-width); text-align:center; border-right:1px solid; font-weight:600; }
+
+.chan-name { padding: 10px; height: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; border-bottom: 1px solid; cursor: pointer; position: relative; z-index: 10; pointer-events: auto; user-select: none; }
+.chan-name img { width:36px; height:36px; object-fit:contain; margin-bottom: 4px; }
+.grid-row  { position:relative; height:60px; border-bottom:1px solid; }
+.grid-content { position:relative; width: var(--total-width); min-height:100%; }
+.program { position:absolute; top:6px; height:48px; border:1px solid; padding:4px 6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; border-radius:6px; z-index:1; } /* ensure fixed header sits above programs */
+.program.now { font-weight:bold; }
+.now-line { position:absolute; top:0; bottom:0; width:2px; z-index:8; pointer-events:none; left: var(--now-offset); }
+
+/* === Scrollbar reveal styles ===
+   We hide the native scrollbars by default (cross-browser) and show a thin, themed scrollbar
+   when .show-scroll is present (or the element has keyboard focus via :focus-within).
+*/
+.grid-col.show-scroll,
+.grid-col:focus-within {
+  /* Firefox: show thin scrollbar when revealed */
+  scrollbar-width: thin;
+}
+
+/* Webkit: styled visible scrollbar when .show-scroll is added */
+.grid-col.show-scroll::-webkit-scrollbar { width: 10px; /* vertical scrollbar width */ height: 8px; /* horizontal scrollbar height (if any) */ }
+.grid-col.show-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.08); border-radius: 6px; }
+.grid-col.show-scroll::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.28); border-radius: 6px; border: 2px solid transparent; background-clip: padding-box; }
+
+/* Apply the variable to the fixed-left spacer (safe to re-declare; will override earlier rules) */
+.time-header-fixed .left-spacer { width: var(--chan-col-width, 200px); min-width: var(--chan-col-width, 200px); max-width: var(--chan-col-width, 200px); height: var(--chan-col-height, auto); /* optional: aligns heights if you changed the fixed header height */ }
+
+/* Fixed time header (new) */
+.time-header-fixed { position: fixed;  z-index: 1200; left: 0; display: flex; align-items: stretch; overflow: hidden; background: transparent; box-shadow: 0 2px 6px rgba(0,0,0,0.12); height: 34px; top: 0; /* set by JS */ }
+.time-header-fixed .grid-content { display:flex; align-items:stretch; position:relative; height:100%; width:100%; }
+.time-header-fixed .time-header { display:flex; align-items:center; height:100%; flex: 0 0 auto; }
+.time-header-fixed .time-cell { display:inline-flex; align-items:center; justify-content:center; height:100%; border-right:1px solid var(--timebar-border, #ccc); padding:0 6px; font-weight:600; background: var(--timebar-bg, rgba(255,255,255,0.95)); color:var(--timebar-color,#000); }
+.time-header-fixed .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:1300; pointer-events:none; }
+.time-header-fixed .left-spacer { flex: 0 0 auto; height:100%; background: var(--chan-col-bg, #1a1a1a); border-right: 1px solid var(--timebar-border, rgba(0,0,0,0.12)); }
+/* Keep original in-grid time header hidden when using fixed header */
+.hide-in-grid .time-header-wrap { visibility: hidden; height: 0; margin:0; padding:0; }
+
+        /* Dark theme */
+        body.dark { --timebar-bg:#222; --timebar-border:#444; --timebar-color:#ddd; --chan-col-bg:#1a1a1a; background:#111; color:#ddd; }
+        body.dark .time-header-fixed .now-line { background:#0f0; }
+        body.dark {--timebar-bg: #222; --timebar-border: #444; --timebar-color: #ddd; --now-line-color: #0f0; --chan-col-bg: #1a1a1a; }
+        body.dark { background:#111; color:#ddd; }
+        body.dark .header { background:#222; }
+        body.dark #video { background:#000; }
+        body.dark .summary { color:#ccc; }
+        body.dark .chan-col { background:#1a1a1a; border-color:#333; }
+        body.dark .grid-col { background:#181818; }
+        body.dark .chan-header, body.dark .time-header-wrap { background:#222; border-color:#444; }
+        body.dark .time-cell { color:#bbb; border-color:#333; }
+        body.dark .chan-name { color:#fff; border-color:#333; }
+        body.dark .program { background:#3a3a3a; border-color:#555; color:#eee; }
+        body.dark .program.now { background:#2d5030; border-color:#47a447; }
+        body.dark .now-line { background:#0f0; }
+        
+        /* Light theme */
+        body.light { --timebar-bg:#fff; --timebar-border:#ddd; --timebar-color:#000; --chan-col-bg:#f9f9f9; background:#fff; color:#000; }
+        body.light .time-header-fixed .now-line { background:#090; }
+        body.light { --timebar-bg: #fff; --timebar-border: #ddd; --timebar-color: #000; --now-line-color: #090; --chan-col-bg: #f9f9f9; }
+        body.light { background:#fff; color:#000; }
+        body.light .header { background:#222; }
+        body.light #video { background:#fff; }
+        body.light .summary { color:#000; }
+        body.light .chan-col { background:#f9f9f9; border-color:#ccc; }
+        body.light .grid-col { background:#fafafa; }
+        body.light .chan-header, body.light .time-header-wrap { background:#ddd; border-color:#bbb; }
+        body.light .time-cell { color:#000; border-color:#ccc; }
+        body.light .chan-name { color:#000; border-color:#ccc; }
+        body.light .program { background:#ddd; border-color:#aaa; color:#000; }
+        body.light .program.now { background:#cfe8cf; border-color:#090; }
+        body.light .now-line { background:#090; }
+
+/* Retro-AOL */
+body.retro-aol{--timebar-bg:#004466;--timebar-border:#33cccc;--timebar-color:#33cccc;--now-line-color:#090;--chan-col-bg:#004466;--panel-bg-top:#e6f7f5;--panel-bg-bottom:#cfeff0;--now-line-panel-color:var(--panel-bg-top);--now-line-glow:rgba(198,242,240,0.6);background:#2f4f4f;color:#f0f0f0;font-family:"Tahoma","Arial",sans-serif}
+body.retro-aol .header{background:#004466;color:#ffcc00;border-bottom:2px solid #33cccc}
+body.retro-aol .dropdown-content,body.retro-aol .submenu-content{background:#004466;border:1px solid #33cccc;color:#ffcc01;box-shadow:0 4px 6px rgba(0,0,0,.3)}
+body.retro-aol .dropdown-content a,body.retro-aol .submenu-content li a,body.retro-aol .dropdown-content .submenu> a,body.retro-aol .submenu-content .submenu> a{color:#ffcc01!important}
+body.retro-aol .dropdown-content a:hover,body.retro-aol .submenu-content li a:hover{background:#33cccc!important;color:#004466!important}
+body.retro-aol .summary{background:linear-gradient(to bottom,var(--panel-bg-top) 0%,var(--panel-bg-bottom) 100%);color:#00313a;border:2px solid #004466;border-top-color:#66e0e0;border-left-color:#66e0e0;border-right-color:#004466;border-bottom-color:#004466;box-shadow:4px 4px 0 rgba(0,0,0,.28);padding:12px;border-radius:6px;box-sizing:border-box}
+body.retro-aol .summary h3{margin:0 0 6px 0;color:#004466;font-size:1.05em;font-weight:700}
+body.retro-aol .summary p{margin:0;color:#05383a;line-height:1.3}
+body.retro-aol .time-header-fixed .now-line,body.retro-aol .now-line{background:var(--now-line-panel-color);box-shadow:0 0 6px var(--now-line-glow);width:3px}
+body.retro-aol .chan-col{background:#355f5f;border-color:#33cccc}
+body.retro-aol .grid-col{background:#3b6b6b}
+body.retro-aol .chan-header,body.retro-aol .time-header-wrap{background:#3b6b6b;color:#ffcc00;border-color:#33cccc}
+body.retro-aol .time-cell{color:#ffcc00;border-color:var(--timebar-border,#33cccc);border-top:1px solid var(--timebar-border,#33cccc)}
+body.retro-aol .time-header-fixed .time-cell{border-top:1px solid var(--timebar-border,#33cccc)}
+body.retro-aol .chan-name{color:#fff;border-color:#33cccc;font-weight:700}
+body.retro-aol .program{background:#406d6d;border-color:#33cccc;color:#fff}
+body.retro-aol .program.now{background:#33cccc;border-color:#004466;color:#000;font-weight:700}
+body.retro-aol .now-line{background:#ffcc00}
+body.retro-aol .header .links>a,body.retro-aol .header .links>.dropdown>.dropbtn,body.retro-aol .header .links>span,body.retro-aol .header .links>div#clock{color:#ffcc01}
+body.retro-aol .grid-col.show-scroll::-webkit-scrollbar-thumb{background:rgba(0,68,102,.55)}
+body.retro-aol .grid-col.show-scroll::-webkit-scrollbar-track{background:rgba(51,204,204,.06)}
+
+        /* === RetroIPTVGuide Theme: TV Guide 1990 Edition (Final Compact) === */
+        body.tvguide1990{--chan-col-width:200px;--chan-col-height:38px}
+        body.tvguide1990 .time-header-fixed .left-spacer{width:var(--chan-col-width,200px)!important;min-width:var(--chan-col-width,200px)!important;max-width:var(--chan-col-width,200px)!important;height:var(--chan-col-height,auto)!important;flex:0 0 var(--chan-col-width,200px)!important}
+        body.tvguide1990 { --timebar-bg: #fff; --timebar-border: #000; --timebar-color: #000; --chan-col-bg: #d8d7d3; }
+        body.tvguide1990 { --timebar-bg: #fff; --timebar-border: #000; --timebar-color: #000; --now-line-color: #000; --chan-col-bg: #d8d7d3; }
+	      body.tvguide1990{background:#d8d7d3;color:#000;font-family:'Times New Roman',serif;font-size:.9em;}
+	      body.tvguide1990 .header{background:#fff;color:#000;border-bottom:2px solid #000;box-shadow:none;}
+	      body.tvguide1990 .header .links>a,
+	      body.tvguide1990 .header .links>.dropdown>.dropbtn,
+	      body.tvguide1990 .header .links>span,
+	      body.tvguide1990 .header .links>#clock{color:#000!important;background:#fff!important;}
+	      body.tvguide1990 .header .links>a:hover,
+	      body.tvguide1990 .header .links>.dropdown:hover>.dropbtn{background:#e0e0e0!important;color:#000!important;}
+	      body.tvguide1990 .dropdown-content{background:#fff!important;color:#000!important;border:1px solid #000!important;box-shadow:none!important;}
+	      body.tvguide1990 .dropdown-content a{color:#000!important;}
+	      body.tvguide1990 .dropdown-content a:hover{background:#e0e0e0!important;color:#000!important;}
+	      body.tvguide1990 .submenu-content{background:#fff!important;border:1px solid #000!important;box-shadow:none!important;z-index:1000;}
+	      body.tvguide1990 .submenu-content li a{color:#000!important;}
+	      body.tvguide1990 .submenu-content li a:hover{background:#e0e0e0!important;color:#000!important;}
+	      body.tvguide1990 .dropdown-content .submenu>a{color:#000!important;padding-right:22px!important;position:relative;}
+	      body.tvguide1990 .dropdown-content .submenu>a::after{content:"▸";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#000;}
+	      body.tvguide1990 .dropdown-content .submenu:hover>a{background:#e0e0e0!important;color:#000!important;}
+	      body.tvguide1990 .footer{background:transparent;color:#000;border-top:2px solid #000;}
+	      body.tvguide1990 .chan-name img{display:none!important;}
+	      body.tvguide1990 .chan-name span:not(.channel-number){display:none!important;}
+	      body.tvguide1990 .chan-col{height:38px!important;padding:2px 0!important;display:flex;align-items:center;justify-content:center;background:#d8d7d3;border-bottom:1px solid #000;}
+	      body.tvguide1990 .guide-row>.chan-col{border-right:1px solid #000!important;} /* vertical divider */
+	      body.tvguide1990 .channel-number{display:inline-flex;align-items:center;justify-content:center;font-family:'Arial Narrow','Helvetica Neue',sans-serif;font-weight:700;font-size:.9em;min-width:32px;padding:3px 12px;border-radius:999px;background:#000;color:#fff;letter-spacing:-.2px;border:1px solid #000;line-height:1;transform:scale(.9);}
+	      body.tvguide1990 .chan-header{border-bottom:none!important;}
+	      body.tvguide1990 .guide-row{align-items:stretch!important;}
+	      body.tvguide1990 .time-header-wrap{border-top:1px solid #000!important;border-bottom:1px solid #000!important;margin-bottom:0!important;padding-bottom:0!important;height:38px!important;box-sizing:border-box;}
+	      body.tvguide1990 .chan-col{height:38px!important;box-sizing:border-box;}
+	      body.tvguide1990 .grid-content,body.tvguide1990 .time-header{transform:scaleX(.9);transform-origin:left center;}
+	      body.tvguide1990 .time-cell{border-right:1px solid #000;color:#000;font-weight:700;font-size:.8em;padding:0 2px;min-width:0;}
+	      body.tvguide1990 .grid-row{height:38px!important;position:relative;padding:1px 0;box-sizing:border-box;border-bottom:1px solid #000;}
+	      body.tvguide1990 .program,
+	      body.tvguide1990 .program.now{position:absolute;top:1px!important;height:calc(100% - 2px)!important;margin:0!important;padding:2px 4px!important;border:1px solid #000;box-sizing:border-box;border-radius:0!important;line-height:1.2;font-size:.8em!important;display:flex;align-items:center;background:#fff;font-weight:400!important;}
+	      body.tvguide1990 .program.now{background:#e7e5dd!important;font-weight:700!important;}
+	      body.tvguide1990 .grid-col{overflow-x:auto!important;overflow-y:hidden!important;height:38px!important;box-sizing:border-box;}
+	      body.tvguide1990 .grid-content{height:100%!important;}
+	      body.tvguide1990 #clock::before{content:"IPTV GUIDE";display:inline-block;margin-right:10px;padding:4px 10px;background:#fff;color:#000;font-weight:900;font-size:12px;line-height:1;border-radius:50px;border:2px solid #000;box-shadow:none;letter-spacing:.3px;vertical-align:middle;}
+	      body.tvguide1990 #summary{border:2px solid #000;background:#fff;padding:12px;margin:10px;box-shadow:2px 2px 5px rgba(0,0,0,.25);}
+	      body.tvguide1990 #video{border:2px solid #000;background:#000;box-shadow:3px 3px 6px rgba(0,0,0,.35);}
+	      body.tvguide1990 .chan-col{position:relative;}
+	      body.tvguide1990 .chan-col::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:20px;height:60%;background:#000;border-right:1px solid #000;}
+	      body.tvguide1990 { --chan-col-width: 200px; --chan-col-height: 38px; }
+
+
+        /* DirecTV */
+        body.directv { --timebar-bg:#002b80; --timebar-border:#001f66; --timebar-color:#d8ebff; --chan-col-bg:#001b50; }
+        body.directv .time-header-fixed .now-line { background:#ffcc00; }
+        body.directv { --timebar-bg: #002b80; --timebar-border: #001f66; --timebar-color: #d8ebff; --now-line-color: #ffcc00; --chan-col-bg: #001b50; }
+	      body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+	      body.directv .header { background:linear-gradient(to bottom,#1d72ff,#003a8c); border-bottom:2px solid #001f66; }
+	      body.directv .header .links > a, body.directv .header .links > .dropdown > .dropbtn, body.directv .header .links > span, body.directv .header .links > div#clock { color:#ffffff !important; font-weight:bold !important; text-shadow:1px 1px 2px #000 !important; }
+	      body.directv .header .links > a:hover, body.directv .header .links > .dropdown:hover > .dropbtn { background:#003f9e !important; color:#ffd802 !important; }
+	      body.directv .dropdown-content, body.directv .submenu-content { background:#003a8c !important; border:1px solid #0070ff !important; box-shadow:0 4px 8px rgba(0,0,0,.4) !important; }
+	      body.directv .dropdown-content a, body.directv .submenu-content li a { color:#ffffff !important; font-weight:bold !important; }
+	      body.directv .dropdown-content a:hover, body.directv .submenu-content li a:hover { background:#0070ff !important; color:#fff !important; }
+	      body.directv .dropdown-content .submenu > a { color:#fff !important; padding-right:28px !important; position:relative; }
+	      body.directv .dropdown-content .submenu > a::after { content:"▸"; position:absolute; right:10px; top:50%; transform:translateY(-50%); color:#fff; }
+	      body.directv .dropdown-content .submenu:hover > a { background:#0070ff !important; color:#fff !important; }
+	      body.directv .summary, body.directv #program-info { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; border:1px solid #004bdb; }
+	      body.directv .time-header-wrap { background:#002b80; color:#d8ebff; border-bottom:2px solid #001f66; }
+	      body.directv .time-cell { background:#002b80; color:#b9dcff; border-color:#001f66; font-weight:bold; }
+	      body.directv .chan-col { background:#001f66; border-right:1px solid #004bdb; color:#fff; font-weight:bold; text-shadow:1px 1px 2px #000; }
+	      body.directv .chan-header { background:linear-gradient(to bottom,#0b3b8c,#3c8dff); color:#fff; border-color:#003b91; }
+	      body.directv .grid-col { background:#001f66; }
+	      body.directv .program { background:#003a8c; border:1px solid #004bdb; color:#fff; border-radius:2px; }
+	      body.directv .program.now { background:#ffd802; border:1px solid #caa600; color:#000; font-weight:bold; box-shadow:none; }
+	      body.directv .program:hover { background:linear-gradient(to right,#1d67d9,#7fbfff); color:#fff; }
+	      body.directv .now-line { background:#ffcc00; }
+	      body.directv .footer { background:linear-gradient(to top,#001f66,#004bdb); color:#fff; border-top:2px solid #003580; padding:5px 10px; font-size:0.9em; }
+	      body.directv .footer .dot-red { color:#ff3c3c; } body.directv .footer .dot-green { color:#00cc00; } body.directv .footer .dot-yellow { color:#ffd700; } 
+	      body.directv .footer .dot-blue { color:#4ca9ff; }
+	      body.directv #video { background:#000; border:2px solid #004bdb; box-shadow:0 0 6px rgba(0,0,0,0.6); }
+	      body.directv #clock::before { content:"IPTV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+
+        /* Comcast */
+        body.comcast { --timebar-bg:linear-gradient(to bottom,#0055cc,#001b50); --timebar-border:#003090; --timebar-color:#fff; --chan-col-bg:#001b50; }
+        body.comcast .time-header-fixed .now-line { background:#ffcc00; }
+        body.comcast { --timebar-bg: linear-gradient(to bottom,#0055cc,#001b50); --timebar-border: #003090; --timebar-color: #fff; --now-line-color: #ffcc00; --chan-col-bg: #001b50; }
+        body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
+	      body.comcast .header { background:linear-gradient(to bottom,#0055cc,#001b50); border-bottom:2px solid #003090; }
+	      body.comcast .header .links > a, body.comcast .header .links > .dropdown > .dropbtn, body.comcast .header .links > span, body.comcast .header .links > div#clock { color:#ffffff !important; font-weight:bold !important; text-shadow:1px 1px 2px #000 !important; }
+	      body.comcast .header .links > a:hover, body.comcast .header .links > .dropdown:hover > .dropbtn { background:#003890 !important; color:#ffcc00 !important; }
+	      body.comcast .dropdown-content, body.comcast .submenu-content { background:#002a70 !important; border:1px solid #0044cc !important; box-shadow:0 4px 8px rgba(0,0,0,.4) !important; }
+	      body.comcast .dropdown-content a, body.comcast .submenu-content li a { color:#ffffff !important; font-weight:bold !important; }
+	      body.comcast .dropdown-content a:hover, body.comcast .submenu-content li a:hover { background:#0044cc !important; color:#fff !important; }
+	      body.comcast .summary, body.comcast #program-info { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; border:1px solid #003090; }
+	      body.comcast .time-header-wrap { background:#003890; color:#bcd8ff; border-bottom:2px solid #002b80; }
+	      body.comcast .time-cell { background:#003890; color:#ffffff; border-color:#002b80; font-weight:bold; }
+	      body.comcast .chan-col { background:#001b50; border-right:1px solid #0044cc; color:#fff; font-weight:bold; text-shadow:1px 1px 2px #000; }
+	      body.comcast .chan-header { background:#002a70; color:#fff; border-color:#0044cc; }
+	      body.comcast .grid-col { background:#002a70; }
+	      body.comcast .program { background:#003890; border:1px solid #0044cc; color:#fff; border-radius:2px; }
+	      body.comcast .program.now { background:#ffffff; border:1px solid #cccccc; color:#000; font-weight:bold; }
+	      body.comcast .program:hover { background:#0044cc; color:#fff; }
+	      body.comcast .now-line { background:#ffcc00; }
+	      body.comcast #video { background:#000; border:2px solid #0044cc; box-shadow:0 0 8px rgba(0,0,0,.6); }
+	      body.comcast .footer { background:linear-gradient(to top,#001b50,#0044cc); color:#fff; border-top:2px solid #002b80; padding:5px 10px; font-size:0.9em; }
+	      body.comcast .footer .dot-red { color:#ff3c3c; } body.comcast .footer .dot-green { color:#00cc00; } body.comcast .footer .dot-yellow { color:#ffd700; }   
+	      body.comcast .footer .dot-blue { color:#4ca9ff; }
+	      body.comcast #clock::before { content:"IPTV GUIDE"; display:inline-block; margin-right:10px; padding:3px 8px; background:#e41e26; color:#fff; font-weight:900; font-size:12px; line-height:1; border-radius:3px; border:1px solid rgba(255,255,255,.85); box-shadow:0 1px 2px rgba(0,0,0,.35); letter-spacing:.4px; vertical-align:middle; }
+	
+	    /* Retro TV Guide Magazine Theme */
+	    body.retro-magazine{--panel-bg-top:#ffffff;--panel-bg-bottom:#f2f2f2;--now-line-panel-color:#fff;--now-line-glow:rgba(0,0,0,0.22);background:#fff;color:#000;font-family:"Times New Roman","Georgia",serif}
+      body.retro-magazine .summary{background:linear-gradient(to bottom,var(--panel-bg-top) 0%,var(--panel-bg-bottom) 100%);color:#000;border:2px solid #000;border-top-color:#000;border-left-color:#000;border-right-color:#000;border-bottom-color:#000;box-shadow:4px 4px 0 rgba(0,0,0,0.22);padding:12px;border-radius:6px;box-sizing:border-box}
+      body.retro-magazine .summary h3{margin:0 0 6px 0;color:#000;font-size:1.05em;font-weight:700}
+      body.retro-magazine .summary p{margin:0;color:#111;line-height:1.35}
+      body.retro-magazine .time-header-fixed .now-line,body.retro-magazine .now-line{background:var(--now-line-panel-color);box-shadow:0 0 6px var(--now-line-glow);width:3px} 
+      body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
+	    body.retro-magazine .header { background:#ffffff; color:#000; border-bottom:2px solid #000; font-weight:bold; }
+	    body.retro-magazine .header .links > a,
+	    body.retro-magazine .header .links > .dropdown > .dropbtn,
+	    body.retro-magazine .header .links > span,
+	    body.retro-magazine .header .links > #clock { background:#ffffff !important; color:#000000 !important; }
+	    body.retro-magazine .header .links > a:hover,
+	    body.retro-magazine .header .links > .dropdown:hover > .dropbtn { background:#e0e0e0 !important; color:#000000 !important; }
+	    body.retro-magazine .dropdown-content { background:#ffffff !important; color:#000000 !important; border:1px solid #000 !important; box-shadow:none !important; }
+	    body.retro-magazine .dropdown-content a { background:#ffffff !important; color:#000000 !important; }
+	    body.retro-magazine .dropdown-content a:hover { background:#e0e0e0 !important; color:#000000 !important; }
+	    body.retro-magazine #video { background:#000; }
+	    body.retro-magazine .chan-col { background:#fff; border:1px solid #000; color:#000; font-weight:bold; }
+	    body.retro-magazine .grid-col { background:#fff; }
+	    body.retro-magazine .chan-header,
+	    body.retro-magazine .time-header-wrap { background:#fff; color:#fff; border:1px solid #000; font-weight:bold; }
+	    body.retro-magazine .time-cell { color:#000; border:1px solid #000; font-weight:bold; }
+	    body.retro-magazine .chan-name { color:#000; border:1px solid #000; font-weight:bold; }
+	    body.retro-magazine .program { background:#fff; border:1px solid #000; color:#000; font-size:14px; }
+	    body.retro-magazine .program.now { background:#e0e0e0; border:2px solid #000; color:#000; font-weight:bold; }
+	    body.retro-magazine .now-line { background:#000; height:3px; }
+	    body.retro-magazine #current-tuner { color:#000000 !important; font-weight:bold; }
+      body.retro-magazine .time-header-fixed .left-spacer { background: var(--timebar-bg, #fff) !important; }
+
+	    /* Add other theme variables as needed */
+	    body{transition:background-color .3s ease,color .3s ease;}
+	    body.fade-switch{opacity:0;transition:opacity .25s ease;}
+
+/* Insert inside <style> in head (update/append) */
+.header { position: relative; z-index: 2000; }
+/* Ensure dropdowns and submenu flyouts are above everything */
+.dropdown-content,
+.submenu-content { position: absolute; z-index: 2100; }
+
+/* If you want submenu children to stack above parent dropdowns too */
+.dropdown-content .submenu,
+.submenu-content .submenu { z-index: 2200; }
+
+/* If you need to keep the time bar behind menus explicitly, ensure it's lower than header */
+.time-header-fixed { z-index: 1200; }
+
+/* Keep the now-line under dropdowns */
+.time-header-fixed .now-line { z-index: 1250; }
+
+/* --- Fixed timebar core (keep once globally) --- */
+.time-header-fixed { position: fixed; top: 0; left: 0; width: 100%; height: 34px; display: flex; align-items: stretch; z-index: 1200; background: var(--timebar-bg, #fff); border-bottom: 1px solid var(--timebar-border, #ccc); box-shadow: 0 2px 6px rgba(0,0,0,0.12); pointer-events: none; }
+
+/* The left spacer (covers the channel column area visually) */
+.time-header-fixed .left-spacer { flex: 0 0 auto; width: var(--chan-col-width, 200px); background: var(--chan-col-bg, #1a1a1a); border-right: 1px solid var(--timebar-border, #ccc); pointer-events: none; }
+
+/* The cloned time cells area (after the spacer) */
+.time-header-fixed .time-header { display:flex; align-items:center; pointer-events: none; background: var(--timebar-bg, #fff); color: var(--timebar-color, #000); }
+
+/* Ensure the NOW line is above programs but under dropdown menus */
+.time-header-fixed .now-line { position:absolute; top:0; bottom:0; width:2px; background: var(--now-line-color, #0f0); z-index: 1250; pointer-events: none; }
+
+/* Programs must be below the fixed timebar */
+.program { z-index: 1; position: absolute; }
+
+/* Header & dropdown must be above the timebar (keep these) */
+.header { position: relative; z-index: 2000; }
+.dropdown-content, .submenu-content { position: absolute; z-index: 2100; }
+.program.no-guide { font-style: italic; color: #999; background: #2a2a2a; border: 1px dashed #555; }
+
+
+/* Ensure the guide and channels panes can scroll vertically */
+.guide,
+.channels {
+  overflow-y: auto;         /* allow vertical scrolling */
+  scroll-behavior: auto;    /* avoid CSS smooth interfering with per-frame moves */
+  -webkit-overflow-scrolling: touch; /* iOS momentum */
+}
+
+/* Important: the scroller needs a fixed height (or max-height) to enable scrolling.
+   Example: if your layout uses a header, calculate available space or set a sensible max-height. */
+.guide, .channels {
+  /* Example fixed height; adjust to your layout */
+  max-height: 60vh; /* or height: calc(100vh - 120px); */
+}
+
+/* If your guide/channel container already has a height in layout CSS, you don't need the max-height above. */
+
+
