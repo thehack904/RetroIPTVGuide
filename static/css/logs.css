@@ -1,0 +1,104 @@
+/* Per-page styles for logs.html — keeps the original log table look, scoped to this page */
+
+/* Outer container centers and sizes the panel */
+.container-logs {
+  max-width: 900px;
+  margin: 60px auto;
+  padding: 10px;
+  box-sizing: border-box;
+}
+
+/* Panel box */
+.container-logs .box {
+  padding: 18px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.06);
+  border: 1px solid rgba(255,255,255,0.03);
+  box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset;
+}
+
+/* Heading */
+.container-logs h2 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: inherit;
+}
+
+/* Clear button */
+.clear-form { text-align: center; margin-bottom: 12px; }
+.btn-clear {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  background: #c00;
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.btn-clear:hover { opacity: 0.95; transform: translateY(-1px); }
+
+/* Filter bar */
+.filter-bar { text-align:center; margin: 8px 0 12px; }
+.filter-btn {
+  padding: 6px 12px;
+  margin: 0 6px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+}
+.filter-btn:hover { background: #0af; color: #002; }
+
+/* Table wrapper: allow horizontal scroll on narrow screens */
+.table-wrap { overflow-x: auto; }
+
+/* Logs table */
+.logs-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
+.logs-table thead th {
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  padding: 8px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.logs-table tbody td {
+  padding: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+/* Row striping */
+.logs-table tbody tr:nth-child(even) { background: rgba(0,0,0,0.08); }
+
+/* Security highlight (high contrast) */
+.logs-table tbody tr.security, .security {
+  background: rgba(200,30,30,0.12);
+  color: #ffbaba;
+  font-weight: 700;
+}
+
+/* Theme-aware overrides: dark and light inherit base styles, but adjust backgrounds */
+body.dark .container-logs .box { background: #222; border-color: rgba(255,255,255,0.03); }
+body.dark .logs-table thead th { background: #333; }
+body.dark .logs-table tbody tr:nth-child(even) { background: #222; color: #fff; }
+
+body.light .container-logs .box { background: #f3f3f3; border-color: rgba(0,0,0,0.06); color: #000; }
+body.light .logs-table thead th { background: #ddd; color: #000; }
+body.light .logs-table tbody tr:nth-child(even) { background: #fff; color: #000; }
+body.retro-magazine .logs-table thead th { background: #000; color: #fff; }
+
+/* Small screens */
+@media (max-width: 640px) {
+  .container-logs { padding: 8px; margin: 40px 12px; }
+  .filter-btn { padding: 8px 10px; margin: 4px; }
+  .logs-table thead th, .logs-table tbody td { padding: 8px 6px; font-size: 0.92rem; }
+}

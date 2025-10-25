@@ -47,7 +47,7 @@
                     <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide (Refresh)</a></li>
                     <li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
                     <li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
-                    <li><a href="#" onclick="setTheme('tvguide1990'); return false;">TV Guide (Classic)</a></li>
+		    <!--  <li><a href="#" onclick="setTheme('tvguide1990'); return false;">TV Guide (Classic)</a></li> --> 
                   </ul>
                 </li>
             </div>
@@ -394,79 +394,79 @@ function updateClock() {
 </script>
 
 <script>
-document.addEventListener("DOMContentLoaded", () => {
-  // --- tvguide1990 channel-number logic (unchanged) ---
-  if (document.body.classList.contains("tvguide1990")) {
-    document.querySelectorAll(".chan-col").forEach((col, idx) => {
-      const nameBox = col.querySelector(".chan-name");
-      if (!nameBox || col.classList.contains("tvguide1990-applied")) return;
+document.addEventListener('DOMContentLoaded', () => {
+  const el = document.getElementById('toggleAutoScroll');
+  if (!el) return;
 
-      // Create or replace channel number capsule
-      const chanNum = idx + 1; // sequential numbering
-      const capsule = document.createElement("div");
-      capsule.className = "channel-number";
-      capsule.textContent = chanNum;
-
-      // Clean out nameBox contents (remove logos/text)
-      nameBox.innerHTML = "";
-      nameBox.appendChild(capsule);
-      col.classList.add("tvguide1990-applied");
-    });
+  function localPref() {
+    return localStorage.getItem('autoScrollEnabled') !== 'false';
   }
 
-  // --- Auto-scroll toggle initializer ---
-  const toggleEl = document.getElementById('toggleAutoScroll');
-  if (toggleEl) {
-    // local helper to read pref even if auto-scroll script isn't loaded yet
-    function localPref() {
-      return localStorage.getItem('autoScrollEnabled') !== 'false';
-    }
-
-    // Refresh label according to preference
-    function refreshLabel() {
-      const enabled = window.__autoScroll ? window.__autoScroll.pref() : localPref();
-      toggleEl.textContent = enabled ? 'Disable Auto-Scroll' : 'Enable Auto-Scroll';
-    }
-
-    // Click handler: if auto-scroll api is available call it, otherwise wait briefly
-    toggleEl.addEventListener('click', (e) => {
-      e.preventDefault();
-
+  function getPrefSafe() {
+    try {
       if (window.__autoScroll) {
-        window.__autoScroll.toggle();
-        // update label after toggle (toggle updates localStorage)
-        setTimeout(refreshLabel, 50);
-        return;
+        if (typeof window.__autoScroll.pref === 'function') return window.__autoScroll.pref();
+        if (typeof window.__autoScroll.prefValue !== 'undefined') return Boolean(window.__autoScroll.prefValue);
+        if (typeof window.__autoScroll.pref !== 'undefined') return Boolean(window.__autoScroll.pref);
       }
-
-      // Defensive wait: try for a short period for auto-scroll script to become available
-      let tries = 0;
-      const waiter = setInterval(() => {
-        if (window.__autoScroll || ++tries > 20) { // ~1s max
-          clearInterval(waiter);
-          if (window.__autoScroll) {
-            window.__autoScroll.toggle();
-            setTimeout(refreshLabel, 50);
-          } else {
-            // fallback: toggle raw localStorage flag so next load will respect it
-            const cur = localPref();
-            localStorage.setItem('autoScrollEnabled', (!cur).toString());
-            refreshLabel();
-          }
-        }
-      }, 50);
-    });
-
-    // Update label initially
-    refreshLabel();
-
-    // Keep label in sync if pref changes in another tab/window
-    window.addEventListener('storage', (ev) => {
-      if (ev.key === 'autoScrollEnabled') refreshLabel();
-    });
+    } catch (e) { /* ignore */ }
+    return localPref();
   }
 
-  // (other DOMContentLoaded tasks can remain below)
+  function refreshLabel() {
+    const themeActive = document.body.classList.contains('tvguide1990');
+    if (themeActive) {
+      el.textContent = 'Auto-Scroll disabled for TV Guide (1990)';
+      el.classList.add('disabled');
+      el.style.pointerEvents = 'none';
+      el.title = 'Auto-Scroll is not supported for this theme.';
+      return;
+    }
+
+    const enabled = getPrefSafe();
+    el.textContent = enabled ? 'Disable Auto-Scroll' : 'Enable Auto-Scroll';
+    el.classList.remove('disabled');
+    el.style.pointerEvents = '';
+    el.title = '';
+  }
+
+  el.addEventListener('click', (e) => {
+    e.preventDefault();
+    if (document.body.classList.contains('tvguide1990')) {
+      alert('Auto-Scroll is not available for the TV Guide (1990) theme.');
+      return;
+    }
+    if (window.__autoScroll) {
+      // call toggle if available
+      if (typeof window.__autoScroll.toggle === 'function') {
+        window.__autoScroll.toggle();
+      } else if (typeof window.__autoScroll.pref === 'function') {
+        const cur = window.__autoScroll.pref();
+        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+      } else {
+        const cur = localPref();
+        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+      }
+      setTimeout(refreshLabel, 50);
+    } else {
+      const cur = localPref();
+      localStorage.setItem('autoScrollEnabled', (!cur).toString());
+      setTimeout(refreshLabel, 50);
+    }
+  });
+
+  refreshLabel();
+
+  if (window.__autoScroll) {
+    window.__autoScroll._onThemeChange = function () { refreshLabel(); };
+  }
+
+  window.addEventListener('storage', (ev) => {
+    if (ev.key === 'autoScrollEnabled') refreshLabel();
+  });
+
+  const bodyObserver = new MutationObserver(() => refreshLabel());
+  bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
 });
 </script>
 

@@ -1,144 +1,58 @@
-<!doctype html>
-<html>
-<head>
-    <title>Activity Log</title>
-    <style>
-        body { font-family: Arial, sans-serif; margin:0; }
-        .header { background:#222; height:40px; display:flex; justify-content:space-between; align-items:center; padding:0 10px; }
-        .header .links { display:flex; align-items:center; height:100%; gap:10px; }
-        .header .links > a, .header .links > .dropdown > .dropbtn, .header .links > span, .header .links > div#clock {
-            display:flex; align-items:center; justify-content:center; padding:0 12px;
-            color:#eee; font-weight:bold; text-decoration:none; height:40px; line-height:40px;
-        }
-        .header .links > a:hover, .header .links > .dropdown:hover > .dropbtn { background:#111; color:#0af; }
-        .dropdown { position:relative; }
-        .dropbtn { background:none; border:none; font:inherit; color:inherit; cursor:pointer; }
-        .dropdown-content {
-            display:none; position:absolute; top:100%; left:0; background:#333; min-width:180px;
-            border-radius:3px; box-shadow:0 4px 6px rgba(0,0,0,0.3);
-        }
-        .dropdown-content a { padding:10px 14px; display:block; color:#eee; text-decoration:none; }
-        .dropdown-content a:hover { background:#0af; color:#fff; }
-        .dropdown:hover .dropdown-content { display:block; }
+{% extends "base.html" %}
+{% block title %}Activity Log — IPTV Guide{% endblock %}
 
-        .container { max-width:800px; margin:60px auto; padding:20px; border-radius:8px; }
-        table { width:100%; border-collapse:collapse; margin-top:15px; }
-        th, td { border-bottom:1px solid #444; padding:8px; text-align:left; }
-        th { background:#333; color:#fff; }
-        tr:nth-child(even) { background:#222; }
+{% block page_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/logs.css') }}">
+{% endblock %}
 
-        /* Highlight for security events */
-        .security { background:#330000; color:#ff6666; }
-
-        /* Filter button bar */
-        .filter-bar { text-align:center; margin:10px; }
-        .filter-bar button { padding:6px 12px; margin:0 4px; border:none; border-radius:4px; background:#0a0a0a; color:#fff; cursor:pointer; font-weight:bold; }
-        .filter-bar button:hover { background:#0af; color:#000; }
-
-        /* Theme support */
-        body.dark { background:#111; color:#eee; }
-        body.dark .container { background:#222; }
-        body.dark table { color:#fff; }
-
-        body.light { background:#fff; color:#000; }
-        body.light .container { background:#f3f3f3; color:#000; }
-        body.light table { color:#000; }
-
-        body.retro-aol { background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
-        body.retro-aol .header { background:#004466; color:#ffcc00; border-bottom:2px solid #33cccc; }
-        body.retro-aol .container { background:#355f5f; color:#fff; }
-
-		body.retro-magazine { background:#ffffff; color:#000000; font-family:"Times New Roman","Georgia",serif; }
-		body.retro-magazine .header { background:#ffffff; color:#000; border-bottom:2px solid #000; font-weight:bold; }
-		body.retro-magazine .header .links > a,
-		body.retro-magazine .header .links > .dropdown > .dropbtn,
-		body.retro-magazine .header .links > span,
-		body.retro-magazine .header .links > #clock { background:#ffffff !important; color:#000000 !important; }
-		body.retro-magazine .header .links > a:hover,
-		body.retro-magazine .header .links > .dropdown:hover > .dropbtn { background:#e0e0e0 !important; color:#000000 !important; }
-		body.retro-magazine table,body.retro-magazine th,body.retro-magazine td{color:#000;}body.retro-magazine tr:nth-child(even){background:#000;}body.retro-magazine tr:nth-child(even) td{color:#fff;}body.retro-magazine th{background:#000;color:#fff;}
-		body.retro-magazine tr.security td,body.retro-magazine .security td{background:#800000;color:#fff!important;}
-
-        body.directv { background:#001a66; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-		body.directv .header { background:linear-gradient(to bottom,#1d72ff,#003a8c); border-bottom:2px solid #001f66; }
-        body.directv .container { background:linear-gradient(to bottom,#66b2ff,#003f9e); color:#fff; }
-
-        body.comcast { background:#001b50; color:#fff; font-family:"Segoe UI","Arial",sans-serif; }
-		body.comcast .header { background:linear-gradient(to bottom,#0055cc,#001b50); border-bottom:2px solid #003090; }
-        body.comcast .container { background:linear-gradient(to bottom,#001b50,#003890); color:#fff; }
-
-    </style>
-</head>
-<body>
-<div class="header">
-    <div class="links">
-        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
-        <a href="{{ url_for('guide') }}">HOME</a>
-        <a href="{{ url_for('logout') }}">LOGOUT</a>
-    </div>
-    <div id="clock" class="clock">--:-- --</div>
-</div>
-
-<div class="container">
+{% block content %}
+<div class="container-logs">
+  <div class="box">
     <h2>Activity Log ({{ log_size }} bytes)</h2>
 
-<!-- Clear Logs button -->
-<form method="POST" action="{{ url_for('clear_logs') }}" style="text-align:center; margin-bottom:10px;">
-  <button type="submit" style="padding:6px 14px; border:none; border-radius:4px; background:#c00; color:#fff; font-weight:bold; cursor:pointer;">
-    Clear Logs
-  </button>
-</form>
+    <!-- Clear Logs button -->
+    <form method="POST" action="{{ url_for('clear_logs') }}" class="clear-form">
+      <button type="submit" class="btn-clear">Clear Logs</button>
+    </form>
 
     <!-- Filter bar -->
     <div class="filter-bar">
-        <button onclick="filterLogs('all')">All</button>
-        <button onclick="filterLogs('activity')">Activity</button>
-        <button onclick="filterLogs('security')">Security</button>
+      <button type="button" class="filter-btn" onclick="filterLogs('all')">All</button>
+      <button type="button" class="filter-btn" onclick="filterLogs('activity')">Activity</button>
+      <button type="button" class="filter-btn" onclick="filterLogs('security')">Security</button>
     </div>
 
-    <table id="logsTable">
-        <thead>
-            <tr><th>User</th><th>Action</th><th>Timestamp</th></tr>
-        </thead>
-        <tbody>
-            {% for user, action, ts, log_type in entries %}
-            <tr class="{{ log_type }}">
-                <td>{{ user }}</td>
-                <td>{{ action }}</td>
-                <td>{{ ts }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <div class="table-wrap">
+      <table id="logsTable" class="logs-table">
+          <thead>
+              <tr><th>User</th><th>Action</th><th>Timestamp</th></tr>
+          </thead>
+          <tbody>
+              {% for user, action, ts, log_type in entries %}
+              <tr class="{{ log_type }}">
+                  <td>{{ user }}</td>
+                  <td>{{ action }}</td>
+                  <td>{{ ts }}</td>
+              </tr>
+              {% endfor %}
+          </tbody>
+      </table>
+    </div>
+  </div>
 </div>
+{% endblock %}
 
+{% block scripts_extra %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+    // Apply saved theme (base.html provides setTheme/updateClock)
     const saved = localStorage.getItem("theme") || "dark";
-    setTheme(saved);
-    updateClock();
-    setInterval(updateClock, 1000);
+    if (typeof setTheme === 'function') setTheme(saved);
+    if (typeof updateClock === 'function') updateClock();
+    setInterval(() => { if (typeof updateClock === 'function') updateClock(); }, 1000);
 });
 
-function setTheme(theme){
-    const body=document.body;
-    body.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv","retro-tvguide2000","retro-magazine","directv","comcast");
-    body.classList.add(theme);
-    localStorage.setItem("theme",theme);
-}
-
-function updateClock(){
-    const now=new Date();
-    const el=document.getElementById('clock');
-    if(el){
-        el.textContent=now.toLocaleString([],{
-            weekday:'short',month:'short',day:'numeric',
-            hour:'2-digit',minute:'2-digit',second:'2-digit'
-        });
-    }
-}
-
-/* Filter function */
+// Filter function (keeps original behavior)
 function filterLogs(type) {
     const rows = document.querySelectorAll("#logsTable tbody tr");
     rows.forEach(r => {
@@ -150,6 +64,4 @@ function filterLogs(type) {
     });
 }
 </script>
-</body>
-</html>
-
+{% endblock %}
