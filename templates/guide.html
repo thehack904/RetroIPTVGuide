@@ -402,12 +402,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return localStorage.getItem('autoScrollEnabled') !== 'false';
   }
 
+  // Read preference in a way that supports several possible auto-scroll API shapes:
+  // - window.__autoScroll.pref() (old)
+  // - window.__autoScroll.prefValue (getter)
+  // - window.__autoScroll.status().pref (newer v36.x)
+  // - fall back to localStorage
   function getPrefSafe() {
     try {
       if (window.__autoScroll) {
+        // status().pref is our recommended current API
+        if (typeof window.__autoScroll.status === 'function') {
+          const s = window.__autoScroll.status();
+          if (s && typeof s.pref !== 'undefined') return Boolean(s.pref);
+        }
+        // older pref() function
         if (typeof window.__autoScroll.pref === 'function') return window.__autoScroll.pref();
+        // prefValue getter (some versions expose it)
         if (typeof window.__autoScroll.prefValue !== 'undefined') return Boolean(window.__autoScroll.prefValue);
-        if (typeof window.__autoScroll.pref !== 'undefined') return Boolean(window.__autoScroll.pref);
       }
     } catch (e) { /* ignore */ }
     return localPref();
@@ -436,29 +447,64 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Auto-Scroll is not available for the TV Guide (1990) theme.');
       return;
     }
-    if (window.__autoScroll) {
-      // call toggle if available
-      if (typeof window.__autoScroll.toggle === 'function') {
-        window.__autoScroll.toggle();
-      } else if (typeof window.__autoScroll.pref === 'function') {
-        const cur = window.__autoScroll.pref();
-        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+
+    // Primary: if auto-scroll exposes a toggle(), use it.
+    // Secondary: if it exposes enable()/disable(), call those based on current status.
+    // Fallback: update localStorage only.
+    try {
+      if (window.__autoScroll) {
+        if (typeof window.__autoScroll.toggle === 'function') {
+          window.__autoScroll.toggle();
+          setTimeout(refreshLabel, 100);
+          return;
+        }
+
+        // Prefer status().pref if present
+        let curPref = null;
+        if (typeof window.__autoScroll.status === 'function') {
+          try { curPref = window.__autoScroll.status().pref; } catch (e) { curPref = null; }
+        }
+        // older pref() function fallback
+        if (curPref === null && typeof window.__autoScroll.pref === 'function') {
+          try { curPref = window.__autoScroll.pref(); } catch (e) { curPref = null; }
+        }
+        // prefValue getter fallback
+        if (curPref === null && typeof window.__autoScroll.prefValue !== 'undefined') {
+          try { curPref = Boolean(window.__autoScroll.prefValue); } catch (e) { curPref = null; }
+        }
+
+        // If enable/disable present use them
+        if (typeof window.__autoScroll.enable === 'function' && typeof window.__autoScroll.disable === 'function') {
+          if (curPref === null) curPref = localPref();
+          if (curPref) window.__autoScroll.disable(); else window.__autoScroll.enable();
+          setTimeout(refreshLabel, 100);
+          return;
+        }
+
+        // last fallback: toggle localStorage (some earlier auto-scroll builds read this)
+        const curLocal = localPref();
+        localStorage.setItem('autoScrollEnabled', (!curLocal).toString());
+        setTimeout(refreshLabel, 100);
+        return;
       } else {
-        const cur = localPref();
-        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+        // No auto-scroll script loaded: just flip localStorage flag so when it loads it'll respect the setting
+        const curLocal = localPref();
+        localStorage.setItem('autoScrollEnabled', (!curLocal).toString());
+        setTimeout(refreshLabel, 100);
+        return;
       }
-      setTimeout(refreshLabel, 50);
-    } else {
-      const cur = localPref();
-      localStorage.setItem('autoScrollEnabled', (!cur).toString());
-      setTimeout(refreshLabel, 50);
+    } catch (err) {
+      console.error('toggleAutoScroll error', err);
+      // ensure label still refreshes
+      setTimeout(refreshLabel, 100);
     }
   });
 
   refreshLabel();
 
   if (window.__autoScroll) {
-    window.__autoScroll._onThemeChange = function () { refreshLabel(); };
+    // Some auto-scroll builds notify on theme changes; store a hook if supported.
+    try { window.__autoScroll._onThemeChange = function () { refreshLabel(); }; } catch (e) {}
   }
 
   window.addEventListener('storage', (ev) => {
