@@ -1,8 +1,8 @@
-# 📺 RetroIPTVGuide v4.0.0
+# 📺 RetroIPTVGuide v4.1.0
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-v4.0.0-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-v4.1.0-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
@@ -59,7 +59,7 @@ docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
 ```
 
 ### 🧩 TrueNAS SCALE App
-- Upload the provided `retroiptvguide-3.2.0.zip` chart.
+- Upload the provided `retroiptvguide-4.1.0.zip` chart.
 - Repository: `ghcr.io/thehack904/retroiptvguide`
 - Tag: `latest`
 - Exposes port `5000`.

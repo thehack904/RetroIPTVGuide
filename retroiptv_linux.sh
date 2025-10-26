@@ -3,7 +3,7 @@
 # License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 set -euo pipefail
-VERSION="4.0.0"
+VERSION="4.1.0"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1

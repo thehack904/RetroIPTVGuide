@@ -1,5 +1,5 @@
-APP_VERSION = "v4.0.0"
-APP_RELEASE_DATE = "2025-10-11"
+APP_VERSION = "v4.1.0"
+APP_RELEASE_DATE = "2025-10-25"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
