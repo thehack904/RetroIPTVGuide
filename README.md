@@ -133,6 +133,8 @@ sudo retroiptv_rpi.sh uninstall --yes
 ---
 
 ## 📸 Screenshots
+### 📺 Auto Scroll
+![Auto Scroll](docs/screenshots/auto-scroll.gif)
 
 ### 📺 Guide Page
 ![Guide Screenshot](docs/screenshots/guide.png)
