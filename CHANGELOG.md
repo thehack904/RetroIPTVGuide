@@ -4,7 +4,47 @@ All notable changes to this project will be documented here.
 Format based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/). 
 This project follows [Semantic Versioning](https://semver.org/). 
 
+---
 
+## v4.1.0 - 2025-10-25
+### ✨ New Features
+- **Auto-Scroll Guide System**
+  - Added `static/js/auto-scroll.js` enabling smooth, continuous automatic scrolling of the live TV guide.
+  - Uses `requestAnimationFrame` with a `setInterval` watchdog fallback for consistent performance.
+  - Deterministic wraparound ensures seamless looping without scroll jitter.
+  - Waits up to 5 seconds for guide data to populate before activating.
+  - Stores preference in localStorage (`autoScrollEnabled`) and exposes simple APIs (`cloneNow`, `status`).
+  
+- **Per-Page Modular CSS**
+  - Introduced separate per-page stylesheets: `about.css`, `change_password.css`, `change_tuner.css`, `logs.css`, and `manage_users.css`.
+  - Shared global styling moved to `base.css` for consistency.
+
+- **Unified Template Structure**
+  - New `base.html` and `_header.html` templates consolidate common layout and navigation.
+  - All major pages now extend from `base.html` for easier maintenance.
+
+- **New JavaScript Modules**
+  - Added `tuner-settings.js` for handling tuner selection and dynamic UI updates.
+
+### 🧰 Improvements
+- Updated `INSTALL.md`, `README.md`, and `ROADMAP.md` to document the new layout and structure.
+- `app.py` updated to serve new static assets and integrate template inheritance.
+- All installer scripts (`retroiptv_linux.sh`, `retroiptv_rpi.sh`, `retroiptv_windows.ps1`) updated for v4.1.0 compatibility and new folder paths.
+
+### 🐞 Fixes
+- Reduced redundancy across templates by introducing a unified base layout.
+- Improved guide performance and browser compatibility with the new auto-scroll implementation.
+- Minor visual and layout corrections across settings and guide pages.
+
+---
+
+## [Unreleased]
+
+- Planned: add `.m3u8` tuner support. 
+- Planned: move logs to SQLite DB. 
+- Planned: log filtering and pagination. 
+
+---
 ## v4.0.0 — 2025-10-19
 **Status:** Public Release (Feature Complete)
 
@@ -33,16 +73,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Per-user tuner assignment system
 - PlutoTV / custom tuner aggregation features
 - Enhanced guide refresh logic for long-running sessions
-
----
-
-## [Unreleased]
-
-- Planned: add `.m3u8` tuner support. 
-- Planned: move logs to SQLite DB. 
-- Planned: log filtering and pagination. 
-
----
 
 ## v3.3.0 - 2025-10-15
 ### Added

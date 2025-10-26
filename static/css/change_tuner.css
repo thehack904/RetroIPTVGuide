@@ -1,0 +1,134 @@
+/* change_tuner page stylesheet — restores boxed centered forms like the original view
+   Loaded only on change_tuner.html so it won't affect other pages.
+*/
+
+/* Layout: center column and stack boxes */
+.container-change-tuner {
+  max-width: 520px;
+  margin: 28px auto 80px;
+  padding: 0 12px;
+  box-sizing: border-box;
+}
+
+/* Panel (card) used for each section */
+.box {
+  margin: 28px 0;
+  padding: 18px 20px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.18); /* translucent panel to let theme show through */
+  /* subtle inset to match the original boxed look */
+  box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset, 0 6px 18px rgba(0,0,0,0.18);
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+/* Headings */
+.box h2 {
+  margin: 0 0 12px;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+}
+
+/* Labels */
+.box label {
+  display: block;
+  font-size: 0.9rem;
+  color: rgba(255,255,255,0.9);
+  margin: 8px 0 6px;
+}
+
+/* Form rows - stack fields with gap */
+.form-row {
+  display: block;
+  margin-bottom: 10px;
+}
+
+/* Inputs & selects: full width, teal border, rounded */
+select, input[type="text"], input[type="url"], input[type="email"], input[type="password"], textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  border: 1px solid rgba(100,200,200,0.25);
+  background: rgba(255,255,255,0.03);
+  color: #eaf6f6;
+  box-sizing: border-box;
+  outline: none;
+  transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
+}
+
+/* slightly lighter placeholder text so it reads on dark backgrounds */
+::placeholder { color: rgba(255,255,255,0.35); }
+
+/* Focus styles */
+select:focus, input:focus, textarea:focus {
+  border-color: rgba(36,220,210,0.95);
+  box-shadow: 0 0 0 4px rgba(36,220,210,0.06);
+  background: rgba(255,255,255,0.02);
+  color: #fff;
+}
+
+/* Primary button — full width teal pill */
+button.primary, input[type="submit"].primary {
+  display: block;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: #1ed3ce;
+  color: #002e2c;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.12);
+  transition: transform .06s ease, box-shadow .06s ease, background .08s ease;
+}
+
+/* Hover / active */
+button.primary:hover { transform: translateY(-1px); background: #16cfc9; }
+button.primary:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
+
+/* Secondary small inline buttons (e.g., Rename button row) */
+.btn-inline {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.92);
+  color: #002e2c;
+  border: 1px solid rgba(0,0,0,0.06);
+  cursor: pointer;
+  font-weight: 600;
+  margin-left: 8px;
+}
+
+/* Tuning select & inputs layout in a row for small screens only: vertical stack on mobile */
+.row-inline {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.row-inline .row-item {
+  flex: 1 1 auto;
+}
+
+/* Small screens: keep stacked */
+@media (max-width: 640px) {
+  .container-change-tuner { padding: 0 18px; max-width: 100%; }
+  .row-inline { flex-direction: column; align-items: stretch; }
+}
+
+/* Additional spacing for the delete / rename sections to match original spacing */
+.box .sub-heading {
+  margin-top: 12px;
+  margin-bottom: 8px;
+  color: rgba(255,255,255,0.9);
+  font-weight: 600;
+}
+
+/* Safety: ensure labels and form elements contrast on light theme too */
+body.light .box { background: rgba(255,255,255,0.95); color: #111; }
+body.light .box h2 { color: #111; text-shadow: none; }
+body.light select, body.light input, body.light textarea { color: #111; background: #fff; border-color: rgba(0,0,0,0.12); }
+body.light button.primary { background: #06c; color: #fff; }
+
+/* small helper to hide an element if needed */
+.hidden { display: none !important; }

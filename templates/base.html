@@ -1,0 +1,276 @@
+<!doctype html>
+<html>
+<head>
+    <title>{% block title %}IPTV Guide{% endblock %}</title>
+
+    <!-- global shared CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
+    <script src="{{ url_for('static', filename='js/auto-scroll.js') }}" defer></script>
+
+    {% block page_styles %}
+    {# per-page CSS variables or small style blocks can be provided here #}
+    {% endblock %}
+</head>
+<body>
+    {% include '_header.html' %}
+
+    {% block content %}
+    <!-- Page-specific content goes here -->
+    {% endblock %}
+
+    <!-- shared scripts -->
+    <script src="{{ url_for('static', filename='hls.js') }}"></script>
+
+    <script>
+    /* Shared JS: theme helper, header utilities, fixed timebar helpers, clock, toggleAutoScroll binding.
+       This code is the canonical shared behavior used by pages that extend base.html.
+    */
+
+    (function(){
+      // Basic theme / class setter and small transition helper
+      window.setTheme = function(theme){
+        const b = document.body;
+        b.classList.add("fade-switch");
+        setTimeout(()=>{
+          const wasTVG = b.classList.contains("tvguide1990");
+          b.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv",
+                             "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990");
+          if (theme) b.classList.add(theme);
+          localStorage.setItem("theme", theme || "");
+          if (wasTVG && theme !== "tvguide1990") {
+            document.querySelectorAll(".chan-col .chan-name").forEach(el=>{
+              const name = el.dataset.name || "Channel";
+              const logo = el.dataset.logo;
+              el.innerHTML = logo ? `<img src="${logo}" alt=""><span>${name}</span>` : `<span>${name}</span>`;
+            });
+            document.querySelectorAll(".grid-row,.chan-col").forEach(r => r.style.height = "");
+          }
+          if (theme === "tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
+          setTimeout(()=>b.classList.remove("fade-switch"), 100);
+        }, 150);
+      };
+
+      // applyTvGuide1990Capsules: only operate on original .chan-col elements (exclude auto-scroll clones)
+      window.applyTvGuide1990Capsules = function(){
+        const originalCols = Array.from(document.querySelectorAll('.chan-col')).filter(c => !c.closest('.__auto_scroll_clone'));
+        originalCols.forEach((col,i)=>{
+          const box = col.querySelector('.chan-name');
+          if(!box) return;
+          if(box.querySelector('.channel-number')) return;
+          const cap = document.createElement('span');
+          cap.className='channel-number';
+          cap.textContent = String(i+1);
+          box.innerHTML = '';
+          box.appendChild(cap);
+          col.classList.add('tvguide1990-applied');
+        });
+
+        if (window.__autoScroll && typeof window.__autoScroll.recomputeLoops === 'function') {
+          window.__autoScroll.recomputeLoops();
+        }
+      };
+
+      // Clock update
+      window.updateClock = function(){
+        const now = new Date();
+        const el = document.getElementById('clock');
+        if (el) {
+          el.textContent = now.toLocaleString([], {
+            weekday:'short', month:'short', day:'numeric',
+            hour:'2-digit', minute:'2-digit', second:'2-digit'
+          });
+        }
+      };
+
+      // Fixed timebar helpers (createOrUpdateFixedTimeBar and updateNowLine)
+      window.createOrUpdateFixedTimeBar = function(){
+        const fixedBar = document.getElementById('fixedTimeBar');
+        const gridTimeRow = document.getElementById('gridTimeRow');
+        const guideOuter = document.getElementById('guideOuter');
+        const playerRow = document.getElementById('playerRow');
+        if (!gridTimeRow || !fixedBar || !guideOuter) return;
+        const headerWrap = gridTimeRow.querySelector('.time-header-wrap .grid-content');
+        const serverTimeHeader = headerWrap ? headerWrap.querySelector('.time-header') : null;
+        if (!serverTimeHeader) return;
+
+        fixedBar.innerHTML = '';
+
+        const clonedGridContent = document.createElement('div');
+        clonedGridContent.className = 'grid-content';
+        clonedGridContent.style.display = 'flex';
+        clonedGridContent.style.alignItems = 'stretch';
+        clonedGridContent.style.position = 'relative';
+        clonedGridContent.style.height = '100%';
+
+        const spacer = document.createElement('div');
+        spacer.className = 'left-spacer';
+
+        const guideRect = guideOuter.getBoundingClientRect();
+        const headerGridRect = headerWrap.getBoundingClientRect();
+
+        let spacerWidth = Math.round(headerGridRect.left - guideRect.left);
+
+        if (!spacerWidth || spacerWidth <= 0) {
+          const firstChanCol = document.querySelector('.guide-row .chan-col');
+          spacerWidth = firstChanCol ? Math.round(firstChanCol.getBoundingClientRect().width) : 200;
+        }
+
+        spacer.style.width = spacer.style.minWidth = spacer.style.maxWidth = spacerWidth + 'px';
+        spacer.style.flex = '0 0 ' + spacerWidth + 'px';
+        spacer.style.height = '100%';
+        spacer.style.pointerEvents = 'none';
+
+        const clonedTimeHeader = serverTimeHeader.cloneNode(true);
+        clonedTimeHeader.classList.add('time-header');
+        clonedTimeHeader.style.display = 'flex';
+        clonedTimeHeader.style.height = '100%';
+
+        clonedGridContent.appendChild(spacer);
+        clonedGridContent.appendChild(clonedTimeHeader);
+
+        const nowLine = document.createElement('div');
+        nowLine.id = 'nowLineFixed';
+        nowLine.className = 'now-line';
+        nowLine.style.position = 'absolute';
+        nowLine.style.top = '0';
+        nowLine.style.bottom = '0';
+        nowLine.style.width = '2px';
+        nowLine.style.left = '0px';
+        nowLine.style.pointerEvents = 'none';
+        clonedGridContent.appendChild(nowLine);
+
+        fixedBar.appendChild(clonedGridContent);
+
+        fixedBar.style.left = '0px';
+        fixedBar.style.width = window.innerWidth + 'px';
+
+        if (playerRow) {
+            const rect = playerRow.getBoundingClientRect();
+            fixedBar.style.top = rect.bottom + 'px';
+        } else {
+            const header = document.querySelector('.header');
+            const headerRect = header ? header.getBoundingClientRect() : { bottom: 40 };
+            fixedBar.style.top = headerRect.bottom + 'px';
+        }
+
+        requestAnimationFrame(() => {
+            const fbHeight = fixedBar.getBoundingClientRect().height || 34;
+            const currentPaddingTop = parseFloat(window.getComputedStyle(guideOuter).paddingTop) || 0;
+            if (currentPaddingTop < fbHeight) {
+                guideOuter.style.paddingTop = fbHeight + 'px';
+            }
+        });
+
+        const origNow = document.getElementById('nowLineOriginal');
+        if (origNow) origNow.style.display = 'none';
+      };
+
+      window.updateNowLine = function(grid_start_iso, scale){
+        try {
+          if (!grid_start_iso || !scale) return;
+          const gridStart = new Date(grid_start_iso);
+          const now = new Date();
+          const minutesFromStart = (now - gridStart) / 60000;
+          const leftPx = (minutesFromStart * scale);
+          const firstChanCol = document.querySelector('.guide-row .chan-col');
+          const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width : 0;
+
+          const nlFixed = document.getElementById('nowLineFixed');
+          if (nlFixed) nlFixed.style.left = (leftPx + chanColWidth) + 'px';
+
+          const nlOrig = document.getElementById('nowLineOriginal');
+          if (nlOrig) nlOrig.style.left = leftPx + 'px';
+        } catch(e){ console.debug('updateNowLine err', e); }
+      };
+
+      // DOMContent loaded common init for header/theme/clock
+      document.addEventListener("DOMContentLoaded", () => {
+        const saved = localStorage.getItem("theme") || "dark";
+        if (saved) document.body.classList.add(saved);
+        updateClock();
+        setInterval(updateClock, 1000);
+      });
+
+      // Toggle Auto-Scroll label logic (shared)
+      document.addEventListener('DOMContentLoaded', () => {
+        const el = document.getElementById('toggleAutoScroll');
+        if (!el) return;
+
+        function localPref() {
+          return localStorage.getItem('autoScrollEnabled') !== 'false';
+        }
+
+        function getPrefSafe() {
+          try {
+            if (window.__autoScroll) {
+              if (typeof window.__autoScroll.pref === 'function') return window.__autoScroll.pref();
+              if (typeof window.__autoScroll.prefValue !== 'undefined') return Boolean(window.__autoScroll.prefValue);
+              if (typeof window.__autoScroll.pref !== 'undefined') return Boolean(window.__autoScroll.pref);
+            }
+          } catch (e) { /* ignore */ }
+          return localPref();
+        }
+
+        function refreshLabel() {
+          const themeActive = document.body.classList.contains('tvguide1990');
+          if (themeActive) {
+            el.textContent = 'Auto-Scroll disabled for TV Guide (1990)';
+            el.classList.add('disabled');
+            el.style.pointerEvents = 'none';
+            el.title = 'Auto-Scroll is not supported for this theme.';
+            return;
+          }
+
+          const enabled = getPrefSafe();
+          el.textContent = enabled ? 'Disable Auto-Scroll' : 'Enable Auto-Scroll';
+          el.classList.remove('disabled');
+          el.style.pointerEvents = '';
+          el.title = '';
+        }
+
+        el.addEventListener('click', (e) => {
+          e.preventDefault();
+          if (document.body.classList.contains('tvguide1990')) {
+            alert('Auto-Scroll is not available for the TV Guide (1990) theme.');
+            return;
+          }
+          if (window.__autoScroll) {
+            if (typeof window.__autoScroll.toggle === 'function') {
+              window.__autoScroll.toggle();
+            } else if (typeof window.__autoScroll.pref === 'function') {
+              const cur = window.__autoScroll.pref();
+              localStorage.setItem('autoScrollEnabled', (!cur).toString());
+            } else {
+              const cur = localPref();
+              localStorage.setItem('autoScrollEnabled', (!cur).toString());
+            }
+            setTimeout(refreshLabel, 50);
+          } else {
+            const cur = localPref();
+            localStorage.setItem('autoScrollEnabled', (!cur).toString());
+            setTimeout(refreshLabel, 50);
+          }
+        });
+
+        refreshLabel();
+
+        if (window.__autoScroll) {
+          window.__autoScroll._onThemeChange = function () { refreshLabel(); };
+        }
+
+        window.addEventListener('storage', (ev) => {
+          if (ev.key === 'autoScrollEnabled') refreshLabel();
+        });
+
+        const bodyObserver = new MutationObserver(() => refreshLabel());
+        bodyObserver.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+      });
+
+    })();
+    </script>
+
+    {% block scripts_extra %}
+    {# per-page scripts can be placed here #}
+    {% endblock %}
+</body>
+</html>
