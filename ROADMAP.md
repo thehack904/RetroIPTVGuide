@@ -112,6 +112,12 @@ This version refines templates and adds an auto scroll feature w/ and enable/dis
 - [ ] Validate update/uninstall paths on all OSes.  
 
 ---
+## User Submitted Enhancements
+- [ ] Casting Support - (Chromecast Support)
+- [ ] Resize Pop Out Video - (pop out the video player resize)
+- [ ] Resize video on page (able to resize or change the layout of the video on the program guide page)
+- [ ] Auto load Channel from Guide / Hidden Channel / Sizzle Reels    
+
 
 ## ✅ Completed (v4.1.0)
 - [x] Modular CSS/JS introduced.  
