@@ -27,7 +27,6 @@ Includes **Docker and TrueNAS SCALE deployment** for easy installation and persi
 
 ## 🚀 Features
 - 🧰 Unified installers for Linux, Raspberry Pi, and Windows
-- 🖥️ Android / Fire / Google TV optimized mode with animated CRT-style glow header
 - 🧭 Integrated channel guide (EPG) viewer
 - 👥 User management web interface (`manage_users.html`)
 - ⚙️ Lightweight Flask backend, easy to self-host
