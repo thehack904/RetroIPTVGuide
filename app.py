@@ -1,7 +1,8 @@
-APP_VERSION = "v4.1.0"
+# app.py — merged version (features from both sources)
+APP_VERSION = "v4.2.0"
 APP_RELEASE_DATE = "2025-10-25"
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -12,10 +13,19 @@ import os
 import datetime
 import requests
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse   # added
-import socket                       # added
-import ipaddress                    # added
+from urllib.parse import urlparse, urljoin
+import socket
+import ipaddress
+import logging
+import subprocess
 from datetime import datetime, timezone, timedelta
+
+# Optional helper module for vlc (try import; fall back to subprocess-based helpers)
+try:
+    import vlc_control
+except Exception:
+    vlc_control = None
+    logging.exception("vlc_control import failed (this is optional): %s", sys.exc_info()[0])
 
 APP_START_TIME = datetime.now()
 
@@ -23,7 +33,6 @@ APP_START_TIME = datetime.now()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # replace with a fixed key in production
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
-
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
@@ -214,7 +223,7 @@ def parse_m3u(m3u_url):
         lines = r.text.splitlines()
     except:
         return channels
-    
+
     for i, line in enumerate(lines):
         if line.startswith('#EXTINF:'):
             info = line.strip()
@@ -235,11 +244,11 @@ def parse_m3u(m3u_url):
 # ------------------- XMLTV EPG Parsing -------------------
 def parse_epg(xml_url):
     programs = {}
-    
-    # ✅ Handle when user pastes same .m3u for XML
+
+    # handle when user pastes same .m3u for XML
     if xml_url.lower().endswith(('.m3u', '.m3u8')):
         return programs  # empty, fallback will fill it later
-        
+
     try:
         r = requests.get(xml_url, timeout=15)
         r.raise_for_status()
@@ -292,6 +301,67 @@ def apply_epg_fallback(channels, epg):
             }]
     return epg
 
+# ------------------- Helper: safe redirect -------------------
+def is_safe_url(target):
+    try:
+        ref_url = urlparse(request.host_url)
+        test_url = urlparse(urljoin(request.host_url, target))
+        return test_url.scheme in ('http', 'https') and ref_url.netloc == test_url.netloc
+    except Exception:
+        return False
+
+# ------------------- Remote / Playback Helpers -------------------
+PLAY_SCRIPT = "/usr/local/bin/vlc-play.sh"
+STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
+VLC_LOG = "/var/log/vlc-play.log"
+
+def run_play_script(url, instance="main"):
+    """Run the configured helper script via sudo if vlc_control isn't available."""
+    if vlc_control:
+        try:
+            return vlc_control.start(url, instance)
+        except Exception:
+            logging.exception("vlc_control.start failed")
+            # fallthrough to subprocess
+    try:
+        subprocess.run(["sudo", PLAY_SCRIPT, url, instance], check=True, timeout=30)
+        return True
+    except Exception:
+        logging.exception("Failed to run play script")
+        return False
+
+def run_stop_script(instance="main"):
+    if vlc_control:
+        try:
+            return vlc_control.stop(instance)
+        except Exception:
+            logging.exception("vlc_control.stop failed")
+    try:
+        subprocess.run(["sudo", STOP_SCRIPT, instance], check=True, timeout=20)
+        return True
+    except Exception:
+        logging.exception("Failed to run stop script")
+        return False
+
+def tail_file(path, lines=200):
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            block = 1024
+            data = b''
+            while size > 0 and lines > 0:
+                size -= block
+                if size < 0:
+                    block += size
+                    size = 0
+                f.seek(size)
+                chunk = f.read(block)
+                data = chunk + data
+                lines -= chunk.count(b'\n')
+            return data.decode(errors='ignore').splitlines()[-200:]
+    except Exception:
+        return []
 
 # ------------------- Routes -------------------
 @app.route('/')
@@ -303,11 +373,10 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        remember = 'remember' in request.form  # ✅ new: detect Save Session checkbox
+        remember = 'remember' in request.form
         user = get_user(username)
         if user and check_password_hash(user.password_hash, password):
-            login_user(user, remember=remember)  # ✅ persist login if checked
-            login_user(user)
+            login_user(user, remember=remember)
             log_event(username, "Logged in")
             tuners = get_tuners()
             current_tuner = get_current_tuner()
@@ -316,8 +385,11 @@ def login():
             global cached_channels, cached_epg
             cached_channels = parse_m3u(m3u_url)
             cached_epg = parse_epg(xml_url)
-            # ✅ Apply “No Guide Data Available” fallback
             cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+            # safe redirect handling for optional 'next' param
+            next_url = request.args.get('next') or request.form.get('next')
+            if next_url and is_safe_url(next_url):
+                return redirect(next_url)
             return redirect(url_for('guide'))
         else:
             log_event(username if username else "unknown", "Failed login attempt")
@@ -332,8 +404,6 @@ def logout():
     return redirect(url_for('login'))
 
 def revoke_user_sessions(username):
-    # Placeholder: later this can use a session-tracking table or Redis
-    # For now, it clears any "remember" cookie or stored flag
     session_key = f"user_session_{username}"
     if session_key in session:
         session.pop(session_key, None)
@@ -417,18 +487,14 @@ def delete_user():
 def manage_users():
     ua = request.headers.get('User-Agent', '').lower()
 
-    # Detect Android / Fire / Google TV browsers
     tv_patterns = ['silk', 'aft', 'android tv', 'googletv', 'mibox', 'bravia', 'shield', 'tcl', 'hisense', 'puffin', 'tv bro']
     is_tv = any(p in ua for p in tv_patterns)
 
-    # Restrict access
     if current_user.username != 'admin' or is_tv:
-        # Log unauthorized or TV-based attempt
         log_event(current_user.username, f"Unauthorized attempt to access /manage_users from UA: {ua}")
         flash("Unauthorized access.")
         return redirect(url_for('guide'))
 
-    # ---- Normal admin logic below ----
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
         c.execute('SELECT username FROM users WHERE username != "admin"')
@@ -474,9 +540,8 @@ def manage_users():
 
     return render_template('manage_users.html', users=users, current_tuner=get_current_tuner())
 
-
 @app.route("/about")
-@login_required  # optional
+@login_required
 def about():
     python_version = sys.version.split()[0]
     os_info = platform.platform()
@@ -484,7 +549,6 @@ def about():
     db_path = os.path.join(install_path, "app.db")
     log_path = "/var/log/iptv" if os.name != "nt" else os.path.join(install_path, "logs")
 
-    # calculate uptime
     uptime_delta = datetime.now() - APP_START_TIME
     days, seconds = uptime_delta.days, uptime_delta.seconds
     hours = seconds // 3600
@@ -504,7 +568,6 @@ def about():
     }
     return render_template("about.html", info=info)
 
-
 @app.route('/change_tuner', methods=['GET', 'POST'])
 @login_required
 def change_tuner():
@@ -521,14 +584,12 @@ def change_tuner():
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
             flash(f"Active tuner switched to {new_tuner}")
 
-            # ✅ Refresh cached guide data immediately
             global cached_channels, cached_epg
             tuners = get_tuners()
             m3u_url = tuners[new_tuner]["m3u"]
             xml_url = tuners[new_tuner]["xml"]
             cached_channels = parse_m3u(m3u_url)
             cached_epg = parse_epg(xml_url)
-            # ✅ Apply “No Guide Data Available” fallback
             cached_epg = apply_epg_fallback(cached_channels, cached_epg)
 
         elif action == "update_urls":
@@ -536,12 +597,10 @@ def change_tuner():
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
 
-            # update DB
             update_tuner_urls(tuner, xml_url, m3u_url)
             log_event(current_user.username, f"Updated URLs for tuner {tuner}")
             flash(f"Updated URLs for tuner {tuner}")
 
-            # ✅ Validate inputs
             if xml_url:
                 validate_tuner_url(xml_url, label=f"{tuner} XML")
             if m3u_url:
@@ -558,7 +617,7 @@ def change_tuner():
                 flash(f"Tuner {tuner} deleted.")
 
         elif action == "rename_tuner":
-            old_name = request.form["tuner"]   # matches HTML <select name="tuner">
+            old_name = request.form["tuner"]
             new_name = request.form["new_name"].strip()
             if not new_name:
                 flash("New name cannot be empty.", "warning")
@@ -602,18 +661,6 @@ def guide():
     total_width = slots * SLOT_MINUTES * SCALE
     minutes_from_start = (now - grid_start).total_seconds() / 60.0
     now_offset = int(minutes_from_start * SCALE)
-    
-    # --- DEBUG: Show alignment between M3U and EPG ---
-    #print("\n=== DEBUG: Cached Channels and EPG Keys ===")
-    #print("First 5 channel IDs from M3U:")
-    #for ch in cached_channels[:5]:
-    #    print("  ", ch.get('tvg_id'))
-
-    #print("\nFirst 5 EPG keys:")
-    #for key in list(cached_epg.keys())[:5]:
-    #    print("  ", key)
-    #print("==========================================\n")
-
 
     return render_template(
         'guide.html',
@@ -671,8 +718,6 @@ def view_logs():
         log_size=log_size
     )
 
-
-
 @app.route('/clear_logs', methods=['POST'])
 @login_required
 def clear_logs():
@@ -680,16 +725,253 @@ def clear_logs():
         flash("Unauthorized access.")
         return redirect(url_for('view_logs'))
 
-    open(LOG_PATH, "w").close()  # clear the file
+    open(LOG_PATH, "w").close()
     log_event("admin", "Cleared log file")
     flash("🧹 Logs cleared successfully.")
     return redirect(url_for('view_logs'))
-
 
 # ------------------- Constants -------------------
 SCALE = 5
 HOURS_SPAN = 6
 SLOT_MINUTES = 30
+
+# ------------------- API: guide snapshot -------------------
+@app.route('/api/guide_snapshot', methods=['GET'])
+def api_guide_snapshot():
+    """
+    Returns a compact JSON payload representing the current guide window
+    and channels. Useful for lightweight clients.
+    Query params:
+      - tuner (optional)
+      - minutes (window size in minutes; default 120)
+    """
+    try:
+        tuner_name = request.args.get('tuner') or get_current_tuner()
+        minutes_window = int(request.args.get('minutes') or 120)
+        slots = max(1, (minutes_window // 30))
+        now = datetime.utcnow()
+        start = now - timedelta(minutes=(now.minute % 30), seconds=now.second, microseconds=now.microsecond)
+        end = start + timedelta(minutes=minutes_window)
+
+        tuner_info = get_tuners().get(tuner_name, {})
+        channels_out = []
+        timeline = []
+
+        # build timeline slots
+        slot_start = start
+        while slot_start < end:
+            timeline.append(slot_start.isoformat())
+            slot_start += timedelta(minutes=30)
+
+        for ch in cached_channels:
+            visible_programs = []
+            try:
+                tvg = ch.get('tvg_id')
+                progs = cached_epg.get(tvg, [])
+                for p in progs:
+                    pstart = p.get('start')
+                    pstop = p.get('stop')
+                    if not pstart or not pstop:
+                        continue
+                    if pstop <= start or pstart >= end:
+                        continue
+                    clipped_start = max(pstart, start)
+                    clipped_stop = min(pstop, end)
+                    duration = int((clipped_stop - clipped_start).total_seconds() / 60)
+                    visible_programs.append({
+                        "title": p.get('title'),
+                        "desc": p.get('desc'),
+                        "start_iso": clipped_start.isoformat(),
+                        "stop_iso": clipped_stop.isoformat(),
+                        "duration": duration
+                    })
+            except Exception:
+                pass
+
+            if not visible_programs:
+                visible_programs = [{
+                    "title": "No Data",
+                    "desc": "",
+                    "start_iso": start.isoformat(),
+                    "stop_iso": (start + timedelta(minutes=30)).isoformat(),
+                    "duration": 30
+                }]
+
+            channels_out.append({
+                "number": ch.get('number') or ch.get('tvg_chno'),
+                "name": ch.get('name'),
+                "logo": ch.get('logo'),
+                "programs": visible_programs
+            })
+
+        payload = {
+            "meta": {
+                "generated": datetime.utcnow().isoformat() + "Z",
+                "tuner": tuner_name,
+                "tuner_xml": tuner_info.get('xml'),
+                "tuner_m3u": tuner_info.get('m3u'),
+                "theme": "default_crt_blue",
+                "version": APP_VERSION
+            },
+            "timeline": timeline,
+            "window": {
+                "start_iso": start.isoformat(),
+                "end_iso": end.isoformat(),
+                "minutes": minutes_window
+            },
+            "channels": channels_out
+        }
+        return jsonify(payload)
+    except Exception as e:
+        logging.exception("api_guide_snapshot failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/theme_snapshot', methods=['GET'])
+def api_theme_snapshot():
+    theme = {
+        "name": "DirecTV CRT Blue",
+        "font": "DejaVu Sans Bold",
+        "variant": "dark_blue",
+        "palette": {
+            "background": "#000820",
+            "channel_column": "#253b6e",
+            "program_block": "#3b5ba0",
+            "grid_line": "#6070a0",
+            "highlight": "#ffff00",
+            "header": "#001844",
+            "text": "#ffffff"
+        },
+        "crt_effects": {
+            "scanlines": True,
+            "bloom": True,
+            "vignette": True
+        },
+        "generated": datetime.utcnow().isoformat() + "Z"
+    }
+    return jsonify(theme)
+
+# ------------------- QR Visibility Control -------------------
+crt_qr_visible = True
+qr_hide_time = None
+QR_AUTO_RESHOW_MINUTES = 15  # inactivity window
+
+@app.route('/api/qr_status', methods=['GET'])
+def api_qr_status():
+    global crt_qr_visible, qr_hide_time
+    if not crt_qr_visible and qr_hide_time:
+        elapsed = datetime.utcnow() - qr_hide_time
+        if elapsed > timedelta(minutes=QR_AUTO_RESHOW_MINUTES):
+            crt_qr_visible = True
+            qr_hide_time = None
+            logging.info(f"QR overlay auto-restored after {elapsed}")
+    return jsonify({"visible": crt_qr_visible})
+
+@app.route('/api/qr_hide', methods=['POST'])
+def api_qr_hide():
+    global crt_qr_visible, qr_hide_time
+    crt_qr_visible = False
+    qr_hide_time = datetime.utcnow()
+    logging.info("QR overlay hidden; inactivity timer started")
+    return jsonify({"status": "hidden"})
+
+@app.route('/api/qr_show', methods=['POST'])
+def api_qr_show():
+    global crt_qr_visible, qr_hide_time
+    crt_qr_visible = True
+    qr_hide_time = None
+    logging.info("QR overlay manually shown via /api/qr_show")
+    return jsonify({"status": "visible"})
+
+# ------------------- Playback control endpoints -------------------
+@app.route('/api/start_stream', methods=['POST'])
+@login_required
+def api_start_stream():
+    """
+    Starts playback using the helper script or vlc_control.
+    Expects JSON: { "url": "<stream url>", "instance": "main" }
+    """
+    data = request.get_json() or {}
+    url = data.get('url') or request.form.get('url')
+    instance = data.get('instance') or request.form.get('instance') or "main"
+    if not url:
+        return jsonify({"ok": False, "error": "missing url"}), 400
+    ok = run_play_script(url, instance=instance)
+    if ok:
+        log_event(current_user.username, f"Started stream {url} (instance={instance})")
+        return jsonify({"ok": True})
+    else:
+        return jsonify({"ok": False, "error": "failed to start"}), 500
+
+@app.route('/api/stop_stream', methods=['POST'])
+@login_required
+def api_stop_stream():
+    data = request.get_json() or {}
+    instance = data.get('instance') or request.form.get('instance') or "main"
+    ok = run_stop_script(instance=instance)
+    if ok:
+        log_event(current_user.username, f"Stopped stream (instance={instance})")
+        return jsonify({"ok": True})
+    else:
+        return jsonify({"ok": False, "error": "failed to stop"}), 500
+
+@app.route('/api/tail_logs', methods=['GET'])
+@login_required
+def api_tail_logs():
+    max_lines = int(request.args.get('lines') or 200)
+    lines = tail_file(VLC_LOG, lines=max_lines)
+    return jsonify({"lines": lines})
+
+@app.route('/api/status', methods=['GET'])
+@login_required
+def api_status():
+    """
+    Returns playback/log status. This is a best-effort summary (may parse vlc_control if available).
+    """
+    try:
+        state = "stopped"
+        raw = ""
+        if vlc_control:
+            try:
+                raw = vlc_control.query()
+                state = raw.get('state', 'unknown')
+            except Exception:
+                logging.exception("vlc_control.query failed")
+        # fallback: read tail log
+        tail = tail_file(VLC_LOG, lines=20)
+        return jsonify({
+            'now_playing': None,
+            'current_tvg_id': None,
+            'current_channel_url': None,
+            'vlc_state': state,
+            'raw_status': raw,
+            'tail_log': tail
+        })
+    except Exception as e:
+        logging.exception("api_status error: %s", e)
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/current_program', methods=['GET'])
+@login_required
+def api_current_program():
+    tvg_id = request.args.get('tvg_id') or request.args.get('id') or ''
+    if not tvg_id:
+        return jsonify({"ok": False, "error": "missing tvg_id or id"}), 400
+    try:
+        progs = cached_epg.get(tvg_id, [])
+        now = datetime.utcnow().replace(tzinfo=timezone.utc)
+        current = None
+        for p in progs:
+            start = p.get('start')
+            stop = p.get('stop')
+            if start and stop and start <= now < stop:
+                current = p
+                break
+        if not current and progs:
+            current = progs[0]
+        return jsonify({"ok": True, "channel": tvg_id, "program": current})
+    except Exception as e:
+        logging.exception("api_current_program error: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 # ------------------- Main -------------------
 def ensure_default_tuner():
@@ -698,7 +980,6 @@ def ensure_default_tuner():
     c.execute("SELECT COUNT(*) FROM tuners")
     count = c.fetchone()[0]
     if count == 0:
-        # Insert a safe default
         c.execute(
             "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
             ("Tuner 1", "http://example.com/guide.xml", "http://example.com/playlist.m3u")
@@ -710,17 +991,15 @@ if __name__ == '__main__':
     init_db()
     add_user('admin', 'strongpassword123')
     init_tuners_db()
-
-    # make sure there’s at least one tuner in the DB
     ensure_default_tuner()
 
-    # preload guide cache
     tuners = get_tuners()
     current_tuner = get_current_tuner()
-    if not current_tuner and tuners:  # fallback if no active tuner set
+    if not current_tuner and tuners:
         current_tuner = list(tuners.keys())[0]
     cached_channels = parse_m3u(tuners[current_tuner]["m3u"])
     cached_epg = parse_epg(tuners[current_tuner]["xml"])
+    cached_epg = apply_epg_fallback(cached_channels, cached_epg)
 
     app.run(host='0.0.0.0', port=5000, debug=False)
 
