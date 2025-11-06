@@ -1,5 +1,5 @@
-/* change_tuner page stylesheet — restores boxed centered forms like the original view
-   Loaded only on change_tuner.html so it won't affect other pages.
+/* change_tuner page stylesheet — theme-aware via CSS variables
+   Falls back to original values if variables are not provided by theme CSS.
 */
 
 /* Layout: center column and stack boxes */
@@ -15,10 +15,13 @@
   margin: 28px 0;
   padding: 18px 20px;
   border-radius: 8px;
-  background: rgba(0,0,0,0.18); /* translucent panel to let theme show through */
-  /* subtle inset to match the original boxed look */
+
+  /* Use CSS variables so theme files can override these.
+     Fallback to previous values when variables are not defined. */
+  background: var(--panel-bg, rgba(0,0,0,0.18));
   box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset, 0 6px 18px rgba(0,0,0,0.18);
-  border: 1px solid rgba(255,255,255,0.03);
+  border: 1px solid var(--panel-border, rgba(255,255,255,0.03));
+  color: var(--text-color, #eaf6f6);
 }
 
 /* Headings */
@@ -26,7 +29,7 @@
   margin: 0 0 12px;
   font-size: 1.35rem;
   font-weight: 700;
-  color: #fff;
+  color: var(--heading-color, #fff);
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
 }
 
@@ -34,7 +37,7 @@
 .box label {
   display: block;
   font-size: 0.9rem;
-  color: rgba(255,255,255,0.9);
+  color: var(--label-color, rgba(255,255,255,0.9));
   margin: 8px 0 6px;
 }
 
@@ -44,38 +47,38 @@
   margin-bottom: 10px;
 }
 
-/* Inputs & selects: full width, teal border, rounded */
+/* Inputs & selects: full width, use themed borders/background/text */
 select, input[type="text"], input[type="url"], input[type="email"], input[type="password"], textarea {
   width: 100%;
   padding: 10px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(100,200,200,0.25);
-  background: rgba(255,255,255,0.03);
-  color: #eaf6f6;
+  border: 1px solid var(--input-border, rgba(100,200,200,0.25));
+  background: var(--input-bg, rgba(255,255,255,0.03));
+  color: var(--input-color, #eaf6f6);
   box-sizing: border-box;
   outline: none;
   transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
 }
 
 /* slightly lighter placeholder text so it reads on dark backgrounds */
-::placeholder { color: rgba(255,255,255,0.35); }
+::placeholder { color: var(--placeholder-color, rgba(255,255,255,0.35)); }
 
 /* Focus styles */
 select:focus, input:focus, textarea:focus {
-  border-color: rgba(36,220,210,0.95);
-  box-shadow: 0 0 0 4px rgba(36,220,210,0.06);
-  background: rgba(255,255,255,0.02);
-  color: #fff;
+  border-color: var(--focus-border, rgba(36,220,210,0.95));
+  box-shadow: 0 0 0 4px var(--focus-ring, rgba(36,220,210,0.06));
+  background: var(--input-bg-focus, rgba(255,255,255,0.02));
+  color: var(--input-color-focus, #fff);
 }
 
-/* Primary button — full width teal pill */
+/* Primary button — full width pill */
 button.primary, input[type="submit"].primary {
   display: block;
   width: 100%;
   padding: 10px 12px;
   border-radius: 6px;
-  background: #1ed3ce;
-  color: #002e2c;
+  background: var(--primary-color, #1ed3ce);
+  color: var(--primary-text-color, #002e2c);
   font-weight: 700;
   border: none;
   cursor: pointer;
@@ -84,7 +87,7 @@ button.primary, input[type="submit"].primary {
 }
 
 /* Hover / active */
-button.primary:hover { transform: translateY(-1px); background: #16cfc9; }
+button.primary:hover { transform: translateY(-1px); background: var(--primary-color-hover, #16cfc9); }
 button.primary:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
 
 /* Secondary small inline buttons (e.g., Rename button row) */
@@ -92,9 +95,9 @@ button.primary:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0,0,0
   display: inline-block;
   padding: 6px 10px;
   border-radius: 4px;
-  background: rgba(255,255,255,0.92);
-  color: #002e2c;
-  border: 1px solid rgba(0,0,0,0.06);
+  background: var(--btn-inline-bg, rgba(255,255,255,0.92));
+  color: var(--btn-inline-color, #002e2c);
+  border: 1px solid var(--btn-inline-border, rgba(0,0,0,0.06));
   cursor: pointer;
   font-weight: 600;
   margin-left: 8px;
@@ -120,15 +123,31 @@ button.primary:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0,0,0
 .box .sub-heading {
   margin-top: 12px;
   margin-bottom: 8px;
-  color: rgba(255,255,255,0.9);
+  color: var(--sub-heading-color, rgba(255,255,255,0.9));
   font-weight: 600;
 }
 
-/* Safety: ensure labels and form elements contrast on light theme too */
-body.light .box { background: rgba(255,255,255,0.95); color: #111; }
-body.light .box h2 { color: #111; text-shadow: none; }
-body.light select, body.light input, body.light textarea { color: #111; background: #fff; border-color: rgba(0,0,0,0.12); }
-body.light button.primary { background: #06c; color: #fff; }
+/* Theme-aware light adjustments:
+   Match how the theme script applies themes: html[data-theme="light"] */
+html[data-theme="light"] .box {
+  background: var(--panel-bg-light, rgba(255,255,255,0.95));
+  color: var(--text-color-light, #111);
+}
+html[data-theme="light"] .box h2 {
+  color: var(--heading-color-light, #111);
+  text-shadow: none;
+}
+html[data-theme="light"] select,
+html[data-theme="light"] input,
+html[data-theme="light"] textarea {
+  color: var(--input-color-light, #111);
+  background: var(--input-bg-light, #fff);
+  border-color: var(--input-border-light, rgba(0,0,0,0.12));
+}
+html[data-theme="light"] button.primary {
+  background: var(--primary-color-light, #06c);
+  color: var(--primary-text-color-light, #fff);
+}
 
 /* small helper to hide an element if needed */
 .hidden { display: none !important; }

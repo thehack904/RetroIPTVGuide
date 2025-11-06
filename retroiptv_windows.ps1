@@ -55,7 +55,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "4.1.0"
+$VERSION = "4.2.0"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 

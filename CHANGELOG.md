@@ -6,8 +6,36 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.2.0 - 2025-11-06
+This version introduces mobile responsiveness, a new theme, refinements to auto-scroll, and backend API structures.
+
+### Added
+- Added mobile-friendly CSS and JS for improved viewing on mobile devices
+- Added RetroIPTV Theme
+- Added backend API structures for future updates / efforts
+
+### Changed
+- Enhanced auto-scroll handling with new modular files: `auto-scroll.js` and `auto-scroll-manager.js`.
+- Improved responsive layout for guide and settings pages on small screens.
+
+### Fixed
+- Fixed font scaling and layout issues in mobile and embedded browsers.
+- Fixed path references for Flask static files and templates.
+- Resolved layout inconsistencies across themes and display sizes.
+- General code cleanup and alignment for CI/CD consistency.
+
+---
+
+## [Unreleased]
+
+- Planned: add `.m3u8` tuner support. 
+- Planned: move logs to SQLite DB. 
+- Planned: log filtering and pagination. 
+
+---
+
 ## v4.1.0 - 2025-10-25
-### ✨ New Features
+### New Features
 - **Auto-Scroll Guide System**
   - Added `static/js/auto-scroll.js` enabling smooth, continuous automatic scrolling of the live TV guide.
   - Uses `requestAnimationFrame` with a `setInterval` watchdog fallback for consistent performance.
@@ -26,23 +54,15 @@ This project follows [Semantic Versioning](https://semver.org/).
 - **New JavaScript Modules**
   - Added `tuner-settings.js` for handling tuner selection and dynamic UI updates.
 
-### 🧰 Improvements
+### Improvements
 - Updated `INSTALL.md`, `README.md`, and `ROADMAP.md` to document the new layout and structure.
 - `app.py` updated to serve new static assets and integrate template inheritance.
 - All installer scripts (`retroiptv_linux.sh`, `retroiptv_rpi.sh`, `retroiptv_windows.ps1`) updated for v4.1.0 compatibility and new folder paths.
 
-### 🐞 Fixes
+### Fixes
 - Reduced redundancy across templates by introducing a unified base layout.
 - Improved guide performance and browser compatibility with the new auto-scroll implementation.
 - Minor visual and layout corrections across settings and guide pages.
-
----
-
-## [Unreleased]
-
-- Planned: add `.m3u8` tuner support. 
-- Planned: move logs to SQLite DB. 
-- Planned: log filtering and pagination. 
 
 ---
 ## v4.0.0 — 2025-10-19

@@ -42,17 +42,23 @@
 </div>
 
 <script>
-        /* Future Android TV Browser Code 
-document.addEventListener("DOMContentLoaded",()=>{
-const ua=navigator.userAgent||"";
-const isAndroidTV=/Android|AFT|BRAVIA|GoogleTV|MiBOX|Shield|TCL|Hisense|Fire TV/i.test(ua);
-const remember=document.getElementById("rememberBlock");
-if(isAndroidTV&&remember){remember.style.display="flex";}
-const rememberBox=document.getElementById("remember");
-if(rememberBox){
-	rememberBox.checked=localStorage.getItem("rememberSession")==="true";
-	rememberBox.addEventListener("change",()=>localStorage.setItem("rememberSession",rememberBox.checked));
-} */
+/* Android TV "remember" behavior: enable the checkbox UI and persist choice in localStorage.
+   The original file had a mismatched comment block which left a stray "});" outside the comment,
+   causing the "Unexpected token '}'" syntax error. Below is the fixed, working script. */
+document.addEventListener("DOMContentLoaded", () => {
+    const ua = navigator.userAgent || "";
+    const isAndroidTV = /Android|AFT|BRAVIA|GoogleTV|MiBOX|Shield|TCL|Hisense|Fire TV/i.test(ua);
+    const remember = document.getElementById("rememberBlock");
+    if (isAndroidTV && remember) {
+        remember.style.display = "flex";
+    }
+    const rememberBox = document.getElementById("remember");
+    if (rememberBox) {
+        rememberBox.checked = localStorage.getItem("rememberSession") === "true";
+        rememberBox.addEventListener("change", () => {
+            localStorage.setItem("rememberSession", rememberBox.checked);
+        });
+    }
 });
 </script>
 </body>

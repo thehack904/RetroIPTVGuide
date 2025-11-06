@@ -1,0 +1,164 @@
+/* Mobile / responsive styles (includes header/nav fixes + player/grid responsive rules)
+   Loaded after base.css.
+*/
+
+/* Prevent mobile browsers from auto-resizing text */
+html, body {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* --- Header / nav / mobile menu (unchanged core rules, ensure nav scroll) --- */
+.hamburger {
+  display: none;
+  background: none;
+  border: none;
+  padding: 8px;
+  margin-right: 6px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: inherit;
+  height: 40px;
+  width: 40px;
+  box-sizing: border-box;
+}
+.hamburger svg rect { fill: currentColor; }
+
+/* Off-canvas mobile nav: MUST be independently scrollable */
+.mobile-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  max-width: 90%;
+  background: var(--chan-col-bg, #111);
+  color: var(--timebar-color, #fff);
+  transform: translateX(-110%);
+  transition: transform 220ms ease;
+  z-index: 5000;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  -webkit-overflow-scrolling: touch;
+  overflow-y: auto;
+  max-height: 100vh;
+}
+.mobile-nav.open { transform: translateX(0); }
+.mobile-nav-inner { padding: 12px; box-sizing: border-box; }
+.mobile-nav-header { display:flex; align-items:center; justify-content:space-between; padding-bottom:8px; border-bottom:1px solid rgba(255,255,255,0.06); }
+.mobile-nav .mobile-links { list-style:none; margin:8px 0; padding:0; }
+.mobile-nav .mobile-links li { margin:8px 0; }
+.mobile-nav .mobile-links a { color: inherit; text-decoration:none; display:block; padding:10px 6px; border-radius:4px; }
+.mobile-nav .mobile-links a:hover { background: rgba(255,255,255,0.06); }
+
+/* --- Mobile UX breakpoints --- */
+@media (max-width: 900px) {
+  /* header */
+  .header { height: 40px !important; min-height: 40px !important; padding: 0 8px !important; box-sizing: border-box; }
+  .header .links { display: none !important; }
+  .hamburger { display: inline-flex !important; }
+  .header .clock { display: none !important; } /* optional */
+
+  /* Dropdowns bounded to viewport and scrollable */
+  .dropdown-content, .submenu-content {
+    position: fixed !important;
+    left: 8px !important;
+    right: 8px !important;
+    top: 48px !important;
+    max-height: calc(100vh - 56px) !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35) !important;
+    margin: 0 !important;
+    border-radius: 6px !important;
+  }
+
+  /* keep header stable for directv/comcast */
+  body.directv .header,
+  body.comcast .header {
+    height: 40px !important;
+    min-height: 40px !important;
+    padding: 0 8px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    overflow: visible !important;
+    transform: none !important;
+    -webkit-transform: none !important;
+  }
+
+  /* neutralize heavy text-styles for small screens */
+  body.directv .header .links > a,
+  body.comcast .header .links > a,
+  body.directv .header .links > .dropdown > .dropbtn,
+  body.comcast .header .links > .dropdown > .dropbtn,
+  body.directv .header .links > span,
+  body.comcast .header .links > span,
+  body.directv #clock,
+  body.comcast #clock {
+    -webkit-text-stroke: 0 !important;
+    text-shadow: none !important;
+    height: 40px !important;
+    line-height: 40px !important;
+    padding: 0 10px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    box-sizing: border-box !important;
+  }
+
+  body.directv .header::before,
+  body.directv .header::after,
+  body.comcast .header::before,
+  body.comcast .header::after {
+    display: none !important;
+    content: none !important;
+  }
+
+  body.mobile-nav-open { overflow: hidden !important; touch-action: none !important; }
+
+  /* --- PLAYER / SUMMARY responsiveness --- */
+  /* Make the player row stack vertically on small screens */
+  .player {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 12px !important;
+    box-sizing: border-box;
+  }
+
+  /* Program Info summary sits above the video and is full width */
+  .player .summary {
+    order: 1;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box;
+    padding: 10px !important;
+  }
+
+  /* Video fills the width and is constrained in height so it does not become huge */
+  #video {
+    order: 2;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    max-height: 42vh !important;       /* cap video height to a comfortable viewport fraction */
+    background: #000 !important;
+    object-fit: contain !important;    /* ensure video scales without cropping */
+  }
+
+  /* If you prefer the video to be slightly taller on large phones, override on portrait large screens */
+  @media (min-height: 700px) and (max-width: 900px) {
+    #video { max-height: 48vh !important; }
+  }
+
+  /* Reduce timeline & program sizes for narrow viewports */
+  .grid-row { height: 48px !important; }
+  .program { top: 6px !important; height: 36px !important; font-size: 12px !important; padding: 4px 6px !important; }
+  .time-header-fixed { height: 40px !important; }
+  .time-cell { font-size: 12px !important; padding: 0 6px !important; }
+
+  /* Ensure grid-content transform is GPU-friendly */
+  .grid-content { will-change: transform; -webkit-transform-origin: left top; transform-origin: left top; }
+}
