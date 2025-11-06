@@ -3,9 +3,42 @@
 <head>
     <title>Live TV Guide</title>
 
+    <!-- Responsive viewport for mobile stability -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <!-- Small, immediate script to apply the saved theme before paint and provide a safe stub
+         for setTheme so inline handlers won't throw while the full theme.js loads. -->
+    <script>
+    (function () {
+      try {
+        var t = localStorage.getItem('theme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+      } catch (e) { /* ignore */ }
+
+      if (!window.setTheme) {
+        window.setTheme = function (name) {
+          try {
+            if (name) {
+              document.documentElement.setAttribute('data-theme', name);
+            } else {
+              document.documentElement.removeAttribute('data-theme');
+            }
+            try { localStorage.setItem('theme', name); } catch (e) {}
+          } catch (e) { /* ignore */ }
+        };
+      }
+    })();
+    </script>
+
     <!-- global shared CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/base.css') }}">
-    <script src="/static/js/auto-scroll.js" defer></script>
+    <!-- Mobile-specific overrides (loaded after base.css) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-submenu.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-scroll-fix.css') }}">
+
+    <!-- Theme script (deferred) provides setTheme/applyTheme and will wire theme controls -->
+    <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
 
     <!-- small per-template style block to inject server-side dynamic values used by CSS -->
     <style>
@@ -19,43 +52,7 @@
     </style>
 </head>
 <body>
-<div class="header">
-    <div class="links">
-        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
-        <a href="{{ url_for('guide') }}">HOME</a>
-
-        {% if current_user is defined and current_user.username == 'admin' %}
-        <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
-        {% endif %}
-
-        <div class="dropdown" id="settingsMenu">
-            <button class="dropbtn">SETTINGS ▾</button>
-            <div class="dropdown-content">
-                {% if current_user is defined and current_user.username == 'admin' %}
-                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
-                <a href="{{ url_for('view_logs') }}">Logs</a>
-                <li><a href="{{ url_for('about') }}">About</a></li>
-                {% endif %}
-                <a href="#" id="toggleAutoScroll">Toggle Auto-Scroll</a>
-                <a href="{{ url_for('change_password') }}">Change Password</a>
-                <li class="submenu">
-                  <a href="#">Themes</a>
-                  <ul class="submenu-content">
-                    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
-                    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
-                    <li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
-                    <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide (Refresh)</a></li>
-                    <li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
-                    <li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
-		    <!--  <li><a href="#" onclick="setTheme('tvguide1990'); return false;">TV Guide (Classic)</a></li> --> 
-                  </ul>
-                </li>
-            </div>
-        </div>
-        <a href="{{ url_for('logout') }}">LOGOUT</a>
-    </div>
-    <div id="clock" class="clock">--:-- --</div>
-</div>
+{% include '_header.html' %}
 
 <!-- Player row: summary left, video right -->
 <div class="player" id="playerRow">
@@ -140,7 +137,10 @@
 </div>
 
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
+
 <script>
+// --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
+
 let hlsInstance = null;
 let currentChannelId = null;
 
@@ -191,15 +191,27 @@ function updateSummary(cid, fallbackName) {
     } else {
         summary.innerHTML = `<h3>${fallbackName}</h3><p>No Program Info</p>`;
     }
+
+    // After summary content changes, re-run layout-sensitive code
+    // Use rAF to ensure measurements occur after layout
+    requestAnimationFrame(() => {
+      if (typeof createOrUpdateFixedTimeBar === 'function') {
+        createOrUpdateFixedTimeBar();
+      }
+      if (typeof updateNowLine === 'function') {
+        updateNowLine();
+      }
+      // signal other adaptors (grid-adapt.js, mobile-player-adapt.js) to recompute
+      window.dispatchEvent(new Event('resize'));
+    });
 }
 
-/* Fixed time header function (kept as your implementation) */
+/* Fixed time header function kept (unchanged behavior) */
 function createOrUpdateFixedTimeBar(){
     const fixedBar = document.getElementById('fixedTimeBar');
     const gridTimeRow = document.getElementById('gridTimeRow');
     const guideOuter = document.getElementById('guideOuter');
     const playerRow = document.getElementById('playerRow');
-
     if (!gridTimeRow || !fixedBar || !guideOuter) return;
 
     const headerWrap = gridTimeRow.querySelector('.time-header-wrap .grid-content');
@@ -279,25 +291,35 @@ function createOrUpdateFixedTimeBar(){
 }
 
 function updateNowLine(){
-    const gridStart = new Date("{{ grid_start.isoformat() }}");
-    const scale = {{ SCALE }};
-    const now = new Date();
-    const minutesFromStart = (now - gridStart) / 60000;
-    const leftPx = (minutesFromStart * scale);
+    try {
+      const gridStart = new Date("{{ grid_start.isoformat() }}");
+      const scale = {{ SCALE }};
+      const now = new Date();
+      const minutesFromStart = (now - gridStart) / 60000;
+      const leftPx = (minutesFromStart * scale);
 
-    const firstChanCol = document.querySelector('.guide-row .chan-col');
-    const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width : 0;
+      const firstChanCol = document.querySelector('.guide-row .chan-col');
+      const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width : 0;
 
-    const nlFixed = document.getElementById('nowLineFixed');
-    if (nlFixed) nlFixed.style.left = (leftPx + chanColWidth) + 'px';
+      const nlFixed = document.getElementById('nowLineFixed');
+      if (nlFixed) nlFixed.style.left = (leftPx + chanColWidth) + 'px';
 
-    const nlOrig = document.getElementById('nowLineOriginal');
-    if (nlOrig) nlOrig.style.left = leftPx + 'px';
+      const nlOrig = document.getElementById('nowLineOriginal');
+      if (nlOrig) nlOrig.style.left = leftPx + 'px';
+    } catch(e){ console.debug('updateNowLine err', e); }
 }
 
+/* --- Initialization and bindings --- */
 document.addEventListener("DOMContentLoaded", () => {
     const savedTheme = localStorage.getItem("theme") || "dark";
-    document.body.classList.add(savedTheme);
+    // Prefer the global setTheme helper if available so theme.js / base behavior is used.
+    if (savedTheme) {
+      if (typeof setTheme === 'function') {
+        try { setTheme(savedTheme); } catch (e) { document.documentElement.setAttribute('data-theme', savedTheme); }
+      } else {
+        document.documentElement.setAttribute('data-theme', savedTheme);
+      }
+    }
 
     document.querySelectorAll('.chan-name').forEach(el => {
         el.addEventListener('click', () => {
@@ -317,45 +339,51 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     createOrUpdateFixedTimeBar();
-    updateClock();
+    if (typeof updateClock === 'function') updateClock();
     updateNowLine();
 
     setInterval(updateClock, 1000);
     setInterval(updateNowLine, 60000);
 });
 
+/* Ensure layout recomputes on viewport resize */
 window.addEventListener('resize', () => {
-    createOrUpdateFixedTimeBar();
-    updateNowLine();
+    // recompute fixed header placement and now-line
+    if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+    if (typeof updateNowLine === 'function') updateNowLine();
 });
 
-/* --- Theme & UI helpers --- */
-function setTheme(theme){
+/* --- Theme & UI helpers
+   The guide contains an advanced theme handler that needs to be available to the
+   global theme system. We expose it as window.applyTheme so the shared theme.js
+   will delegate to this implementation when available.
+*/
+function applyThemeGuide(theme){
   const b=document.body;
   b.classList.add("fade-switch");
   setTimeout(()=>{
     const wasTVG=b.classList.contains("tvguide1990");
     b.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv",
-                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990");
-    b.classList.add(theme);
-    localStorage.setItem("theme",theme);
-
-    if(wasTVG && theme!=="tvguide1990"){
+                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990", "retroiptv");
+    if (theme) b.classList.add(theme);
+    try { localStorage.setItem('theme', theme); } catch (e) {}
+    if(wasTVG && theme !== "tvguide1990") {
       document.querySelectorAll(".chan-col .chan-name").forEach(el=>{
-        const name=el.dataset.name||"Channel";
-        const logo=el.dataset.logo;
-        el.innerHTML=logo?`<img src="${logo}" alt=""><span>${name}</span>`:`<span>${name}</span>`;
+        const name = el.dataset.name || "Channel";
+        const logo = el.dataset.logo;
+        el.innerHTML = logo ? `<img src="${logo}" alt=""><span>${name}</span>` : `<span>${name}</span>`;
       });
-      document.querySelectorAll(".grid-row,.chan-col").forEach(r=>r.style.height="");
+      document.querySelectorAll(".grid-row,.chan-col").forEach(r => r.style.height = "");
     }
-
-    if(theme==="tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
-
-    setTimeout(()=>b.classList.remove("fade-switch"),100);
+    if (theme === "tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
+    setTimeout(()=>b.classList.remove("fade-switch"), 100);
   },150);
 }
 
-// applyTvGuide1990Capsules: only operate on original .chan-col elements (exclude auto-scroll clones)
+// expose to the shared theme system; theme.js will prefer this when calling setTheme(...)
+try { window.applyTheme = applyThemeGuide; } catch (e) {}
+
+/* applyTvGuide1990Capsules remains unchanged */
 function applyTvGuide1990Capsules(){
   const originalCols = Array.from(document.querySelectorAll('.chan-col')).filter(c => !c.closest('.__auto_scroll_clone'));
   originalCols.forEach((col,i)=>{
@@ -375,22 +403,25 @@ function applyTvGuide1990Capsules(){
   }
 }
 
-document.addEventListener("DOMContentLoaded",()=>{
-  const t=localStorage.getItem("theme")||"dark";
-  setTheme(t);
-  if(t==="tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
-});
+/* Video event listeners to keep layout in sync */
+document.addEventListener("DOMContentLoaded", () => {
+  const video = document.getElementById('video');
+  if (!video) return;
 
-function updateClock() {
-    const now = new Date();
-    const el = document.getElementById('clock');
-    if (el) {
-        el.textContent = now.toLocaleString([], {
-            weekday:'short', month:'short', day:'numeric',
-            hour:'2-digit', minute:'2-digit', second:'2-digit'
-        });
-    }
-}
+  function recomputeAll() {
+    // wait a frame, then recompute
+    requestAnimationFrame(() => {
+      if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+      if (typeof updateNowLine === 'function') updateNowLine();
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
+
+  video.addEventListener('loadedmetadata', recomputeAll);
+  video.addEventListener('play', recomputeAll);
+  video.addEventListener('pause', recomputeAll);
+  video.addEventListener('ended', recomputeAll);
+});
 </script>
 
 <script>
@@ -402,12 +433,23 @@ document.addEventListener('DOMContentLoaded', () => {
     return localStorage.getItem('autoScrollEnabled') !== 'false';
   }
 
+  // Read preference in a way that supports several possible auto-scroll API shapes:
+  // - window.__autoScroll.pref() (old)
+  // - window.__autoScroll.prefValue (getter)
+  // - window.__autoScroll.status().pref (newer v36.x)
+  // - fall back to localStorage
   function getPrefSafe() {
     try {
       if (window.__autoScroll) {
+        // status().pref is our recommended current API
+        if (typeof window.__autoScroll.status === 'function') {
+          const s = window.__autoScroll.status();
+          if (s && typeof s.pref !== 'undefined') return Boolean(s.pref);
+        }
+        // older pref() function
         if (typeof window.__autoScroll.pref === 'function') return window.__autoScroll.pref();
+        // prefValue getter (some versions expose it)
         if (typeof window.__autoScroll.prefValue !== 'undefined') return Boolean(window.__autoScroll.prefValue);
-        if (typeof window.__autoScroll.pref !== 'undefined') return Boolean(window.__autoScroll.pref);
       }
     } catch (e) { /* ignore */ }
     return localPref();
@@ -436,29 +478,64 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Auto-Scroll is not available for the TV Guide (1990) theme.');
       return;
     }
-    if (window.__autoScroll) {
-      // call toggle if available
-      if (typeof window.__autoScroll.toggle === 'function') {
-        window.__autoScroll.toggle();
-      } else if (typeof window.__autoScroll.pref === 'function') {
-        const cur = window.__autoScroll.pref();
-        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+
+    // Primary: if auto-scroll exposes a toggle(), use it.
+    // Secondary: if it exposes enable()/disable(), call those based on current status.
+    // Fallback: update localStorage only.
+    try {
+      if (window.__autoScroll) {
+        if (typeof window.__autoScroll.toggle === 'function') {
+          window.__autoScroll.toggle();
+          setTimeout(refreshLabel, 100);
+          return;
+        }
+
+        // Prefer status().pref if present
+        let curPref = null;
+        if (typeof window.__autoScroll.status === 'function') {
+          try { curPref = window.__autoScroll.status().pref; } catch (e) { curPref = null; }
+        }
+        // older pref() function fallback
+        if (curPref === null && typeof window.__autoScroll.pref === 'function') {
+          try { curPref = window.__autoScroll.pref(); } catch (e) { curPref = null; }
+        }
+        // prefValue getter fallback
+        if (curPref === null && typeof window.__autoScroll.prefValue !== 'undefined') {
+          try { curPref = Boolean(window.__autoScroll.prefValue); } catch (e) { curPref = null; }
+        }
+
+        // If enable/disable present use them
+        if (typeof window.__autoScroll.enable === 'function' && typeof window.__autoScroll.disable === 'function') {
+          if (curPref === null) curPref = localPref();
+          if (curPref) window.__autoScroll.disable(); else window.__autoScroll.enable();
+          setTimeout(refreshLabel, 100);
+          return;
+        }
+
+        // last fallback: toggle localStorage (some earlier auto-scroll builds read this)
+        const curLocal = localPref();
+        localStorage.setItem('autoScrollEnabled', (!curLocal).toString());
+        setTimeout(refreshLabel, 100);
+        return;
       } else {
-        const cur = localPref();
-        localStorage.setItem('autoScrollEnabled', (!cur).toString());
+        // No auto-scroll script loaded: just flip localStorage flag so when it loads it'll respect the setting
+        const curLocal = localPref();
+        localStorage.setItem('autoScrollEnabled', (!curLocal).toString());
+        setTimeout(refreshLabel, 100);
+        return;
       }
-      setTimeout(refreshLabel, 50);
-    } else {
-      const cur = localPref();
-      localStorage.setItem('autoScrollEnabled', (!cur).toString());
-      setTimeout(refreshLabel, 50);
+    } catch (err) {
+      console.error('toggleAutoScroll error', err);
+      // ensure label still refreshes
+      setTimeout(refreshLabel, 100);
     }
   });
 
   refreshLabel();
 
   if (window.__autoScroll) {
-    window.__autoScroll._onThemeChange = function () { refreshLabel(); };
+    // Some auto-scroll builds notify on theme changes; store a hook if supported.
+    try { window.__autoScroll._onThemeChange = function () { refreshLabel(); }; } catch (e) {}
   }
 
   window.addEventListener('storage', (ev) => {
@@ -470,7 +547,24 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<!-- Android / Fire / Google TV detection -->
+<!-- Mobile nav behavior (off-canvas toggle). Ensure this file contains the open/close and resize-dispatch code -->
+<script src="{{ url_for('static', filename='js/mobile-nav.js') }}" defer></script>
+<!-- Grid adapt script: computes scale on small screens so guide fits proportionally -->
+<script src="{{ url_for('static', filename='js/grid-adapt.js') }}" defer></script>
+<!-- Mobile player adapt script: adjusts video height based on viewport/header/fixed-timebar -->
+<script src="{{ url_for('static', filename='js/mobile-player-adapt.js') }}" defer></script>
+<!-- Mobile player adapt script: allow scrolling -->
+<script src="{{ url_for('static', filename='js/mobile-scroll-fix.js') }}" defer></script>
+
+<!-- Auto Scroll (manager and bindings) -->
+<script src="/static/js/auto-scroll.js" defer></script>
+
+<!-- Right Hand Clock Fix -->
+<script src="{{ url_for('static', filename='js/clock-fix.js') }}" defer></script>
+
+
+
+<!-- Android / Fire / Google TV detection (keeps TV experience simple) -->
 <script>
 (function(){
   const ua = navigator.userAgent || "";
@@ -489,12 +583,14 @@ document.addEventListener('DOMContentLoaded', () => {
     themesMenu.innerHTML = `
       <button class="dropbtn">THEMES ▾</button>
       <div class="dropdown-content">
-        <a href="#" onclick="setTheme('light');return false;">Light</a>
-        <a href="#" onclick="setTheme('dark');return false;">Dark</a>
-        <a href="#" onclick="setTheme('retro-aol');return false;">AOL / CompuServe</a>
-        <a href="#" onclick="setTheme('retro-magazine');return false;">TV Guide Magazine</a>
-        <a href="#" onclick="setTheme('directv');return false;">DirecTV</a>
-        <a href="#" onclick="setTheme('comcast');return false;">Comcast</a>
+        <a href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a>
+        <a href="#" data-theme-selector data-theme="light">Light</a>
+        <a href="#" data-theme-selector data-theme="dark">Dark</a>
+        <a href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a>
+        <a href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a>
+       <!-- <a href="#" data-theme-selector data-theme="tvguide1990">TV Guide Magazine (Classic)</a> -->
+        <a href="#" data-theme-selector data-theme="directv">DirecTV</a>
+        <a href="#" data-theme-selector data-theme="comcast">Comcast</a>
       </div>`;
     const logoutLink = document.querySelector('.header .links a[href*="logout"]');
     linksContainer.insertBefore(themesMenu, logoutLink);

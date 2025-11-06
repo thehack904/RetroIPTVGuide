@@ -89,6 +89,9 @@
 </div>
 {% endblock %}
 
+{# Prevent loading auto-scroll on this page — override autoscroll_script block to empty #}
+{% block autoscroll_script %}{% endblock %}
+
 {% block scripts_extra %}
 <script>
 const tunerData = {{ TUNERS|tojson }};
@@ -103,20 +106,15 @@ function populateUrls(tuner) {
     }
 }
 
+/* Ensure theme is applied: theme.js sets setTheme/applyTheme globally. */
 document.addEventListener("DOMContentLoaded", () => {
-    // Setup theme from storage (shared base handles most of it)
-    const saved = localStorage.getItem("theme") || "dark";
-    setTheme(saved);
+    var saved = null;
+    try { saved = localStorage.getItem("theme"); } catch (e) {}
+    if (saved && typeof setTheme === 'function') setTheme(saved);
+    if (typeof updateClock === 'function') updateClock();
 
-    // Clock already initialized by base; ensure it updates here too
-    updateClock();
-
-    // Initialize update form with first tuner’s URLs if available
-    const sel = document.getElementById('tuner_update');
-    if (sel) {
-      const firstTuner = sel.value;
-      populateUrls(firstTuner);
-    }
+    var sel = document.getElementById('tuner_update');
+    if (sel) populateUrls(sel.value);
 });
 </script>
 {% endblock %}

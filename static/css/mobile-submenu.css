@@ -1,0 +1,127 @@
+@media (max-width: 900px) {
+  :root {
+    /* adjust these to taste to match your desktop header look */
+    --mobile-top-font-size: 16px;   /* Home / Manage Users / Logout size */
+    --mobile-top-font-weight: 700;
+    --mobile-top-padding: 12px 10px;
+
+    --mobile-inner-font-size: 15px; /* Settings list items (Change Tuner, Logs, etc) */
+    --mobile-inner-font-weight: 600;
+    --mobile-inner-padding: 10px 8px;
+    --mobile-top-letter-spacing: 0.06em;
+  }
+
+  .mobile-submenu {
+    margin: 8px 0;
+    list-style: none;
+  }
+
+  /* TOP-LEVEL link / toggle styling
+     Targets only top-level entries in the mobile-links list so "Settings" visually matches HOME/MANAGE/LOGOUT */
+  .mobile-links > li > a,
+  .mobile-links > li > .mobile-submenu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: none;
+    border: none;
+    padding: var(--mobile-top-padding);
+    color: inherit;
+    font-size: var(--mobile-top-font-size);
+    font-weight: var(--mobile-top-font-weight);
+    cursor: pointer;
+    box-sizing: border-box;
+    text-decoration: none; /* for anchors */
+
+    /* Make the top-level items ALL CAPS to match HOME / MANAGE USERS / LOGOUT */
+    text-transform: uppercase;
+    letter-spacing: var(--mobile-top-letter-spacing);
+  }
+
+  .mobile-links > li > a:focus,
+  .mobile-links > li > .mobile-submenu-toggle:focus {
+    outline: 2px solid rgba(255,255,255,0.12);
+    outline-offset: 2px;
+  }
+
+  /* COLLAPSIBLE LIST (general) */
+  .mobile-submenu-list {
+    margin: 0;
+    padding: 0 6px;
+    list-style: none;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 220ms ease, padding 220ms ease;
+    box-sizing: border-box;
+    border-left: 2px solid rgba(255,255,255,0.03);
+    margin-left: 8px;
+  }
+
+  /* allow nested submenu lists to indent more */
+  .mobile-submenu .mobile-submenu .mobile-submenu-list {
+    margin-left: 12px;
+    border-left: 2px solid rgba(255,255,255,0.02);
+  }
+
+  .mobile-submenu.open > .mobile-submenu-list {
+    /* large enough to show content; mobile-nav is scrollable for long content */
+    max-height: 1000px;
+    padding: 8px 6px;
+  }
+
+  /* INNER list items (Change Tuner / Logs / About / Toggle Auto-Scroll / Change Password)
+     and also the nested Themes list items */
+  /* These target items that are direct children of a submenu list */
+  .mobile-submenu-list > li > a,
+  .mobile-submenu-list > li > button,
+  /* nested submenu toggle (e.g. Themes inside Settings) should look like inner items */
+  .mobile-submenu-list > li > .mobile-submenu-toggle {
+    display: block;
+    padding: var(--mobile-inner-padding);
+    border-radius: 4px;
+    text-decoration: none;
+    color: inherit;
+    font-size: var(--mobile-inner-font-size);
+    font-weight: var(--mobile-inner-font-weight);
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    box-sizing: border-box;
+    cursor: pointer;
+
+    /* INNER items are not uppercase (match Change Tuner / Logs / etc) */
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  .mobile-submenu-list > li > a:hover,
+  .mobile-submenu-list > li > button:hover,
+  .mobile-submenu-list > li > .mobile-submenu-toggle:hover {
+    background: rgba(255,255,255,0.04);
+  }
+
+  /* caret styling (keeps visual affordance) */
+  .mobile-submenu-caret {
+    display:inline-block;
+    transition: transform 180ms ease;
+    margin-left: 6px;
+    font-size: 0.9em;
+    line-height: 1;
+  }
+
+  /* rotate caret when open; ensure nested caret rotates as well */
+  .mobile-submenu.open > .mobile-submenu-toggle .mobile-submenu-caret,
+  .mobile-submenu.open > .mobile-submenu-toggle .mobile-submenu-caret {
+    transform: rotate(90deg);
+  }
+
+  /* accessibility: ensure focus states for inner items are visible */
+  .mobile-submenu-list > li > a:focus,
+  .mobile-submenu-list > li > button:focus,
+  .mobile-submenu-list > li > .mobile-submenu-toggle:focus {
+    outline: 2px solid rgba(255,255,255,0.12);
+    outline-offset: 2px;
+  }
+}

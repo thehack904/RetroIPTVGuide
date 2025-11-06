@@ -1,37 +1,110 @@
-<div class="header">
-    <div class="links">
-        <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
-        <a href="{{ url_for('guide') }}">HOME</a>
+<div class="header" role="banner">
+  <!-- Mobile hamburger visible on small screens -->
+  <button class="hamburger" id="mobileHamburger" aria-controls="mobileNav" aria-expanded="false" aria-label="Open navigation">
+    <svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="2"></rect><rect y="6" width="20" height="2"></rect><rect y="12" width="20" height="2"></rect></svg>
+  </button>
 
-        {% if current_user is defined and current_user.username == 'admin' %}
-        <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
-        {% endif %}
+  <div class="links" role="navigation" aria-label="Main navigation">
+      <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
+      <a href="{{ url_for('guide') }}">HOME</a>
 
-        <div class="dropdown" id="settingsMenu">
-            <button class="dropbtn">SETTINGS ▾</button>
-            <div class="dropdown-content">
-                {% if current_user is defined and current_user.username == 'admin' %}
-                <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
-                <a href="{{ url_for('view_logs') }}">Logs</a>
-                <li><a href="{{ url_for('about') }}">About</a></li>
-                {% endif %}
-                <a href="#" id="toggleAutoScroll">Toggle Auto-Scroll</a>
-                <a href="{{ url_for('change_password') }}">Change Password</a>
-                <li class="submenu">
-                  <a href="#">Themes</a>
-                  <ul class="submenu-content">
-                    <li><a href="#" onclick="setTheme('light'); return false;">Light</a></li>
-                    <li><a href="#" onclick="setTheme('dark'); return false;">Dark</a></li>
-                    <li><a href="#" onclick="setTheme('retro-aol'); return false;">AOL / CompuServe</a></li>
-                    <li><a href="#" onclick="setTheme('retro-magazine'); return false;">TV Guide (Refresh)</a></li>
-                    <li><a href="#" onclick="setTheme('directv'); return false;">DirecTV</a></li>
-                    <li><a href="#" onclick="setTheme('comcast'); return false;">Comcast</a></li>
-                    <!-- <li><a href="#" onclick="setTheme('tvguide1990'); return false;">TV Guide (Classic)</a></li> -->
-                  </ul>
-                </li>
-            </div>
-        </div>
-        <a href="{{ url_for('logout') }}">LOGOUT</a>
-    </div>
-    <div id="clock" class="clock">--:-- --</div>
+      {% if current_user is defined and current_user.username == 'admin' %}
+      <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
+      {% endif %}
+
+      <div class="dropdown" id="settingsMenu">
+          <button class="dropbtn">SETTINGS ▾</button>
+          <div class="dropdown-content">
+              {% if current_user is defined and current_user.username == 'admin' %}
+              <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+              <a href="{{ url_for('view_logs') }}">Logs</a>
+              <li><a href="{{ url_for('about') }}">About</a></li>
+              {% endif %}
+              <a href="#" id="toggleAutoScroll">Toggle Auto-Scroll</a>
+              <a href="{{ url_for('change_password') }}">Change Password</a>
+              <li class="submenu">
+                <a href="#">Themes</a>
+                <ul class="submenu-content">
+                  <li><a href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
+                  <li><a href="#" data-theme-selector data-theme="light">Light</a></li>
+                  <li><a href="#" data-theme-selector data-theme="dark">Dark</a></li>
+                  <li><a href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
+                  <li><a href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
+		  <!-- <li><a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li> -->
+                  <li><a href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
+                  <li><a href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                </ul>
+              </li>
+          </div>
+      </div>
+
+      <a href="{{ url_for('logout') }}">LOGOUT</a>
+  </div>
+
+  <div id="clock" class="clock">--:-- --</div>
 </div>
+
+<!-- Off-canvas mobile nav (hidden by default, toggled by hamburger) -->
+<nav id="mobileNav" class="mobile-nav" aria-hidden="true">
+  <div class="mobile-nav-inner" role="menu">
+    <div class="mobile-nav-header">
+      <strong>IPTV GUIDE</strong>
+      <button id="mobileNavClose" aria-label="Close navigation">&times;</button>
+    </div>
+
+    <ul class="mobile-links" role="menubar">
+      <li role="none"><a role="menuitem" href="{{ url_for('guide') }}">HOME</a></li>
+      {% if current_user is defined and current_user.username == 'admin' %}
+      <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">MANAGE USERS</a></li>
+      {% endif %}
+
+      <!-- Settings collapsible: contains Toggle Auto-Scroll, Change Password, and nested Themes -->
+      <li class="mobile-submenu" role="none">
+        <button
+          class="mobile-submenu-toggle"
+          aria-expanded="false"
+          aria-controls="mobileSettingsList"
+          type="button">
+          Settings
+          <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+        </button>
+
+        <ul id="mobileSettingsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+          {% if current_user is defined and current_user.username == 'admin' %}
+          <li role="none"><a role="menuitem" href="{{ url_for('change_tuner') }}">Change Tuner</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('view_logs') }}">Logs</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
+          {% endif %}
+          <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Toggle Auto-Scroll</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
+
+          <!-- Nested Themes submenu -->
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileThemesListNested"
+              type="button">
+              Themes
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileThemesListNested" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="light">Light</a></li>
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="dark">Dark</a></li>
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
+	      <!--<li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li> -->
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
+              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+            </ul>
+          </li>
+
+        </ul>
+      </li>
+
+      <li role="none"><a role="menuitem" href="{{ url_for('logout') }}">LOGOUT</a></li>
+    </ul>
+  </div>
+</nav>

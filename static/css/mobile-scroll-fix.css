@@ -1,0 +1,46 @@
+/* Mobile scroll fixes and timebar recompute helpers
+   Load this after mobile.css (or append these rules to mobile.css).
+   Re-enables body scrolling on narrow viewports while keeping mobile-nav
+   independently scrollable and locking background scroll only when nav open.
+*/
+
+@media (max-width: 900px) {
+  /* Re-enable page scrolling on mobile so users can reach the guide and channels */
+  html, body {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+
+  /* guideOuter should grow with content rather than being a fixed viewport-sub layout */
+  .guide-outer {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    padding-bottom: 120px !important; /* ensure page can scroll past the fixed timebar */
+    box-sizing: border-box !important;
+  }
+
+  /* Keep the mobile nav itself scrollable and bounded to the viewport */
+  .mobile-nav {
+    overflow-y: auto !important;
+    max-height: 100vh !important;
+  }
+
+  /* When mobile nav is open, prevent the background page from scrolling */
+  body.mobile-nav-open {
+    overflow: hidden !important;
+    touch-action: none !important;
+  }
+
+  /* Ensure the fixed time header remains accessible and not covered by content.
+     This keeps it visually anchored at top on mobile; we also recompute on scroll in JS. */
+  .time-header-fixed {
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    position: fixed !important;
+    z-index: 1200 !important;
+  }
+}
