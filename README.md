@@ -58,7 +58,6 @@ docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
 ```
 
 ### 🧩 TrueNAS SCALE App
-- Upload the provided `retroiptvguide-4.1.0.zip` chart.
 - Repository: `ghcr.io/thehack904/retroiptvguide`
 - Tag: `latest`
 - Exposes port `5000`.
