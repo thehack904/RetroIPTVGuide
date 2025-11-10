@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.2.0"
-APP_RELEASE_DATE = "2025-11-06"
+APP_VERSION = "v4.2.1"
+APP_RELEASE_DATE = "2025-11-10"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -1284,29 +1284,28 @@ from flask import Response
 def api_guide_snapshot():
     """
     Public unified guide data for framebuffer/RetroIPTV OS clients.
-    Combines channels + EPG info + active tuner in a single JSON response.
-    Emits precise start/stop ISO and duration (minutes) per program.
+    Supports ?hours=N (0.5–8) to control window size.
     """
     try:
         now = datetime.now(timezone.utc)
-        start = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
 
-        # Allow variable window length via ?hours= parameter
-        try:
-            hours = float(request.args.get("hours", 2))
-        except (TypeError, ValueError):
-            hours = 2
+        # Read optional hours parameter
+        hours_param = request.args.get("hours", type=float)
+        if hours_param is None:
+            hours = 2.0
+        else:
+            hours = max(0.5, min(hours_param, 8.0))  # clamp 0.5–8h
 
-        # Clamp to a sane maximum
-        if hours < 0.5:
-            hours = 0.5
-        elif hours > 8:
-            hours = 8
-
+        start = now.replace(
+            minute=(0 if now.minute < 30 else 30),
+            second=0,
+            microsecond=0
+        )
         end = start + timedelta(hours=hours)
 
-        # Timeline labels (30-minute increments)
-        slots = [start + timedelta(minutes=i*30) for i in range(0, 5)]
+        # 30-minute timeline labels across the window
+        slot_count = int((hours * 60) / 30) + 1
+        slots = [start + timedelta(minutes=30 * i) for i in range(slot_count)]
         timeline = [s.strftime("%I:%M %p").lstrip("0") for s in slots]
 
         tuner_name = get_current_tuner()
@@ -1314,7 +1313,7 @@ def api_guide_snapshot():
         tuner_info = tuners.get(tuner_name, {})
 
         channels_out = []
-        for ch in cached_channels[:50]:  # limit for perf
+        for ch in cached_channels[:50]:  # perf cap
             tvg_id = ch.get('tvg_id')
             progs = cached_epg.get(tvg_id, [])
             visible_programs = []
@@ -1324,32 +1323,33 @@ def api_guide_snapshot():
                 if not st or not sp:
                     continue
 
-                # include any program overlapping our 2h window
+                # include any program overlapping [start, end)
                 if st < end and sp > start:
-                    # clamp to window for a stable box inside the 2h view
                     clipped_start = max(st, start)
-                    clipped_stop  = min(sp, end)
-                    dur_min = max(1, int((clipped_stop - clipped_start).total_seconds() // 60))
+                    clipped_stop = min(sp, end)
+                    dur_min = max(
+                        1,
+                        int((clipped_stop - clipped_start).total_seconds() // 60)
+                    )
 
                     visible_programs.append({
                         "title": p.get('title') or "No Data",
                         "desc":  p.get('desc')  or "",
-                        "start": st.isoformat(),      # full original ISO (tz-aware)
+                        "start": st.isoformat(),
                         "stop":  sp.isoformat(),
                         "clipped_start": clipped_start.isoformat(),
                         "clipped_stop":  clipped_stop.isoformat(),
-                        "duration": dur_min            # minutes within the 2h window
+                        "duration": dur_min
                     })
 
             if not visible_programs:
-                # 30-min placeholder, pinned to window start for display sanity
                 visible_programs = [{
                     "title": "No Data",
                     "desc":  "",
                     "start": None,
                     "stop":  None,
                     "clipped_start": start.isoformat(),
-                    "clipped_stop":  (start + timedelta(minutes=30)).isoformat(),
+                    "clipped_stop": (start + timedelta(minutes=30)).isoformat(),
                     "duration": 30
                 }]
 
@@ -1367,13 +1367,13 @@ def api_guide_snapshot():
                 "tuner_xml": tuner_info.get('xml'),
                 "tuner_m3u": tuner_info.get('m3u'),
                 "theme": "default_crt_blue",
-                "version": APP_VERSION
+                "version": APP_VERSION,
             },
             "timeline": timeline,
             "window": {
                 "start_iso": start.isoformat(),
-                "end_iso":   end.isoformat(),
-                "minutes":   120
+                "end_iso": end.isoformat(),
+                "minutes": int(hours * 60),
             },
             "channels": channels_out
         }
