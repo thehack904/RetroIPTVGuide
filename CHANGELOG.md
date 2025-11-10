@@ -6,6 +6,22 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.2.1 - 2025-11-10
+
+### Added
+- Added horizontal scroll/refresh as time moves forward
+- Added API dynamic guide timing refresh
+
+---
+
+## [Unreleased]
+
+- Planned: add `.m3u8` tuner support. 
+- Planned: move logs to SQLite DB. 
+- Planned: log filtering and pagination. 
+
+---
+
 ## v4.2.0 - 2025-11-06
 This version introduces mobile responsiveness, a new theme, refinements to auto-scroll, and backend API structures.
 
@@ -24,15 +40,6 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Resolved layout inconsistencies across themes and display sizes.
 - General code cleanup and alignment for CI/CD consistency.
 
----
-
-## [Unreleased]
-
-- Planned: add `.m3u8` tuner support. 
-- Planned: move logs to SQLite DB. 
-- Planned: log filtering and pagination. 
-
----
 
 ## v4.1.0 - 2025-10-25
 ### New Features
@@ -64,7 +71,6 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Improved guide performance and browser compatibility with the new auto-scroll implementation.
 - Minor visual and layout corrections across settings and guide pages.
 
----
 ## v4.0.0 — 2025-10-19
 **Status:** Public Release (Feature Complete)
 
