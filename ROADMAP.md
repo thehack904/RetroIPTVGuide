@@ -4,8 +4,8 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, but provide a development path for future releases.
 
 ---
-# Current Version: **v4.2.0 (2025-11-06)**
-This version focuses on mobile responsiveness, new RetroIPTV Theme, backend API integration for future efforts
+# Current Version: **v4.2.1 (2025-11-10)**
+This version adds horizontal scroll/refresh as time moves forward, API dynamic guide timing refresh
 
 ## 🔮 Feature Upgrades
 
