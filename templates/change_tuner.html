@@ -2,94 +2,180 @@
 {% block title %}Change Tuner — IPTV Guide{% endblock %}
 
 {% block page_styles %}
-{# load the per-page stylesheet so the boxed/centered layout is applied #}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/change_tuner.css') }}">
 {% endblock %}
 
 {% block content %}
 <div class="container-change-tuner">
-  <div class="box">
-    <h2>Change Active Tuner</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="switch_tuner">
-        <label for="tuner">Select Tuner:</label>
-        <select name="tuner" id="tuner" required>
+  <header class="page-header">
+    <h1>Tuners</h1>
+    <p class="lead">Switch the active tuner, edit tuner sources, and manage tuners. Dangerous actions are separated below to avoid accidental deletion.</p>
+  </header>
+
+  <main class="card-grid">
+    <!-- Active tuner + Auto-refresh combined -->
+    <section class="card card-primary" aria-labelledby="lbl-active-tuner">
+      <div class="card-head">
+        <h2 id="lbl-active-tuner">Active Tuner & Auto-refresh</h2>
+      </div>
+      <div class="card-body">
+        <form method="POST" class="compact-form" id="form-switch">
+          <input type="hidden" name="action" value="switch_tuner">
+          <label for="tuner">Select Active Tuner</label>
+          <select name="tuner" id="tuner" required>
             {% for tuner in tuners %}
             <option value="{{ tuner }}" {% if tuner == current_tuner %}selected{% endif %}>{{ tuner }}</option>
             {% endfor %}
-        </select>
-        <button type="submit" class="primary">Set Active Tuner</button>
-    </form>
-  </div>
+          </select>
 
-  <div class="box">
-    <h2>Update Tuner URLs</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="update_urls">
-        <label for="tuner_update">Select Tuner:</label>
-        <select name="tuner" id="tuner_update" required onchange="populateUrls(this.value)">
-            {% for tuner in tuners %}
-            <option value="{{ tuner }}">{{ tuner }}</option>
-            {% endfor %}
-        </select>
-        <div class="form-row">
-          <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)" required>
+          <div class="form-row form-row-inline">
+            <button type="submit" class="primary">Set Active Tuner</button>
+            <button type="button" class="secondary" id="btn-run-now" title="Run refresh now">Run Now</button>
+          </div>
+        </form>
+
+        <hr class="divider" aria-hidden="true">
+
+        <!-- Auto-refresh settings inline with active tuner -->
+        <form method="POST" class="compact-form" id="form-autorefresh">
+          <input type="hidden" name="action" value="update_auto_refresh">
+          <div class="row-inline">
+            <div class="col">
+              <label for="auto_refresh_enabled">Auto-refresh</label>
+              <select id="auto_refresh_enabled" name="auto_refresh_enabled" class="form-control">
+                <option value="0" {% if _ar_enabled in ['0','False','false'] %}selected{% endif %}>Off</option>
+                <option value="1" {% if _ar_enabled in ['1','True','true'] %}selected{% endif %}>On</option>
+              </select>
+            </div>
+            <div class="col">
+              <label for="auto_refresh_interval">Interval (hours)</label>
+              <select id="auto_refresh_interval" name="auto_refresh_interval_hours" class="form-control">
+                <option value="" {% if not _ar_interval %}selected{% endif %}>Select interval</option>
+                <option value="2" {% if _ar_interval|string == '2' %}selected{% endif %}>Every 2 hours</option>
+                <option value="4" {% if _ar_interval|string == '4' %}selected{% endif %}>Every 4 hours</option>
+                <option value="6" {% if _ar_interval|string == '6' %}selected{% endif %}>Every 6 hours</option>
+                <option value="12" {% if _ar_interval|string == '12' %}selected{% endif %}>Every 12 hours</option>
+                <option value="24" {% if _ar_interval|string == '24' %}selected{% endif %}>Every 24 hours</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row form-row-inline" style="margin-top:10px;">
+            <button type="submit" class="primary">Save Auto-refresh</button>
+            <button type="button" class="btn-link" id="btn-view-last">View Last Run</button>
+          </div>
+
+          <div class="muted small" id="auto-refresh-meta" style="margin-top:10px;">
+            {% if last_auto_refresh is defined and last_auto_refresh %}
+              {% set parts = last_auto_refresh.split('|') %}
+              <strong>Last:</strong> {{ parts[1] if parts|length > 1 else last_auto_refresh }}
+              {% if parts[0] %}
+              &nbsp;•&nbsp;<em>{{ parts[0] }}</em>
+              {% endif %}
+            {% else %}
+              No automatic refresh recorded yet.
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Edit / Add Tuners: Update URLs, Add, Rename grouped (delete separated) -->
+    <section class="card" aria-labelledby="lbl-edit-tuners">
+      <div class="card-head">
+        <h2 id="lbl-edit-tuners">Edit / Add Tuners</h2>
+      </div>
+      <div class="card-body">
+        <div class="subgrid">
+          <!-- Update selected tuner URLs -->
+          <div>
+            <form method="POST" class="compact-form" id="form-update-urls">
+              <input type="hidden" name="action" value="update_urls">
+              <label for="tuner_update">Select Tuner</label>
+              <select name="tuner" id="tuner_update" required onchange="populateUrls(this.value)">
+                {% for tuner in tuners %}
+                <option value="{{ tuner }}">{{ tuner }}</option>
+                {% endfor %}
+              </select>
+
+              <label for="xml_url">XML URL (.xml)</label>
+              <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)" required>
+
+              <label for="m3u_url">M3U URL (.m3u)</label>
+              <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)" required>
+
+              <div class="form-row form-row-inline">
+                <button type="submit" class="primary">Update URLs</button>
+                <button type="button" class="btn-link" id="btn-validate" title="Check reachability">Validate</button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Add new tuner & Rename -->
+          <div>
+            <form method="POST" class="compact-form" id="form-add-tuner">
+              <input type="hidden" name="action" value="add_tuner">
+              <label for="tuner_name">Add new tuner</label>
+              <input type="text" id="tuner_name" name="tuner_name" placeholder="New Tuner Name" required>
+
+              <label for="xml_new">XML URL</label>
+              <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml" required>
+
+              <label for="m3u_new">M3U URL</label>
+              <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u" required>
+
+              <button type="submit" class="primary">Add Tuner</button>
+            </form>
+
+            <hr class="divider" aria-hidden="true">
+
+            <form method="POST" class="compact-form" id="form-rename">
+              <input type="hidden" name="action" value="rename_tuner">
+              <label for="tuner_rename">Rename tuner</label>
+              <select name="tuner" id="tuner_rename" required>
+                {% for tuner in tuners %}
+                <option value="{{ tuner }}">{{ tuner }}</option>
+                {% endfor %}
+              </select>
+              <input type="text" name="new_name" placeholder="New Tuner Name" required>
+              <button type="submit" class="primary">Rename</button>
+            </form>
+          </div>
         </div>
-        <div class="form-row">
-          <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)" required>
-        </div>
-        <button type="submit" class="primary">Update URLs</button>
-    </form>
-  </div>
+      </div>
+    </section>
 
-  <div class="box">
-    <h2>Manage Tuners</h2>
-
-    <!-- Add new tuner -->
-    <form method="POST" style="margin-bottom:20px;">
-        <input type="hidden" name="action" value="add_tuner">
-        <div class="form-row"><input type="text" name="tuner_name" placeholder="New Tuner Name" required></div>
-        <div class="form-row"><input type="text" name="xml_url" placeholder="XML URL (.xml)" required></div>
-        <div class="form-row"><input type="text" name="m3u_url" placeholder="M3U URL (.m3u)" required></div>
-        <button type="submit" class="primary">Add Tuner</button>
-    </form>
-
-    <!-- Remove existing tuner -->
-    <form method="POST">
-        <input type="hidden" name="action" value="delete_tuner">
-        <label for="tuner_remove">Delete Tuner:</label>
-        <select name="tuner" id="tuner_remove" required>
+    <!-- Danger Zone: Delete tuner separated to avoid mistakes -->
+    <section class="card card-danger" aria-labelledby="lbl-danger-zone">
+      <div class="card-head">
+        <h2 id="lbl-danger-zone">Danger Zone — Delete Tuner</h2>
+      </div>
+      <div class="card-body">
+        <form method="POST" class="compact-form" id="form-delete">
+          <input type="hidden" name="action" value="delete_tuner">
+          <label for="tuner_remove">Delete tuner (cannot undo)</label>
+          <select name="tuner" id="tuner_remove" required>
             {% for tuner in tuners %}
             {% if tuner != current_tuner %}
             <option value="{{ tuner }}">{{ tuner }}</option>
             {% endif %}
             {% endfor %}
-        </select>
-        <button type="submit" class="primary">Delete Tuner</button>
-    </form>
+          </select>
 
-  </div>
+          <label for="confirm_delete" class="confirm-label">Type the tuner name to confirm</label>
+          <input type="text" id="confirm_delete" placeholder="Type tuner name exactly to enable Delete">
 
-  <div class="box">
-    <h2>Rename Tuner</h2>
-    <form method="POST">
-        <input type="hidden" name="action" value="rename_tuner">
-        <label for="tuner_rename">Select Tuner:</label>
-        <select name="tuner" id="tuner_rename" required>
-            {% for tuner in tuners %}
-            <option value="{{ tuner }}">{{ tuner }}</option>
-            {% endfor %}
-        </select>
-        <div class="form-row">
-          <input type="text" name="new_name" placeholder="New Tuner Name" required>
-        </div>
-        <button type="submit" class="primary">Rename</button>
-    </form>
-  </div>
+          <div class="form-row form-row-inline" style="margin-top:10px;">
+            <button type="submit" class="danger" id="btn-delete" disabled>Delete Tuner</button>
+            <div class="muted small" style="margin-left:8px;">This action cannot be undone.</div>
+          </div>
+        </form>
+      </div>
+    </section>
+  </main>
 </div>
 {% endblock %}
 
-{# Prevent loading auto-scroll on this page — override autoscroll_script block to empty #}
 {% block autoscroll_script %}{% endblock %}
 
 {% block scripts_extra %}
@@ -106,15 +192,75 @@ function populateUrls(tuner) {
     }
 }
 
-/* Ensure theme is applied: theme.js sets setTheme/applyTheme globally. */
 document.addEventListener("DOMContentLoaded", () => {
-    var saved = null;
-    try { saved = localStorage.getItem("theme"); } catch (e) {}
-    if (saved && typeof setTheme === 'function') setTheme(saved);
-    if (typeof updateClock === 'function') updateClock();
+    try { if (typeof setTheme === 'function') setTheme(localStorage.getItem('theme') || 'dark'); } catch(e){}
 
     var sel = document.getElementById('tuner_update');
     if (sel) populateUrls(sel.value);
+
+    // Run Now (uses existing endpoint)
+    const runNow = document.getElementById('btn-run-now');
+    if (runNow) {
+      runNow.addEventListener('click', () => {
+        fetch('/api/auto_refresh/trigger', { method: 'POST', credentials: 'same-origin' })
+          .then(r => r.json().catch(()=>({ok:false})))
+          .then(j => {
+            if (j && j.ok) {
+              alert('Refresh started');
+            } else {
+              alert('Refresh request sent (if you have permission).');
+            }
+          }).catch(()=>alert('Refresh request failed.'));
+      });
+    }
+
+    // Validate URLs using HEAD
+    const validateBtn = document.getElementById('btn-validate');
+    if (validateBtn) {
+      validateBtn.addEventListener('click', () => {
+        const xml = document.getElementById('xml_url').value;
+        const m3u = document.getElementById('m3u_url').value;
+        const checks = [];
+        if (m3u) checks.push(fetch(m3u, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
+        if (xml) checks.push(fetch(xml, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
+        Promise.all(checks).then(results => {
+          const ok = results.length > 0 && results.every(Boolean);
+          alert(ok ? 'All URLs reachable (HEAD).' : 'One or more URLs not reachable.');
+        });
+      });
+    }
+
+    // Delete confirmation: enable delete button only when typed name matches selected tuner
+    const deleteSelect = document.getElementById('tuner_remove');
+    const confirmInput = document.getElementById('confirm_delete');
+    const deleteBtn = document.getElementById('btn-delete');
+
+    function updateDeleteState() {
+      const selected = deleteSelect && deleteSelect.value ? deleteSelect.value.trim() : '';
+      const typed = confirmInput && confirmInput.value ? confirmInput.value.trim() : '';
+      if (selected && typed && selected === typed) {
+        deleteBtn.disabled = false;
+      } else {
+        deleteBtn.disabled = true;
+      }
+    }
+
+    if (deleteSelect && confirmInput) {
+      deleteSelect.addEventListener('change', () => {
+        confirmInput.value = '';
+        updateDeleteState();
+      });
+      confirmInput.addEventListener('input', updateDeleteState);
+    }
+
+    // Keep tuner_update / tuner_rename select in sync with initial loaded values
+    try {
+      const selUpdate = document.getElementById('tuner_update');
+      const selRename = document.getElementById('tuner_rename');
+      if (selUpdate && selRename) {
+        selRename.value = selUpdate.value;
+      }
+    } catch (e) {}
 });
 </script>
 {% endblock %}

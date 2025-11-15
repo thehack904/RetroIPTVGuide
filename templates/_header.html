@@ -8,15 +8,23 @@
       <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
       <a href="{{ url_for('guide') }}">HOME</a>
 
-      {% if current_user is defined and current_user.username == 'admin' %}
-      <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">MANAGE USERS</a>
-      {% endif %}
-
       <div class="dropdown" id="settingsMenu">
           <button class="dropbtn">SETTINGS ▾</button>
           <div class="dropdown-content">
               {% if current_user is defined and current_user.username == 'admin' %}
-              <a href="{{ url_for('change_tuner') }}">Change Tuner</a>
+              <li class="submenu">
+                <a href="#">Change Tuner</a>
+                <ul class="submenu-content">
+                  {% if tuner_names is defined and tuner_names %}
+                    {% for t in tuner_names %}
+                      <li><a href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a></li>
+                    {% endfor %}
+                  {% endif %}
+                  <li class="separator"></li>
+                  <li><a href="{{ url_for('change_tuner') }}">Tuner Management…</a></li>
+                </ul>
+              </li>
+              <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a>
               <a href="{{ url_for('view_logs') }}">Logs</a>
               <li><a href="{{ url_for('about') }}">About</a></li>
               {% endif %}
@@ -55,7 +63,8 @@
     <ul class="mobile-links" role="menubar">
       <li role="none"><a role="menuitem" href="{{ url_for('guide') }}">HOME</a></li>
       {% if current_user is defined and current_user.username == 'admin' %}
-      <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">MANAGE USERS</a></li>
+      {# moved Manage Users under the Settings submenu for mobile too #}
+      {# previously a top-level item; now grouped under Settings #}
       {% endif %}
 
       <!-- Settings collapsible: contains Toggle Auto-Scroll, Change Password, and nested Themes -->
@@ -71,7 +80,31 @@
 
         <ul id="mobileSettingsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
           {% if current_user is defined and current_user.username == 'admin' %}
-          <li role="none"><a role="menuitem" href="{{ url_for('change_tuner') }}">Change Tuner</a></li>
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileTunerList"
+              type="button">
+              Change Tuner
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileTunerList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              {% if tuner_names is defined and tuner_names %}
+                {% for t in tuner_names %}
+                  <li role="none">
+                    <a role="menuitem" href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a>
+                  </li>
+                {% endfor %}
+              {% endif %}
+              <li class="separator"></li>
+              <li role="none">
+                <a role="menuitem" href="{{ url_for('change_tuner') }}">Tuner Management…</a>
+              </li>
+            </ul>
+          </li>
+          <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('view_logs') }}">Logs</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
           {% endif %}

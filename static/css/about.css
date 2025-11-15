@@ -65,3 +65,104 @@ body.retro-magazine .about-box { background: #fff; border: 1px solid #000; }
   .about-box li { padding: 8px 6px; display:block; }
   .about-box li strong { display:block; margin-bottom:6px; }
 }
+
+/* --- Collapsible System Health Drawer --- */
+
+.health-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 10px;
+}
+
+.health-header .arrow {
+  font-size: 1.1rem;
+  transition: transform 0.25s ease;
+}
+
+/* Hidden drawer area */
+.diag-box {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.25s ease;
+  margin-top: 10px;
+  padding-top: 0;       /* padding removed when collapsed */
+}
+
+/* Expanded drawer */
+.diag-box.open {
+  max-height: 600px;    /* large enough to hold content */
+  opacity: 1;
+  padding-top: 10px;    /* restore padding */
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Light theme version */
+body.light .diag-box.open {
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+
+:root {
+  --arrow-collapsed: "▶";
+  --arrow-expanded: "▼";
+}
+
+/* Use the themed arrow automatically */
+.arrow::after {
+  content: var(--arrow-collapsed);
+}
+
+/* When open */
+.health-header.open .arrow::after {
+  content: var(--arrow-expanded);
+}
+
+/* Collapsible drawer repeated styles de-duplicated (kept for compatibility) */
+.health-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 10px;
+}
+.diag-box {
+  overflow: hidden;
+  max-height: 0;
+  opacity: 0;
+  transition: max-height 0.35s ease, opacity 0.25s ease;
+  margin-top: 10px;
+  padding-top: 0;
+}
+.diag-box.open {
+  max-height: 600px;
+  opacity: 1;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.04);
+}
+body.light .diag-box.open {
+  border-top: 1px solid rgba(0,0,0,0.08);
+}
+:root{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+.arrow::after{content:var(--arrow-collapsed);transition:transform .2s ease;}
+.health-header.open .arrow::after{content:var(--arrow-expanded);}
+
+body.retroiptv{--arrow-collapsed:"►";--arrow-expanded:"▼";}
+body.directv{--arrow-collapsed:"▸";--arrow-expanded:"▾";}
+body.comcast{--arrow-collapsed:"›";--arrow-expanded:"⌄";}
+body.retro-aol{--arrow-collapsed:"+";--arrow-expanded:"-";}
+body.retro-magazine{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+body.dark{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+body.light{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+
+/* Styles for the auto-refresh list to visually match the diagnostics rows */
+.auto-refresh-list { margin: 8px 0 0 0; padding: 0; list-style: none; }
+.auto-refresh-list li { padding: 6px 0; display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.03); }
+.auto-refresh-list li:last-child { border-bottom: none; }
+.diag-auto-refresh p { margin: 8px 0 6px 0; font-weight: 600; }
+
+/* small helper to hide an element if needed */
+.hidden { display: none !important; }

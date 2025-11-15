@@ -6,6 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.3.0 - 2025-11-14
+
+### Added
+- New mobile UI assets including mobile.css, mobile-header.css, mobile-popup.css, and mobile-submenu.css to improve layout and usability on mobile devices.
+- New mobile-related JavaScript files including mobile-nav.js, mobile-scroll-fix.js, and mobile-player-adapt.js.
+- Added tuner management enhancements through the new tuner-settings.js script.
+- New templates added: _header.html, about.html, change_tuner.html, manage_users.html, and logs.html to support expanded UI functionality.
+
+### Changed
+- Updated app.py to support the expanded template set, updated tuner handling, and new mobile behavior.
+- Updated bump_version.py and bump_version.sh for compatibility with the current file layout and new release processes.
+- Updated installation scripts: retroiptv_linux.sh, retroiptv_rpi.sh, retroiptv_windows.bat, and retroiptv_windows.ps1 to align with the new release structure.
+
+---
+
 ## v4.2.1 - 2025-11-10
 
 ### Added
@@ -14,13 +29,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## [Unreleased]
-
-- Planned: add `.m3u8` tuner support. 
-- Planned: move logs to SQLite DB. 
-- Planned: log filtering and pagination. 
-
----
 
 ## v4.2.0 - 2025-11-06
 This version introduces mobile responsiveness, a new theme, refinements to auto-scroll, and backend API structures.
@@ -40,6 +48,7 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Resolved layout inconsistencies across themes and display sizes.
 - General code cleanup and alignment for CI/CD consistency.
 
+---
 
 ## v4.1.0 - 2025-10-25
 ### New Features
@@ -71,6 +80,8 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Improved guide performance and browser compatibility with the new auto-scroll implementation.
 - Minor visual and layout corrections across settings and guide pages.
 
+---
+
 ## v4.0.0 — 2025-10-19
 **Status:** Public Release (Feature Complete)
 
@@ -100,6 +111,8 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - PlutoTV / custom tuner aggregation features
 - Enhanced guide refresh logic for long-running sessions
 
+---
+
 ## v3.3.0 - 2025-10-15
 ### Added
 
@@ -117,7 +130,6 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
   - Added matching **red “TV Guide” badge** for uniform branding with Comcast.
 
 ---
-
 
 ## [v3.2.0] - 2025-10-11
 ### Added
@@ -137,6 +149,7 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 ### Fixed
 - Corrected GHCR tag formatting for TrueNAS (eliminated `:latest:latest` errors).
 - Fixed workflow permissions with explicit `packages: write` and PAT authentication.
+
 ---
 
 ## v3.1.0 - 2025-10-09
@@ -188,9 +201,7 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
   - Prevented guide from displaying outdated EPG after tuner change.  
   - Corrected case where missing XML data produced empty grid.
 
-
 ---
-
 
 ## [3.0.0] - 2025-10-03
 ### Added
@@ -220,6 +231,8 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Consistent logging of user agreement and installer actions.
 - Ensured firewall rule removal on Windows during uninstall.
 
+---
+
 ## [2.3.2] - 2025-09-26
 ### Added
 - Introduced unified **Themes submenu** (Light, Dark, AOL/CompuServe, TV Guide Magazine) across all admin and user pages.
@@ -238,9 +251,7 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Theme persistence issues: selected theme now applies instantly and consistently on every page.
 - AOL and Magazine themes now update **immediately** on About and other pages (previously only visible after navigating away).
 
-
 ---
-
 
 ## v2.3.1 - 2025-09-26
 
@@ -295,9 +306,9 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 - Fixed alignment of tuner forms with consistent dropdowns and validation.
 - Ensured flash messages and logging work consistently across all tuner operations.
 
+---
 
-
-## [v2.0.0] â€“ 2025-09-24
+## [v2.0.0] 2025-09-24
 ### Added
 - Tuner URL validation: new validate_tuner_url() function checks XML/M3U inputs before saving.
   - Detects invalid/empty URLs, unresolvable hostnames, and distinguishes between public vs. private IPs.
@@ -335,7 +346,7 @@ This version introduces mobile responsiveness, a new theme, refinements to auto-
 
 ---
 
-## [v1.x.x] â€“ 2025-09-01 â†’ 2025-09-23
+## [v1.x.x] 2025-09-01 - 2025-09-23
 ### Added
 - Initial IPTV Flask application with:  
   - User authentication (login/logout, password change).  

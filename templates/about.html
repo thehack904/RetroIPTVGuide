@@ -7,6 +7,55 @@
 
 {% block content %}
 <div class="container-about">
+
+  <!-- ===================== -->
+  <!--    SYSTEM HEALTH BOX  -->
+  <!-- ===================== -->
+  <div class="box about-box health-box">
+    <div class="health-header" id="healthToggle">
+      <h2>System Health</h2>
+      <span id="health-arrow" class="arrow"></span>
+    </div>
+
+    <!-- Quick Status Rows -->
+    <ul class="health-list">
+      <li><strong>M3U Playlist</strong><span id="health-m3u-text">● Checking…</span></li>
+      <li><strong>XMLTV File</strong><span id="health-xml-text">● Checking…</span></li>
+      <li><strong>EPG Freshness</strong><span id="health-epg-text">● Checking…</span></li>
+      <li><strong>Active Tuner</strong><span id="health-tuner-text">{{ current_tuner }}</span></li>
+    </ul>
+
+    <!-- Collapsible Diagnostics -->
+    <div class="diag-box" id="diagBox">
+      <h3>Detailed Diagnostics</h3>
+
+      <p><strong>M3U Playlist URL:</strong><br>
+         <span id="diag-m3u-url"></span></p>
+
+      <p><strong>XMLTV URL:</strong><br>
+         <span id="diag-xml-url"></span></p>
+
+      <p><strong>Last XMLTV Update:</strong><br>
+         <span id="diag-xml-age"></span></p>
+
+      <p><strong>Allowed XMLTV age threshold:</strong><br>
+         6 hours</p>
+
+      <!-- Auto-refresh info inserted here -->
+      <div id="diag-auto-refresh" class="diag-auto-refresh">
+        <p><strong>Auto-refresh</strong></p>
+        <ul class="health-list auto-refresh-list">
+          <li><strong>Enabled</strong><span id="diag-auto-enabled">Loading…</span></li>
+          <li><strong>Interval</strong><span id="diag-auto-interval">Loading…</span></li>
+          <li><strong>Last auto-refresh</strong><span id="diag-auto-last">Loading…</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== -->
+  <!--      ABOUT BOX        -->
+  <!-- ===================== -->
   <div class="box about-box">
     <h2>About RetroIPTVGuide</h2>
     <ul>
@@ -20,12 +69,104 @@
       <li><strong>Server uptime:</strong><span>{{ info.uptime }}</span></li>
     </ul>
   </div>
+
 </div>
 {% endblock %}
-
 {% block scripts_extra %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
+
+    // ------------------
+    // Load Health Status
+    // ------------------
+    async function loadHealthPanel() {
+        try {
+            const res = await fetch("/api/health");
+            const h = await res.json();
+
+            const setColor = (el, ok, stale=false) => {
+                if (!el) return;
+                el.style.color = ok ? (stale ? "gold" : "limegreen") : "red";
+                el.textContent = "● " + (ok ? (stale ? "STALE" : "OK") : "ERROR");
+            };
+
+            setColor(document.getElementById("health-m3u-text"), h.m3u_reachable);
+            setColor(document.getElementById("health-xml-text"), h.xml_reachable);
+            setColor(document.getElementById("health-epg-text"), h.xmltv_fresh, !h.xmltv_fresh);
+
+            const m3u = document.getElementById("diag-m3u-url");
+            const xml = document.getElementById("diag-xml-url");
+            const age = document.getElementById("diag-xml-age");
+
+            if (m3u) m3u.textContent = h.tuner_m3u || "Unavailable";
+            if (xml) xml.textContent = h.tuner_xml || "Unavailable";
+            if (age) age.textContent = (typeof h.xmltv_age_hours === "number")
+                ? `${h.xmltv_age_hours.toFixed(1)} hours ago`
+                : "Unknown";
+
+        } catch (err) {
+            console.error("Health panel error:", err);
+        }
+
+        // ------------------
+        // Load Auto-refresh Status
+        // ------------------
+        try {
+            // This endpoint is provided by a small app.py handler (see server snippet)
+            const r2 = await fetch("/api/auto_refresh/status");
+            if (!r2.ok) throw new Error("auto-refresh status not available");
+            const s = await r2.json();
+
+            const enabledEl = document.getElementById("diag-auto-enabled");
+            const intervalEl = document.getElementById("diag-auto-interval");
+            const lastEl = document.getElementById("diag-auto-last");
+
+            if (enabledEl) enabledEl.textContent = s.enabled ? "Yes" : "No";
+            if (intervalEl) intervalEl.textContent = s.interval_hours ? `Every ${s.interval_hours} hours` : "Not set";
+            if (lastEl) {
+                if (s.last_run) {
+                    // last_run format is stored as "success|{ISO}" or "failed|{ISO}|msg"
+                    const parts = s.last_run.split("|");
+                    const when = parts[1] ? parts[1] : s.last_run;
+                    try {
+                        const dt = new Date(when);
+                        lastEl.textContent = dt.toLocaleString();
+                    } catch(e) {
+                        lastEl.textContent = when;
+                    }
+                } else {
+                    lastEl.textContent = "Unknown";
+                }
+            }
+        } catch (err) {
+            // If the endpoint isn't present, show "Unavailable"
+            const enabledEl = document.getElementById("diag-auto-enabled");
+            const intervalEl = document.getElementById("diag-auto-interval");
+            const lastEl = document.getElementById("diag-auto-last");
+            if (enabledEl) enabledEl.textContent = "Unavailable";
+            if (intervalEl) intervalEl.textContent = "Unavailable";
+            if (lastEl) lastEl.textContent = "Unavailable";
+            console.debug("Auto-refresh status not available:", err);
+        }
+    }
+
+    loadHealthPanel();
+
+    // ------------------
+    // Arrow toggle
+    // ------------------
+    const diagBox = document.getElementById("diagBox");
+    const header  = document.getElementById("healthToggle");
+
+    header.addEventListener("click", () => {
+        const isOpen = diagBox.classList.contains("open");
+        diagBox.classList.toggle("open");
+        header.classList.toggle("open", !isOpen);
+    });
+
+    // ------------------
+    // Theme + Clock
+    // ------------------
     const saved = localStorage.getItem("theme") || "dark";
     if (typeof setTheme === 'function') setTheme(saved);
     if (typeof updateClock === 'function') updateClock();
