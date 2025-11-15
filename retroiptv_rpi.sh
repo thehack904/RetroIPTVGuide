@@ -290,12 +290,56 @@ uninstall_app() {
   echo ""
 }
 
+#====================== UPDATE ======================#
+update_app() {
+  echo ""
+  echo "============================================================"
+  echo " RetroIPTVGuide Updater (Headless) "
+  echo "============================================================"
+  echo "Updating installation in $APP_DIR"
+  echo ""
+
+  if [ ! -d "$APP_DIR/.git" ]; then
+    echo "❌ Cannot update — directory is not a git repo: $APP_DIR"
+    exit 1
+  fi
+
+  echo "Pulling latest updates..."
+  sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
+
+  echo "Updating Python dependencies..."
+  if [ -d "$APP_DIR/venv" ]; then
+    pip_install_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install --upgrade pip"
+    if [ -f "$APP_DIR/requirements.txt" ]; then
+      pip_install_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install -r '$APP_DIR/requirements.txt'"
+    fi
+  else
+    echo "⚠️  No venv found — recreating..."
+    sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
+    pip_install_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install --upgrade pip"
+    pip_install_as_iptv "source '$APP_DIR/venv/bin/activate' && pip install -r '$APP_DIR/requirements.txt'"
+  fi
+
+  echo "Restarting service..."
+  sudo systemctl daemon-reload
+  sudo systemctl restart retroiptvguide
+
+  echo ""
+  echo "============================================================"
+  echo " Update Complete "
+  echo "============================================================"
+  echo "End time: $(date)"
+  echo "Full log saved to: $LOG_FILE"
+  echo ""
+}
+
 #====================== MAIN ======================#
 case "$ACTION" in
   install) install_app ;;
   uninstall) uninstall_app ;;
+  update) update_app ;;
   *)
-    echo "Usage: sudo $0 install|uninstall [--yes|-y] [--agree|-a]"
+    echo "Usage: sudo $0 install|update|uninstall [--yes|-y] [--agree|-a]"
     exit 1
     ;;
 esac
