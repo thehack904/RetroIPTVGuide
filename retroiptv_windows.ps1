@@ -42,7 +42,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
             -Verb RunAs
         exit
     } else {
-        Write-Host "? Operation cancelled Ñ administrator rights required." -ForegroundColor Red
+        Write-Host "? Operation cancelled Ã‘ administrator rights required." -ForegroundColor Red
         exit 1
     }
 }
@@ -104,13 +104,13 @@ try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 ""
 $banner = @"
-¦¦¦¦¦¦¦¦¦¦                ¦¦¦                        ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦¦¦¦¦    ¦¦¦   ¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦            
-¦¦¦     ¦¦¦               ¦¦¦                          ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦  ¦¦¦   ¦¦¦                      ¦¦¦            
-¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦    ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦        ¦¦¦    ¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
-¦¦¦¦¦¦¦¦¦¦  ¦¦¦    ¦¦¦    ¦¦¦    ¦¦¦¦     ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦¦¦¦¦¦¦¦      ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦  ¦¦¦¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦    ¦¦¦ 
-¦¦¦   ¦¦¦   ¦¦¦¦¦¦¦¦¦¦    ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦     ¦¦¦  ¦¦¦  ¦¦¦     ¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦¦¦¦¦¦¦¦ 
-¦¦¦    ¦¦¦  ¦¦¦           ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦      ¦¦¦¦¦¦    ¦¦¦  ¦¦¦¦ ¦¦¦   ¦¦¦¦ ¦¦¦¦¦¦   ¦¦¦¦ ¦¦¦        
-¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦      ¦¦¦¦¦ ¦¦¦       ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦¦      ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
+Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦                Â¦Â¦Â¦                        Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦            
+Â¦Â¦Â¦     Â¦Â¦Â¦               Â¦Â¦Â¦                          Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦   Â¦Â¦Â¦                      Â¦Â¦Â¦            
+Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦        Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  
+Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ 
+Â¦Â¦Â¦   Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ 
+Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦           Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦        
+Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦       Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  
 "@
 
 try {
@@ -473,6 +473,63 @@ function Do-Uninstall {
     Read-Host
 }
 
+function Update-RetroIPTVGuide {
+    Write-Host ""
+    Write-Host "============================================================"
+    Write-Host " RetroIPTVGuide Updater (Windows)"
+    Write-Host "============================================================"
+
+    $InstallPath = "C:\RetroIPTVGuide\iptv-server"
+
+    if (-Not (Test-Path "$InstallPath\.git")) {
+        Write-Host "âŒ Cannot update â€” this is not a git repository: $InstallPath"
+        return
+    }
+
+    Write-Host "Pulling latest changes from GitHub..."
+    try {
+        Set-Location $InstallPath
+        git fetch --all
+        git reset --hard origin/main
+    }
+    catch {
+        Write-Host "âŒ Git update failed: $($_.Exception.Message)"
+        return
+    }
+
+    # Virtual environment path
+    $VenvPath = Join-Path $InstallPath "venv"
+
+    if (Test-Path $VenvPath) {
+        Write-Host "Updating Python dependencies..."
+        & "$VenvPath\Scripts\python.exe" -m pip install --upgrade pip
+        & "$VenvPath\Scripts\pip.exe" install -r "$InstallPath\requirements.txt"
+    }
+    else {
+        Write-Host "âš ï¸  No virtual environment found. Recreating..."
+        python -m venv "$VenvPath"
+        & "$VenvPath\Scripts\python.exe" -m pip install --upgrade pip
+        & "$VenvPath\Scripts\pip.exe" install -r "$InstallPath\requirements.txt"
+    }
+
+    Write-Host "Restarting RetroIPTVGuide service..."
+
+    $service = Get-Service -Name "RetroIPTVGuide" -ErrorAction SilentlyContinue
+    if ($service) {
+        Stop-Service RetroIPTVGuide -Force
+        Start-Service RetroIPTVGuide
+    }
+    else {
+        Write-Host "âš ï¸ Service not installed. The app will run only manually."
+    }
+
+    Write-Host ""
+    Write-Host "============================================================"
+    Write-Host " Update Complete "
+    Write-Host "============================================================"
+    Write-Host ""
+}
+
 
 if (-not $Action) {
     Write-Host ""
@@ -498,6 +555,7 @@ if (-not $Action) {
 try {
     switch ($Action) {
         'install'   { Do-Install }
+        'update'    { Do-Update }
         'uninstall' { Do-Uninstall }
     }
 } catch {
@@ -508,6 +566,7 @@ try {
         Stop-Transcript | Out-Null
         Start-Sleep -Milliseconds 200
     } catch {}
+}
 
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
