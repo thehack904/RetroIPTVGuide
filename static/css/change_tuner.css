@@ -1,153 +1,301 @@
-/* change_tuner page stylesheet — theme-aware via CSS variables
-   Falls back to original values if variables are not provided by theme CSS.
-*/
+/* Full replacement: change_tuner page stylesheet
+ *
+ * Goals:
+ *  - Scoped to .container-change-tuner so changes don't ripple site-wide.
+ *  - Strong, readable defaults for cards, headings, labels, inputs, buttons.
+ *  - Explicit per-theme overrides for the lead text you requested.
+ *  - Accessible focus outlines and improved contrast for danger area.
+ *
+ * Replace the existing static/css/change_tuner.css with this file and hard-refresh (Ctrl+F5).
+ */
 
-/* Layout: center column and stack boxes */
+/* ====================================================================== */
+/* Page-scoped CSS variables (sane, higher-contrast defaults)            */
+/* All variables are scoped to .container-change-tuner to avoid globals.  */
+/* ====================================================================== */
 .container-change-tuner {
-  max-width: 520px;
+  /* surface & text */
+  --panel-bg: rgba(10,12,14,0.72);    /* strong dark panel fallback */
+  --panel-text: #e8f6f6;              /* readable pale text on dark panels */
+  --panel-border: rgba(255,255,255,0.06);
+  --card-head-bg: rgba(255,255,255,0.03);
+  --heading-color: #ffffff;
+  --heading-weight: 800;
+
+  /* labels & muted text */
+  --label-color: rgba(240,240,240,0.92);
+  --muted-color: rgba(220,220,220,0.65);
+
+  /* inputs */
+  --input-bg: rgba(255,255,255,0.04);
+  --input-border: rgba(160,200,200,0.18);
+  --input-color: #e9f7f7;
+  --placeholder-color: rgba(230,230,230,0.42);
+
+  /* primary / danger */
+  --primary-color: #1ed3ce;
+  --primary-hover: #16cfc9;
+  --primary-contrast: #ffffff; /* force white for reliable contrast */
+  --danger-color: #ff4d4f;
+
+  /* focus & visual */
+  --focus-border: rgba(30,211,206,0.95);
+  --focus-ring: rgba(30,211,206,0.12);
+  --box-shadow: 0 8px 22px rgba(0,0,0,0.40);
+  --card-border-radius: 10px;
+
+  /* dropdown / submenu defaults */
+  --dropdown-bg: rgba(22,22,22,0.95);
+  --dropdown-color: #edf7f7;
+
+  /* page defaults */
+  color: var(--panel-text);
+  background: transparent;
+}
+
+/* ====================================================================== */
+/* Light-theme page-scoped overrides (only affect this page)             */
+/* ====================================================================== */
+body.light .container-change-tuner {
+  --panel-bg: #fff;
+  --panel-text: #111;
+  --panel-border: rgba(0,0,0,0.08);
+  --card-head-bg: rgba(0,0,0,0.02);
+  --heading-color: #111;
+  --heading-weight: 700;
+
+  --label-color: #333;
+  --muted-color: rgba(0,0,0,0.56);
+
+  --input-bg: #fff;
+  --input-border: rgba(0,0,0,0.12);
+  --input-color: #111;
+  --placeholder-color: rgba(0,0,0,0.38);
+
+  --primary-color: #06c;
+  --primary-hover: #058;
+  --primary-contrast: #ffffff;
+  --box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+
+  --dropdown-bg: #fff;
+  --dropdown-color: #111;
+}
+
+/* ====================================================================== */
+/* Layout                                                                */
+/* ====================================================================== */
+.container-change-tuner {
+  max-width: 1100px;
   margin: 28px auto 80px;
-  padding: 0 12px;
+  padding: 18px;
   box-sizing: border-box;
 }
 
-/* Panel (card) used for each section */
-.box {
-  margin: 28px 0;
-  padding: 18px 20px;
-  border-radius: 8px;
-
-  /* Use CSS variables so theme files can override these.
-     Fallback to previous values when variables are not defined. */
-  background: var(--panel-bg, rgba(0,0,0,0.18));
-  box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset, 0 6px 18px rgba(0,0,0,0.18);
-  border: 1px solid var(--panel-border, rgba(255,255,255,0.03));
-  color: var(--text-color, #eaf6f6);
+/* Header */
+.page-header h1 {
+  margin: 0 0 6px;
+  font-size: 1.6rem;
+  color: var(--panel-text);
+  font-weight: var(--heading-weight);
+}
+.page-header .lead {
+  margin: 0 0 18px;
+  color: var(--muted-color);
+  font-size: 0.98rem;
+  line-height: 1.45;
 }
 
-/* Headings */
-.box h2 {
-  margin: 0 0 12px;
-  font-size: 1.35rem;
-  font-weight: 700;
-  color: var(--heading-color, #fff);
-  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+/* ====================================================================== */
+/* Grid & Cards                                                           */
+/* ====================================================================== */
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
 }
+.card-danger { grid-column: 1 / -1; }
 
-/* Labels */
-.box label {
-  display: block;
-  font-size: 0.9rem;
-  color: var(--label-color, rgba(255,255,255,0.9));
-  margin: 8px 0 6px;
+.card {
+  background: var(--panel-bg);
+  color: var(--panel-text);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--card-border-radius);
+  overflow: hidden;
+  box-shadow: var(--box-shadow);
 }
-
-/* Form rows - stack fields with gap */
-.form-row {
-  display: block;
-  margin-bottom: 10px;
+.card-head {
+  padding: 12px 16px;
+  background: var(--card-head-bg);
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 85%, transparent 15%);
 }
-
-/* Inputs & selects: full width, use themed borders/background/text */
-select, input[type="text"], input[type="url"], input[type="email"], input[type="password"], textarea {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--input-border, rgba(100,200,200,0.25));
-  background: var(--input-bg, rgba(255,255,255,0.03));
-  color: var(--input-color, #eaf6f6);
-  box-sizing: border-box;
-  outline: none;
-  transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
-}
-
-/* slightly lighter placeholder text so it reads on dark backgrounds */
-::placeholder { color: var(--placeholder-color, rgba(255,255,255,0.35)); }
-
-/* Focus styles */
-select:focus, input:focus, textarea:focus {
-  border-color: var(--focus-border, rgba(36,220,210,0.95));
-  box-shadow: 0 0 0 4px var(--focus-ring, rgba(36,220,210,0.06));
-  background: var(--input-bg-focus, rgba(255,255,255,0.02));
-  color: var(--input-color-focus, #fff);
-}
-
-/* Primary button — full width pill */
-button.primary, input[type="submit"].primary {
-  display: block;
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 6px;
-  background: var(--primary-color, #1ed3ce);
-  color: var(--primary-text-color, #002e2c);
-  font-weight: 700;
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 2px 0 rgba(0,0,0,0.12);
-  transition: transform .06s ease, box-shadow .06s ease, background .08s ease;
-}
-
-/* Hover / active */
-button.primary:hover { transform: translateY(-1px); background: var(--primary-color-hover, #16cfc9); }
-button.primary:active { transform: translateY(0); box-shadow: 0 1px 0 rgba(0,0,0,0.12); }
-
-/* Secondary small inline buttons (e.g., Rename button row) */
-.btn-inline {
-  display: inline-block;
-  padding: 6px 10px;
-  border-radius: 4px;
-  background: var(--btn-inline-bg, rgba(255,255,255,0.92));
-  color: var(--btn-inline-color, #002e2c);
-  border: 1px solid var(--btn-inline-border, rgba(0,0,0,0.06));
-  cursor: pointer;
-  font-weight: 600;
-  margin-left: 8px;
-}
-
-/* Tuning select & inputs layout in a row for small screens only: vertical stack on mobile */
-.row-inline {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-}
-.row-inline .row-item {
-  flex: 1 1 auto;
-}
-
-/* Small screens: keep stacked */
-@media (max-width: 640px) {
-  .container-change-tuner { padding: 0 18px; max-width: 100%; }
-  .row-inline { flex-direction: column; align-items: stretch; }
-}
-
-/* Additional spacing for the delete / rename sections to match original spacing */
-.box .sub-heading {
-  margin-top: 12px;
-  margin-bottom: 8px;
-  color: var(--sub-heading-color, rgba(255,255,255,0.9));
-  font-weight: 600;
-}
-
-/* Theme-aware light adjustments:
-   Match how the theme script applies themes: html[data-theme="light"] */
-html[data-theme="light"] .box {
-  background: var(--panel-bg-light, rgba(255,255,255,0.95));
-  color: var(--text-color-light, #111);
-}
-html[data-theme="light"] .box h2 {
-  color: var(--heading-color-light, #111);
+.card-head h2 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: var(--heading-color);
+  font-weight: var(--heading-weight);
   text-shadow: none;
 }
-html[data-theme="light"] select,
-html[data-theme="light"] input,
-html[data-theme="light"] textarea {
-  color: var(--input-color-light, #111);
-  background: var(--input-bg-light, #fff);
-  border-color: var(--input-border-light, rgba(0,0,0,0.12));
+.card-body { padding: 14px 16px; }
+
+/* ====================================================================== */
+/* Form controls & readability                                            */
+/* ====================================================================== */
+.compact-form label {
+  display:block;
+  margin:8px 0 6px;
+  font-size:.95rem;
+  color: var(--label-color);
+  font-weight:600;
 }
-html[data-theme="light"] button.primary {
-  background: var(--primary-color-light, #06c);
-  color: var(--primary-text-color-light, #fff);
+.compact-form input[type="text"],
+.compact-form select,
+.compact-form textarea {
+  width:100%;
+  padding:9px 11px;
+  border-radius:6px;
+  border:1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-color);
+  box-sizing:border-box;
+  transition: box-shadow .12s ease, border-color .12s ease, background-color .12s ease;
+  font-size:0.96rem;
 }
 
-/* small helper to hide an element if needed */
-.hidden { display: none !important; }
+/* placeholder color */
+.container-change-tuner ::placeholder { color: var(--placeholder-color); }
+
+/* focus */
+.compact-form input:focus,
+.compact-form select:focus,
+.compact-form textarea:focus {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 5px var(--focus-ring);
+  outline: none;
+}
+
+/* ====================================================================== */
+/* Buttons                                                                */
+/* ====================================================================== */
+button.primary {
+  background: var(--primary-color);
+  color: var(--primary-contrast);
+  border: none;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-weight:700;
+  cursor:pointer;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.12);
+}
+button.primary:hover { background: var(--primary-hover); transform: translateY(-1px); }
+
+button.secondary {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--panel-border) 70%, transparent 30%);
+  padding: 8px 12px;
+  border-radius: 6px;
+  color: var(--panel-text);
+  cursor:pointer;
+}
+button.danger {
+  background: var(--danger-color);
+  color: #fff;
+  border:none;
+  padding:8px 12px;
+  border-radius:6px;
+  cursor:pointer;
+}
+
+/* ====================================================================== */
+/* Rows, subgrid, divider                                                 */
+/* ====================================================================== */
+.form-row-inline { display:flex; gap:8px; align-items:center; margin-top:12px; }
+.row-inline { display:flex; gap:12px; align-items:flex-start; }
+.row-inline .col { flex:1 1 0; }
+.subgrid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+.divider { border: none; height: 1px; background: color-mix(in srgb, var(--panel-border) 85%, transparent 15%); margin: 12px 0; }
+
+/* Muted helper text */
+.muted { color: var(--muted-color); font-size:0.92rem; }
+.small { font-size:0.88rem; }
+
+/* ====================================================================== */
+/* Danger card improvements                                                */
+/* ====================================================================== */
+.card-danger {
+  border-left: 4px solid var(--danger-color);
+  background: color-mix(in srgb, var(--panel-bg) 80%, var(--danger-color) 6%);
+}
+.card-danger .card-head {
+  border-bottom-color: color-mix(in srgb, var(--danger-color) 12%, transparent 88%);
+}
+.confirm-label { font-size:.9rem; margin-top:8px; color: var(--label-color); }
+#confirm_delete { letter-spacing: 0.02em; }
+
+/* ====================================================================== */
+/* Dropdowns & flyouts (scoped to this page)                              */
+/* ====================================================================== */
+.container-change-tuner .dropdown-content,
+.container-change-tuner .submenu-content {
+  background: var(--dropdown-bg);
+  color: var(--dropdown-color, var(--panel-text));
+  border: 1px solid color-mix(in srgb, var(--panel-border) 85%, transparent 15%);
+}
+
+/* ====================================================================== */
+/* Table header contrasts (if table used)                                 */
+/* ====================================================================== */
+.container-change-tuner th,
+.container-change-tuner .table thead th {
+  color: var(--panel-text);
+  background: color-mix(in srgb, var(--panel-bg) 90%, transparent 10%);
+}
+
+/* ====================================================================== */
+/* Accessibility focus outlines                                            */
+/* ====================================================================== */
+button:focus, select:focus, input:focus, textarea:focus {
+  outline: 3px solid color-mix(in srgb, var(--primary-color) 30%, transparent 70%);
+  outline-offset: 2px;
+}
+
+/* ====================================================================== */
+/* Responsive                                                              */
+/* ====================================================================== */
+@media (max-width: 920px) {
+  .card-grid { grid-template-columns: 1fr; }
+  .subgrid { grid-template-columns: 1fr; }
+  .row-inline { flex-direction: column; }
+}
+
+/* ====================================================================== */
+/* Theme-specific, exact overrides you asked for                          */
+/* - RetroIPTV and TV Guide: lead text color #48494a                       */
+/* - DirecTV: lead text color #153a56                                       */
+/* These are intentionally page-scoped and use !important to override      */
+/* theme rules that previously caused blending.                            */
+/* ====================================================================== */
+
+/* RetroIPTV */
+body.retroiptv .container-change-tuner .page-header h1,
+body.retroiptv .container-change-tuner .page-header .lead {
+  color: #48494a !important;
+}
+
+/* TV Guide (retro-magazine) */
+body.retro-magazine .container-change-tuner .page-header h1,
+body.retro-magazine .container-change-tuner .page-header .lead {
+  color: #48494a !important;
+}
+
+/* DirecTV */
+body.directv .container-change-tuner .page-header h1,
+body.directv .container-change-tuner .page-header .lead {
+  color: #153a56 !important;
+}
+
+/* ====================================================================== */
+/* Smooth, conservative transitions                                        */
+/* ====================================================================== */
+.container-change-tuner * {
+  transition: background-color .12s ease, color .12s ease, border-color .12s ease !important;
+}

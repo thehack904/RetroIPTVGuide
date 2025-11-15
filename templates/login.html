@@ -2,18 +2,121 @@
 <html>
 <head>
     <title>Login</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <style>
-        body {font-family:Arial,sans-serif;margin:0;height:100vh;display:flex;justify-content:center;align-items:center;background-color:#d8d7d3;position:relative;}
-        .logo {position:absolute;top:10%;right:10%;max-width:250px;height:auto;}
-        .box {padding:20px;border-radius:8px;width:300px;box-sizing:border-box;background:#fff;border:1px solid #ccc;box-shadow:0 8px 20px rgba(0,0,0,0.25);}
-        input {width:100%;padding:8px;margin:5px 0;border-radius:4px;border:1px solid #aaa;box-sizing:border-box;}
-        button {width:100%;padding:10px;border:none;border-radius:4px;font-weight:bold;cursor:pointer;}
-        button.primary {background:#06c;color:#fff;}
-        button.primary:hover {background:#049;}
-        .remember {display:none;align-items:center;margin-top:8px;}
-        .remember input[type="checkbox"]{margin-right:6px;}
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #d8d7d3;
+            position: relative;
+        }
+
+        .logo {
+            position: absolute;
+            top: 10%;
+            right: 10%;
+            max-width: 250px;
+            height: auto;
+        }
+
+        .box {
+            padding: 20px;
+            border-radius: 8px;
+            width: 300px;
+            box-sizing: border-box;
+            background: #fff;
+            border: 1px solid #ccc;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+        }
+
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border: 1px solid #aaa;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            border: none;
+            border-radius: 4px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button.primary {
+            background: #06c;
+            color: #fff;
+        }
+
+        button.primary:hover {
+            background: #049;
+        }
+
+        .remember {
+            display: none;
+            align-items: center;
+            margin-top: 8px;
+        }
+
+        .remember input[type="checkbox"] {
+            margin-right: 6px;
+        }
+
+        /* NEW — unified reddish/maroon error styling */
+        .error-msg {
+            color: #da4563;
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+
+        /* MOBILE ONLY OVERRIDES — desktop unchanged */
+        @media (max-width: 600px) {
+
+            body {
+                flex-direction: column;
+                justify-content: flex-start;
+                padding: 20px;
+                padding-top: 40px;
+                height: auto;
+            }
+
+            .logo {
+                position: static !important;
+                display: block;
+                margin: 0 auto 10px;
+                max-width: 180px;
+            }
+
+            .box {
+                width: 100% !important;
+                max-width: 100% !important;
+                margin-top: 10px;
+                border-radius: 10px;
+            }
+
+            input {
+                padding: 10px !important;
+                font-size: 16px !important;
+            }
+
+            button {
+                padding: 10px !important;
+                font-size: 16px !important;
+            }
+        }
     </style>
 </head>
+
 <body>
 <a href="https://github.com/thehack904/RetroIPTVGuide" target="_blank" title="View on GitHub">
     <img src="{{ url_for('static', filename='logo.png') }}" alt="RetroIPTVGuide Logo" class="logo">
@@ -21,37 +124,41 @@
 
 <div class="box">
     <h2>Login</h2>
+
     <form method="POST">
         <input type="text" name="username" placeholder="Username" required>
         <input type="password" name="password" placeholder="Password" required>
+
         <div class="remember" id="rememberBlock">
             <label><input type="checkbox" name="remember" id="remember"> Save Session</label>
         </div>
+
         <button type="submit" class="primary">Login</button>
     </form>
+
     {% if error %}
-        <p style="color:yellow;">{{ error }}</p>
+        <p class="error-msg">{{ error }}</p>
     {% endif %}
+
     {% with messages = get_flashed_messages() %}
         {% if messages %}
             {% for msg in messages %}
-                <p style="color:#da4563;">{{ msg }}</p>
+                <p class="error-msg">{{ msg }}</p>
             {% endfor %}
         {% endif %}
     {% endwith %}
 </div>
 
 <script>
-/* Android TV "remember" behavior: enable the checkbox UI and persist choice in localStorage.
-   The original file had a mismatched comment block which left a stray "});" outside the comment,
-   causing the "Unexpected token '}'" syntax error. Below is the fixed, working script. */
 document.addEventListener("DOMContentLoaded", () => {
     const ua = navigator.userAgent || "";
     const isAndroidTV = /Android|AFT|BRAVIA|GoogleTV|MiBOX|Shield|TCL|Hisense|Fire TV/i.test(ua);
     const remember = document.getElementById("rememberBlock");
+
     if (isAndroidTV && remember) {
         remember.style.display = "flex";
     }
+
     const rememberBox = document.getElementById("remember");
     if (rememberBox) {
         rememberBox.checked = localStorage.getItem("rememberSession") === "true";
@@ -61,5 +168,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 });
 </script>
+
 </body>
 </html>
+

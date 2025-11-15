@@ -1,7 +1,7 @@
 # Installation Guide
 
-**Version:** v4.2.1  
-**Last Updated:** 2025-10-25  
+**Version:** v4.3.0  
+**Last Updated:** 2025-11-14
 
 ---
 
@@ -20,7 +20,6 @@
 
 ## 🐳 Quick Docker Run
 
-The fastest way to launch **RetroIPTVGuide v3.2.0**:
 
 ```bash
 docker pull ghcr.io/thehack904/retroiptvguide:latest
@@ -110,7 +109,7 @@ sudo retroiptv_rpi.sh update
 ```
 
 ### 🪟 Windows
-**Alignment with Linux/Pi currently on track for v4.0.1 release**
+
 ```powershell
 git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
 ```

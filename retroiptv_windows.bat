@@ -3,7 +3,7 @@ mode con: cols=160 lines=50
 
 REM ============================================================
 REM RetroIPTVGuide Windows Unified Installer / Uninstaller
-REM Version: v4.0.0
+REM Version: v4.3.0
 REM License: Creative Commons BY-NC-SA 4.0
 REM ============================================================
 
@@ -31,7 +31,7 @@ if /i "%choice%"=="Y" (
 
 :continue
 setlocal
-set "VERSION=4.0.0"
+set "VERSION=4.3.0"
 set "REPO_URL=https://github.com/thehack904/RetroIPTVGuide.git"
 set "ZIP_URL=https://github.com/thehack904/RetroIPTVGuide/archive/refs/heads/main.zip"
 set "INSTALL_DIR=%~dp0RetroIPTVGuide"

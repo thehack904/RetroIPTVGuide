@@ -258,6 +258,8 @@ body.light .program { background:#ddd; border-color:#aaa; color:#000; }
 body.light .program.now { background:#cfe8cf; border-color:#090; }
 body.light .now-line { background:#090; }
 body.light .header #clock { color: #ffffff !important; }
+/* compact: make hamburger rects white in Light theme */
+body.light .hamburger svg rect,body.light #mobileHamburger svg rect{fill:#fff!important;stroke:#fff!important}
 
 /* Retro-AOL */
 body.retro-aol { --timebar-bg:#004466; --timebar-border:#33cccc; --timebar-color:#33cccc; --chan-col-bg:#004466; background:#2f4f4f; color:#f0f0f0; font-family:"Tahoma","Arial",sans-serif; }
@@ -497,4 +499,29 @@ body.retroiptv a{color:var(--timebar-border)}body.retroiptv a:hover{color:var(--
 body { transition: background-color .3s ease,color .3s ease; }
 body.fade-switch { opacity:0; transition:opacity .25s ease; }
 
+
+:root{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+.arrow::after{content:var(--arrow-collapsed);transition:transform .2s ease;}
+.health-header.open .arrow::after{content:var(--arrow-expanded);}
+
+body.retroiptv{--arrow-collapsed:"►";--arrow-expanded:"▼";}
+body.directv{--arrow-collapsed:"▸";--arrow-expanded:"▾";}
+body.comcast{--arrow-collapsed:"›";--arrow-expanded:"⌄";}
+body.retro-aol{--arrow-collapsed:"+";--arrow-expanded:"-";}
+body.retro-magazine{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+body.dark{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+body.light{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
+
+
 /* End of base.css */
+
+
+/* Theme-aware separator for tuner fly-outs */
+.separator {
+    border-top: 1px solid currentColor;
+    opacity: 0.25;
+    margin: 6px 0;
+    padding: 0;
+    list-style: none;
+    height: 0;
+}

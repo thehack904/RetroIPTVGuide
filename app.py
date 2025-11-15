@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.2.1"
-APP_RELEASE_DATE = "2025-11-10"
+APP_VERSION = "v4.3.0"
+APP_RELEASE_DATE = "2025-11-14"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -12,6 +12,7 @@ import platform
 import os
 import datetime
 import requests
+import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urljoin
 import socket
@@ -19,6 +20,7 @@ import ipaddress
 import logging
 import subprocess
 from datetime import datetime, timezone, timedelta
+import threading
 
 # New import: vlc control helper (optional - keep existing integration compatibility)
 try:
@@ -211,6 +213,21 @@ def rename_tuner(old_name, new_name):
         c = conn.cursor()
         c.execute("UPDATE tuners SET name=? WHERE name=?", (new_name, old_name))
         conn.commit()
+
+
+# ------------------- Template context helpers -------------------
+@app.context_processor
+def inject_tuner_context():
+    """Inject tuner info into all templates (for header fly-outs)."""
+    try:
+        tuners = get_tuners()
+        tuner_names = list(tuners.keys())
+    except Exception:
+        tuner_names = []
+    return {
+        "current_tuner": get_current_tuner(),
+        "tuner_names": tuner_names
+    }
 
 # ------------------- Global cache -------------------
 cached_channels = []
@@ -588,6 +605,48 @@ def about():
     return render_template("about.html", info=info)
 
 
+
+@app.route('/set_tuner/<name>')
+@login_required
+def set_tuner(name):
+    """Quick-switch the active tuner from the header fly-out.
+    Admin-only, mirrors the behaviour of the 'switch_tuner' action in /change_tuner.
+    """
+    if current_user.username != 'admin':
+        log_event(current_user.username, f"Unauthorized quick tuner switch attempt to {name}")
+        flash("Unauthorized access.", "warning")
+        return redirect(url_for('guide'))
+
+    tuners = get_tuners()
+    if name not in tuners:
+        flash(f"Tuner '{name}' does not exist.", "warning")
+        return redirect(request.referrer or url_for('change_tuner'))
+
+    # Update current tuner
+    set_current_tuner(name)
+
+    # Refresh cached guide data
+    global cached_channels, cached_epg
+    m3u_url = tuners[name].get("m3u")
+    xml_url = tuners[name].get("xml")
+
+    cached_channels = parse_m3u(m3u_url) if m3u_url else []
+    cached_epg = parse_epg(xml_url) if xml_url else {}
+    cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+
+    log_event(current_user.username, f"Quick switched active tuner to {name}")
+    flash(f"Active tuner switched to {name}", "success")
+
+    # Try to redirect back to where the user came from, falling back to guide
+    dest = request.referrer or url_for('guide')
+    try:
+        if not is_safe_url(dest):
+            dest = url_for('guide')
+    except Exception:
+        dest = url_for('guide')
+    return redirect(dest)
+
+
 @app.route('/change_tuner', methods=['GET', 'POST'])
 @login_required
 def change_tuner():
@@ -664,20 +723,83 @@ def change_tuner():
                 log_event(current_user.username, f"Added tuner {name}")
                 flash(f"Tuner {name} added successfully.")
 
+        elif action == "update_auto_refresh":
+            # Expect form fields: auto_refresh_enabled ('0' or '1') and auto_refresh_interval_hours (2/4/6/12/24)
+            enabled = request.form.get("auto_refresh_enabled", "0")
+            interval = request.form.get("auto_refresh_interval_hours", "")
+            if enabled not in ("0", "1"):
+                enabled = "0"
+            if interval:
+                try:
+                    intval = int(interval)
+                except:
+                    intval = None
+            else:
+                intval = None
+
+            # only allow preset intervals
+            AUTO_REFRESH_PRESETS = [2, 4, 6, 12, 24]
+            if intval and intval not in AUTO_REFRESH_PRESETS:
+                flash(f"Invalid interval. Allowed: {AUTO_REFRESH_PRESETS}", "warning")
+            else:
+                # persist using existing settings table
+                try:
+                    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+                        c = conn.cursor()
+                        c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("auto_refresh_enabled", "1" if enabled == "1" else "0"))
+                        if intval:
+                            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("auto_refresh_interval_hours", str(intval)))
+                        else:
+                            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", ("auto_refresh_interval_hours", ""))
+                        conn.commit()
+                except Exception:
+                    logging.exception("Failed to persist auto-refresh settings")
+                    flash("Failed to save auto-refresh settings.", "warning")
+                else:
+                    log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
+                    flash("Auto-refresh settings updated.", "success")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
+
+    # read auto-refresh status for template display
+    def _get_setting_inline(key, default=None):
+        try:
+            with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute("SELECT value FROM settings WHERE key=?", (key,))
+                row = c.fetchone()
+            return row[0] if row else default
+        except Exception:
+            return default
+
+    auto_refresh_enabled = _get_setting_inline("auto_refresh_enabled", "0")
+    auto_refresh_interval_hours = _get_setting_inline("auto_refresh_interval_hours", "")
+    last_auto_refresh = None
+    if current_tuner:
+        last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
         current_tuner=current_tuner,
         current_urls=tuners[current_tuner],
-        TUNERS=tuners
+        TUNERS=tuners,
+        auto_refresh_enabled=auto_refresh_enabled,
+        auto_refresh_interval_hours=auto_refresh_interval_hours,
+        last_auto_refresh=last_auto_refresh
     )
 
 @app.route('/guide')
 @login_required
 def guide():
     log_event(current_user.username, "Loaded guide page")
+    # Check and run auto-refresh if due (minimal preset-based approach)
+    try:
+        refresh_if_due()
+    except Exception:
+        logging.exception("refresh_if_due from guide() failed")
+
     now = datetime.now(timezone.utc)
     grid_start = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
     slots = int((HOURS_SPAN * 60) / SLOT_MINUTES)
@@ -831,6 +953,29 @@ def api_start_stream():
 
     log_event(current_user.username, f"Requested start_stream {url} (id={instance}, hide_cursor={hide_cursor})")
     return jsonify({"ok": True, "message": "started", "id": instance})
+
+@app.route('/api/auto_refresh/status', methods=['GET'])
+@login_required
+def api_auto_refresh_status():
+    """
+    Return auto-refresh status for the current tuner:
+      { tuner, enabled (bool), interval_hours (int|null), last_run (string|null) }
+    """
+    try:
+        tuner = get_current_tuner()
+        enabled = get_setting("auto_refresh_enabled", "0")
+        interval = get_setting("auto_refresh_interval_hours", "")
+        last = get_setting(f"last_auto_refresh:{tuner}", None) if tuner else None
+
+        return jsonify({
+            "tuner": tuner,
+            "enabled": bool(str(enabled) in ("1", "true", "True")),
+            "interval_hours": int(interval) if interval not in (None, "") else None,
+            "last_run": last
+        })
+    except Exception as e:
+        logging.exception("api_auto_refresh_status failed: %s", e)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/stop_stream', methods=['POST'])
 @login_required
@@ -1287,6 +1432,12 @@ def api_guide_snapshot():
     Supports ?hours=N (0.5–8) to control window size.
     """
     try:
+        # Run auto-refresh if due so CRT clients get fresh data when they poll
+        try:
+            refresh_if_due()
+        except Exception:
+            logging.exception("refresh_if_due from api_guide_snapshot failed")
+
         now = datetime.now(timezone.utc)
 
         # Read optional hours parameter
@@ -1458,6 +1609,228 @@ def api_qr_show():
     return jsonify({"status": "visible"})
 
 
+def check_url_reachable(url, timeout=5):
+    try:
+        r = requests.head(url, timeout=timeout)
+        return r.status_code < 400
+    except:
+        return False
+
+def check_xmltv_freshness(xml_url, max_age_hours=6):
+    try:
+        r = requests.get(xml_url, timeout=10)
+        r.raise_for_status()
+
+        root = ET.fromstring(r.content)
+
+        now = datetime.now(timezone.utc)
+        past_starts = []
+
+        for prog in root.findall(".//programme"):
+            start = prog.get("start")
+            if not start:
+                continue
+
+            # example format: "20251115051031 +0000"
+            parts = start.split()
+            ts = parts[0]  # 20251115051031
+            if len(ts) >= 14:
+                try:
+                    dt = datetime.strptime(ts[:14], "%Y%m%d%H%M%S").replace(tzinfo=timezone.utc)
+                    if dt <= now:
+                        past_starts.append(dt)
+                except:
+                    pass
+
+        if not past_starts:
+            # If no past events, assume fresh
+            return (True, 0.0)
+
+        latest_past = max(past_starts)
+        age_hours = (now - latest_past).total_seconds() / 3600.0
+
+        return (age_hours <= max_age_hours, age_hours)
+
+    except Exception as e:
+        print("XMLTV freshness error:", e)
+        return (False, None)
+
+# ------------------- Minimal Auto-refresh (preset-based, no scheduler) -------------------
+AUTO_REFRESH_PRESETS = [2, 4, 6, 12, 24]  # allowed hours
+_auto_refresh_locks = {}  # in-memory locks (OK for single-process)
+
+def get_setting(key, default=None):
+    """Read key from tuners.settings table (existing settings table)."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?", (key,))
+            row = c.fetchone()
+        return row[0] if row else default
+    except Exception:
+        return default
+
+def set_setting(key, value):
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
+            conn.commit()
+    except Exception:
+        logging.exception("set_setting failed for %s", key)
+
+def _acquire_lock(name):
+    lock = _auto_refresh_locks.setdefault(name, threading.Lock())
+    return lock.acquire(blocking=False)
+
+def _release_lock(name):
+    lock = _auto_refresh_locks.get(name)
+    try:
+        if lock and lock.locked():
+            lock.release()
+    except RuntimeError:
+        # already released or not owned
+        pass
+
+def refresh_current_tuner(tuner_name=None):
+    """Perform the same refresh logic you already run on login/tuner switch.
+       Returns True on success, False on failure/skip.
+    """
+    try:
+        if not tuner_name:
+            tuner_name = get_current_tuner()
+        if not tuner_name:
+            logging.info("refresh_current_tuner: no current tuner set")
+            return False
+
+        if not _acquire_lock(tuner_name):
+            logging.info("refresh_current_tuner: lock busy for %s", tuner_name)
+            return False
+
+        logging.info("refresh_current_tuner: refreshing tuner %s", tuner_name)
+        tuners = get_tuners()
+        info = tuners.get(tuner_name)
+        if not info:
+            logging.warning("refresh_current_tuner: tuner %s not found", tuner_name)
+            return False
+
+        m3u_url = info.get('m3u')
+        xml_url = info.get('xml')
+
+        new_channels = parse_m3u(m3u_url) if m3u_url else []
+        new_epg = parse_epg(xml_url) if xml_url else {}
+        new_epg = apply_epg_fallback(new_channels, new_epg)
+
+        # atomic swap
+        global cached_channels, cached_epg
+        cached_channels = new_channels
+        cached_epg = new_epg
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        set_setting(f"last_auto_refresh:{tuner_name}", f"success|{now_iso}")
+
+        logging.info("refresh_current_tuner: finished %s", tuner_name)
+        return True
+
+    except Exception as e:
+        logging.exception("refresh_current_tuner error for %s: %s", tuner_name, e)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        set_setting(f"last_auto_refresh:{tuner_name}", f"failed|{now_iso}|{str(e)[:200]}")
+        return False
+    finally:
+        try:
+            _release_lock(tuner_name)
+        except Exception:
+            pass
+
+def refresh_if_due(tuner_name=None):
+    """Check settings and last-run timestamp; refresh if interval elapsed."""
+    try:
+        # global enabling (simple): stored as 'auto_refresh_enabled' = "1" or "0"
+        enabled = get_setting("auto_refresh_enabled", "0")
+        if str(enabled) not in ("1", "true", "True"):
+            return False
+
+        interval_value = get_setting("auto_refresh_interval_hours", None)
+        try:
+            interval_hours = int(interval_value) if interval_value is not None and interval_value != "" else None
+        except:
+            interval_hours = None
+
+        # Only allow preset intervals for simplicity/safety
+        if interval_hours not in AUTO_REFRESH_PRESETS:
+            logging.debug("refresh_if_due: interval %s not in presets %s", interval_hours, AUTO_REFRESH_PRESETS)
+            return False
+
+        if not tuner_name:
+            tuner_name = get_current_tuner()
+        if not tuner_name:
+            return False
+
+        last_raw = get_setting(f"last_auto_refresh:{tuner_name}", None)
+        if last_raw:
+            # stored as "success|{ISO}" or "failed|{ISO}|msg"
+            try:
+                last_iso = last_raw.split("|")[1]
+                last_dt = datetime.fromisoformat(last_iso)
+            except Exception:
+                last_dt = None
+        else:
+            last_dt = None
+
+        now = datetime.now(timezone.utc)
+        if last_dt is None:
+            due = True
+        else:
+            elapsed_hours = (now - last_dt).total_seconds() / 3600.0
+            due = (elapsed_hours >= interval_hours)
+
+        if due:
+            logging.info("refresh_if_due: due for tuner %s (interval=%s)", tuner_name, interval_hours)
+            return refresh_current_tuner(tuner_name)
+        return False
+
+    except Exception:
+        logging.exception("refresh_if_due unexpected error")
+        return False
+
+# ------------------- QR Visibility Control (with auto-restore) -------------------
+
+# (rest of the file unchanged)
+# ------------------- Health endpoint and the remainder of the script -------------------
+
+@app.route('/api/health')
+@login_required
+def api_health():
+    tuners = get_tuners()
+    curr = get_current_tuner()
+    t = tuners.get(curr, {})
+
+    m3u_url = t.get("m3u", "")
+    xml_url = t.get("xml", "")
+
+    # Reachability checks
+    m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
+    xml_ok = check_url_reachable(xml_url) if xml_url else False
+
+    # Freshness check (keep your current function)
+    # If you don't compute age yet, return None so "Unknown" shows
+    xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
+
+
+    return jsonify({
+        "tuner": curr,
+        "m3u_reachable": m3u_ok,
+        "xml_reachable": xml_ok,
+        "xmltv_fresh": xml_fresh,
+
+        # ADD THESE:
+        "tuner_m3u": m3u_url,
+        "tuner_xml": xml_url,
+        "xmltv_age_hours": xml_age_hours
+    })
+
+
 if __name__ == '__main__':
     init_db()
     add_user('admin', 'strongpassword123')
@@ -1474,4 +1847,5 @@ if __name__ == '__main__':
     cached_channels = parse_m3u(tuners[current_tuner]["m3u"])
     cached_epg = parse_epg(tuners[current_tuner]["xml"])
 
+    # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)

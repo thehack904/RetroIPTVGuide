@@ -1,6 +1,74 @@
-/* Per-page styles for Manage Users page — scoped to this page */
+/* Full replacement: Manage Users page stylesheet
+ *
+ * Purpose:
+ *  - Match the Change Tuner visual system (same scoped variables) so cards/boxes,
+ *    inputs, select, buttons, table headers, and focus states are consistent.
+ *  - Scoped to .container-manage-users so site-wide CSS is unaffected.
+ *  - Theme-specific header overrides for RetroIPTV, Retro Magazine, and DirecTV.
+ */
 
-/* Outer container to center content */
+/* Page-scoped variables (same tokens as change_tuner.css) */
+.container-manage-users {
+  --panel-bg: rgba(10,12,14,0.72);
+  --panel-text: #e8f6f6;
+  --panel-border: rgba(255,255,255,0.06);
+  --card-head-bg: rgba(255,255,255,0.03);
+  --heading-color: #ffffff;
+  --heading-weight: 800;
+
+  --label-color: rgba(240,240,240,0.92);
+  --muted-color: rgba(220,220,220,0.65);
+
+  --input-bg: rgba(255,255,255,0.04);
+  --input-border: rgba(160,200,200,0.18);
+  --input-color: #e9f7f7;
+  --placeholder-color: rgba(230,230,230,0.42);
+
+  --primary-color: #1ed3ce;
+  --primary-hover: #16cfc9;
+  --primary-contrast: #ffffff;
+
+  --danger-color: #c00;
+
+  --focus-border: rgba(30,211,206,0.95);
+  --focus-ring: rgba(30,211,206,0.12);
+  --box-shadow: 0 8px 22px rgba(0,0,0,0.40);
+  --card-border-radius: 10px;
+
+  --dropdown-bg: rgba(22,22,22,0.95);
+  --dropdown-color: #edf7f7;
+
+  color: var(--panel-text);
+  background: transparent;
+}
+
+/* Light-theme page-scoped overrides */
+body.light .container-manage-users {
+  --panel-bg: #f3f3f3;
+  --panel-text: #111;
+  --panel-border: rgba(0,0,0,0.06);
+  --card-head-bg: rgba(0,0,0,0.02);
+  --heading-color: #111;
+  --heading-weight: 700;
+
+  --label-color: #333;
+  --muted-color: rgba(0,0,0,0.56);
+
+  --input-bg: #fff;
+  --input-border: rgba(0,0,0,0.08);
+  --input-color: #111;
+  --placeholder-color: rgba(0,0,0,0.36);
+
+  --primary-color: #06c;
+  --primary-hover: #058;
+  --primary-contrast: #ffffff;
+  --box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+
+  --dropdown-bg: #fff;
+  --dropdown-color: #111;
+}
+
+/* Layout */
 .container-manage-users {
   max-width: 720px;
   margin: 60px auto;
@@ -8,21 +76,32 @@
   box-sizing: border-box;
 }
 
-/* Panel */
-.container-manage-users .box {
+/* Panel / Card surface */
+.container-manage-users .box,
+.container-manage-users .card {
   padding: 18px;
-  border-radius: 8px;
-  background: rgba(0,0,0,0.06);
-  border: 1px solid rgba(255,255,255,0.03);
-  box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset;
+  border-radius: var(--card-border-radius);
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  box-shadow: var(--box-shadow);
+  color: var(--panel-text);
 }
 
 /* Headings */
-.container-manage-users h2 { margin: 0 0 12px; font-size:1.25rem; font-weight:700; color:inherit; }
-.container-manage-users h3 { margin: 10px 0; font-size:1rem; color:inherit; }
+.container-manage-users h2 {
+  margin: 0 0 12px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--heading-color);
+}
+.container-manage-users h3 {
+  margin: 10px 0;
+  font-size: 1rem;
+  color: var(--heading-color);
+}
 
 /* Form rows */
-.form-row { margin-bottom: 8px; }
+.container-manage-users .form-row { margin-bottom: 8px; }
 
 /* Inputs / selects */
 .container-manage-users input[type="text"],
@@ -30,68 +109,78 @@
 .container-manage-users select {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid rgba(255,255,255,0.06);
-  background: rgba(255,255,255,0.03);
-  color: inherit;
+  border-radius: 6px;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--input-color);
   box-sizing: border-box;
   outline: none;
+  font-size: 0.96rem;
 }
-.container-manage-users input:focus {
-  border-color: rgba(30,211,206,0.95);
-  box-shadow: 0 0 0 4px rgba(30,211,206,0.06);
+
+/* Placeholder and focus */
+.container-manage-users ::placeholder { color: var(--placeholder-color); }
+.container-manage-users input:focus,
+.container-manage-users select:focus {
+  border-color: var(--focus-border);
+  box-shadow: 0 0 0 5px var(--focus-ring);
 }
 
 /* Buttons */
-.btn { padding: 8px 12px; border-radius:4px; border:none; cursor:pointer; font-weight:700; }
-.btn.add { background: #0a0; color: #fff; display: inline-block; }
-.btn.add:hover { background: #070; }
-.btn.danger { background: #c00; color: #fff; }
-.btn.danger:hover { background: #900; }
+.btn { padding: 8px 12px; border-radius:6px; border:none; cursor:pointer; font-weight:700; }
+.btn.add { background: var(--primary-color); color: var(--primary-contrast); display: inline-block; }
+.btn.add:hover { background: var(--primary-hover); }
+.btn.danger { background: var(--danger-color); color: #fff; }
 .btn.warn { background: #d2691e; color: #fff; }
-.btn.warn:hover { background: #a0522d; }
 
-/* For the add user button make it full width in the form */
+/* Make add-user button full width in add-user form */
 .add-user-form .btn.add { width: 100%; }
 
 /* Table */
 .table-wrap { overflow-x: auto; margin-top: 12px; }
 .users-table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-.users-table thead th { background: rgba(0,0,0,0.6); color: #fff; padding: 8px; text-align: left; position: sticky; top: 0; z-index: 5; }
-.users-table tbody td { padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); vertical-align: middle; }
+.users-table thead th {
+  background: color-mix(in srgb, var(--panel-bg) 85%, rgba(0,0,0,0.06) 15%);
+  color: var(--panel-text);
+  padding: 8px;
+  text-align: left;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+.users-table tbody td {
+  padding: 10px 8px;
+  border-bottom: 1px solid color-mix(in srgb, var(--panel-border) 75%, transparent 25%);
+  vertical-align: middle;
+  color: var(--panel-text);
+}
 
-/* Actions cell: inline forms */
+/* Actions & inline forms */
 .actions { display:flex; gap:8px; }
-
-/* Inline form reset so buttons sit next to each other */
 .inline-form { display:inline; margin:0; padding:0; }
 
 /* Flash messages */
 .flash-messages { margin-top: 12px; }
-.flash { color: #ffd; background: transparent; margin: 6px 0; }
+.flash { color: var(--panel-text); background: transparent; margin: 6px 0; }
 
-/* Theme overrides */
-body.dark .container-manage-users .box { background: #222; border-color: rgba(255,255,255,0.03); }
-body.dark .users-table thead th { background: #333; color: #fff; }
-body.dark .users-table tbody tr:nth-child(even) { background: #222; color: #fff; }
-
-body.light .container-manage-users .box { background: #f3f3f3; border-color: rgba(0,0,0,0.06); color: #000; }
-body.light .users-table thead th { background: #ddd; color: #000; }
-body.light .users-table tbody tr:nth-child(even) { background: #fff; color: #000; }
-
-body.retro-aol .container-manage-users .box {
-  padding: 18px;
-  border-radius: 8px;
-  background: #004466;
-  border:2px solid #33cccc;
-  box-shadow: 0 2px 0 rgba(255,255,255,0.02) inset;
+/* Theme-specific header overrides to match change_tuner exact colors */
+/* RetroIPTV */
+body.retroiptv .container-manage-users h2,
+body.retroiptv .container-manage-users h3 {
+  color: #ffffff !important;
 }
 
-body.retro-magazine .container-manage-users .box { border:2px solid #000000; }
+/* Retro Magazine (tv guide look) */
+body.retro-magazine .container-manage-users h2,
+body.retro-magazine .container-manage-users h3 {
+  color: #ffffff !important;
+}
 
-body.directv .container-manage-users .box { background:linear-gradient(to bottom,#e7e4ff,#d2f3ff); border-bottom:2px solid #003090; }
-
-body.comcast .container-manage-users .box { background:linear-gradient(to bottom,#0055cc,#001b50); border-bottom:2px solid #003090; }
+/* DirecTV */
+body.directv .container-manage-users h2,
+body.directv .container-manage-users h3 {
+  color: #ffffff !important;
+}
 
 /* Responsive */
 @media (max-width: 640px) {
