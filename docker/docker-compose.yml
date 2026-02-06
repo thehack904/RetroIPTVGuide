@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   retroiptvguide:
     container_name: retroiptvguide
@@ -13,6 +11,9 @@ services:
       - ./config:/app/config
       - ./logs:/app/logs
       - ./data:/app/data
+      - ./entrypoint_fixdb.sh:/entrypoint_fixdb.sh:ro
+    entrypoint: ["sh", "/entrypoint_fixdb.sh"]
+    command: ["python", "app.py"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000"]
       interval: 30s

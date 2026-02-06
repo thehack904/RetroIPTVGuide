@@ -1,0 +1,34 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>RetroIPTVGuide</Name>
+  <Repository>ghcr.io/thehack904/retroiptvguide:latest</Repository>
+  <Registry>https://ghcr.io</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/thehack904/retroiptvguide</Support>
+  <Project>https://github.com/thehack904/retroiptvguide</Project>
+  <Overview>RetroIPTVGuide is an IPTV guide management system that provides a web interface for managing and viewing TV guides.</Overview>
+  <Category>MediaApp:Video MediaServer:Video</Category>
+  <WebUI>http://[IP]:[PORT:5000]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/Squidly271/community.applications/master/source/community.applications/usr/local/emhttp/plugins/community.applications/images/question.png</Icon>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled></DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Requires/>
+  <Config Name="Web UI Port" Target="5000" Default="5000" Mode="tcp" Description="Port for RetroIPTVGuide web interface" Type="Port" Display="always" Required="true" Mask="false">5000</Config>
+  <Config Name="Config Path" Target="/app/config" Default="/mnt/user/appdata/retroiptvguide/config" Mode="rw" Description="Container Path: /app/config" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/retroiptvguide/config</Config>
+  <Config Name="Logs Path" Target="/app/logs" Default="/mnt/user/appdata/retroiptvguide/logs" Mode="rw" Description="Container Path: /app/logs" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/retroiptvguide/logs</Config>
+  <Config Name="Data Path" Target="/app/data" Default="/mnt/user/appdata/retroiptvguide/data" Mode="rw" Description="Container Path: /app/data" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/retroiptvguide/data</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/Chicago" Mode="" Description="Set your timezone (e.g., America/Chicago, America/New_York, Europe/London)" Type="Variable" Display="always" Required="false" Mask="false">America/Chicago</Config>
+  <Config Name="Flask Environment" Target="FLASK_ENV" Default="production" Mode="" Description="Flask environment mode" Type="Variable" Display="advanced" Required="false" Mask="false">production</Config>
+  <Config Name="Python Unbuffered" Target="PYTHONUNBUFFERED" Default="1" Mode="" Description="Force Python to run unbuffered" Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="Secret Key" Target="SECRET_KEY" Default="" Mode="" Description="IMPORTANT: Change this to a secure random string for security" Type="Variable" Display="always" Required="true" Mask="true">change_me_securely</Config>
+  <Config Name="Database File" Target="DATABASE_FILE" Default="retroiptv.db" Mode="" Description="Database filename" Type="Variable" Display="advanced" Required="false" Mask="false">retroiptv.db</Config>
+  <Config Name="Log File" Target="LOG_FILE" Default="retroiptv.log" Mode="" Description="Log filename" Type="Variable" Display="advanced" Required="false" Mask="false">retroiptv.log</Config>
+  <Config Name="Flask Port" Target="FLASK_PORT" Default="5000" Mode="" Description="Internal Flask port (should match the container port)" Type="Variable" Display="advanced" Required="false" Mask="false">5000</Config>
+</Container>

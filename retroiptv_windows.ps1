@@ -1,7 +1,7 @@
 <# 
 RetroIPTVGuide Windows Installer/Uninstaller
 Filename: retroiptv_windows.ps1
-Version: 4.3.0
+Version: 4.4.0
 
 License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -55,7 +55,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "4.3.0"
+$VERSION = "4.4.0"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -104,13 +104,13 @@ try { Start-Transcript -Path $logFile -Append | Out-Null } catch {}
 
 ""
 $banner = @"
-Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦                Â¦Â¦Â¦                        Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦            
-Â¦Â¦Â¦     Â¦Â¦Â¦               Â¦Â¦Â¦                          Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦   Â¦Â¦Â¦                      Â¦Â¦Â¦            
-Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦        Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  
-Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦Â¦     Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ 
-Â¦Â¦Â¦   Â¦Â¦Â¦   Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦  Â¦Â¦Â¦     Â¦Â¦ Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ 
-Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦           Â¦Â¦Â¦    Â¦Â¦Â¦      Â¦Â¦Â¦    Â¦Â¦Â¦   Â¦Â¦Â¦  Â¦Â¦Â¦             Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦    Â¦Â¦Â¦  Â¦Â¦Â¦Â¦ Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦   Â¦Â¦Â¦Â¦ Â¦Â¦Â¦        
-Â¦Â¦Â¦     Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦       Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦             Â¦Â¦Â¦       Â¦Â¦Â¦Â¦      Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦ Â¦Â¦Â¦ Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  Â¦Â¦Â¦Â¦Â¦Â¦Â¦Â¦  
+¦¦¦¦¦¦¦¦¦¦                ¦¦¦                        ¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦¦¦¦¦    ¦¦¦   ¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦            
+¦¦¦     ¦¦¦               ¦¦¦                          ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦  ¦¦¦   ¦¦¦                      ¦¦¦            
+¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦    ¦¦¦  ¦¦¦     ¦¦¦     ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦        ¦¦¦    ¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
+¦¦¦¦¦¦¦¦¦¦  ¦¦¦    ¦¦¦    ¦¦¦    ¦¦¦¦     ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦¦¦¦¦¦¦¦      ¦¦¦    ¦¦¦    ¦¦¦ ¦¦¦  ¦¦¦¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦    ¦¦¦ 
+¦¦¦   ¦¦¦   ¦¦¦¦¦¦¦¦¦¦    ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦     ¦¦¦  ¦¦¦  ¦¦¦     ¦¦ ¦¦¦    ¦¦¦ ¦¦¦¦¦¦    ¦¦¦ ¦¦¦¦¦¦¦¦¦¦ 
+¦¦¦    ¦¦¦  ¦¦¦           ¦¦¦    ¦¦¦      ¦¦¦    ¦¦¦   ¦¦¦  ¦¦¦             ¦¦¦      ¦¦¦¦¦¦    ¦¦¦  ¦¦¦¦ ¦¦¦   ¦¦¦¦ ¦¦¦¦¦¦   ¦¦¦¦ ¦¦¦        
+¦¦¦     ¦¦¦  ¦¦¦¦¦¦¦¦      ¦¦¦¦¦ ¦¦¦       ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦¦             ¦¦¦       ¦¦¦¦      ¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦¦ ¦¦¦ ¦¦¦¦¦¦¦¦¦  ¦¦¦¦¦¦¦¦  
 "@
 
 try {
@@ -177,6 +177,25 @@ By continuing, you acknowledge and agree that:
 # -------------------------------
 function Ensure-Choco {
   Write-Info "Checking for Chocolatey..."
+  
+  $chocoPath = "C:\ProgramData\chocolatey"
+  $chocoBin = "$chocoPath\bin\choco.exe"
+  
+  # Check if Chocolatey directory exists but choco.exe is missing (broken install)
+  if ((Test-Path $chocoPath) -and -not (Test-Path $chocoBin)) {
+    Write-Warn "Broken Chocolatey installation detected. Removing..."
+    try {
+      Remove-Item -Path $chocoPath -Recurse -Force -ErrorAction Stop
+      Write-Ok "Broken installation removed."
+      Start-Sleep -Seconds 1
+    } catch {
+      Write-ErrorMsg "Failed to remove broken Chocolatey installation at $chocoPath"
+      Write-ErrorMsg "Please manually delete this folder and run the script again."
+      throw
+    }
+  }
+  
+  # Check if choco is accessible
   if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
     Write-Warn "Chocolatey not found. Installing..."
     # Allow TLS 1.2
@@ -184,7 +203,38 @@ function Ensure-Choco {
     Set-ExecutionPolicy Bypass -Scope Process -Force
     try {
       Invoke-Expression ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
-      Write-Ok "Chocolatey installed."
+      
+      Write-Info "Refreshing environment variables..."
+      # Refresh PATH multiple ways to ensure it works
+      $env:ChocolateyInstall = "C:\ProgramData\chocolatey"
+      $machinePath = [System.Environment]::GetEnvironmentVariable("Path","Machine")
+      $userPath = [System.Environment]::GetEnvironmentVariable("Path","User")
+      $env:Path = "$machinePath;$userPath"
+      
+      # Give it a moment to settle
+      Start-Sleep -Seconds 2
+      
+      # Verify choco is now available
+      if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+        # One more attempt - directly check if the file exists
+        if (Test-Path "$chocoPath\bin\choco.exe") {
+          Write-Warn "Chocolatey installed but not yet in PATH for this session."
+          Write-Warn "Manually adding to PATH..."
+          $env:Path = "$chocoPath\bin;$env:Path"
+          
+          # Final check
+          if (-not (Get-Command choco.exe -ErrorAction SilentlyContinue)) {
+            Write-ErrorMsg "Chocolatey installation completed but 'choco' command is still not available."
+            Write-ErrorMsg "Please close this window and run the script again."
+            throw "ChocoNotInPath"
+          }
+        } else {
+          Write-ErrorMsg "Chocolatey installation may have failed - choco.exe not found."
+          throw "ChocoInstallFailed"
+        }
+      }
+      
+      Write-Ok "Chocolatey installed successfully."
     } catch {
       Write-ErrorMsg "Failed to install Chocolatey. $_"
       throw
@@ -196,7 +246,7 @@ function Ensure-Choco {
 
 function Ensure-ChocoPkg($pkgName) {
   if (-not (choco list --local-only | Select-String -Quiet ("^{0} " -f [regex]::Escape($pkgName)))) {
-    Write-Info "Installing $pkgName via Chocolatey..."
+    Write-Info "Installing $pkgName via Chocolatey...(This may take several minutes, please be patient)"
     choco install $pkgName -y | Out-Null
     Write-Ok "$pkgName installed."
   } else {
@@ -247,17 +297,97 @@ function Upgrade-PipAndInstallReqs {
   & $VenvPy -m pip install --upgrade pip
   Write-Info "Installing requirements..."
   $req = Join-Path $ScriptDir "requirements.txt"
+  
   if (-not (Test-Path $req)) {
-    Write-Warn "requirements.txt not found in $ScriptDir; skipping package install."
-  } else {
-    & $VenvPy -m pip install -r $req
+    Write-Warn "requirements.txt not found in $ScriptDir"
+    Write-Info "Downloading requirements.txt from GitHub..."
+    
+    $reqUrl = "https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/refs/heads/main/requirements.txt"
+    try {
+      # Download requirements.txt
+      [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+      $webClient = New-Object System.Net.WebClient
+      $webClient.DownloadFile($reqUrl, $req)
+      Write-Ok "requirements.txt downloaded successfully."
+    } catch {
+      Write-ErrorMsg "Failed to download requirements.txt from GitHub: $_"
+      Write-Warn "Skipping package installation."
+      return
+    }
   }
-  Write-Ok "Python dependencies installed."
+  
+  if (Test-Path $req) {
+    Write-Info "Installing Python packages from requirements.txt..."
+    & $VenvPy -m pip install -r $req
+    Write-Ok "Python dependencies installed."
+  } else {
+    Write-Warn "requirements.txt still not found; skipping package install."
+  }
 }
 
 # -------------------------------
 # NSSM service helpers
 # -------------------------------
+function Ensure-AppFiles {
+  Write-Info "Checking for required application files..."
+  
+  $appPy = Join-Path $ScriptDir "app.py"
+  
+  # Check if we're in a git repository
+  if (Test-Path (Join-Path $ScriptDir ".git")) {
+    Write-Ok "Running from git repository."
+    if (-not (Test-Path $appPy)) {
+      Write-ErrorMsg "app.py not found in repository. Repository may be corrupted."
+      throw "AppPyNotFound"
+    }
+    return
+  }
+  
+  # Not in a git repo - need to clone it
+  Write-Warn "This installer is not running from a git repository."
+  Write-Info "The RetroIPTVGuide repository will be cloned to continue installation."
+  
+  $installPath = "C:\RetroIPTVGuide"
+  $repoUrl = "https://github.com/thehack904/RetroIPTVGuide.git"
+  
+  if (Test-Path $installPath) {
+    Write-Warn "Directory $installPath already exists."
+    if (-not (Confirm-YesNo "Remove existing directory and clone fresh?")) {
+      Write-Warn "Installation aborted by user."
+      exit 1
+    }
+    try {
+      Remove-Item -Path $installPath -Recurse -Force
+      Write-Ok "Existing directory removed."
+    } catch {
+      Write-ErrorMsg "Failed to remove existing directory: $_"
+      throw
+    }
+  }
+  
+  Write-Info "Cloning repository to $installPath..."
+  try {
+    git clone $repoUrl $installPath
+    if (-not $?) {
+      throw "Git clone failed"
+    }
+    Write-Ok "Repository cloned successfully."
+  } catch {
+    Write-ErrorMsg "Failed to clone repository: $_"
+    throw
+  }
+  
+  # Update script directory to the cloned repo
+  Write-Info "Switching to repository directory..."
+  Set-Location $installPath
+  $script:ScriptDir = $installPath
+  $script:VenvDir = Join-Path $ScriptDir "venv"
+  $script:VenvPy = Join-Path $VenvDir "Scripts\python.exe"
+  
+  Write-Ok "Now working from $installPath"
+}
+
+
 function Ensure-Service {
   param([string] $Name)
 
@@ -266,14 +396,24 @@ function Ensure-Service {
 
   $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
   if ($svc) {
-    Write-Warn "Service '$Name' already exists. It will be updated to use the current directory."
-    # stop first
-    try { Stop-Service -Name $Name -Force -ErrorAction SilentlyContinue } catch {}
-    # reconfigure below
-  } else {
-    Write-Info "Creating Windows service '$Name' (NSSM)..."
-    & $NssmExe install $Name $VenvPy "app.py"
+    Write-Warn "Service '$Name' already exists. Stopping and reconfiguring..."
+    # Stop the service completely
+    try { 
+      & $NssmExe stop $Name | Out-Null 
+      Start-Sleep -Seconds 2
+    } catch {}
+    
+    # Remove the old service
+    try {
+      & $NssmExe remove $Name confirm | Out-Null
+      Start-Sleep -Seconds 1
+      Write-Ok "Old service removed."
+    } catch {}
   }
+
+  # Create new service
+  Write-Info "Creating Windows service '$Name' (NSSM)..."
+  & $NssmExe install $Name $VenvPy "app.py"
 
   # Configure AppDirectory / stdout / stderr / start type
   & $NssmExe set $Name AppDirectory $ScriptDir | Out-Null
@@ -288,9 +428,104 @@ function Ensure-Service {
 
   Write-Ok "Service '$Name' configured."
   Write-Info "Starting service..."
+  
+  # Start the service
   & $NssmExe start $Name | Out-Null
-  Start-Sleep -Seconds 1
-  Write-Ok "Service start issued."
+  Start-Sleep -Seconds 3
+  
+  # Check if it actually started
+  $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+  if ($svc) {
+    if ($svc.Status -eq 'Running') {
+      Write-Ok "Service started successfully."
+    } elseif ($svc.Status -eq 'Paused') {
+      Write-Warn "Service is paused. Attempting to resume..."
+      try {
+        Resume-Service -Name $Name -ErrorAction Stop
+        Start-Sleep -Seconds 2
+        $svc = Get-Service -Name $Name
+        if ($svc.Status -eq 'Running') {
+          Write-Ok "Service resumed successfully."
+        } else {
+          Write-Warn "Service status: $($svc.Status)"
+        }
+      } catch {
+        Write-Warn "Failed to resume service: $_"
+      }
+    } else {
+      Write-Warn "Service status: $($svc.Status)"
+    }
+  }
+}
+
+function Ensure-Service {
+  param([string] $Name)
+
+  # Install NSSM if missing
+  Ensure-ChocoPkg "nssm"
+
+  $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+  if ($svc) {
+    Write-Warn "Service '$Name' already exists. Stopping and reconfiguring..."
+    # Stop the service completely
+    try { 
+      & $NssmExe stop $Name | Out-Null 
+      Start-Sleep -Seconds 2
+    } catch {}
+    
+    # Remove the old service
+    try {
+      & $NssmExe remove $Name confirm | Out-Null
+      Start-Sleep -Seconds 1
+      Write-Ok "Old service removed."
+    } catch {}
+  }
+
+  # Create new service
+  Write-Info "Creating Windows service '$Name' (NSSM)..."
+  & $NssmExe install $Name $VenvPy "app.py"
+
+  # Configure AppDirectory / stdout / stderr / start type
+  & $NssmExe set $Name AppDirectory $ScriptDir | Out-Null
+  & $NssmExe set $Name Start SERVICE_AUTO_START | Out-Null
+
+  $logDir = Join-Path $ScriptDir "logs"
+  if (-not (Test-Path $logDir)) { New-Item -ItemType Directory -Path $logDir | Out-Null }
+  & $NssmExe set $Name AppStdout (Join-Path $logDir "service_stdout.log") | Out-Null
+  & $NssmExe set $Name AppStderr (Join-Path $logDir "service_stderr.log") | Out-Null
+  & $NssmExe set $Name AppStopMethodConsole 1500 | Out-Null
+  & $NssmExe set $Name AppKillProcessTree 1   | Out-Null
+
+  Write-Ok "Service '$Name' configured."
+  Write-Info "Starting service..."
+  
+  # Start the service
+  & $NssmExe start $Name | Out-Null
+  Start-Sleep -Seconds 3
+  
+  # Check if it actually started
+  $svc = Get-Service -Name $Name -ErrorAction SilentlyContinue
+  if ($svc) {
+    if ($svc.Status -eq 'Running') {
+      Write-Ok "Service started successfully."
+    } elseif ($svc.Status -eq 'Paused') {
+      Write-Warn "Service is paused. Attempting to resume..."
+      try {
+        Resume-Service -Name $Name -ErrorAction Stop
+        Start-Sleep -Seconds 2
+        $svc = Get-Service -Name $Name
+        if ($svc.Status -eq 'Running') {
+          Write-Ok "Service resumed successfully."
+        } else {
+          Write-Warn "Service status: $($svc.Status)"
+        }
+      } catch {
+        Write-Warn "Failed to resume service: $_"
+      }
+    } else {
+      Write-Warn "Service status: $($svc.Status)"
+    }
+  }
 }
 
 function Remove-ServiceSafe {
@@ -390,6 +625,9 @@ function Do-Install {
   Ensure-ChocoPkg "python"
   Ensure-ChocoPkg "git"
   Ensure-ChocoPkg "nssm"
+  
+  # Make sure we have the application files
+  Ensure-AppFiles
 
   # Python & venv
   New-Venv -VenvPath $VenvDir
@@ -411,7 +649,6 @@ function Do-Install {
   Write-Info  ("Log file: {0}" -f $logFile)
   Write-Title "============================================================"
 }
-
 # -------------------------------
 # UNINSTALL
 # -------------------------------
@@ -473,7 +710,7 @@ function Do-Uninstall {
     Read-Host
 }
 
-function Update-RetroIPTVGuide {
+function Do-Update {
     Write-Host ""
     Write-Host "============================================================"
     Write-Host " RetroIPTVGuide Updater (Windows)"
@@ -482,7 +719,7 @@ function Update-RetroIPTVGuide {
     $InstallPath = "C:\RetroIPTVGuide\iptv-server"
 
     if (-Not (Test-Path "$InstallPath\.git")) {
-        Write-Host "âŒ Cannot update â€” this is not a git repository: $InstallPath"
+        Write-Host "Cannot update - this is not a git repository: $InstallPath" -ForegroundColor Red
         return
     }
 
@@ -493,7 +730,7 @@ function Update-RetroIPTVGuide {
         git reset --hard origin/main
     }
     catch {
-        Write-Host "âŒ Git update failed: $($_.Exception.Message)"
+        Write-Host "Git update failed: $($_.Exception.Message)" -ForegroundColor Red
         return
     }
 
@@ -506,7 +743,7 @@ function Update-RetroIPTVGuide {
         & "$VenvPath\Scripts\pip.exe" install -r "$InstallPath\requirements.txt"
     }
     else {
-        Write-Host "âš ï¸  No virtual environment found. Recreating..."
+        Write-Host "No virtual environment found. Recreating..." -ForegroundColor Yellow
         python -m venv "$VenvPath"
         & "$VenvPath\Scripts\python.exe" -m pip install --upgrade pip
         & "$VenvPath\Scripts\pip.exe" install -r "$InstallPath\requirements.txt"
@@ -520,7 +757,7 @@ function Update-RetroIPTVGuide {
         Start-Service RetroIPTVGuide
     }
     else {
-        Write-Host "âš ï¸ Service not installed. The app will run only manually."
+        Write-Host "Service not installed. The app will run only manually." -ForegroundColor Yellow
     }
 
     Write-Host ""
@@ -529,7 +766,6 @@ function Update-RetroIPTVGuide {
     Write-Host "============================================================"
     Write-Host ""
 }
-
 
 if (-not $Action) {
     Write-Host ""
@@ -566,7 +802,6 @@ try {
         Stop-Transcript | Out-Null
         Start-Sleep -Milliseconds 200
     } catch {}
-}
 
     Write-Host ""
     Write-Host "============================================================" -ForegroundColor Cyan
