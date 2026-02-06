@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.3.0 (2025-11-14)**
+# Current Version: **v4.4.0 (2026-02-05)**
 
 ## 🔮 Feature Upgrades
 
@@ -117,4 +117,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [ ] Casting Support (Chromecast)
 - [ ] Resize Pop Out Video
 - [ ] Resize video on page
-- [ ] Auto load Channel from Guide / Hidden Channel / Sizzle Reels    
+- [ ] Auto load Channel from Guide / Hidden Channel / Sizzle Reels
+- [ ] Adjustable scrolling speed of the Guide
+- [ ] Output IPTV stream from built guide for re-broadcast as a channel
+- [x] Unraid Template - in *BETA*

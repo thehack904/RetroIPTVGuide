@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.4.0 - 2026-02-05
+
+### Added
+- (Windows Powershell Install Script) Better validation checks in Windows Powershell install script.  Added Ensure-AppFiles Function (NEW)
+- Added *BETA* Unraid .xml for testing
+
+### Changed
+- (Windows Powershell Install Script) Enhanced Upgrade-PipAndInstallReqs Function, Ensure-Service Function, Do-Install Function 
+
+### Fixed
+- (Windows Powershell Install Script) Fixed update code bug from v.4.3.0, Fixed Syntax Errors, Update-RetroIPTVGuide Function, Ensure-Choco Function - Broken Chocolatey Detection
+- Docker - Add persistant directories for:
+/app/users.db → symlink to /app/config/users.db
+/app/tuners.db → symlink to /app/config/tuners.db
+
+---
+
 ## v4.3.0 - 2025-11-14
 
 ### Added

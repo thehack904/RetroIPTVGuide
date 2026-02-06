@@ -1,8 +1,8 @@
-# 📺 RetroIPTVGuide v4.3.0
+# 📺 RetroIPTVGuide v4.4.0
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-v4.3.0-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-vv4.4.0-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
@@ -62,6 +62,9 @@ docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
 - Tag: `latest`
 - Exposes port `5000`.
 
+### 🧩 Unraid (Docker) — **BETA / Manual Install Only**
+See docker/unraid/ for RetroIPTVGuide.xml / README-unraid.md for installation instructions
+
 ### 🐧 Linux 
 ```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh | sudo bash -s install --agree --yes
@@ -75,8 +78,8 @@ curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retro
 ### 🪟 Windows (PowerShell)
 ```powershell
 Set-ExecutionPolicy Bypass -Scope Process -Force
-Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.ps1 -OutFile retroiptv_windows.ps1
-.\retroiptv_windows.ps1 install
+Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
+.\retroiptv_windows.bat install
 ```
 
 ## 🌐 Access
