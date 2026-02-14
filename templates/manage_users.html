@@ -28,7 +28,7 @@
             {% for user in users %}
             <tr>
               <td>{{ user.username }}</td>
-              <td>{{ user.last_login if user.last_login else 'Never' }}</td>
+              <td>{{ user.last_login | format_datetime }}</td>
               <td class="actions">
                 <form method="POST" class="inline-form">
                   <input type="hidden" name="username" value="{{ user.username }}">

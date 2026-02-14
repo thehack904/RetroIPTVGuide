@@ -46,13 +46,17 @@ login_manager.login_view = 'login'
 login_manager.init_app(app)
 
 # ------------------- Activity Log -------------------
-LOG_PATH = "/home/iptv/iptv-server/logs/activity.log"
+LOG_PATH = os.path.join(os.getcwd(), "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    with open(LOG_PATH, "a") as f:
-        f.write(f"{user} | {action} | {ts}\n")
+    try:
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "a") as f:
+            f.write(f"{user} | {action} | {ts}\n")
+    except (PermissionError, OSError) as e:
+        # Log to stderr if file logging fails
+        print(f"Warning: Could not write to log file: {e}", file=sys.stderr)
 
 # ------------------- URL Validation -------------------
 def validate_tuner_url(url, label="Tuner"):
@@ -225,6 +229,19 @@ def rename_tuner(old_name, new_name):
 
 
 # ------------------- Template context helpers -------------------
+@app.template_filter('format_datetime')
+def format_datetime_filter(iso_string):
+    """Format ISO datetime string to human-readable format."""
+    if not iso_string:
+        return 'Never'
+    try:
+        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        # Convert to local time (or keep UTC, depending on preference)
+        # For now, we'll display in UTC with a cleaner format
+        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+    except Exception:
+        return iso_string
+
 @app.context_processor
 def inject_tuner_context():
     """Inject tuner info into all templates (for header fly-outs)."""
