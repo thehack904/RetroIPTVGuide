@@ -46,7 +46,7 @@ login_manager.login_view = 'login'
 login_manager.init_app(app)
 
 # ------------------- Activity Log -------------------
-LOG_PATH = os.path.join(os.getcwd(), "logs", "activity.log")
+LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -127,7 +127,7 @@ def get_user(username):
         c.execute('SELECT id, username, password, last_login FROM users WHERE username=?', (username,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3] if len(row) > 3 else None)
+        return User(row[0], row[1], row[2], row[3])
     return None
 
 @login_manager.user_loader
@@ -137,7 +137,7 @@ def load_user(user_id):
         c.execute('SELECT id, username, password, last_login FROM users WHERE id=?', (user_id,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3] if len(row) > 3 else None)
+        return User(row[0], row[1], row[2], row[3])
     return None
 
 # ------------------- Tuner DB -------------------
@@ -235,7 +235,7 @@ def format_datetime_filter(iso_string):
     if not iso_string:
         return 'Never'
     try:
-        dt = datetime.fromisoformat(iso_string.replace('Z', '+00:00'))
+        dt = datetime.fromisoformat(iso_string)
         # Convert to local time (or keep UTC, depending on preference)
         # For now, we'll display in UTC with a cleaner format
         return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
