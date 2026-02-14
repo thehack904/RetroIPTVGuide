@@ -3,8 +3,9 @@
    Place this at /static/css/base.css
 */
 
-/* Make the page itself non-scrollable so only the guide area scrolls */
-html, body { height: 100%; overflow: hidden; }
+/* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
+body.guide-page { height: 100%; overflow: hidden; }
+html { height: 100%; }
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
