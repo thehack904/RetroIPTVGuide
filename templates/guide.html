@@ -68,6 +68,19 @@
     <!-- content injected by JS -->
 </div>
 
+<!-- Search Container -->
+<div class="search-container">
+    <input 
+        type="text" 
+        id="channelSearch" 
+        placeholder="Search channels or programs..." 
+        autocomplete="off"
+        aria-label="Search channels"
+    >
+    <button id="clearSearch" aria-label="Clear search">✕</button>
+    <span id="searchResultCount"></span>
+</div>
+
 <!-- Guide grid -->
 <div class="guide-outer" id="guideOuter">
     <!-- Keep original small time header inside grid for alignment, it will be hidden when fixed header is active -->
@@ -602,6 +615,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })();
 </script>
+
+<!-- Guide filter script -->
+<script src="{{ url_for('static', filename='js/guide-filter.js') }}" defer></script>
 
 </body>
 </html>

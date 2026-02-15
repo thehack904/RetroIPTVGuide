@@ -10,6 +10,22 @@
   function prefEnabled() { return localStorage.getItem(PREF_KEY) !== 'false'; }
   function setPref(v) { localStorage.setItem(PREF_KEY, v ? 'true' : 'false'); }
 
+  // Add speed mapping for configurable scroll speeds
+  const SCROLL_SPEEDS = {
+    slow: 1200,
+    medium: 650,
+    fast: 350
+  };
+
+  function getScrollDuration() {
+    try {
+      const savedSpeed = localStorage.getItem('autoScrollSpeed') || 'medium';
+      return SCROLL_SPEEDS[savedSpeed] || SCROLL_SPEEDS.medium;
+    } catch (e) {
+      return SCROLL_SPEEDS.medium;
+    }
+  }
+
   const SELECTOR_PRIORITY = ['#guideOuter', '.guide-outer', '.grid-col'];
   const scrollSpeed = 1.2; // px per frame (visual)
   const idleDelay = 15000; // ms initial inactivity/start delay (15s)
@@ -69,19 +85,23 @@
     try { return 'scrollBehavior' in document.documentElement.style; } catch (e) { return false; }
   }
 
-  function smoothScrollTo(el, targetTop, duration = 650) {
+  function smoothScrollTo(el, targetTop, duration = null) {
     if (!el) return Promise.resolve();
+    
+    // Use custom duration or get from settings
+    const scrollDuration = duration !== null ? duration : getScrollDuration();
+    
     if (supportsNativeSmoothScroll()) {
       try {
         el.scrollTo({ top: targetTop, behavior: 'smooth' });
-        return new Promise(resolve => setTimeout(resolve, duration));
+        return new Promise(resolve => setTimeout(resolve, scrollDuration));
       } catch (e) {}
     }
     return new Promise(resolve => {
       const start = el.scrollTop;
       const change = targetTop - start;
       const startTime = performance.now();
-      const dur = Math.max(1, duration);
+      const dur = Math.max(1, scrollDuration);
       const ease = t => (t < 0.5) ? (2 * t * t) : (-1 + (4 - 2 * t) * t);
       function step(now) {
         const elapsed = now - startTime;
@@ -445,4 +465,70 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
+})();
+
+// Initialize speed selector
+(function initSpeedControl() {
+  function syncSpeedSelectors() {
+    const speedSelect = document.getElementById('scrollSpeed');
+    const mobileSpeedSelect = document.getElementById('mobileScrollSpeed');
+    
+    // Load saved speed
+    try {
+      const saved = localStorage.getItem('autoScrollSpeed') || 'medium';
+      if (speedSelect) speedSelect.value = saved;
+      if (mobileSpeedSelect) mobileSpeedSelect.value = saved;
+    } catch (e) {}
+  }
+
+  function handleSpeedChange(e) {
+    try {
+      const newSpeed = e.target.value;
+      localStorage.setItem('autoScrollSpeed', newSpeed);
+      
+      // Sync both selectors
+      const speedSelect = document.getElementById('scrollSpeed');
+      const mobileSpeedSelect = document.getElementById('mobileScrollSpeed');
+      if (speedSelect) speedSelect.value = newSpeed;
+      if (mobileSpeedSelect) mobileSpeedSelect.value = newSpeed;
+      
+      if (typeof console !== 'undefined' && console.debug) {
+        console.debug('[auto-scroll] Scroll speed changed to:', newSpeed);
+      }
+    } catch (err) {
+      if (typeof console !== 'undefined' && console.debug) {
+        console.debug('[auto-scroll] Failed to save scroll speed:', err);
+      }
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+      syncSpeedSelectors();
+      
+      const speedSelect = document.getElementById('scrollSpeed');
+      const mobileSpeedSelect = document.getElementById('mobileScrollSpeed');
+      
+      if (speedSelect) {
+        speedSelect.addEventListener('change', handleSpeedChange);
+      }
+      
+      if (mobileSpeedSelect) {
+        mobileSpeedSelect.addEventListener('change', handleSpeedChange);
+      }
+    });
+  } else {
+    syncSpeedSelectors();
+    
+    const speedSelect = document.getElementById('scrollSpeed');
+    const mobileSpeedSelect = document.getElementById('mobileScrollSpeed');
+    
+    if (speedSelect) {
+      speedSelect.addEventListener('change', handleSpeedChange);
+    }
+    
+    if (mobileSpeedSelect) {
+      mobileSpeedSelect.addEventListener('change', handleSpeedChange);
+    }
+  }
 })();
