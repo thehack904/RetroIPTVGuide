@@ -43,19 +43,19 @@
             <div class="col">
               <label for="auto_refresh_enabled">Auto-refresh</label>
               <select id="auto_refresh_enabled" name="auto_refresh_enabled" class="form-control">
-                <option value="0" {% if _ar_enabled in ['0','False','false'] %}selected{% endif %}>Off</option>
-                <option value="1" {% if _ar_enabled in ['1','True','true'] %}selected{% endif %}>On</option>
+                <option value="0" {% if auto_refresh_enabled in ['0','False','false'] %}selected{% endif %}>Off</option>
+                <option value="1" {% if auto_refresh_enabled in ['1','True','true'] %}selected{% endif %}>On</option>
               </select>
             </div>
             <div class="col">
               <label for="auto_refresh_interval">Interval (hours)</label>
               <select id="auto_refresh_interval" name="auto_refresh_interval_hours" class="form-control">
-                <option value="" {% if not _ar_interval %}selected{% endif %}>Select interval</option>
-                <option value="2" {% if _ar_interval|string == '2' %}selected{% endif %}>Every 2 hours</option>
-                <option value="4" {% if _ar_interval|string == '4' %}selected{% endif %}>Every 4 hours</option>
-                <option value="6" {% if _ar_interval|string == '6' %}selected{% endif %}>Every 6 hours</option>
-                <option value="12" {% if _ar_interval|string == '12' %}selected{% endif %}>Every 12 hours</option>
-                <option value="24" {% if _ar_interval|string == '24' %}selected{% endif %}>Every 24 hours</option>
+                <option value="" {% if not auto_refresh_interval_hours %}selected{% endif %}>Select interval</option>
+                <option value="2" {% if auto_refresh_interval_hours|string == '2' %}selected{% endif %}>Every 2 hours</option>
+                <option value="4" {% if auto_refresh_interval_hours|string == '4' %}selected{% endif %}>Every 4 hours</option>
+                <option value="6" {% if auto_refresh_interval_hours|string == '6' %}selected{% endif %}>Every 6 hours</option>
+                <option value="12" {% if auto_refresh_interval_hours|string == '12' %}selected{% endif %}>Every 12 hours</option>
+                <option value="24" {% if auto_refresh_interval_hours|string == '24' %}selected{% endif %}>Every 24 hours</option>
               </select>
             </div>
           </div>
@@ -77,6 +77,50 @@
             {% endif %}
           </div>
         </form>
+
+        <hr class="divider" aria-hidden="true">
+
+        <!-- Cache Settings -->
+        <form method="POST" class="compact-form" id="form-cache-settings">
+          <input type="hidden" name="action" value="update_cache_settings">
+          <div class="row-inline">
+            <div class="col">
+              <label for="epg_cache_ttl">Cache Duration (minutes)</label>
+              <select id="epg_cache_ttl" name="epg_cache_ttl" class="form-control">
+                <option value="5" {% if epg_cache_ttl == '5' %}selected{% endif %}>5 minutes</option>
+                <option value="10" {% if epg_cache_ttl == '10' %}selected{% endif %}>10 minutes</option>
+                <option value="15" {% if epg_cache_ttl == '15' %}selected{% endif %}>15 minutes</option>
+                <option value="30" {% if epg_cache_ttl == '30' %}selected{% endif %}>30 minutes</option>
+                <option value="60" {% if epg_cache_ttl == '60' %}selected{% endif %}>60 minutes</option>
+              </select>
+              <small>How long to cache EPG data before reloading</small>
+            </div>
+          </div>
+
+          <div class="form-row form-row-inline" style="margin-top:10px;">
+            <button type="submit" class="primary">Save Cache Settings</button>
+          </div>
+        </form>
+
+        <hr class="divider" aria-hidden="true">
+
+        <!-- Manual Refresh -->
+        <div class="manual-refresh-section">
+          <h3>Manual Refresh</h3>
+          <p>Force an immediate refresh of the guide data, bypassing the cache.</p>
+          
+          <form action="{{ url_for('refresh_guide_now') }}" method="POST" style="display: inline;">
+            <button type="submit" class="btn btn-primary">
+              🔄 Refresh Guide Now
+            </button>
+          </form>
+          
+          {% if cache_age %}
+          <p class="cache-info">
+            Cache Age: <strong>{{ cache_age }}</strong>
+          </p>
+          {% endif %}
+        </div>
       </div>
     </section>
 
