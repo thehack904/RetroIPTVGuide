@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.4.0 (2026-02-05)**
+# Current Version: **v4.5.0 (2026-02-15)**
 
 ## 🔮 Feature Upgrades
 
@@ -21,7 +21,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 
 ### 2. Logging & Monitoring
 - [ ] Move logs from flat file (`activity.log`) into **SQLite DB** for better querying.  
-- [ ] Add filtering and pagination in logs view.  
+- [x] Add filtering and pagination in logs view. *(v4.5.0)*  
 - [ ] Add system health checks (tuner reachability, XMLTV freshness).  
 - [x] Admin log management: clear logs + size indicator (v2.3.1).  
 - [x] Post-install HTTP service verification in Pi installer (v3.1.0).  
@@ -45,7 +45,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Add manage_users.html (v4.0.0)  
 - [-] Role-based access control (basic admin-only gates exist, no RBAC roles).  
 - [ ] Add email or 2FA support for login.  
-- [ ] Show last login time in admin panel.  
+- [x] Show last login time in admin panel. *(v4.5.0)*  
 - [ ] User role/channel restrictions.  
 
 ---
@@ -58,11 +58,12 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Modular CSS and JS added (v4.1.0).  
 - [x] Introduced new JS modules: `auto-scroll.js`, `tuner-settings.js`.  
 - [x] Mobile responsive layout and navigation (v4.2.0). 
-- [ ] Add dark/light theme auto-detect.  
+- [x] Add dark/light theme auto-detect. *(v4.5.0)*  
 - [x] Frozen header timeline to prevent scrolling with channel listing (v4.3.0).  
 - [x] About page under Settings menu (v2.3.1).  
 - [x] Added new mobile-specific CSS and JS (v4.3.0).  
-- [x] Added new templates: change_tuner.html, manage_users.html, logs.html. (v4.3.0)
+- [x] Added new templates: change_tuner.html, manage_users.html, logs.html. (v4.3.0)  
+- [x] Fixed scrolling on About, Logs, Tuner Management, and Manage Users pages. *(v4.5.0)*
 
 ---
 

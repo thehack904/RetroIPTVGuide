@@ -1,8 +1,8 @@
-# 📺 RetroIPTVGuide v4.4.0
+# 📺 RetroIPTVGuide v4.5.0
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-vv4.4.0-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-v4.5.0-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
