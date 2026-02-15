@@ -164,6 +164,7 @@ body.dark .logs-table thead th { background: #333; }
 body.dark .logs-table tbody tr:nth-child(even) { background: #222; color: #fff; }
 body.dark .search-bar input { background: rgba(0,0,0,0.5); color: #fff; border-color: rgba(255,255,255,0.2); }
 body.dark #pageSizeSelect { background: rgba(0,0,0,0.5); color: #fff; border-color: rgba(255,255,255,0.2); }
+body.dark .page-info { color: #fff; }
 
 body.light .container-logs .box { background: #f3f3f3; border-color: rgba(0,0,0,0.06); color: #000; }
 body.light .logs-table thead th { background: #ddd; color: #000; }

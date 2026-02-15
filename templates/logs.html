@@ -17,7 +17,7 @@
 
     <!-- Search bar -->
     <div class="search-bar">
-      <input type="text" id="searchInput" placeholder="Search logs..." onkeyup="searchLogs()">
+      <input type="text" id="searchInput" placeholder="Search logs..." aria-label="Search logs" onkeyup="searchLogs()">
     </div>
 
     <!-- Filter bar -->
@@ -137,6 +137,10 @@ function getFilteredRows(rows) {
 function applyPaginationAndFilters() {
     const allRows = Array.from(document.querySelectorAll("#logsTable tbody tr"));
     const filteredRows = getFilteredRows(allRows);
+    
+    // Guard against division by zero
+    if (pageSize <= 0) pageSize = 25;
+    
     const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
     
     // Ensure currentPage is within bounds
@@ -161,8 +165,8 @@ function applyPaginationAndFilters() {
     // Update pagination controls
     document.getElementById('pageInfo').textContent = 
         `Page ${currentPage} of ${totalPages} (${filteredRows.length} entries)`;
-    document.getElementById('prevBtn').disabled = currentPage === 1;
-    document.getElementById('nextBtn').disabled = currentPage === totalPages;
+    document.getElementById('prevBtn').disabled = currentPage === 1 || filteredRows.length === 0;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages || filteredRows.length === 0;
 }
 </script>
 {% endblock %}
