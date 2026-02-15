@@ -22,20 +22,21 @@
     <div class="table-wrap">
       <table class="users-table">
           <thead>
-            <tr><th>Username</th><th>Actions</th></tr>
+            <tr><th>Username</th><th>Last Login</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
             <tr>
-              <td>{{ user }}</td>
+              <td>{{ user.username }}</td>
+              <td>{{ user.last_login | format_datetime }}</td>
               <td class="actions">
                 <form method="POST" class="inline-form">
-                  <input type="hidden" name="username" value="{{ user }}">
+                  <input type="hidden" name="username" value="{{ user.username }}">
                   <input type="hidden" name="action" value="delete">
                   <button class="btn danger" type="submit">Delete</button>
                 </form>
                 <form method="POST" class="inline-form">
-                  <input type="hidden" name="username" value="{{ user }}">
+                  <input type="hidden" name="username" value="{{ user.username }}">
                   <input type="hidden" name="action" value="signout">
                   <button class="btn warn" type="submit">Sign Out All</button>
                 </form>

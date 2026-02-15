@@ -46,13 +46,17 @@ login_manager.login_view = 'login'
 login_manager.init_app(app)
 
 # ------------------- Activity Log -------------------
-LOG_PATH = "/home/iptv/iptv-server/logs/activity.log"
+LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-    with open(LOG_PATH, "a") as f:
-        f.write(f"{user} | {action} | {ts}\n")
+    try:
+        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
+        with open(LOG_PATH, "a") as f:
+            f.write(f"{user} | {action} | {ts}\n")
+    except (PermissionError, OSError) as e:
+        # Log to stderr if file logging fails
+        print(f"Warning: Could not write to log file: {e}", file=sys.stderr)
 
 # ------------------- URL Validation -------------------
 def validate_tuner_url(url, label="Tuner"):
@@ -87,10 +91,11 @@ def validate_tuner_url(url, label="Tuner"):
 
 # ------------------- User Model -------------------
 class User(UserMixin):
-    def __init__(self, id, username, password_hash):
+    def __init__(self, id, username, password_hash, last_login=None):
         self.id = id
         self.username = username
         self.password_hash = password_hash
+        self.last_login = last_login
 
 # ------------------- Init DBs -------------------
 def init_db():
@@ -98,8 +103,16 @@ def init_db():
         conn.execute("PRAGMA journal_mode=WAL;")
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS users
-                     (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT)''')
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, last_login TEXT)''')
         conn.commit()
+        
+        # Add last_login column if it doesn't exist (for existing databases)
+        try:
+            c.execute('ALTER TABLE users ADD COLUMN last_login TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
 
 def add_user(username, password):
     password_hash = generate_password_hash(password)
@@ -111,20 +124,20 @@ def add_user(username, password):
 def get_user(username):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password FROM users WHERE username=?', (username,))
+        c.execute('SELECT id, username, password, last_login FROM users WHERE username=?', (username,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2])
+        return User(row[0], row[1], row[2], row[3])
     return None
 
 @login_manager.user_loader
 def load_user(user_id):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password FROM users WHERE id=?', (user_id,))
+        c.execute('SELECT id, username, password, last_login FROM users WHERE id=?', (user_id,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2])
+        return User(row[0], row[1], row[2], row[3])
     return None
 
 # ------------------- Tuner DB -------------------
@@ -216,6 +229,19 @@ def rename_tuner(old_name, new_name):
 
 
 # ------------------- Template context helpers -------------------
+@app.template_filter('format_datetime')
+def format_datetime_filter(iso_string):
+    """Format ISO datetime string to human-readable format."""
+    if not iso_string:
+        return 'Never'
+    try:
+        dt = datetime.fromisoformat(iso_string)
+        # Convert to local time (or keep UTC, depending on preference)
+        # For now, we'll display in UTC with a cleaner format
+        return dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+    except Exception:
+        return iso_string
+
 @app.context_processor
 def inject_tuner_context():
     """Inject tuner info into all templates (for header fly-outs)."""
@@ -360,6 +386,13 @@ def login():
         remember = request.form.get('remember') == 'on' or request.form.get('remember') == 'true' or 'remember' in request.form
         user = get_user(username)
         if user and check_password_hash(user.password_hash, password):
+            # Update last_login timestamp
+            with sqlite3.connect(DATABASE, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute('UPDATE users SET last_login=? WHERE username=?',
+                          (datetime.now(timezone.utc).isoformat(), username))
+                conn.commit()
+            
             login_user(user, remember=remember)
             log_event(username, "Logged in")
 
@@ -531,8 +564,8 @@ def manage_users():
     # ---- Normal admin logic below ----
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT username FROM users WHERE username != "admin"')
-        users = [row[0] for row in c.fetchall()]
+        c.execute('SELECT username, last_login FROM users WHERE username != "admin"')
+        users = [{'username': row[0], 'last_login': row[1]} for row in c.fetchall()]
 
     if request.method == 'POST':
         action = request.form.get('action')
