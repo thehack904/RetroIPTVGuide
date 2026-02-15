@@ -22,7 +22,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ### 2. Logging & Monitoring
 - [ ] Move logs from flat file (`activity.log`) into **SQLite DB** for better querying.  
 - [x] Add filtering and pagination in logs view. *(v4.5.0)*  
-- [ ] Add system health checks (tuner reachability, XMLTV freshness).  
+- [x] Add system health checks (tuner reachability, XMLTV freshness). *(v2.3.1)*  
 - [x] Admin log management: clear logs + size indicator (v2.3.1).  
 - [x] Post-install HTTP service verification in Pi installer (v3.1.0).  
 - [x] Unified “Refresh Guide” scheduler. (v4.2.0)  
