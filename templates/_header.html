@@ -29,6 +29,14 @@
               <li><a href="{{ url_for('about') }}">About</a></li>
               {% endif %}
               <a href="#" id="toggleAutoScroll">Toggle Auto-Scroll</a>
+              <div class="scroll-speed-control">
+                  <label for="scrollSpeed">Scroll Speed:</label>
+                  <select id="scrollSpeed">
+                      <option value="slow">Slow</option>
+                      <option value="medium" selected>Medium</option>
+                      <option value="fast">Fast</option>
+                  </select>
+              </div>
               <a href="{{ url_for('change_password') }}">Change Password</a>
               <li class="submenu">
                 <a href="#">Themes</a>
@@ -110,6 +118,14 @@
           <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
           {% endif %}
           <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Toggle Auto-Scroll</a></li>
+          <li role="none" class="scroll-speed-control">
+              <label for="mobileScrollSpeed">Scroll Speed:</label>
+              <select id="mobileScrollSpeed">
+                  <option value="slow">Slow</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="fast">Fast</option>
+              </select>
+          </li>
           <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
 
           <!-- Nested Themes submenu -->
