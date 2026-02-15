@@ -270,7 +270,7 @@ def get_cache_ttl():
     try:
         ttl = get_setting("epg_cache_ttl", "15")
         return int(ttl)
-    except:
+    except (ValueError, TypeError):
         return 15
 
 def is_cache_valid():
@@ -289,7 +289,7 @@ def is_cache_valid():
     try:
         cache_age_minutes = (now - cache_timestamp).total_seconds() / 60.0
         return cache_age_minutes < ttl_minutes
-    except:
+    except (AttributeError, TypeError):
         return False
 
 def update_cache(channels, epg):
@@ -704,13 +704,13 @@ def set_tuner(name):
     set_current_tuner(name)
 
     # Refresh cached guide data
-    global cached_channels, cached_epg
     m3u_url = tuners[name].get("m3u")
     xml_url = tuners[name].get("xml")
 
-    cached_channels = parse_m3u(m3u_url) if m3u_url else []
-    cached_epg = parse_epg(xml_url) if xml_url else {}
-    cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+    new_channels = parse_m3u(m3u_url) if m3u_url else []
+    new_epg = parse_epg(xml_url) if xml_url else {}
+    apply_epg_fallback(new_channels, new_epg)
+    update_cache(new_channels, new_epg)
 
     log_event(current_user.username, f"Quick switched active tuner to {name}")
     flash(f"Active tuner switched to {name}", "success")
