@@ -12,7 +12,25 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
-        if (t) document.documentElement.setAttribute('data-theme', t);
+        if (t) {
+          // Handle 'auto' theme
+          if (t === 'auto') {
+            // Detect system preference
+            if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+              t = 'dark';
+            } else {
+              t = 'light';
+            }
+          }
+          document.documentElement.setAttribute('data-theme', t);
+        } else {
+          // No saved preference - auto-detect
+          if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          } else {
+            document.documentElement.setAttribute('data-theme', 'light');
+          }
+        }
       } catch (e) { /* ignore */ }
 
       // temporary safe stub — will be replaced by /static/js/theme.js when it loads

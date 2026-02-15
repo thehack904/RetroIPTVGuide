@@ -2,6 +2,18 @@
   'use strict';
   var STORAGE_KEY = 'theme';
 
+  // Detect system color scheme preference
+  function detectSystemTheme() {
+    try {
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
+        return 'light';
+      }
+    } catch (e) { /* ignore */ }
+    return 'light'; // default fallback
+  }
+
   function setHtmlAndBodyTheme(name) {
     try {
       if (name) {
@@ -26,8 +38,15 @@
 
   function applyTheme(name) {
     if (!name) return;
-    setHtmlAndBodyTheme(name);
-    try { localStorage.setItem(STORAGE_KEY, name); } catch (e) {}
+    
+    // Handle 'auto' theme - detect system preference
+    var actualTheme = name;
+    if (name === 'auto') {
+      actualTheme = detectSystemTheme();
+    }
+    
+    setHtmlAndBodyTheme(actualTheme);
+    try { localStorage.setItem(STORAGE_KEY, name); } catch (e) {} // Store user choice (including 'auto')
 
     // If TV Guide (Classic) selected, ensure auto-scroll is turned off and disabled.
     // We set localStorage autoScrollEnabled to 'false' and call any available auto-scroll API.
@@ -104,7 +123,38 @@
       try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) {}
       if (saved) {
         setTheme(saved);
+      } else {
+        // No saved preference - auto-detect system preference
+        var systemTheme = detectSystemTheme();
+        setHtmlAndBodyTheme(systemTheme);
       }
     } catch (e) { /* ignore */ }
   });
+
+  // Listen for system theme changes and update if 'auto' is selected
+  try {
+    if (window.matchMedia) {
+      var darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      var lightModeQuery = window.matchMedia('(prefers-color-scheme: light)');
+      
+      var updateAutoTheme = function() {
+        try {
+          var saved = localStorage.getItem(STORAGE_KEY);
+          if (saved === 'auto' || !saved) {
+            var systemTheme = detectSystemTheme();
+            setHtmlAndBodyTheme(systemTheme);
+          }
+        } catch (e) { /* ignore */ }
+      };
+      
+      // Use addEventListener if available, otherwise use addListener
+      if (darkModeQuery.addEventListener) {
+        darkModeQuery.addEventListener('change', updateAutoTheme);
+        lightModeQuery.addEventListener('change', updateAutoTheme);
+      } else if (darkModeQuery.addListener) {
+        darkModeQuery.addListener(updateAutoTheme);
+        lightModeQuery.addListener(updateAutoTheme);
+      }
+    }
+  } catch (e) { /* ignore */ }
 })();
