@@ -38,6 +38,30 @@
 }
 .btn-clear:hover { opacity: 0.95; transform: translateY(-1px); }
 
+/* Search bar */
+.search-bar {
+  text-align: center;
+  margin: 12px 0;
+}
+.search-bar input {
+  width: 100%;
+  max-width: 400px;
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  font-size: 0.95rem;
+}
+.search-bar input:focus {
+  outline: none;
+  border-color: #0af;
+  background: rgba(0,0,0,0.4);
+}
+.search-bar input::placeholder {
+  color: rgba(255,255,255,0.5);
+}
+
 /* Filter bar */
 .filter-bar { text-align:center; margin: 8px 0 12px; }
 .filter-btn {
@@ -86,14 +110,69 @@
   font-weight: 700;
 }
 
+/* Pagination controls */
+.pagination-controls {
+  text-align: center;
+  margin-top: 16px;
+  padding: 12px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.page-btn {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  background: rgba(0,0,0,0.45);
+  color: #fff;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.page-btn:hover:not(:disabled) {
+  background: #0af;
+  color: #002;
+}
+.page-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.page-info {
+  padding: 8px 12px;
+  font-weight: 700;
+  color: inherit;
+}
+#pageSizeSelect {
+  padding: 8px 12px;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  background: rgba(0,0,0,0.3);
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+#pageSizeSelect:focus {
+  outline: none;
+  border-color: #0af;
+}
+
 /* Theme-aware overrides: dark and light inherit base styles, but adjust backgrounds */
 body.dark .container-logs .box { background: #222; border-color: rgba(255,255,255,0.03); }
 body.dark .logs-table thead th { background: #333; }
 body.dark .logs-table tbody tr:nth-child(even) { background: #222; color: #fff; }
+body.dark .search-bar input { background: rgba(0,0,0,0.5); color: #fff; border-color: rgba(255,255,255,0.2); }
+body.dark #pageSizeSelect { background: rgba(0,0,0,0.5); color: #fff; border-color: rgba(255,255,255,0.2); }
+body.dark .page-info { color: #fff; }
 
 body.light .container-logs .box { background: #f3f3f3; border-color: rgba(0,0,0,0.06); color: #000; }
 body.light .logs-table thead th { background: #ddd; color: #000; }
 body.light .logs-table tbody tr:nth-child(even) { background: #fff; color: #000; }
+body.light .search-bar input { background: #fff; color: #000; border-color: #ccc; }
+body.light .search-bar input::placeholder { color: rgba(0,0,0,0.5); }
+body.light #pageSizeSelect { background: #fff; color: #000; border-color: #ccc; }
+body.light .page-info { color: #000; }
 body.retro-magazine .logs-table thead th { background: #000; color: #fff; }
 
 /* Small screens */
@@ -101,4 +180,9 @@ body.retro-magazine .logs-table thead th { background: #000; color: #fff; }
   .container-logs { padding: 8px; margin: 40px 12px; }
   .filter-btn { padding: 8px 10px; margin: 4px; }
   .logs-table thead th, .logs-table tbody td { padding: 8px 6px; font-size: 0.92rem; }
+  .search-bar input { max-width: 100%; font-size: 0.9rem; }
+  .pagination-controls { gap: 8px; padding: 8px; }
+  .page-btn { padding: 6px 12px; font-size: 0.9rem; }
+  .page-info { font-size: 0.9rem; }
+  #pageSizeSelect { font-size: 0.85rem; }
 }

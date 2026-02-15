@@ -15,6 +15,11 @@
       <button type="submit" class="btn-clear">Clear Logs</button>
     </form>
 
+    <!-- Search bar -->
+    <div class="search-bar">
+      <input type="text" id="searchInput" placeholder="Search logs..." aria-label="Search logs" onkeyup="searchLogs()">
+    </div>
+
     <!-- Filter bar -->
     <div class="filter-bar">
       <button type="button" class="filter-btn" onclick="filterLogs('all')">All</button>
@@ -38,30 +43,130 @@
           </tbody>
       </table>
     </div>
+
+    <!-- Pagination controls -->
+    <div class="pagination-controls">
+      <button type="button" class="page-btn" id="prevBtn" onclick="changePage(-1)">Previous</button>
+      <span id="pageInfo" class="page-info">Page 1</span>
+      <button type="button" class="page-btn" id="nextBtn" onclick="changePage(1)">Next</button>
+      <select id="pageSizeSelect" onchange="changePageSize()">
+        <option value="10">10 per page</option>
+        <option value="25" selected>25 per page</option>
+        <option value="50">50 per page</option>
+        <option value="100">100 per page</option>
+      </select>
+    </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts_extra %}
 <script>
+// Pagination and filtering state
+let currentPage = 1;
+let pageSize = 25;
+let currentFilter = 'all';
+let searchQuery = '';
+
 document.addEventListener("DOMContentLoaded", () => {
     // Apply saved theme (base.html provides setTheme/updateClock)
     const saved = localStorage.getItem("theme") || "dark";
     if (typeof setTheme === 'function') setTheme(saved);
     if (typeof updateClock === 'function') updateClock();
     setInterval(() => { if (typeof updateClock === 'function') updateClock(); }, 1000);
+    
+    // Initialize pagination
+    applyPaginationAndFilters();
 });
 
-// Filter function (keeps original behavior)
+// Search function
+function searchLogs() {
+    searchQuery = document.getElementById('searchInput').value.toLowerCase();
+    currentPage = 1; // Reset to first page on search
+    applyPaginationAndFilters();
+}
+
+// Filter function (updated to work with pagination)
 function filterLogs(type) {
-    const rows = document.querySelectorAll("#logsTable tbody tr");
-    rows.forEach(r => {
-        if (type === "all") {
-            r.style.display = "";
-        } else {
-            r.style.display = r.classList.contains(type) ? "" : "none";
+    currentFilter = type;
+    currentPage = 1; // Reset to first page on filter change
+    applyPaginationAndFilters();
+}
+
+// Change page
+function changePage(delta) {
+    const allRows = Array.from(document.querySelectorAll("#logsTable tbody tr"));
+    const filteredRows = getFilteredRows(allRows);
+    const totalPages = Math.ceil(filteredRows.length / pageSize);
+    
+    currentPage += delta;
+    if (currentPage < 1) currentPage = 1;
+    if (currentPage > totalPages) currentPage = totalPages;
+    
+    applyPaginationAndFilters();
+}
+
+// Change page size
+function changePageSize() {
+    pageSize = parseInt(document.getElementById('pageSizeSelect').value);
+    currentPage = 1; // Reset to first page
+    applyPaginationAndFilters();
+}
+
+// Get filtered rows based on current filters and search
+function getFilteredRows(rows) {
+    return rows.filter(row => {
+        // Apply type filter
+        if (currentFilter !== 'all' && !row.classList.contains(currentFilter)) {
+            return false;
+        }
+        
+        // Apply search filter
+        if (searchQuery) {
+            const text = row.textContent.toLowerCase();
+            if (!text.includes(searchQuery)) {
+                return false;
+            }
+        }
+        
+        return true;
+    });
+}
+
+// Apply both pagination and filters
+function applyPaginationAndFilters() {
+    const allRows = Array.from(document.querySelectorAll("#logsTable tbody tr"));
+    const filteredRows = getFilteredRows(allRows);
+    
+    // Guard against division by zero
+    if (pageSize <= 0) pageSize = 25;
+    
+    const totalPages = Math.ceil(filteredRows.length / pageSize) || 1;
+    
+    // Ensure currentPage is within bounds
+    if (currentPage > totalPages) currentPage = totalPages;
+    if (currentPage < 1) currentPage = 1;
+    
+    const startIdx = (currentPage - 1) * pageSize;
+    const endIdx = startIdx + pageSize;
+    
+    // Hide all rows first
+    allRows.forEach(row => {
+        row.style.display = 'none';
+    });
+    
+    // Show only the rows for current page
+    filteredRows.forEach((row, idx) => {
+        if (idx >= startIdx && idx < endIdx) {
+            row.style.display = '';
         }
     });
+    
+    // Update pagination controls
+    document.getElementById('pageInfo').textContent = 
+        `Page ${currentPage} of ${totalPages} (${filteredRows.length} entries)`;
+    document.getElementById('prevBtn').disabled = currentPage === 1 || filteredRows.length === 0;
+    document.getElementById('nextBtn').disabled = currentPage === totalPages || filteredRows.length === 0;
 }
 </script>
 {% endblock %}
