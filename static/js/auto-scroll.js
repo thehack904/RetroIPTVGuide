@@ -502,22 +502,7 @@
     }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', () => {
-      syncSpeedSelectors();
-      
-      const speedSelect = document.getElementById('scrollSpeed');
-      const mobileSpeedSelect = document.getElementById('mobileScrollSpeed');
-      
-      if (speedSelect) {
-        speedSelect.addEventListener('change', handleSpeedChange);
-      }
-      
-      if (mobileSpeedSelect) {
-        mobileSpeedSelect.addEventListener('change', handleSpeedChange);
-      }
-    });
-  } else {
+  function attachEventListeners() {
     syncSpeedSelectors();
     
     const speedSelect = document.getElementById('scrollSpeed');
@@ -530,5 +515,11 @@
     if (mobileSpeedSelect) {
       mobileSpeedSelect.addEventListener('change', handleSpeedChange);
     }
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', attachEventListeners);
+  } else {
+    attachEventListeners();
   }
 })();
