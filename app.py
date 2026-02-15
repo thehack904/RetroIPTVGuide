@@ -258,9 +258,55 @@ def inject_tuner_context():
 # ------------------- Global cache -------------------
 cached_channels = []
 cached_epg = {}
+cache_timestamp = None  # When cache was last populated
+cache_ttl_minutes = 15  # Default cache duration
 
 # Track currently playing marker (server-side)
 CURRENTLY_PLAYING = None
+
+# ------------------- Cache Helper Functions -------------------
+def get_cache_ttl():
+    """Get cache TTL from settings (in minutes)."""
+    try:
+        ttl = get_setting("epg_cache_ttl", "15")
+        return int(ttl)
+    except:
+        return 15
+
+def is_cache_valid():
+    """Check if current cache is still valid based on TTL."""
+    global cache_timestamp
+    
+    if cache_timestamp is None:
+        return False
+    
+    if not cached_channels or not cached_epg:
+        return False
+    
+    ttl_minutes = get_cache_ttl()
+    now = datetime.now(timezone.utc)
+    
+    try:
+        cache_age_minutes = (now - cache_timestamp).total_seconds() / 60.0
+        return cache_age_minutes < ttl_minutes
+    except:
+        return False
+
+def update_cache(channels, epg):
+    """Update the global cache with new data and timestamp."""
+    global cached_channels, cached_epg, cache_timestamp
+    
+    cached_channels = channels
+    cached_epg = epg
+    cache_timestamp = datetime.now(timezone.utc)
+    
+    logging.info(f"Cache updated at {cache_timestamp.isoformat()}, TTL: {get_cache_ttl()} minutes")
+
+def invalidate_cache():
+    """Force cache invalidation."""
+    global cache_timestamp
+    cache_timestamp = None
+    logging.info("Cache invalidated manually")
 
 # ------------------- M3U Parsing -------------------
 def parse_m3u(m3u_url):
@@ -401,12 +447,11 @@ def login():
             current_tuner = get_current_tuner()
             m3u_url = tuners[current_tuner]["m3u"] if current_tuner and current_tuner in tuners else None
             xml_url = tuners[current_tuner]["xml"] if current_tuner and current_tuner in tuners else None
-            global cached_channels, cached_epg
             if m3u_url:
-                cached_channels = parse_m3u(m3u_url)
-            if xml_url:
-                cached_epg = parse_epg(xml_url)
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+                new_channels = parse_m3u(m3u_url)
+                new_epg = parse_epg(xml_url) if xml_url else {}
+                apply_epg_fallback(new_channels, new_epg)
+                update_cache(new_channels, new_epg)
 
             # Determine next redirect target (prefer POSTed next, then query param)
             next_url = request.form.get('next') or request.args.get('next') or url_for('guide')
@@ -697,14 +742,15 @@ def change_tuner():
             flash(f"Active tuner switched to {new_tuner}")
 
             # ✅ Refresh cached guide data immediately
-            global cached_channels, cached_epg
             tuners = get_tuners()
             m3u_url = tuners[new_tuner]["m3u"]
             xml_url = tuners[new_tuner]["xml"]
-            cached_channels = parse_m3u(m3u_url)
-            cached_epg = parse_epg(xml_url)
-            # ✅ Apply “No Guide Data Available” fallback
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+            new_channels = parse_m3u(m3u_url)
+            new_epg = parse_epg(xml_url)
+            # ✅ Apply "No Guide Data Available" fallback
+            apply_epg_fallback(new_channels, new_epg)
+            # Use new cache update function
+            update_cache(new_channels, new_epg)
 
         elif action == "update_urls":
             tuner = request.form["tuner"]
@@ -792,6 +838,20 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
+        elif action == "update_cache_settings":
+            ttl = request.form.get("epg_cache_ttl", "15")
+            try:
+                ttl_int = int(ttl)
+                if ttl_int not in [5, 10, 15, 30, 60]:
+                    flash("Invalid cache duration", "warning")
+                else:
+                    set_setting("epg_cache_ttl", str(ttl_int))
+                    flash(f"Cache duration set to {ttl_int} minutes", "success")
+                    log_event(current_user.username, f"Updated cache TTL: {ttl_int} minutes")
+            except Exception as e:
+                logging.exception("Failed to update cache TTL")
+                flash("Failed to save cache settings", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -812,6 +872,17 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    # Pass cache info to template
+    epg_cache_ttl = get_setting("epg_cache_ttl", "15")
+    
+    cache_age_str = None
+    if cache_timestamp:
+        cache_age_minutes = (datetime.now(timezone.utc) - cache_timestamp).total_seconds() / 60.0
+        if cache_age_minutes < 60:
+            cache_age_str = f"{cache_age_minutes:.1f} minutes"
+        else:
+            cache_age_str = f"{cache_age_minutes / 60:.1f} hours"
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
@@ -820,8 +891,41 @@ def change_tuner():
         TUNERS=tuners,
         auto_refresh_enabled=auto_refresh_enabled,
         auto_refresh_interval_hours=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh
+        last_auto_refresh=last_auto_refresh,
+        epg_cache_ttl=epg_cache_ttl,
+        cache_age=cache_age_str
     )
+
+@app.route('/refresh_guide_now', methods=['POST'])
+@login_required
+def refresh_guide_now():
+    """Manually refresh the guide data, invalidating cache."""
+    if current_user.username != 'admin':
+        log_event(current_user.username, "Unauthorized access attempt to /refresh_guide_now")
+        flash("Unauthorized access", "warning")
+        return redirect(request.referrer or url_for('guide'))
+    
+    log_event(current_user.username, "Manual guide refresh triggered")
+    
+    # Invalidate cache first
+    invalidate_cache()
+    
+    tuner_name = get_current_tuner()
+    if not tuner_name:
+        flash("No tuner selected", "warning")
+        return redirect(request.referrer or url_for('guide'))
+    
+    try:
+        success = refresh_current_tuner(tuner_name)
+        if success:
+            flash("Guide refreshed successfully!", "success")
+        else:
+            flash("Guide refresh failed. Check logs for details.", "error")
+    except Exception as e:
+        logging.exception("Manual refresh failed")
+        flash(f"Guide refresh error: {str(e)}", "error")
+    
+    return redirect(request.referrer or url_for('guide'))
 
 @app.route('/guide')
 @login_required
@@ -832,6 +936,25 @@ def guide():
         refresh_if_due()
     except Exception:
         logging.exception("refresh_if_due from guide() failed")
+
+    # Check if cache is valid
+    if not is_cache_valid():
+        logging.info("Cache expired or invalid, reloading EPG data")
+        tuner = get_current_tuner()
+        if tuner:
+            tuners = get_tuners()
+            urls = tuners.get(tuner, {})
+            xml_url = urls.get("xml", "")
+            m3u_url = urls.get("m3u", "")
+            
+            if m3u_url:
+                new_channels = parse_m3u(m3u_url)
+                new_epg = parse_epg(xml_url) if xml_url else {}
+                apply_epg_fallback(new_channels, new_epg)
+                update_cache(new_channels, new_epg)
+    else:
+        cache_age_minutes = (datetime.now(timezone.utc) - cache_timestamp).total_seconds() / 60.0
+        logging.info(f"Using cached EPG data (age: {cache_age_minutes:.1f} minutes)")
 
     now = datetime.now(timezone.utc)
     grid_start = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
@@ -1752,12 +1875,10 @@ def refresh_current_tuner(tuner_name=None):
 
         new_channels = parse_m3u(m3u_url) if m3u_url else []
         new_epg = parse_epg(xml_url) if xml_url else {}
-        new_epg = apply_epg_fallback(new_channels, new_epg)
+        apply_epg_fallback(new_channels, new_epg)
 
-        # atomic swap
-        global cached_channels, cached_epg
-        cached_channels = new_channels
-        cached_epg = new_epg
+        # Use new cache update function
+        update_cache(new_channels, new_epg)
 
         now_iso = datetime.now(timezone.utc).isoformat()
         set_setting(f"last_auto_refresh:{tuner_name}", f"success|{now_iso}")
