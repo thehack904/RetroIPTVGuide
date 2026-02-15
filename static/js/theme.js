@@ -135,12 +135,11 @@
   try {
     if (window.matchMedia) {
       var darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      var lightModeQuery = window.matchMedia('(prefers-color-scheme: light)');
       
       var updateAutoTheme = function() {
         try {
           var saved = localStorage.getItem(STORAGE_KEY);
-          if (saved === 'auto' || !saved) {
+          if (saved === 'auto') {
             var systemTheme = detectSystemTheme();
             setHtmlAndBodyTheme(systemTheme);
           }
@@ -150,10 +149,8 @@
       // Use addEventListener if available, otherwise use addListener
       if (darkModeQuery.addEventListener) {
         darkModeQuery.addEventListener('change', updateAutoTheme);
-        lightModeQuery.addEventListener('change', updateAutoTheme);
       } else if (darkModeQuery.addListener) {
         darkModeQuery.addListener(updateAutoTheme);
-        lightModeQuery.addListener(updateAutoTheme);
       }
     }
   } catch (e) { /* ignore */ }
