@@ -221,12 +221,41 @@ def add_tuner(name, xml_url, m3u_url):
         if not xml_url.startswith(('http://', 'https://')):
             raise ValueError("XML URL must start with http:// or https://")
     
-    # Optional: Check URL reachability
+    # Optional: Check URL reachability with SSRF protection
     try:
+        # Parse the URL to validate the hostname
+        parsed_url = urlparse(m3u_url)
+        hostname = parsed_url.hostname
+        
+        if not hostname:
+            raise ValueError("M3U URL must have a valid hostname")
+        
+        # Block localhost to prevent SSRF attacks on local services
+        try:
+            # Resolve hostname to IP address
+            ip_addr = socket.gethostbyname(hostname)
+            ip_obj = ipaddress.ip_address(ip_addr)
+            
+            # Block localhost (127.0.0.0/8) to prevent SSRF
+            if ip_obj.is_loopback:
+                raise ValueError("M3U URL cannot point to localhost (127.0.0.0/8)")
+            # Block link-local addresses (169.254.0.0/16) which could be cloud metadata
+            if ip_obj.is_link_local:
+                raise ValueError("M3U URL cannot point to link-local addresses (169.254.0.0/16)")
+        except socket.gaierror:
+            # If hostname can't be resolved, it will fail in the requests call anyway
+            pass
+        
+        # Make the request with security restrictions
         r = requests.head(m3u_url, timeout=5, allow_redirects=True)
         r.raise_for_status()
     except requests.RequestException as e:
         raise ValueError(f"M3U URL unreachable: {str(e)}")
+    except ValueError:
+        # Re-raise ValueError from our validation
+        raise
+    except Exception as e:
+        raise ValueError(f"M3U URL validation failed: {str(e)}")
     
     # Insert into database
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:

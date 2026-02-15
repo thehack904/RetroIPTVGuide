@@ -104,6 +104,19 @@ class TestAddTunerValidation:
             with pytest.raises(ValueError, match="M3U URL unreachable"):
                 app_module.add_tuner("TestTuner", "http://example.com/epg.xml", "http://unreachable.example.com/playlist.m3u")
     
+    def test_localhost_blocked(self):
+        """Test that localhost URLs are blocked to prevent SSRF."""
+        with pytest.raises(ValueError, match="M3U URL cannot point to localhost"):
+            app_module.add_tuner("LocalhostTuner", "http://example.com/epg.xml", "http://localhost:8080/playlist.m3u")
+        
+        with pytest.raises(ValueError, match="M3U URL cannot point to localhost"):
+            app_module.add_tuner("LocalhostTuner", "http://example.com/epg.xml", "http://127.0.0.1:8080/playlist.m3u")
+    
+    def test_link_local_blocked(self):
+        """Test that link-local addresses are blocked to prevent SSRF."""
+        with pytest.raises(ValueError, match="M3U URL cannot point to link-local"):
+            app_module.add_tuner("LinkLocalTuner", "http://example.com/epg.xml", "http://169.254.169.254/latest/meta-data/")
+    
     def test_successful_tuner_addition(self):
         """Test successful tuner addition with valid inputs."""
         with patch('app.requests.head') as mock_head:
