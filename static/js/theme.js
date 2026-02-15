@@ -7,8 +7,6 @@
     try {
       if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         return 'dark';
-      } else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches) {
-        return 'light';
       }
     } catch (e) { /* ignore */ }
     return 'light'; // default fallback
