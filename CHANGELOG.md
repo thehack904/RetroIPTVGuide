@@ -9,15 +9,35 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## v4.5.0 - 2026-02-15
 
 ### Added
-- Client-side search and pagination to logs view
+- **Client-side search and pagination to logs view**
   - Added search bar to filter log entries by keyword
   - Added filter buttons to show all logs, activity logs, or security logs
   - Added pagination controls with customizable page size (10, 25, 50, 100 entries per page)
   - Log entries are now categorized as 'activity' or 'security' types for easy filtering
+- **System theme auto-detection**
+  - Added "Auto (System)" option to theme menu
+  - Automatically detects dark/light mode preference via CSS `prefers-color-scheme`
+  - Dynamically switches theme when system preference changes
+  - Auto-detects system theme on first visit when no saved preference exists
+- **Last login tracking**
+  - Added `last_login` column to user database
+  - Display last login timestamp in admin user management panel
+  - Automatically updates timestamp on successful login
+  - Shows "Never" for users who haven't logged in yet
 
 ### Changed
 - Enhanced logs.html template with interactive filtering and pagination controls
 - Improved user experience when viewing large log files
+- Updated theme.js with system theme detection and dynamic switching
+- Updated manage_users.html to display last login information
+
+### Fixed
+- Fixed scrolling issue on About, Logs, Tuner Management, and Manage Users pages
+  - Scoped overflow-y rule to guide page only to prevent breaking other pages
+- Added database temp files (*.db-shm, *.db-wal) to .gitignore
+- Fixed LOG_PATH permission issues in test environments
+- Added accessibility improvements (aria-labels) to search inputs
+- Added guard against division by zero in pagination logic
 
 ---
 
