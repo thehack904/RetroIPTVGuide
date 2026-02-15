@@ -6,6 +6,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.5.0 - 2026-02-15
+
+### Added
+- Client-side search and pagination to logs view
+  - Added search bar to filter log entries by keyword
+  - Added filter buttons to show all logs, activity logs, or security logs
+  - Added pagination controls with customizable page size (10, 25, 50, 100 entries per page)
+  - Log entries are now categorized as 'activity' or 'security' types for easy filtering
+
+### Changed
+- Enhanced logs.html template with interactive filtering and pagination controls
+- Improved user experience when viewing large log files
+
+---
+
 ## v4.4.0 - 2026-02-05
 
 ### Added
