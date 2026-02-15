@@ -204,7 +204,31 @@ def update_tuner_urls(name, xml_url, m3u_url):
         conn.commit()
 
 def add_tuner(name, xml_url, m3u_url):
-    """Insert a new tuner into DB."""
+    """Insert a new tuner into DB with validation."""
+    # Check for duplicate name
+    tuners = get_tuners()
+    if name in tuners:
+        raise ValueError(f"Tuner '{name}' already exists")
+    
+    # Validate M3U URL
+    if not m3u_url or not m3u_url.strip():
+        raise ValueError("M3U URL is required")
+    if not m3u_url.startswith(('http://', 'https://')):
+        raise ValueError("M3U URL must start with http:// or https://")
+    
+    # Validate XML URL if provided
+    if xml_url and xml_url.strip():
+        if not xml_url.startswith(('http://', 'https://')):
+            raise ValueError("XML URL must start with http:// or https://")
+    
+    # Optional: Check URL reachability
+    try:
+        r = requests.head(m3u_url, timeout=5, allow_redirects=True)
+        r.raise_for_status()
+    except requests.RequestException as e:
+        raise ValueError(f"M3U URL unreachable: {str(e)}")
+    
+    # Insert into database
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
         c.execute(
@@ -272,6 +296,39 @@ def parse_m3u(m3u_url):
     except:
         return channels
     
+    # Filter out empty lines and comments (except #EXTINF)
+    non_empty_lines = [line.strip() for line in lines if line.strip()]
+    
+    # Check if this is a single-channel playlist (no #EXTINF tags)
+    has_extinf = any(line.startswith('#EXTINF:') for line in non_empty_lines)
+    
+    if not has_extinf:
+        # Look for a single stream URL
+        stream_urls = [line for line in non_empty_lines 
+                      if line.startswith(('http://', 'https://')) 
+                      and not line.startswith('#')]
+        
+        if len(stream_urls) == 1:
+            url = stream_urls[0]
+            # Extract a channel name from the URL or use default
+            try:
+                from urllib.parse import urlparse
+                parsed = urlparse(url)
+                name = parsed.path.split('/')[-1].replace('.m3u8', '').replace('_', ' ').title()
+                if not name:
+                    name = 'Live Stream'
+            except:
+                name = 'Live Stream'
+            
+            channels.append({
+                'name': name,
+                'logo': '',
+                'url': url,
+                'tvg_id': 'stream_1'
+            })
+            return channels
+    
+    # Existing multi-channel parsing logic
     for i, line in enumerate(lines):
         if line.startswith('#EXTINF:'):
             info = line.strip()
@@ -749,12 +806,14 @@ def change_tuner():
 
             if not name:
                 flash("Tuner name cannot be empty.", "warning")
-            elif name in get_tuners():
-                flash(f"Tuner {name} already exists.", "warning")
             else:
-                add_tuner(name, xml_url, m3u_url)
-                log_event(current_user.username, f"Added tuner {name}")
-                flash(f"Tuner {name} added successfully.")
+                try:
+                    add_tuner(name, xml_url, m3u_url)
+                    log_event(current_user.username, f"Added tuner {name}")
+                    flash(f"Tuner {name} added successfully.")
+                except ValueError as e:
+                    flash(str(e), "warning")
+                    log_event(current_user.username, f"Failed to add tuner {name}: {str(e)}")
 
         elif action == "update_auto_refresh":
             # Expect form fields: auto_refresh_enabled ('0' or '1') and auto_refresh_interval_hours (2/4/6/12/24)
