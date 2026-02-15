@@ -312,12 +312,11 @@ def parse_m3u(m3u_url):
             url = stream_urls[0]
             # Extract a channel name from the URL or use default
             try:
-                from urllib.parse import urlparse
                 parsed = urlparse(url)
                 name = parsed.path.split('/')[-1].replace('.m3u8', '').replace('_', ' ').title()
                 if not name:
                     name = 'Live Stream'
-            except:
+            except Exception:
                 name = 'Live Stream'
             
             channels.append({

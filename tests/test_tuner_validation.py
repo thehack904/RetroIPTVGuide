@@ -36,7 +36,7 @@ class TestAddTunerValidation:
         """Clean up test database after each test."""
         try:
             os.unlink(self.temp_db.name)
-        except:
+        except OSError:
             pass
     
     def test_duplicate_name_prevention(self):
