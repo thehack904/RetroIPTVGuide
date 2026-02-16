@@ -239,30 +239,35 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sel) populateUrls(sel.value);
 
     // Flash message auto-dismiss and manual close
-    const flashMessages = document.querySelectorAll('.flash-message');
-    if (flashMessages.length > 0) {
-      // Add close button handlers
-      flashMessages.forEach(msg => {
-        const closeBtn = msg.querySelector('.flash-close');
-        if (closeBtn) {
-          closeBtn.addEventListener('click', () => {
-            msg.classList.add('fade-out');
-            setTimeout(() => msg.remove(), 500);
-          });
-        }
-      });
-
-      // Auto-dismiss after 8 seconds
-      setTimeout(() => {
+    try {
+      const flashMessages = document.querySelectorAll('.flash-message');
+      if (flashMessages.length > 0) {
+        // Add close button handlers
         flashMessages.forEach(msg => {
-          if (msg.parentNode) { // Check if still in DOM
-            msg.classList.add('fade-out');
-            setTimeout(() => {
-              if (msg.parentNode) msg.remove();
-            }, 500);
+          const closeBtn = msg.querySelector('.flash-close');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+              msg.classList.add('fade-out');
+              setTimeout(() => msg.remove(), 500);
+            });
           }
         });
-      }, 8000);
+
+        // Auto-dismiss after 8 seconds
+        setTimeout(() => {
+          flashMessages.forEach(msg => {
+            if (msg.parentNode) { // Check if still in DOM
+              msg.classList.add('fade-out');
+              setTimeout(() => {
+                if (msg.parentNode) msg.remove();
+              }, 500);
+            }
+          });
+        }, 8000);
+      }
+    } catch (e) {
+      // Flash messages will remain visible if auto-dismiss fails
+      console.error('Flash message initialization failed:', e);
     }
 
     // Run Now (uses existing endpoint)
