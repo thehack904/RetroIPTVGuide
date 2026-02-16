@@ -282,45 +282,45 @@ button:focus, select:focus, input:focus, textarea:focus {
 /* Ensure flash messages have high contrast in all themes */
 body.dark .container-change-tuner .flash {
   color: #ffffff;
-  background: rgba(30, 211, 206, 0.1);
+  background: rgba(30, 211, 206, 0.2);
   border-left-color: #1ed3ce;
 }
 
 body.light .container-change-tuner .flash {
-  color: #111;
-  background: rgba(6, 102, 204, 0.08);
-  border-left-color: #06c;
+  color: #000000;
+  background: #e3f2fd;
+  border-left-color: #1976d2;
 }
 
 body.retroiptv .container-change-tuner .flash,
 body.retro-magazine .container-change-tuner .flash {
-  color: #ffffff;
-  background: rgba(30, 211, 206, 0.15);
-  border-left-color: #1ed3ce;
+  color: #000000;
+  background: #b2ebf2;
+  border-left-color: #00acc1;
 }
 
 body.directv .container-change-tuner .flash {
-  color: #ffffff;
-  background: rgba(4, 159, 255, 0.15);
-  border-left-color: #049fff;
+  color: #000000;
+  background: #bbdefb;
+  border-left-color: #1976d2;
 }
 
 body.comcast .container-change-tuner .flash {
   color: #ffffff;
-  background: rgba(30, 211, 206, 0.15);
+  background: rgba(30, 211, 206, 0.2);
   border-left-color: #1ed3ce;
 }
 
 body.tvguide1990 .container-change-tuner .flash {
   color: #000000;
-  background: rgba(0, 102, 204, 0.1);
-  border-left-color: #06c;
+  background: #e3f2fd;
+  border-left-color: #1976d2;
 }
 
 body.retro-aol .container-change-tuner .flash {
-  color: #ffcc01;
-  background: rgba(51, 204, 204, 0.1);
-  border-left-color: #33cccc;
+  color: #000000;
+  background: #e0f2f1;
+  border-left-color: #00897b;
 }
 
 /* ====================================================================== */
