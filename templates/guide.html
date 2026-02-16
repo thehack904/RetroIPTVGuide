@@ -648,9 +648,17 @@ document.addEventListener('DOMContentLoaded', () => {
   function clearHighlights() {
     document.querySelectorAll('.search-highlight').forEach(el => {
       const parent = el.parentNode;
-      parent.replaceChild(document.createTextNode(el.textContent), el);
-      parent.normalize();
+      if (parent) {
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+      }
     });
+  }
+  
+  function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
   
   function highlightText(element, searchTerm) {
@@ -661,8 +669,21 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (!regex.test(text)) return;
     
-    const html = text.replace(regex, '<span class="search-highlight">$1</span>');
-    element.innerHTML = html;
+    // Safely create highlighted HTML by escaping all text content
+    const parts = text.split(regex);
+    element.innerHTML = '';
+    parts.forEach((part, i) => {
+      if (i % 2 === 0) {
+        // Non-matching text
+        element.appendChild(document.createTextNode(part));
+      } else {
+        // Matching text - create highlight span
+        const span = document.createElement('span');
+        span.className = 'search-highlight';
+        span.textContent = part;
+        element.appendChild(span);
+      }
+    });
   }
   
   function escapeRegex(string) {
@@ -728,9 +749,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Update result count
     resultCountSpan.textContent = visibleCount;
     resultsDiv.style.display = 'block';
-    
-    // Dispatch resize event to trigger layout recalculations
-    window.dispatchEvent(new Event('resize'));
   }
   
   // Real-time search with debouncing
