@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__autoScroll.setSpeed(speedValue);
       }
     } catch (e) {
-      console.debug('applySavedSpeed error', e);
+      console.debug('Failed to apply saved auto-scroll speed', e);
     }
   }
 
@@ -582,7 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
           console.debug('Scroll speed set to', speed, '(' + speedValue + ' px/frame)');
         }
       } catch (e) {
-        console.error('handleSpeedClick error', e);
+        console.error('Failed to save scroll speed preference', e);
       }
     }
   }
