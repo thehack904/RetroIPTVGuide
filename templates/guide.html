@@ -68,6 +68,26 @@
     <!-- content injected by JS -->
 </div>
 
+<!-- Search/Filter Bar -->
+<div class="search-bar" id="searchBar">
+  <div class="search-container">
+    <input type="text" 
+           id="searchInput" 
+           class="search-input" 
+           placeholder="Search channels or programs..."
+           autocomplete="off"
+           aria-label="Search channels or programs">
+    <button type="button" 
+            id="clearSearch" 
+            class="clear-search" 
+            aria-label="Clear search"
+            style="display: none;">✕</button>
+  </div>
+  <div class="search-results" id="searchResults" style="display: none;">
+    <span id="resultCount">0</span> results found
+  </div>
+</div>
+
 <!-- Guide grid -->
 <div class="guide-outer" id="guideOuter">
     <!-- Keep original small time header inside grid for alignment, it will be hidden when fixed header is active -->
@@ -611,6 +631,132 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   
   setTimeout(retryApplySavedSpeed, retryInterval);
+});
+</script>
+
+<script>
+// Search/Filter Functionality
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('searchInput');
+  const clearBtn = document.getElementById('clearSearch');
+  const resultsDiv = document.getElementById('searchResults');
+  const resultCountSpan = document.getElementById('resultCount');
+  const guideRows = Array.from(document.querySelectorAll('.guide-row:not(.hide-in-grid)'));
+  
+  let searchTimeout = null;
+  
+  function clearHighlights() {
+    document.querySelectorAll('.search-highlight').forEach(el => {
+      const parent = el.parentNode;
+      parent.replaceChild(document.createTextNode(el.textContent), el);
+      parent.normalize();
+    });
+  }
+  
+  function highlightText(element, searchTerm) {
+    if (!searchTerm || searchTerm.length < 2) return;
+    
+    const text = element.textContent;
+    const regex = new RegExp(`(${escapeRegex(searchTerm)})`, 'gi');
+    
+    if (!regex.test(text)) return;
+    
+    const html = text.replace(regex, '<span class="search-highlight">$1</span>');
+    element.innerHTML = html;
+  }
+  
+  function escapeRegex(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+  
+  function performSearch(searchTerm) {
+    clearHighlights();
+    
+    searchTerm = searchTerm.trim().toLowerCase();
+    
+    // Show/hide clear button
+    clearBtn.style.display = searchTerm ? 'block' : 'none';
+    
+    if (!searchTerm || searchTerm.length < 2) {
+      // Show all rows
+      guideRows.forEach(row => row.classList.remove('hidden-by-search'));
+      resultsDiv.style.display = 'none';
+      return;
+    }
+    
+    let visibleCount = 0;
+    
+    guideRows.forEach(row => {
+      const chanName = row.querySelector('.chan-name span');
+      const channelText = chanName ? chanName.textContent.toLowerCase() : '';
+      
+      const programs = Array.from(row.querySelectorAll('.program'));
+      const programTexts = programs.map(p => {
+        const title = (p.dataset.title || p.textContent || '').toLowerCase();
+        const desc = (p.dataset.desc || '').toLowerCase();
+        return { title, desc, element: p };
+      });
+      
+      // Check if channel name matches
+      const channelMatches = channelText.includes(searchTerm);
+      
+      // Check if any program matches
+      const programMatches = programTexts.some(p => 
+        p.title.includes(searchTerm) || p.desc.includes(searchTerm)
+      );
+      
+      if (channelMatches || programMatches) {
+        row.classList.remove('hidden-by-search');
+        visibleCount++;
+        
+        // Highlight channel name if it matches
+        if (channelMatches && chanName) {
+          highlightText(chanName, searchTerm);
+        }
+        
+        // Highlight program titles that match
+        programTexts.forEach(({ title, desc, element }) => {
+          if (title.includes(searchTerm)) {
+            highlightText(element, searchTerm);
+          }
+        });
+      } else {
+        row.classList.add('hidden-by-search');
+      }
+    });
+    
+    // Update result count
+    resultCountSpan.textContent = visibleCount;
+    resultsDiv.style.display = 'block';
+    
+    // Dispatch resize event to trigger layout recalculations
+    window.dispatchEvent(new Event('resize'));
+  }
+  
+  // Real-time search with debouncing
+  searchInput.addEventListener('input', (e) => {
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(() => {
+      performSearch(e.target.value);
+    }, 250); // 250ms debounce
+  });
+  
+  // Clear button
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    clearBtn.style.display = 'none';
+    performSearch('');
+    searchInput.focus();
+  });
+  
+  // Clear on Escape key
+  searchInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      searchInput.value = '';
+      clearBtn.style.display = 'none';
+      performSearch('');
+    }
+  });
 });
 </script>
 

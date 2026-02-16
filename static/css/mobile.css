@@ -173,3 +173,19 @@ html, body {
     list-style: none;
     height: 0;
 }
+
+@media (max-width: 900px) {
+  .search-bar {
+    padding: 8px 12px;
+  }
+  
+  .search-input {
+    font-size: 16px; /* Prevent zoom on iOS */
+    padding: 8px 36px 8px 12px;
+  }
+  
+  .search-results {
+    font-size: 12px;
+    margin-top: 6px;
+  }
+}

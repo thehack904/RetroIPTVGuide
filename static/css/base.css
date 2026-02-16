@@ -186,6 +186,90 @@ body { font-family: Arial, sans-serif; margin:0; }
 .program.now { font-weight:bold; }
 .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:8; pointer-events:none; left: var(--now-offset); }
 
+/* Search/Filter Bar */
+.search-bar {
+  padding: 12px 16px;
+  background: var(--search-bg, rgba(0, 0, 0, 0.2));
+  border-bottom: 1px solid var(--search-border, rgba(255, 255, 255, 0.1));
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.search-container {
+  position: relative;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px 40px 10px 16px;
+  font-size: 15px;
+  border: 2px solid var(--search-input-border, rgba(255, 255, 255, 0.2));
+  border-radius: 24px;
+  background: var(--search-input-bg, rgba(255, 255, 255, 0.1));
+  color: var(--search-input-color, inherit);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #0af);
+  background: var(--search-input-bg-focus, rgba(255, 255, 255, 0.15));
+  box-shadow: 0 0 0 3px var(--search-focus-shadow, rgba(0, 170, 255, 0.1));
+}
+
+.search-input::placeholder {
+  color: var(--search-placeholder, rgba(255, 255, 255, 0.4));
+}
+
+.clear-search {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--search-clear-color, rgba(255, 255, 255, 0.6));
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  transition: color 0.2s ease;
+}
+
+.clear-search:hover {
+  color: var(--search-clear-hover, #fff);
+}
+
+.search-results {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--search-results-color, rgba(255, 255, 255, 0.7));
+}
+
+.search-results #resultCount {
+  font-weight: 600;
+  color: var(--primary-color, #0af);
+}
+
+/* Hidden state for filtered rows */
+.guide-row.hidden-by-search {
+  display: none !important;
+}
+
+/* Highlight matching text */
+.search-highlight {
+  background: var(--search-highlight-bg, rgba(255, 255, 0, 0.3));
+  color: var(--search-highlight-color, inherit);
+  font-weight: 600;
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
 /* Scrollbar reveal styles */
 .grid-col.show-scroll,
 .grid-col:focus-within {
@@ -231,7 +315,7 @@ body { font-family: Arial, sans-serif; margin:0; }
 /* Theme variables & theme-specific rules preserved below (copied/preserved from original base.css) */
 
 /* Dark theme */
-body.dark { --timebar-bg:#222; --timebar-border:#444; --timebar-color:#ddd; --chan-col-bg:#1a1a1a; background:#111; color:#ddd; }
+body.dark { --timebar-bg:#222; --timebar-border:#444; --timebar-color:#ddd; --chan-col-bg:#1a1a1a; background:#111; color:#ddd; --search-bg: rgba(0, 0, 0, 0.3); --search-border: rgba(255, 255, 255, 0.1); --search-input-bg: rgba(255, 255, 255, 0.05); --search-input-bg-focus: rgba(255, 255, 255, 0.1); --search-input-border: rgba(255, 255, 255, 0.2); --search-input-color: #fff; --search-placeholder: rgba(255, 255, 255, 0.4); --search-highlight-bg: rgba(0, 170, 255, 0.3); }
 body.dark .time-header-fixed .now-line { background:#0f0; }
 body.dark .header { background:#222; }
 body.dark #video { background:#000; }
@@ -246,7 +330,7 @@ body.dark .program.now { background:#2d5030; border-color:#47a447; }
 body.dark .now-line { background:#0f0; }
 
 /* Light theme */
-body.light { --timebar-bg:#fff; --timebar-border:#ddd; --timebar-color:#000; --chan-col-bg:#f9f9f9; background:#fff; color:#000; }
+body.light { --timebar-bg:#fff; --timebar-border:#ddd; --timebar-color:#000; --chan-col-bg:#f9f9f9; background:#fff; color:#000; --search-bg: rgba(255, 255, 255, 0.9); --search-border: rgba(0, 0, 0, 0.1); --search-input-bg: rgba(0, 0, 0, 0.05); --search-input-bg-focus: rgba(0, 0, 0, 0.08); --search-input-border: rgba(0, 0, 0, 0.2); --search-input-color: #000; --search-placeholder: rgba(0, 0, 0, 0.4); --search-highlight-bg: rgba(255, 255, 0, 0.4); }
 body.light .time-header-fixed .now-line { background:#090; }
 body.light .header { background:#222; }
 body.light #video { background:#fff; }
