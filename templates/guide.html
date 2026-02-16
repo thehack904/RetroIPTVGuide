@@ -655,12 +655,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   
-  function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-  
   function highlightText(element, searchTerm) {
     if (!searchTerm || searchTerm.length < 2) return;
     
@@ -669,9 +663,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (!regex.test(text)) return;
     
-    // Safely create highlighted HTML by escaping all text content
+    // Safely create highlighted HTML by using DOM manipulation
     const parts = text.split(regex);
-    element.innerHTML = '';
+    element.textContent = '';
     parts.forEach((part, i) => {
       if (i % 2 === 0) {
         // Non-matching text
