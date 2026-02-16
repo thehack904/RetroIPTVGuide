@@ -865,20 +865,41 @@ def change_tuner():
 
         elif action == "add_tuner":
             name = request.form["tuner_name"].strip()
-            xml_url = request.form["xml_url"].strip()
-            m3u_url = request.form["m3u_url"].strip()
-
+            tuner_mode = request.form.get("tuner_mode", "standard")
+            
             if not name:
                 flash("Tuner name cannot be empty.", "warning")
             else:
                 try:
-                    add_tuner(name, xml_url, m3u_url)
-                    log_event(current_user.username, f"Added tuner {name}")
-                    flash(f"Tuner {name} added successfully.")
-                    
-                    # Validate URLs (DNS/reachability check) after successful add
-                    validate_tuner_url(xml_url, label=f"{name} XML")
-                    validate_tuner_url(m3u_url, label=f"{name} M3U")
+                    if tuner_mode == "single_stream":
+                        # Single stream mode: use M3U8 stream URL for both XML and M3U
+                        m3u8_stream_url = request.form.get("m3u8_stream_url", "").strip()
+                        if not m3u8_stream_url:
+                            flash("M3U8 Stream URL is required for single stream mode.", "warning")
+                        else:
+                            # For single stream mode, we use the same URL for both fields
+                            # This allows the existing infrastructure to work without major changes
+                            add_tuner(name, m3u8_stream_url, m3u8_stream_url)
+                            log_event(current_user.username, f"Added single-stream tuner {name}")
+                            flash(f"Single-stream tuner {name} added successfully.", "success")
+                            
+                            # Validate URL (DNS/reachability check) after successful add
+                            validate_tuner_url(m3u8_stream_url, label=f"{name} M3U8")
+                    else:
+                        # Standard mode: require both XML and M3U URLs
+                        xml_url = request.form.get("xml_url", "").strip()
+                        m3u_url = request.form.get("m3u_url", "").strip()
+                        
+                        if not xml_url or not m3u_url:
+                            flash("Both XML URL and M3U URL are required for standard mode.", "warning")
+                        else:
+                            add_tuner(name, xml_url, m3u_url)
+                            log_event(current_user.username, f"Added tuner {name}")
+                            flash(f"Tuner {name} added successfully.", "success")
+                            
+                            # Validate URLs (DNS/reachability check) after successful add
+                            validate_tuner_url(xml_url, label=f"{name} XML")
+                            validate_tuner_url(m3u_url, label=f"{name} M3U")
                 except ValueError as e:
                     flash(f"Failed to add tuner: {str(e)}", "warning")
                     logging.warning(f"Failed to add tuner {name}: {e}")
