@@ -82,6 +82,62 @@ body.light .container-change-tuner {
 }
 
 /* ====================================================================== */
+/* RetroIPTV theme page-scoped overrides                                  */
+/* ====================================================================== */
+body.retroiptv .container-change-tuner {
+  --panel-bg: #f6e1c8;
+  --panel-text: #111;
+  --panel-border: rgba(0,0,0,0.08);
+  --card-head-bg: rgba(0,0,0,0.02);
+  --heading-color: #111;
+  --heading-weight: 700;
+
+  --label-color: #333;
+  --muted-color: rgba(0,0,0,0.56);
+
+  --input-bg: #fff;
+  --input-border: rgba(0,0,0,0.12);
+  --input-color: #111;
+  --placeholder-color: rgba(0,0,0,0.38);
+
+  --primary-color: #3fb7b0;
+  --primary-hover: #31988f;
+  --primary-contrast: #ffffff;
+  --box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+
+  --dropdown-bg: #fff;
+  --dropdown-color: #111;
+}
+
+/* ====================================================================== */
+/* Retro Magazine theme page-scoped overrides                             */
+/* ====================================================================== */
+body.retro-magazine .container-change-tuner {
+  --panel-bg: #fff;
+  --panel-text: #111;
+  --panel-border: rgba(0,0,0,0.08);
+  --card-head-bg: rgba(0,0,0,0.02);
+  --heading-color: #111;
+  --heading-weight: 700;
+
+  --label-color: #333;
+  --muted-color: rgba(0,0,0,0.56);
+
+  --input-bg: #fff;
+  --input-border: rgba(0,0,0,0.12);
+  --input-color: #111;
+  --placeholder-color: rgba(0,0,0,0.38);
+
+  --primary-color: #06c;
+  --primary-hover: #058;
+  --primary-contrast: #ffffff;
+  --box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+
+  --dropdown-bg: #fff;
+  --dropdown-color: #111;
+}
+
+/* ====================================================================== */
 /* Layout                                                                */
 /* ====================================================================== */
 .container-change-tuner {
