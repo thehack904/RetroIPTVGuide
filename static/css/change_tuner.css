@@ -547,7 +547,7 @@ body.retro-aol .flash-message.flash-default {
 body.retro-aol .flash-message.flash-warning {
   background: rgba(255, 204, 0, 0.2);
   border: 2px solid rgba(255, 204, 0, 0.5);
-  color: rgb(255, 204, 1);
+  color: rgb(255, 204, 0);
 }
 
 body.retro-aol .flash-message.flash-error,
@@ -560,7 +560,7 @@ body.retro-aol .flash-message.flash-danger {
 body.retro-aol .flash-message.flash-info {
   background: rgba(51, 204, 204, 0.2);
   border: 2px solid rgba(51, 204, 204, 0.5);
-  color: rgb(51, 204, 204);
+  color: rgb(102, 255, 255);
 }
 
 /* TV Guide 1990 theme adjustments - Black/white newspaper style */
