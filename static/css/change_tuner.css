@@ -352,14 +352,8 @@ body.directv .container-change-tuner .page-header .lead {
 }
 
 /* Flash message types */
-.flash-message.flash-success {
-  background: rgba(34, 197, 94, 0.15);
-  border: 1px solid rgba(34, 197, 94, 0.3);
-  color: rgb(34, 197, 94);
-}
-
-/* Default flash message (no category) */
-.flash-message:not([class*="flash-success"]):not([class*="flash-warning"]):not([class*="flash-error"]):not([class*="flash-danger"]):not([class*="flash-info"]) {
+.flash-message.flash-success,
+.flash-message.flash-default {
   background: rgba(34, 197, 94, 0.15);
   border: 1px solid rgba(34, 197, 94, 0.3);
   color: rgb(34, 197, 94);
@@ -385,13 +379,8 @@ body.directv .container-change-tuner .page-header .lead {
 }
 
 /* Light theme adjustments */
-body.light .flash-message.flash-success {
-  background: rgba(34, 197, 94, 0.1);
-  color: rgb(22, 163, 74);
-}
-
-/* Default flash message in light theme */
-body.light .flash-message:not([class*="flash-success"]):not([class*="flash-warning"]):not([class*="flash-error"]):not([class*="flash-danger"]):not([class*="flash-info"]) {
+body.light .flash-message.flash-success,
+body.light .flash-message.flash-default {
   background: rgba(34, 197, 94, 0.1);
   color: rgb(22, 163, 74);
 }

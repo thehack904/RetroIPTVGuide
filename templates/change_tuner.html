@@ -17,7 +17,7 @@
     {% if messages %}
       <div class="flash-messages-container">
         {% for category, message in messages %}
-          <div class="flash-message flash-{{ category }}">
+          <div class="flash-message flash-{{ category if category else 'default' }}">
             <span class="flash-content">{{ message }}</span>
             <button class="flash-close" aria-label="Close message">&times;</button>
           </div>
@@ -368,8 +368,8 @@ document.addEventListener("DOMContentLoaded", () => {
       radio.addEventListener('change', updateFormMode);
     });
   } catch (e) {
-    // Log error if mode switching setup fails
-    console.error('Error setting up tuner mode switching. The mode selection may not work correctly. Please refresh the page and try again.', e);
+    // Log error if mode switching setup fails - form will still submit with default standard mode
+    console.error('Mode switching initialization failed:', e);
   }
 });
 </script>
