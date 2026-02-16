@@ -636,6 +636,104 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+<!-- Cache refresh and age display script -->
+<script>
+(function() {
+  let cacheAgeInterval = null;
+
+  // Function to update cache age display
+  function updateCacheAge() {
+    fetch('/api/cache_info', {
+      method: 'GET',
+      credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+      const cacheAgeEl = document.getElementById('cacheAge');
+      if (!cacheAgeEl) return;
+
+      if (data.cached_at && data.age_seconds !== null) {
+        const ageMinutes = Math.floor(data.age_seconds / 60);
+        const ttlMinutes = Math.floor(data.ttl_seconds / 60);
+        const remainingMinutes = Math.floor((data.ttl_seconds - data.age_seconds) / 60);
+        
+        if (data.is_valid) {
+          cacheAgeEl.textContent = `Cache: ${ageMinutes}m ago (${remainingMinutes}m left)`;
+        } else {
+          cacheAgeEl.textContent = `Cache: expired`;
+        }
+      } else {
+        cacheAgeEl.textContent = `Cache: none`;
+      }
+    })
+    .catch(err => {
+      console.error('Failed to fetch cache info:', err);
+    });
+  }
+
+  // Function to handle manual refresh
+  function handleManualRefresh(e) {
+    e.preventDefault();
+    
+    const btn = e.target;
+    const originalText = btn.textContent;
+    btn.textContent = 'Refreshing...';
+    btn.disabled = true;
+
+    fetch('/api/refresh_guide', {
+      method: 'POST',
+      credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+      
+      if (data.success) {
+        alert('Guide refreshed successfully!');
+        updateCacheAge();
+        // Optionally reload the page to show new data
+        setTimeout(() => window.location.reload(), 500);
+      } else {
+        alert('Failed to refresh guide: ' + (data.error || 'Unknown error'));
+      }
+    })
+    .catch(err => {
+      btn.textContent = originalText;
+      btn.disabled = false;
+      alert('Failed to refresh guide: ' + err.message);
+    });
+  }
+
+  // Initialize when DOM is ready
+  document.addEventListener('DOMContentLoaded', function() {
+    // Set up refresh buttons
+    const refreshBtn = document.getElementById('refreshGuideBtn');
+    const mobileRefreshBtn = document.getElementById('mobileRefreshGuideBtn');
+    
+    if (refreshBtn) {
+      refreshBtn.addEventListener('click', handleManualRefresh);
+    }
+    if (mobileRefreshBtn) {
+      mobileRefreshBtn.addEventListener('click', handleManualRefresh);
+    }
+
+    // Initial cache age update
+    updateCacheAge();
+    
+    // Update cache age every 30 seconds
+    cacheAgeInterval = setInterval(updateCacheAge, 30000);
+  });
+
+  // Cleanup on page unload
+  window.addEventListener('beforeunload', function() {
+    if (cacheAgeInterval) {
+      clearInterval(cacheAgeInterval);
+    }
+  });
+})();
+</script>
+
 <!-- Android / Fire / Google TV detection (keeps TV experience simple) -->
 <script>
 (function(){

@@ -94,6 +94,51 @@
       </div>
     </section>
 
+    <!-- EPG Cache Settings -->
+    <section class="card" aria-labelledby="lbl-cache-settings">
+      <div class="card-head">
+        <h2 id="lbl-cache-settings">EPG Cache Settings</h2>
+      </div>
+      <div class="card-body">
+        <form method="POST" class="compact-form" id="form-cache-settings">
+          <input type="hidden" name="action" value="update_cache_settings">
+          
+          <label for="epg_cache_duration">Cache Duration</label>
+          <select id="epg_cache_duration" name="epg_cache_duration" class="form-control">
+            <option value="300" {% if _cache_duration|string == '300' %}selected{% endif %}>5 minutes</option>
+            <option value="600" {% if _cache_duration|string == '600' %}selected{% endif %}>10 minutes</option>
+            <option value="900" {% if _cache_duration|string == '900' %}selected{% endif %}>15 minutes</option>
+            <option value="1800" {% if _cache_duration|string == '1800' or not _cache_duration %}selected{% endif %}>30 minutes (default)</option>
+            <option value="3600" {% if _cache_duration|string == '3600' %}selected{% endif %}>60 minutes</option>
+          </select>
+          
+          <p class="muted small" style="margin: 10px 0;">
+            EPG data will be cached for the selected duration. After expiration, the guide will automatically refresh on next page load.
+          </p>
+
+          <div class="form-row form-row-inline" style="margin-top:10px;">
+            <button type="submit" class="primary">Save Cache Settings</button>
+          </div>
+
+          <div class="muted small" id="cache-meta" style="margin-top:10px;">
+            {% if cache_info is defined and cache_info %}
+              <strong>Current cache:</strong> 
+              {% if cache_info.cached_at %}
+                Last updated {{ cache_info.age_seconds // 60 }} minutes ago
+                {% if cache_info.is_valid %}
+                  (valid for {{ (cache_info.ttl_seconds - cache_info.age_seconds) // 60 }} more minutes)
+                {% else %}
+                  (expired)
+                {% endif %}
+              {% else %}
+                No data cached yet
+              {% endif %}
+            {% endif %}
+          </div>
+        </form>
+      </div>
+    </section>
+
     <!-- Edit / Add Tuners: Update URLs, Add, Rename grouped (delete separated) -->
     <section class="card" aria-labelledby="lbl-edit-tuners">
       <div class="card-head">

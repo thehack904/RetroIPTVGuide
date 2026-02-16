@@ -939,6 +939,21 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
+        elif action == "update_cache_settings":
+            # Handle EPG cache duration update
+            cache_duration = request.form.get("epg_cache_duration", "1800")
+            try:
+                duration_int = int(cache_duration)
+                # Validate allowed values
+                if duration_int not in [300, 600, 900, 1800, 3600]:
+                    flash("Invalid cache duration. Allowed: 5, 10, 15, 30, 60 minutes", "warning")
+                else:
+                    set_setting("epg_cache_duration", str(duration_int))
+                    log_event(current_user.username, f"Updated EPG cache duration to {duration_int} seconds")
+                    flash(f"EPG cache duration updated to {duration_int // 60} minutes", "success")
+            except ValueError:
+                flash("Invalid cache duration value", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -959,15 +974,21 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    # Get cache info and duration
+    cache_duration = _get_setting_inline("epg_cache_duration", "1800")
+    cache_info = get_cache_info()
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
         current_tuner=current_tuner,
         current_urls=tuners[current_tuner],
         TUNERS=tuners,
-        auto_refresh_enabled=auto_refresh_enabled,
-        auto_refresh_interval_hours=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh
+        _ar_enabled=auto_refresh_enabled,
+        _ar_interval=auto_refresh_interval_hours,
+        last_auto_refresh=last_auto_refresh,
+        _cache_duration=cache_duration,
+        cache_info=cache_info
     )
 
 @app.route('/guide')

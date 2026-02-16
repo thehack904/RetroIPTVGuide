@@ -27,6 +27,8 @@
               <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a>
               <a href="{{ url_for('view_logs') }}">Logs</a>
               <li><a href="{{ url_for('about') }}">About</a></li>
+              <li class="separator"></li>
+              <a href="#" id="refreshGuideBtn">Refresh Guide Now</a>
               {% endif %}
               <li class="submenu">
                 <a href="#">Auto-Scroll</a>
@@ -63,7 +65,10 @@
       <a href="{{ url_for('logout') }}">LOGOUT</a>
   </div>
 
-  <div id="clock" class="clock">--:-- --</div>
+  <div class="header-right">
+    <div id="cacheAge" class="cache-age" style="font-size: 0.9em; margin-right: 15px; opacity: 0.8;">--</div>
+    <div id="clock" class="clock">--:-- --</div>
+  </div>
 </div>
 
 <!-- Off-canvas mobile nav (hidden by default, toggled by hamburger) -->
@@ -121,6 +126,8 @@
           <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('view_logs') }}">Logs</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
+          <li class="separator"></li>
+          <li role="none"><a role="menuitem" href="#" id="mobileRefreshGuideBtn">Refresh Guide Now</a></li>
           {% endif %}
           <li class="mobile-submenu" role="none">
             <button
