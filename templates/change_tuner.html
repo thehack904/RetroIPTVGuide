@@ -132,11 +132,37 @@
               <label for="tuner_name">Add new tuner</label>
               <input type="text" id="tuner_name" name="tuner_name" placeholder="New Tuner Name" required>
 
-              <label for="xml_new">XML URL</label>
-              <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml" required>
+              <!-- Mode selection -->
+              <div class="mode-selection" style="margin-top: 12px;">
+                <label style="display: block; margin-bottom: 8px;">Tuner Mode</label>
+                <div style="display: flex; gap: 16px;">
+                  <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" name="tuner_mode" value="standard" checked>
+                    Standard Playlist Mode
+                  </label>
+                  <label style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" name="tuner_mode" value="single_stream">
+                    Single Stream Mode
+                  </label>
+                </div>
+                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL.</p>
+              </div>
 
-              <label for="m3u_new">M3U URL</label>
-              <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u" required>
+              <!-- Standard mode fields -->
+              <div id="standard-fields">
+                <label for="xml_new">XML URL</label>
+                <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml">
+
+                <label for="m3u_new">M3U URL</label>
+                <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u">
+              </div>
+
+              <!-- Single stream mode fields -->
+              <div id="stream-fields" style="display: none;">
+                <label for="m3u8_stream">M3U8 Stream URL</label>
+                <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
+                <p class="muted small" style="margin: 6px 0 0 0;">Direct link to a single M3U8 stream. Channel name will be auto-generated from the tuner name.</p>
+              </div>
 
               <button type="submit" class="primary">Add Tuner</button>
             </form>
@@ -302,6 +328,46 @@ document.addEventListener("DOMContentLoaded", () => {
         selRename.value = selUpdate.value;
       }
     } catch (e) {}
+
+    // Mode switching for Add Tuner form
+    const standardFields = document.getElementById('standard-fields');
+    const streamFields = document.getElementById('stream-fields');
+    const xmlInput = document.getElementById('xml_new');
+    const m3uInput = document.getElementById('m3u_new');
+    const m3u8Input = document.getElementById('m3u8_stream');
+    const modeRadios = document.querySelectorAll('input[name="tuner_mode"]');
+
+    function updateFormMode() {
+      const selectedMode = document.querySelector('input[name="tuner_mode"]:checked');
+      if (selectedMode && selectedMode.value === 'single_stream') {
+        // Single stream mode
+        standardFields.style.display = 'none';
+        streamFields.style.display = 'block';
+        // Remove required from standard fields
+        xmlInput.removeAttribute('required');
+        m3uInput.removeAttribute('required');
+        // Add required to stream field
+        m3u8Input.setAttribute('required', 'required');
+      } else {
+        // Standard mode
+        standardFields.style.display = 'block';
+        streamFields.style.display = 'none';
+        // Add required to standard fields
+        xmlInput.setAttribute('required', 'required');
+        m3uInput.setAttribute('required', 'required');
+        // Remove required from stream field
+        m3u8Input.removeAttribute('required');
+      }
+    }
+
+    // Initialize mode on load
+    updateFormMode();
+
+    // Handle mode change
+    modeRadios.forEach(radio => {
+      radio.addEventListener('change', updateFormMode);
+    });
+  } catch (e) {}
 });
 </script>
 {% endblock %}
