@@ -342,6 +342,16 @@ def inject_tuner_context():
 cached_channels = []
 cached_epg = {}
 
+# EPG cache with metadata (timestamp, expiration, tuner)
+epg_cache = {
+    'timestamp': None,
+    'expiration': None,
+    'tuner': None,
+    'channels': [],
+    'epg': {}
+}
+epg_cache_lock = threading.Lock()
+
 # Track currently playing marker (server-side)
 CURRENTLY_PLAYING = None
 
@@ -775,14 +785,9 @@ def set_tuner(name):
     # Update current tuner
     set_current_tuner(name)
 
-    # Refresh cached guide data
-    global cached_channels, cached_epg
-    m3u_url = tuners[name].get("m3u")
-    xml_url = tuners[name].get("xml")
-
-    cached_channels = parse_m3u(m3u_url) if m3u_url else []
-    cached_epg = parse_epg(xml_url) if xml_url else {}
-    cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+    # Invalidate cache and refresh with new tuner data
+    invalidate_cache()
+    refresh_current_tuner(name, force=True)
 
     log_event(current_user.username, f"Quick switched active tuner to {name}")
     flash(f"Active tuner switched to {name}", "success")
@@ -813,15 +818,9 @@ def change_tuner():
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
             flash(f"Active tuner switched to {new_tuner}", "success")
 
-            # ✅ Refresh cached guide data immediately
-            global cached_channels, cached_epg
-            tuners = get_tuners()
-            m3u_url = tuners[new_tuner]["m3u"]
-            xml_url = tuners[new_tuner]["xml"]
-            cached_channels = parse_m3u(m3u_url)
-            cached_epg = parse_epg(xml_url)
-            # ✅ Apply “No Guide Data Available” fallback
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+            # Invalidate cache and refresh with new tuner data
+            invalidate_cache()
+            refresh_current_tuner(new_tuner, force=True)
 
         elif action == "update_urls":
             tuner = request.form["tuner"]
@@ -1157,6 +1156,56 @@ def api_auto_refresh_status():
     except Exception as e:
         logging.exception("api_auto_refresh_status failed: %s", e)
         return jsonify({"error": str(e)}), 500
+
+@app.route('/api/cache_info', methods=['GET'])
+@login_required
+def api_cache_info():
+    """
+    Return EPG cache information:
+      { cached_at, expires_at, age_seconds, ttl_seconds, tuner, is_valid }
+    """
+    try:
+        cache_info = get_cache_info()
+        return jsonify(cache_info)
+    except Exception as e:
+        logging.exception("api_cache_info failed: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+@app.route('/api/refresh_guide', methods=['POST'])
+@login_required
+def api_refresh_guide():
+    """
+    Manually refresh EPG data, bypassing cache.
+    Admin-only endpoint.
+    Returns JSON with success status and new cache info.
+    """
+    if current_user.username != 'admin':
+        log_event(current_user.username, "Unauthorized refresh_guide attempt")
+        return jsonify({"success": False, "error": "Unauthorized"}), 403
+    
+    try:
+        tuner_name = get_current_tuner()
+        if not tuner_name:
+            return jsonify({"success": False, "error": "No active tuner"}), 400
+        
+        log_event(current_user.username, f"Manual refresh of guide for tuner {tuner_name}")
+        success = refresh_current_tuner(tuner_name, force=True)
+        
+        if success:
+            cache_info = get_cache_info()
+            return jsonify({
+                "success": True,
+                "message": "Guide refreshed successfully",
+                "cache_info": cache_info
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Refresh failed or is in progress"
+            }), 500
+    except Exception as e:
+        logging.exception("api_refresh_guide failed: %s", e)
+        return jsonify({"success": False, "error": str(e)}), 500
 
 @app.route('/api/stop_stream', methods=['POST'])
 @login_required
@@ -1860,6 +1909,90 @@ def set_setting(key, value):
     except Exception:
         logging.exception("set_setting failed for %s", key)
 
+# ------------------- EPG Cache Management Functions -------------------
+def get_cache_duration():
+    """Get configured cache duration in seconds. Default is 1800 (30 minutes)."""
+    duration_str = get_setting('epg_cache_duration', '1800')
+    try:
+        return int(duration_str)
+    except (ValueError, TypeError):
+        return 1800
+
+def get_cache_info():
+    """Returns current cache metadata."""
+    with epg_cache_lock:
+        if epg_cache['timestamp'] is None:
+            return {
+                'cached_at': None,
+                'expires_at': None,
+                'age_seconds': None,
+                'ttl_seconds': get_cache_duration(),
+                'tuner': None,
+                'is_valid': False
+            }
+        
+        now = datetime.now(timezone.utc)
+        age_seconds = (now - epg_cache['timestamp']).total_seconds()
+        
+        return {
+            'cached_at': epg_cache['timestamp'].isoformat() if epg_cache['timestamp'] else None,
+            'expires_at': epg_cache['expiration'].isoformat() if epg_cache['expiration'] else None,
+            'age_seconds': int(age_seconds),
+            'ttl_seconds': get_cache_duration(),
+            'tuner': epg_cache['tuner'],
+            'is_valid': is_cache_valid()
+        }
+
+def is_cache_valid(tuner_name=None):
+    """Check if cache is still valid (not expired and matches current tuner)."""
+    with epg_cache_lock:
+        if epg_cache['timestamp'] is None or epg_cache['expiration'] is None:
+            return False
+        
+        now = datetime.now(timezone.utc)
+        if now >= epg_cache['expiration']:
+            return False
+        
+        # Check if tuner matches
+        if tuner_name is None:
+            tuner_name = get_current_tuner()
+        
+        if epg_cache['tuner'] != tuner_name:
+            return False
+        
+        return True
+
+def invalidate_cache():
+    """Clear the EPG cache."""
+    global cached_channels, cached_epg
+    with epg_cache_lock:
+        epg_cache['timestamp'] = None
+        epg_cache['expiration'] = None
+        epg_cache['tuner'] = None
+        epg_cache['channels'] = []
+        epg_cache['epg'] = {}
+        cached_channels = []
+        cached_epg = {}
+    logging.info("EPG cache invalidated")
+
+def update_cache(channels, epg, tuner_name):
+    """Store new EPG data with timestamp and expiration."""
+    global cached_channels, cached_epg
+    now = datetime.now(timezone.utc)
+    ttl_seconds = get_cache_duration()
+    expiration = now + timedelta(seconds=ttl_seconds)
+    
+    with epg_cache_lock:
+        epg_cache['timestamp'] = now
+        epg_cache['expiration'] = expiration
+        epg_cache['tuner'] = tuner_name
+        epg_cache['channels'] = channels
+        epg_cache['epg'] = epg
+        cached_channels = channels
+        cached_epg = epg
+    
+    logging.info("EPG cache updated for tuner %s, expires at %s", tuner_name, expiration.isoformat())
+
 def _acquire_lock(name):
     lock = _auto_refresh_locks.setdefault(name, threading.Lock())
     return lock.acquire(blocking=False)
@@ -1873,9 +2006,10 @@ def _release_lock(name):
         # already released or not owned
         pass
 
-def refresh_current_tuner(tuner_name=None):
+def refresh_current_tuner(tuner_name=None, force=False):
     """Perform the same refresh logic you already run on login/tuner switch.
        Returns True on success, False on failure/skip.
+       If force=True, bypass cache and fetch fresh data.
     """
     try:
         if not tuner_name:
@@ -1884,11 +2018,16 @@ def refresh_current_tuner(tuner_name=None):
             logging.info("refresh_current_tuner: no current tuner set")
             return False
 
+        # Check cache validity if not forcing refresh
+        if not force and is_cache_valid(tuner_name):
+            logging.info("refresh_current_tuner: using cached data for %s", tuner_name)
+            return True
+
         if not _acquire_lock(tuner_name):
             logging.info("refresh_current_tuner: lock busy for %s", tuner_name)
             return False
 
-        logging.info("refresh_current_tuner: refreshing tuner %s", tuner_name)
+        logging.info("refresh_current_tuner: refreshing tuner %s (force=%s)", tuner_name, force)
         tuners = get_tuners()
         info = tuners.get(tuner_name)
         if not info:
@@ -1902,10 +2041,8 @@ def refresh_current_tuner(tuner_name=None):
         new_epg = parse_epg(xml_url) if xml_url else {}
         new_epg = apply_epg_fallback(new_channels, new_epg)
 
-        # atomic swap
-        global cached_channels, cached_epg
-        cached_channels = new_channels
-        cached_epg = new_epg
+        # Update cache with new data
+        update_cache(new_channels, new_epg, tuner_name)
 
         now_iso = datetime.now(timezone.utc).isoformat()
         set_setting(f"last_auto_refresh:{tuner_name}", f"success|{now_iso}")
