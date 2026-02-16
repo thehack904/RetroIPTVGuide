@@ -450,7 +450,7 @@ body.retroiptv .flash-message.flash-danger {
 }
 
 body.retroiptv .flash-message.flash-info {
-  background: rgba(63, 183, 176, 0.12);
+  background: #e8f3f3;
   border: 2px solid rgba(63, 183, 176, 0.5);
   color: #48494a;
 }
