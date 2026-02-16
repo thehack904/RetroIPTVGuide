@@ -59,13 +59,22 @@ def log_event(user, action):
         print(f"Warning: Could not write to log file: {e}", file=sys.stderr)
 
 # ------------------- URL Validation -------------------
-def validate_tuner_url(url, label="Tuner"):
-    """Warn if tuner URL uses DNS that can't be resolved or invalid IP ranges."""
+def validate_tuner_url(url, label="Tuner", check_reachability=False):
+    """Warn if tuner URL uses DNS that can't be resolved or invalid IP ranges.
+    
+    Args:
+        url: URL to validate
+        label: Label for flash messages
+        check_reachability: If True, perform HTTP HEAD request to check if URL is reachable
+    
+    Returns:
+        True if validation passes, False otherwise
+    """
     try:
         host = urlparse(url).hostname
         if not host:
             flash(f"⚠️ {label} URL seems invalid: {url}", "warning")
-            return
+            return False
 
         # If it's an IP, validate private vs public
         try:
@@ -73,7 +82,7 @@ def validate_tuner_url(url, label="Tuner"):
             if ip_obj.is_private:
                 flash(f"ℹ️ {label} is using a private IP ({host})", "info")
             else:
-                flash(f"ℹ️ {label} is using a public IP ({host}). Ensure it’s reachable.", "info")
+                flash(f"ℹ️ {label} is using a public IP ({host}). Ensure it's reachable.", "info")
         except ValueError:
             # Not an IP → must be a hostname
             try:
@@ -85,9 +94,34 @@ def validate_tuner_url(url, label="Tuner"):
                     flash(f"ℹ️ {label} hostname '{host}' resolved to public IP {resolved_ip}.", "info")
             except socket.gaierror:
                 flash(f"⚠️ {label} hostname '{host}' could not be resolved. Consider using IP instead.", "warning")
+                return False
+        
+        # Optionally check reachability
+        if check_reachability:
+            try:
+                response = requests.head(url, timeout=10, allow_redirects=True)
+                if 200 <= response.status_code < 300:
+                    flash(f"✅ {label} is reachable (HTTP {response.status_code})", "info")
+                    return True
+                else:
+                    flash(f"⚠️ {label} returned HTTP {response.status_code}", "warning")
+                    return False
+            except requests.Timeout:
+                flash(f"⚠️ {label} request timed out (10 seconds)", "warning")
+                return False
+            except requests.ConnectionError:
+                flash(f"⚠️ {label} connection failed", "warning")
+                return False
+            except Exception as e:
+                flash(f"⚠️ {label} reachability check failed: {str(e)}", "warning")
+                return False
+        
+        return True
 
     except Exception as e:
         flash(f"⚠️ Validation error for {label}: {str(e)}", "warning")
+        return False
+
 
 # ------------------- User Model -------------------
 class User(UserMixin):
@@ -197,7 +231,27 @@ def set_current_tuner(name):
         c.execute("UPDATE settings SET value=? WHERE key='current_tuner'", (name,))
         conn.commit()
 
+def _validate_url(url, field_name):
+    """Validate URL format (http/https scheme)."""
+    if not url or not url.strip():
+        raise ValueError(f"{field_name} cannot be empty")
+    
+    url = url.strip()
+    parsed = urlparse(url)
+    
+    if not parsed.scheme or parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"{field_name} must start with http:// or https://")
+    
+    if not parsed.netloc:
+        raise ValueError(f"{field_name} is malformed (missing host)")
+    
+    return url
+
 def update_tuner_urls(name, xml_url, m3u_url):
+    # Validate URLs before updating
+    xml_url = _validate_url(xml_url, "XML URL")
+    m3u_url = _validate_url(m3u_url, "M3U URL")
+    
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
         c.execute("UPDATE tuners SET xml=?, m3u=? WHERE name=?", (xml_url, m3u_url, name))
@@ -205,13 +259,26 @@ def update_tuner_urls(name, xml_url, m3u_url):
 
 def add_tuner(name, xml_url, m3u_url):
     """Insert a new tuner into DB."""
+    # Validate URLs before adding
+    xml_url = _validate_url(xml_url, "XML URL")
+    m3u_url = _validate_url(m3u_url, "M3U URL")
+    
+    # Check for duplicate name
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
-        c.execute(
-            "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
-            (name, xml_url, m3u_url)
-        )
-        conn.commit()
+        c.execute("SELECT name FROM tuners WHERE name=?", (name,))
+        if c.fetchone():
+            raise ValueError(f"Tuner '{name}' already exists")
+        
+        # Insert new tuner
+        try:
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
+                (name, xml_url, m3u_url)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"Database error: {str(e)}")
 
 def delete_tuner(name):
     """Delete a tuner from DB (except current one)."""
@@ -272,8 +339,12 @@ def parse_m3u(m3u_url):
     except:
         return channels
     
+    # Track if we found any #EXTINF entries
+    found_extinf = False
+    
     for i, line in enumerate(lines):
         if line.startswith('#EXTINF:'):
+            found_extinf = True
             info = line.strip()
             name_match = re.search(r',(.+)$', info)
             name = name_match.group(1) if name_match else f'Channel {i}'
@@ -287,6 +358,36 @@ def parse_m3u(m3u_url):
                 url = url.replace('.ts', '.m3u8')
 
             channels.append({'name': name, 'logo': logo, 'url': url, 'tvg_id': tvg_id})
+    
+    # If no #EXTINF entries found, check for single-channel M3U8 (just a URL)
+    if not found_extinf:
+        for line in lines:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            # Check if this looks like a URL
+            if line.startswith('http://') or line.startswith('https://'):
+                # Extract a channel name from the URL
+                parsed = urlparse(line)
+                # Get filename from path, or use 'stream' as default
+                path_parts = parsed.path.strip('/').split('/')
+                if path_parts and path_parts[-1]:
+                    filename = path_parts[-1]
+                    # Remove extension for cleaner name
+                    name = re.sub(r'\.(m3u8?|ts)$', '', filename, flags=re.IGNORECASE)
+                else:
+                    name = 'stream'
+                
+                channels.append({
+                    'name': name,
+                    'logo': '',
+                    'url': line,
+                    'tvg_id': name
+                })
+                # Only take the first valid URL for single-channel mode
+                break
+    
     return channels
 
 # ------------------- XMLTV EPG Parsing -------------------
@@ -711,16 +812,20 @@ def change_tuner():
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
 
-            # update DB
-            update_tuner_urls(tuner, xml_url, m3u_url)
-            log_event(current_user.username, f"Updated URLs for tuner {tuner}")
-            flash(f"Updated URLs for tuner {tuner}")
+            # update DB with validation
+            try:
+                update_tuner_urls(tuner, xml_url, m3u_url)
+                log_event(current_user.username, f"Updated URLs for tuner {tuner}")
+                flash(f"Updated URLs for tuner {tuner}")
 
-            # ✅ Validate inputs
-            if xml_url:
-                validate_tuner_url(xml_url, label=f"{tuner} XML")
-            if m3u_url:
-                validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+                # ✅ Validate inputs (DNS/reachability check)
+                if xml_url:
+                    validate_tuner_url(xml_url, label=f"{tuner} XML")
+                if m3u_url:
+                    validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+            except ValueError as e:
+                flash(f"URL validation failed: {str(e)}", "warning")
+                logging.warning(f"URL validation failed for tuner {tuner}: {e}")
 
         elif action == "delete_tuner":
             tuner = request.form["tuner"]
@@ -749,12 +854,18 @@ def change_tuner():
 
             if not name:
                 flash("Tuner name cannot be empty.", "warning")
-            elif name in get_tuners():
-                flash(f"Tuner {name} already exists.", "warning")
             else:
-                add_tuner(name, xml_url, m3u_url)
-                log_event(current_user.username, f"Added tuner {name}")
-                flash(f"Tuner {name} added successfully.")
+                try:
+                    add_tuner(name, xml_url, m3u_url)
+                    log_event(current_user.username, f"Added tuner {name}")
+                    flash(f"Tuner {name} added successfully.")
+                    
+                    # Validate URLs (DNS/reachability check) after successful add
+                    validate_tuner_url(xml_url, label=f"{name} XML")
+                    validate_tuner_url(m3u_url, label=f"{name} M3U")
+                except ValueError as e:
+                    flash(f"Failed to add tuner: {str(e)}", "warning")
+                    logging.warning(f"Failed to add tuner {name}: {e}")
 
         elif action == "update_auto_refresh":
             # Expect form fields: auto_refresh_enabled ('0' or '1') and auto_refresh_interval_hours (2/4/6/12/24)
