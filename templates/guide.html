@@ -547,6 +547,59 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script>
+// Scroll Speed Selection Handler
+document.addEventListener('DOMContentLoaded', () => {
+  const speedMapping = {
+    'slow': 0.6,
+    'medium': 1.2,
+    'fast': 2.4
+  };
+
+  // Apply saved speed on page load
+  function applySavedSpeed() {
+    try {
+      const savedSpeed = localStorage.getItem('autoScrollSpeed') || 'medium';
+      const speedValue = speedMapping[savedSpeed] || 1.2;
+      if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+        window.__autoScroll.setSpeed(speedValue);
+      }
+    } catch (e) {
+      console.debug('applySavedSpeed error', e);
+    }
+  }
+
+  // Handle speed selection clicks
+  function handleSpeedClick(e) {
+    e.preventDefault();
+    const speed = e.target.dataset.scrollSpeed;
+    if (speed && speedMapping[speed]) {
+      try {
+        localStorage.setItem('autoScrollSpeed', speed);
+        const speedValue = speedMapping[speed];
+        if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+          window.__autoScroll.setSpeed(speedValue);
+          console.debug('Scroll speed set to', speed, '(' + speedValue + ' px/frame)');
+        }
+      } catch (e) {
+        console.error('handleSpeedClick error', e);
+      }
+    }
+  }
+
+  // Attach event listeners to all speed selection links
+  document.querySelectorAll('[data-scroll-speed]').forEach(link => {
+    link.addEventListener('click', handleSpeedClick);
+  });
+
+  // Apply saved speed when auto-scroll initializes
+  applySavedSpeed();
+
+  // Re-apply speed when auto-scroll is loaded (in case it loads after DOMContentLoaded)
+  setTimeout(applySavedSpeed, 500);
+});
+</script>
+
 <!-- Mobile nav behavior (off-canvas toggle). Ensure this file contains the open/close and resize-dispatch code -->
 <script src="{{ url_for('static', filename='js/mobile-nav.js') }}" defer></script>
 <!-- Grid adapt script: computes scale on small screens so guide fits proportionally -->

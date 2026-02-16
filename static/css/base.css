@@ -97,7 +97,8 @@ body { font-family: Arial, sans-serif; margin:0; }
 
 /* Submenu (fly-out for Themes) */
 .submenu { position: relative; }
-.submenu > a { display: flex; justify-content: space-between; align-items: center; }
+.submenu > a { display: flex; justify-content: space-between; align-items: center; padding-right: 28px !important; position: relative; }
+.submenu > a::after { content: "▸"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
 .submenu-content {
   display: none;
   position: absolute;
