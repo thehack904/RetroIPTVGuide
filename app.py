@@ -97,7 +97,23 @@ def validate_tuner_url(url, label="Tuner", check_reachability=False):
                 return False
         
         # Optionally check reachability
+        # Note: This performs an HTTP request to a user-provided URL.
+        # Security: Only admin users can trigger this, and we validate the hostname above.
+        # However, we block certain sensitive addresses to prevent SSRF attacks.
         if check_reachability:
+            # Block localhost and link-local addresses for security
+            try:
+                resolved_ip = socket.gethostbyname(host)
+                ip_obj = ipaddress.ip_address(resolved_ip)
+                
+                # Block localhost (127.0.0.0/8) and link-local (169.254.0.0/16)
+                if ip_obj.is_loopback or ip_obj.is_link_local:
+                    flash(f"⚠️ {label} reachability check blocked: Cannot check localhost or link-local addresses", "warning")
+                    return False
+            except (socket.gaierror, ValueError):
+                # If we can't resolve, let the request attempt fail naturally
+                pass
+            
             try:
                 response = requests.head(url, timeout=10, allow_redirects=True)
                 if 200 <= response.status_code < 300:
