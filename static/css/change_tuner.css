@@ -433,26 +433,26 @@ body.retroiptv .flash-message.flash-success,
 body.retroiptv .flash-message.flash-default {
   background: rgba(34, 197, 94, 0.12);
   border: 2px solid rgba(34, 197, 94, 0.5);
-  color: rgb(22, 163, 74);
+  color: #48494a;
 }
 
 body.retroiptv .flash-message.flash-warning {
   background: rgba(251, 191, 36, 0.12);
   border: 2px solid rgba(251, 191, 36, 0.5);
-  color: rgb(161, 98, 7);
+  color: #48494a;
 }
 
 body.retroiptv .flash-message.flash-error,
 body.retroiptv .flash-message.flash-danger {
   background: rgba(239, 68, 68, 0.12);
   border: 2px solid rgba(239, 68, 68, 0.5);
-  color: rgb(185, 28, 28);
+  color: #48494a;
 }
 
 body.retroiptv .flash-message.flash-info {
   background: rgba(63, 183, 176, 0.12);
   border: 2px solid rgba(63, 183, 176, 0.5);
-  color: rgb(14, 116, 144);
+  color: #48494a;
 }
 
 /* Retro Magazine theme adjustments - Black text on white background theme */
@@ -460,26 +460,26 @@ body.retro-magazine .flash-message.flash-success,
 body.retro-magazine .flash-message.flash-default {
   background: rgba(34, 197, 94, 0.15);
   border: 2px solid rgba(34, 197, 94, 0.6);
-  color: rgb(21, 128, 61);
+  color: #48494a;
 }
 
 body.retro-magazine .flash-message.flash-warning {
   background: rgba(251, 191, 36, 0.15);
   border: 2px solid rgba(251, 191, 36, 0.6);
-  color: rgb(161, 98, 7);
+  color: #48494a;
 }
 
 body.retro-magazine .flash-message.flash-error,
 body.retro-magazine .flash-message.flash-danger {
   background: rgba(239, 68, 68, 0.15);
   border: 2px solid rgba(239, 68, 68, 0.6);
-  color: rgb(153, 27, 27);
+  color: #48494a;
 }
 
 body.retro-magazine .flash-message.flash-info {
   background: rgba(59, 130, 246, 0.15);
   border: 2px solid rgba(59, 130, 246, 0.6);
-  color: rgb(29, 78, 216);
+  color: #48494a;
 }
 
 /* DirecTV theme adjustments - Match blue corporate palette */
