@@ -366,7 +366,7 @@ def parse_m3u(m3u_url):
             # Skip empty lines and comments
             if not line or line.startswith('#'):
                 continue
-            # Check if this looks like a URL
+            # Simple protocol check (more lenient than _validate_url for parsing)
             if line.startswith('http://') or line.startswith('https://'):
                 # Extract a channel name from the URL
                 parsed = urlparse(line)
