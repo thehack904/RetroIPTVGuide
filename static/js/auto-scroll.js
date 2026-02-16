@@ -436,7 +436,14 @@
     window.__autoScroll.clearEnd = function(){ endReached = false; endReachedAt = 0; };
     window.__autoScroll.recompute = function(){ scroller = null; };
     window.__autoScroll.cloneNow = function(){ if (!scroller) scroller = findScroller(); return cloneOnce(scroller); };
-    window.__autoScroll.setSpeed = function(speed){ if (typeof speed === 'number' && speed > 0) { scrollSpeed = speed; log('setSpeed ->', scrollSpeed); } else { log('setSpeed: invalid speed', speed); } };
+    window.__autoScroll.setSpeed = function(speed) {
+      if (typeof speed === 'number' && speed > 0) {
+        scrollSpeed = speed;
+        log('setSpeed ->', scrollSpeed);
+      } else {
+        log('setSpeed: invalid speed', speed);
+      }
+    };
     window.__autoScroll.getSpeed = function(){ return scrollSpeed; };
     window.__autoScroll.status = function(){ return { isScrolling, pref: prefEnabled(), loopMode, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId: !!rafId, watchdog: !!watchdogInterval }; };
     window.__autoScroll.debug = function(){ return { lastActivity, idleDelay, scrollSpeed, isScrolling, pref: prefEnabled(), loopMode, endReached, endReachedAt, autoRestart, autoRestartDelayMs, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId, lastFrameTime, watchdogInterval }; };

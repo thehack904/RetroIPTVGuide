@@ -596,7 +596,21 @@ document.addEventListener('DOMContentLoaded', () => {
   applySavedSpeed();
 
   // Re-apply speed when auto-scroll is loaded (in case it loads after DOMContentLoaded)
-  setTimeout(applySavedSpeed, 500);
+  // Use a retry mechanism with maximum attempts
+  let retryCount = 0;
+  const maxRetries = 5;
+  const retryInterval = 100;
+  
+  function retryApplySavedSpeed() {
+    if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+      applySavedSpeed();
+    } else if (retryCount < maxRetries) {
+      retryCount++;
+      setTimeout(retryApplySavedSpeed, retryInterval);
+    }
+  }
+  
+  setTimeout(retryApplySavedSpeed, retryInterval);
 });
 </script>
 
