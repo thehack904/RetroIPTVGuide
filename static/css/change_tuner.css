@@ -259,12 +259,72 @@ button:focus, select:focus, input:focus, textarea:focus {
 }
 
 /* ====================================================================== */
+/* Flash messages - ensure visibility across all themes                    */
+/* ====================================================================== */
+.flash-messages { 
+  margin-top: 20px;
+  max-width: 1100px;
+  margin-left: auto;
+  margin-right: auto;
+  padding: 0 18px;
+}
+.flash { 
+  color: var(--panel-text); 
+  background: rgba(30, 211, 206, 0.1); 
+  padding: 12px 16px;
+  border-radius: 6px;
+  border-left: 4px solid var(--primary-color);
+  margin: 10px 0;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+/* Ensure flash messages have high contrast in all themes */
+body.light .container-change-tuner .flash {
+  color: #111;
+  background: rgba(6, 102, 204, 0.08);
+  border-left-color: #06c;
+}
+
+body.retroiptv .container-change-tuner .flash,
+body.retro-magazine .container-change-tuner .flash {
+  color: #ffffff;
+  background: rgba(30, 211, 206, 0.15);
+  border-left-color: #1ed3ce;
+}
+
+body.directv .container-change-tuner .flash {
+  color: #ffffff;
+  background: rgba(4, 159, 255, 0.15);
+  border-left-color: #049fff;
+}
+
+body.comcast .container-change-tuner .flash {
+  color: #ffffff;
+  background: rgba(30, 211, 206, 0.15);
+  border-left-color: #1ed3ce;
+}
+
+body.tvguide1990 .container-change-tuner .flash {
+  color: #000000;
+  background: rgba(0, 102, 204, 0.1);
+  border-left-color: #06c;
+}
+
+body.retro-aol .container-change-tuner .flash {
+  color: #ffcc01;
+  background: rgba(51, 204, 204, 0.1);
+  border-left-color: #33cccc;
+}
+
+/* ====================================================================== */
 /* Responsive                                                              */
 /* ====================================================================== */
 @media (max-width: 920px) {
   .card-grid { grid-template-columns: 1fr; }
   .subgrid { grid-template-columns: 1fr; }
   .row-inline { flex-direction: column; }
+  .flash-messages { padding: 0 12px; }
 }
 
 /* ====================================================================== */

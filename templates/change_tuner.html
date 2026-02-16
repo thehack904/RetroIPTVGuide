@@ -173,6 +173,16 @@
       </div>
     </section>
   </main>
+
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="flash-messages">
+        {% for msg in messages %}
+          <p class="flash">{{ msg }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
 </div>
 {% endblock %}
 
