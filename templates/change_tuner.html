@@ -367,7 +367,10 @@ document.addEventListener("DOMContentLoaded", () => {
     modeRadios.forEach(radio => {
       radio.addEventListener('change', updateFormMode);
     });
-  } catch (e) {}
+  } catch (e) {
+    // Log error if mode switching setup fails
+    console.error('Error setting up tuner mode switching:', e);
+  }
 });
 </script>
 {% endblock %}
