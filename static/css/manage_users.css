@@ -172,6 +172,12 @@ body.light .container-manage-users {
 }
 
 /* Ensure flash messages have high contrast in all themes */
+body.dark .container-manage-users .flash {
+  color: #ffffff;
+  background: rgba(30, 211, 206, 0.1);
+  border-left-color: #1ed3ce;
+}
+
 body.light .container-manage-users .flash {
   color: #111;
   background: rgba(6, 102, 204, 0.08);

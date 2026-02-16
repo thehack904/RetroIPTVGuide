@@ -280,6 +280,12 @@ button:focus, select:focus, input:focus, textarea:focus {
 }
 
 /* Ensure flash messages have high contrast in all themes */
+body.dark .container-change-tuner .flash {
+  color: #ffffff;
+  background: rgba(30, 211, 206, 0.1);
+  border-left-color: #1ed3ce;
+}
+
 body.light .container-change-tuner .flash {
   color: #111;
   background: rgba(6, 102, 204, 0.08);
