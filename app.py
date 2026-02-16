@@ -603,11 +603,11 @@ def change_password():
                           (generate_password_hash(new), current_user.id))
                 conn.commit()
             log_event(current_user.username, "Changed password")
-            flash("Password updated successfully.")
+            flash("Password updated successfully.", "success")
             return redirect(url_for('guide'))
         else:
             log_event(current_user.username, "Failed password change attempt (invalid old password)")
-            flash("Old password incorrect.")
+            flash("Old password incorrect.", "error")
     return render_template("change_password.html", current_tuner=get_current_tuner())
 
 @app.route('/add_user', methods=['GET','POST'])
@@ -627,11 +627,11 @@ def add_user_route():
                           (new_username, generate_password_hash(new_password)))
                 conn.commit()
             log_event(current_user.username, f"Added user {new_username}")
-            flash(f"User {new_username} added successfully.")
+            flash(f"User {new_username} added successfully.", "success")
             return redirect(url_for('guide'))
         except sqlite3.IntegrityError:
             log_event(current_user.username, f"Failed to add user {new_username} (duplicate)")
-            flash("Username already exists.")
+            flash("Username already exists.", "warning")
     return render_template("add_user.html", current_tuner=get_current_tuner())
 
 @app.route('/delete_user', methods=['GET','POST'])
@@ -645,7 +645,7 @@ def delete_user():
         del_username = request.form['username']
         if del_username == 'admin':
             log_event(current_user.username, "Attempted to delete admin user (blocked)")
-            flash("You cannot delete the admin account.")
+            flash("You cannot delete the admin account.", "warning")
             return redirect(url_for('delete_user'))
 
         with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -653,7 +653,7 @@ def delete_user():
             c.execute('DELETE FROM users WHERE username=?', (del_username,))
             conn.commit()
         log_event(current_user.username, f"Deleted user {del_username}")
-        flash(f"User {del_username} deleted (if they existed).")
+        flash(f"User {del_username} deleted (if they existed).", "success")
         return redirect(url_for('guide'))
 
     with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -675,7 +675,7 @@ def manage_users():
     if current_user.username != 'admin' or is_tv:
         # Log unauthorized or TV-based attempt
         log_event(current_user.username, f"Unauthorized attempt to access /manage_users from UA: {ua}")
-        flash("Unauthorized access.")
+        flash("Unauthorized access.", "warning")
         return redirect(url_for('guide'))
 
     # ---- Normal admin logic below ----
@@ -691,7 +691,7 @@ def manage_users():
 
         if action == 'add':
             if not username or not password:
-                flash("Please provide both username and password.")
+                flash("Please provide both username and password.", "warning")
             else:
                 try:
                     with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -700,25 +700,25 @@ def manage_users():
                                   (username, generate_password_hash(password)))
                         conn.commit()
                     log_event(current_user.username, f"Added user {username}")
-                    flash(f"✅ User '{username}' added successfully.")
+                    flash(f"✅ User '{username}' added successfully.", "success")
                 except sqlite3.IntegrityError:
-                    flash("⚠️ Username already exists.")
+                    flash("⚠️ Username already exists.", "warning")
 
         elif action == 'delete':
             if username == 'admin':
-                flash("❌ Cannot delete the admin account.")
+                flash("❌ Cannot delete the admin account.", "error")
             else:
                 with sqlite3.connect(DATABASE, timeout=10) as conn:
                     c = conn.cursor()
                     c.execute('DELETE FROM users WHERE username=?', (username,))
                     conn.commit()
                 log_event(current_user.username, f"Deleted user {username}")
-                flash(f"🗑 Deleted user '{username}'.")
+                flash(f"🗑 Deleted user '{username}'.", "success")
 
         elif action == 'signout':
             revoke_user_sessions(username)
             log_event(current_user.username, f"Revoked sessions for {username}")
-            flash(f"🚪 Signed out all active logins for '{username}'.")
+            flash(f"🚪 Signed out all active logins for '{username}'.", "success")
 
         return redirect(url_for('manage_users'))
 
@@ -811,7 +811,7 @@ def change_tuner():
             new_tuner = request.form["tuner"]
             set_current_tuner(new_tuner)
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
-            flash(f"Active tuner switched to {new_tuner}")
+            flash(f"Active tuner switched to {new_tuner}", "success")
 
             # ✅ Refresh cached guide data immediately
             global cached_channels, cached_epg
@@ -832,7 +832,7 @@ def change_tuner():
             try:
                 update_tuner_urls(tuner, xml_url, m3u_url)
                 log_event(current_user.username, f"Updated URLs for tuner {tuner}")
-                flash(f"Updated URLs for tuner {tuner}")
+                flash(f"Updated URLs for tuner {tuner}", "success")
 
                 # ✅ Validate inputs (DNS/reachability check)
                 if xml_url:
@@ -851,7 +851,7 @@ def change_tuner():
             else:
                 delete_tuner(tuner)
                 log_event(current_user.username, f"Deleted tuner {tuner}")
-                flash(f"Tuner {tuner} deleted.")
+                flash(f"Tuner {tuner} deleted.", "success")
 
         elif action == "rename_tuner":
             old_name = request.form["tuner"]   # matches HTML <select name="tuner">
@@ -861,7 +861,7 @@ def change_tuner():
             else:
                 rename_tuner(old_name, new_name)
                 log_event(current_user.username, f"Renamed tuner {old_name} → {new_name}")
-                flash(f"Tuner {old_name} renamed to {new_name}")
+                flash(f"Tuner {old_name} renamed to {new_name}", "success")
 
         elif action == "add_tuner":
             name = request.form["tuner_name"].strip()
@@ -1574,12 +1574,12 @@ def view_logs():
 @login_required
 def clear_logs():
     if current_user.username != 'admin':
-        flash("Unauthorized access.")
+        flash("Unauthorized access.", "warning")
         return redirect(url_for('view_logs'))
 
     open(LOG_PATH, "w").close()  # clear the file
     log_event("admin", "Cleared log file")
-    flash("🧹 Logs cleared successfully.")
+    flash("🧹 Logs cleared successfully.", "success")
     return redirect(url_for('view_logs'))
 
 
