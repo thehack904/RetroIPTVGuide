@@ -565,7 +565,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__autoScroll.setSpeed(speedValue);
       }
     } catch (e) {
-      console.debug('Failed to apply saved auto-scroll speed', e);
+      console.debug('Failed to retrieve or apply saved auto-scroll speed from localStorage', e);
     }
   }
 
@@ -596,10 +596,10 @@ document.addEventListener('DOMContentLoaded', () => {
   applySavedSpeed();
 
   // Re-apply speed when auto-scroll is loaded (in case it loads after DOMContentLoaded)
-  // Use a retry mechanism with maximum attempts
+  // Use a retry mechanism with maximum attempts to handle async script loading
   let retryCount = 0;
-  const maxRetries = 5;
-  const retryInterval = 100;
+  const maxRetries = 5; // Max 5 attempts to find auto-scroll API
+  const retryInterval = 100; // 100ms between retries (total max wait: 500ms)
   
   function retryApplySavedSpeed() {
     if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
