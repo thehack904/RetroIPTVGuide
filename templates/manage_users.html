@@ -10,6 +10,16 @@
   <div class="box">
     <h2>Manage Users</h2>
 
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="flash-messages">
+          {% for msg in messages %}
+            <p class="flash">{{ msg }}</p>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
     <form method="POST" class="add-user-form">
       <h3>Add New User</h3>
       <input type="hidden" name="action" value="add">
@@ -47,15 +57,6 @@
       </table>
     </div>
 
-    {% with messages = get_flashed_messages() %}
-      {% if messages %}
-        <div class="flash-messages">
-          {% for msg in messages %}
-            <p class="flash">{{ msg }}</p>
-          {% endfor %}
-        </div>
-      {% endif %}
-    {% endwith %}
   </div>
 </div>
 {% endblock %}

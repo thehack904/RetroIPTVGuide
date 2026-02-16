@@ -12,6 +12,16 @@
     <p class="lead">Switch the active tuner, edit tuner sources, and manage tuners. Dangerous actions are separated below to avoid accidental deletion.</p>
   </header>
 
+  {% with messages = get_flashed_messages() %}
+    {% if messages %}
+      <div class="flash-messages">
+        {% for msg in messages %}
+          <p class="flash">{{ msg }}</p>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <main class="card-grid">
     <!-- Active tuner + Auto-refresh combined -->
     <section class="card card-primary" aria-labelledby="lbl-active-tuner">
@@ -173,16 +183,6 @@
       </div>
     </section>
   </main>
-
-  {% with messages = get_flashed_messages() %}
-    {% if messages %}
-      <div class="flash-messages">
-        {% for msg in messages %}
-          <p class="flash">{{ msg }}</p>
-        {% endfor %}
-      </div>
-    {% endif %}
-  {% endwith %}
 </div>
 {% endblock %}
 
