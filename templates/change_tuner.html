@@ -12,6 +12,20 @@
     <p class="lead">Switch the active tuner, edit tuner sources, and manage tuners. Dangerous actions are separated below to avoid accidental deletion.</p>
   </header>
 
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages-container">
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category }}">
+            <span class="flash-content">{{ message }}</span>
+            <button class="flash-close" aria-label="Close message">&times;</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <main class="card-grid">
     <!-- Active tuner + Auto-refresh combined -->
     <section class="card card-primary" aria-labelledby="lbl-active-tuner">
@@ -197,6 +211,33 @@ document.addEventListener("DOMContentLoaded", () => {
 
     var sel = document.getElementById('tuner_update');
     if (sel) populateUrls(sel.value);
+
+    // Flash message auto-dismiss and manual close
+    const flashMessages = document.querySelectorAll('.flash-message');
+    if (flashMessages.length > 0) {
+      // Add close button handlers
+      flashMessages.forEach(msg => {
+        const closeBtn = msg.querySelector('.flash-close');
+        if (closeBtn) {
+          closeBtn.addEventListener('click', () => {
+            msg.classList.add('fade-out');
+            setTimeout(() => msg.remove(), 500);
+          });
+        }
+      });
+
+      // Auto-dismiss after 8 seconds
+      setTimeout(() => {
+        flashMessages.forEach(msg => {
+          if (msg.parentNode) { // Check if still in DOM
+            msg.classList.add('fade-out');
+            setTimeout(() => {
+              if (msg.parentNode) msg.remove();
+            }, 500);
+          }
+        });
+      }, 8000);
+    }
 
     // Run Now (uses existing endpoint)
     const runNow = document.getElementById('btn-run-now');
