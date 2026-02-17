@@ -956,6 +956,20 @@ def change_tuner():
 
     tuners = get_tuners()
     current_tuner = get_current_tuner()
+    
+    # Ensure current_tuner exists in tuners, fallback to first tuner if not
+    if not current_tuner or current_tuner not in tuners:
+        if tuners:
+            current_tuner = list(tuners.keys())[0]
+            set_current_tuner(current_tuner)
+            logging.warning("Current tuner was invalid, reset to %s", current_tuner)
+        else:
+            logging.error("No tuners configured!")
+            flash("No tuners configured. Please add a tuner first.", "error")
+            return redirect(url_for('guide'))
+    
+    # Safely get current_urls
+    current_urls = tuners.get(current_tuner, {"xml": "", "m3u": ""})
 
     # read auto-refresh status for template display
     def _get_setting_inline(key, default=None):
@@ -995,7 +1009,7 @@ def change_tuner():
             "change_tuner.html",
             tuners=tuners.keys(),
             current_tuner=current_tuner,
-            current_urls=tuners[current_tuner],
+            current_urls=current_urls,
             TUNERS=tuners,
             _ar_enabled=auto_refresh_enabled,
             _ar_interval=auto_refresh_interval_hours,
