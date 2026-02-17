@@ -961,8 +961,8 @@ def change_tuner():
     if not current_tuner or current_tuner not in tuners:
         if tuners:
             current_tuner = list(tuners.keys())[0]
-            set_current_tuner(current_tuner)
-            logging.warning("Current tuner was invalid, reset to %s", current_tuner)
+            # Don't call set_current_tuner here - just use it for display
+            logging.warning("Current tuner was invalid or None, using first available: %s", current_tuner)
         else:
             logging.error("No tuners configured!")
             flash("No tuners configured. Please add a tuner first.", "error")
