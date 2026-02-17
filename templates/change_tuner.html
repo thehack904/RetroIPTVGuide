@@ -123,9 +123,9 @@
           <div class="muted small" id="cache-meta" style="margin-top:10px;">
             {% if cache_info is defined and cache_info %}
               <strong>Current cache:</strong> 
-              {% if cache_info.cached_at %}
+              {% if cache_info.cached_at and cache_info.age_seconds is not none %}
                 Last updated {{ cache_info.age_seconds // 60 }} minutes ago
-                {% if cache_info.is_valid %}
+                {% if cache_info.is_valid and cache_info.ttl_seconds is not none and cache_info.age_seconds is not none %}
                   (valid for {{ (cache_info.ttl_seconds - cache_info.age_seconds) // 60 }} more minutes)
                 {% else %}
                   (expired)
