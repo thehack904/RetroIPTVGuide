@@ -1954,6 +1954,8 @@ def get_cache_info():
         
         now = datetime.now(timezone.utc)
         age_seconds = (now - epg_cache['timestamp']).total_seconds()
+        # Ensure age_seconds is non-negative (handles clock skew)
+        age_seconds = max(0, age_seconds)
         
         return {
             'cached_at': epg_cache['timestamp'].isoformat() if epg_cache['timestamp'] else None,
