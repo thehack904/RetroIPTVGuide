@@ -975,21 +975,38 @@ def change_tuner():
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
     # Get cache info and duration
-    cache_duration = _get_setting_inline("epg_cache_duration", "1800")
-    cache_info = get_cache_info()
+    try:
+        cache_duration = _get_setting_inline("epg_cache_duration", "1800")
+        cache_info = get_cache_info()
+    except Exception as e:
+        logging.exception("Failed to get cache info in change_tuner: %s", e)
+        cache_duration = "1800"
+        cache_info = {
+            'cached_at': None,
+            'expires_at': None,
+            'age_seconds': None,
+            'ttl_seconds': 1800,
+            'tuner': None,
+            'is_valid': False
+        }
 
-    return render_template(
-        "change_tuner.html",
-        tuners=tuners.keys(),
-        current_tuner=current_tuner,
-        current_urls=tuners[current_tuner],
-        TUNERS=tuners,
-        _ar_enabled=auto_refresh_enabled,
-        _ar_interval=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh,
-        _cache_duration=cache_duration,
-        cache_info=cache_info
-    )
+    try:
+        return render_template(
+            "change_tuner.html",
+            tuners=tuners.keys(),
+            current_tuner=current_tuner,
+            current_urls=tuners[current_tuner],
+            TUNERS=tuners,
+            _ar_enabled=auto_refresh_enabled,
+            _ar_interval=auto_refresh_interval_hours,
+            last_auto_refresh=last_auto_refresh,
+            _cache_duration=cache_duration,
+            cache_info=cache_info
+        )
+    except Exception as e:
+        logging.exception("Failed to render change_tuner template: %s", e)
+        # Return a simple error page instead of hanging
+        return f"<html><body><h1>Error Loading Page</h1><p>An error occurred: {str(e)}</p><p>Please check server logs for details.</p><a href='/guide'>Return to Guide</a></body></html>", 500
 
 @app.route('/guide')
 @login_required
@@ -1941,29 +1958,41 @@ def get_cache_duration():
 
 def get_cache_info():
     """Returns current cache metadata."""
-    with epg_cache_lock:
-        if epg_cache['timestamp'] is None:
+    try:
+        with epg_cache_lock:
+            if epg_cache['timestamp'] is None:
+                return {
+                    'cached_at': None,
+                    'expires_at': None,
+                    'age_seconds': None,
+                    'ttl_seconds': get_cache_duration(),
+                    'tuner': None,
+                    'is_valid': False
+                }
+            
+            now = datetime.now(timezone.utc)
+            age_seconds = (now - epg_cache['timestamp']).total_seconds()
+            # Ensure age_seconds is non-negative (handles clock skew)
+            age_seconds = max(0, age_seconds)
+            
             return {
-                'cached_at': None,
-                'expires_at': None,
-                'age_seconds': None,
+                'cached_at': epg_cache['timestamp'].isoformat() if epg_cache['timestamp'] else None,
+                'expires_at': epg_cache['expiration'].isoformat() if epg_cache['expiration'] else None,
+                'age_seconds': int(age_seconds),
                 'ttl_seconds': get_cache_duration(),
-                'tuner': None,
-                'is_valid': False
+                'tuner': epg_cache['tuner'],
+                'is_valid': is_cache_valid()
             }
-        
-        now = datetime.now(timezone.utc)
-        age_seconds = (now - epg_cache['timestamp']).total_seconds()
-        # Ensure age_seconds is non-negative (handles clock skew)
-        age_seconds = max(0, age_seconds)
-        
+    except Exception as e:
+        logging.exception("get_cache_info failed: %s", e)
+        # Return safe default values if anything goes wrong
         return {
-            'cached_at': epg_cache['timestamp'].isoformat() if epg_cache['timestamp'] else None,
-            'expires_at': epg_cache['expiration'].isoformat() if epg_cache['expiration'] else None,
-            'age_seconds': int(age_seconds),
-            'ttl_seconds': get_cache_duration(),
-            'tuner': epg_cache['tuner'],
-            'is_valid': is_cache_valid()
+            'cached_at': None,
+            'expires_at': None,
+            'age_seconds': None,
+            'ttl_seconds': 1800,
+            'tuner': None,
+            'is_valid': False
         }
 
 def is_cache_valid(tuner_name=None):
