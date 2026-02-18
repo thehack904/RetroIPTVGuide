@@ -1039,6 +1039,7 @@ def crt():
 
 PLAY_SCRIPT = "/usr/local/bin/vlc-play.sh"
 STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
+VOLUME_SCRIPT = "/usr/local/bin/vlc-volume.sh"
 LOG_FILE = "/var/log/vlc-play.log"
 INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
 
@@ -1188,6 +1189,103 @@ def api_stop_stream():
     except Exception as e:
         logging.exception("Unexpected error in api_stop_stream: %s", e)
         return jsonify({"ok": False, "error": "unexpected server error", "trace": str(e)}), 500
+
+@app.route('/api/volume/<int:value>', methods=['POST'])
+@login_required
+def api_set_volume(value):
+    """
+    Set volume using the helper script.
+    Expects volume value in URL path (0-512 range).
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Clamp volume to reasonable range (0-512 is VLC's range)
+        v = max(0, min(512, int(value)))
+        
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "set", str(v)]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, f"Set volume to {v}")
+            return jsonify({"ok": True, "volume": v, "message": "volume set"})
+        except subprocess.CalledProcessError as e:
+            logging.exception("volume set failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.exception("volume set timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_set_volume: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/volume_up', methods=['POST'])
+@login_required
+def api_volume_up():
+    """
+    Increase volume using the helper script.
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "up"]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, "Volume up")
+            return jsonify({"ok": True, "message": "volume increased"})
+        except subprocess.CalledProcessError as e:
+            logging.exception("volume up failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.exception("volume up timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_volume_up: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/volume_down', methods=['POST'])
+@login_required
+def api_volume_down():
+    """
+    Decrease volume using the helper script.
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "down"]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, "Volume down")
+            return jsonify({"ok": True, "message": "volume decreased"})
+        except subprocess.CalledProcessError as e:
+            logging.exception("volume down failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.exception("volume down timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_volume_down: %s", e)
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/api/tail_logs', methods=['GET'])
 @login_required
