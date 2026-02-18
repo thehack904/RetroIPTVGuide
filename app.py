@@ -1042,6 +1042,7 @@ STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
 VOLUME_SCRIPT = "/usr/local/bin/vlc-volume.sh"
 LOG_FILE = "/var/log/vlc-play.log"
 INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
+MAX_VOLUME = 512  # VLC volume range: 0-512
 
 def is_valid_stream_url(url: str) -> bool:
     try:
@@ -1199,8 +1200,8 @@ def api_set_volume(value):
     The actual volume control is handled by the vlc-volume.sh script if installed.
     """
     try:
-        # Clamp volume to reasonable range (0-512 is VLC's range)
-        v = max(0, min(512, int(value)))
+        # Clamp volume to reasonable range (0-MAX_VOLUME is VLC's range)
+        v = max(0, min(MAX_VOLUME, int(value)))
         
         # Check if volume script exists
         if not os.path.exists(VOLUME_SCRIPT):
@@ -1215,14 +1216,14 @@ def api_set_volume(value):
             log_event(current_user.username, f"Set volume to {v}")
             return jsonify({"ok": True, "volume": v, "message": "volume set"})
         except subprocess.CalledProcessError as e:
-            logging.exception("volume set failed: %s", e)
+            logging.error("volume set failed: %s", e)
             return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
         except subprocess.TimeoutExpired:
-            logging.exception("volume set timed out")
+            logging.error("volume set timed out")
             return jsonify({"ok": False, "error": "volume control timed out"}), 500
             
     except Exception as e:
-        logging.exception("Unexpected error in api_set_volume: %s", e)
+        logging.exception("Unexpected error in api_set_volume")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/api/volume_up', methods=['POST'])
@@ -1246,14 +1247,14 @@ def api_volume_up():
             log_event(current_user.username, "Volume up")
             return jsonify({"ok": True, "message": "volume increased"})
         except subprocess.CalledProcessError as e:
-            logging.exception("volume up failed: %s", e)
+            logging.error("volume up failed: %s", e)
             return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
         except subprocess.TimeoutExpired:
-            logging.exception("volume up timed out")
+            logging.error("volume up timed out")
             return jsonify({"ok": False, "error": "volume control timed out"}), 500
             
     except Exception as e:
-        logging.exception("Unexpected error in api_volume_up: %s", e)
+        logging.exception("Unexpected error in api_volume_up")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/api/volume_down', methods=['POST'])
@@ -1277,14 +1278,14 @@ def api_volume_down():
             log_event(current_user.username, "Volume down")
             return jsonify({"ok": True, "message": "volume decreased"})
         except subprocess.CalledProcessError as e:
-            logging.exception("volume down failed: %s", e)
+            logging.error("volume down failed: %s", e)
             return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
         except subprocess.TimeoutExpired:
-            logging.exception("volume down timed out")
+            logging.error("volume down timed out")
             return jsonify({"ok": False, "error": "volume control timed out"}), 500
             
     except Exception as e:
-        logging.exception("Unexpected error in api_volume_down: %s", e)
+        logging.exception("Unexpected error in api_volume_down")
         return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.route('/api/tail_logs', methods=['GET'])
