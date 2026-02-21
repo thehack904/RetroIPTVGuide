@@ -13,7 +13,7 @@
 (function () {
   'use strict';
 
-  /* ── Inject focus-highlight styles ───────────────────────────────────────── */
+  /* ── Inject styles (focus highlight + TV-mode player sizing) ─────────────── */
   var style = document.createElement('style');
   style.textContent = [
     '.chan-name { cursor: pointer; outline: none; }',
@@ -25,7 +25,13 @@
     '  position: relative; z-index: 2;',
     '}',
     /* guide-row highlight is applied via JS to avoid :has() compat issues */
-    '.guide-row.tv-focused-row { background: rgba(255,153,0,0.07); }'
+    '.guide-row.tv-focused-row { background: rgba(255,153,0,0.07); }',
+    /* ── TV-mode player: reduce video + summary to ~50% of desktop defaults ── */
+    'body.tv-mode .player { padding: 6px; gap: 8px; }',
+    'body.tv-mode #video  { width: 310px; height: 175px; }',
+    'body.tv-mode .summary { font-size: 0.7em; padding: 4px 8px; }',
+    'body.tv-mode .summary h3 { font-size: 1em; margin: 0 0 2px; }',
+    'body.tv-mode .summary p  { margin: 0; line-height: 1.3; }'
   ].join('\n');
   document.head.appendChild(style);
 
@@ -112,6 +118,9 @@
   function init() {
     var channels = getChannels();
     if (!channels.length) return;
+
+    // Mark body so TV-mode CSS rules apply (player sizing, etc.)
+    document.body.classList.add('tv-mode');
 
     // Sync selectedIndex when a channel element receives native focus.
     channels.forEach(function (el) {
