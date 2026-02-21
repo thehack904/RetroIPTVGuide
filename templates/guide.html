@@ -91,6 +91,8 @@
     <div class="guide-row" data-cid="{{ ch.tvg_id }}">
         <div class="chan-col">
             <div class="chan-name"
+                 tabindex="0"
+                 role="button"
                  data-url="{{ ch.url }}"
                  data-cid="{{ ch.tvg_id }}"
                  data-name="{{ ch.name|e }}"
@@ -647,6 +649,11 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("userAdminMenu")?.remove();
   document.getElementById("settingsMenu")?.remove();
   document.getElementById("manageUsersMenu")?.remove();
+
+  // Load DPAD / TV-remote channel navigation module
+  var tvNavScript = document.createElement('script');
+  tvNavScript.src = "{{ url_for('static', filename='js/tv-remote-nav.js') }}";
+  document.body.appendChild(tvNavScript);
 
   const linksContainer = document.querySelector(".header .links");
   if (linksContainer){
