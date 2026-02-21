@@ -143,6 +143,34 @@
     // Mark body so TV-mode CSS rules apply (player sizing, etc.)
     document.body.classList.add('tv-mode');
 
+    // Recompute fixed time bar position after TV-mode CSS has resized the player.
+    // createOrUpdateFixedTimeBar() already ran at DOMContentLoaded (before this
+    // async script loaded), so it measured the full-size player. Two rAF cycles
+    // let the browser apply the new layout before we re-measure.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+        if (typeof updateNowLine === 'function') updateNowLine();
+      });
+    });
+
+    // Default auto-scroll speed to slow for TV mode.
+    // Only set the default when no explicit user preference is saved yet.
+    try {
+      if (!localStorage.getItem('autoScrollSpeed')) {
+        localStorage.setItem('autoScrollSpeed', 'slow');
+      }
+      // Apply immediately — __autoScroll is guaranteed to be available by the
+      // time this async module runs (auto-scroll.js is deferred and ran before
+      // DOMContentLoaded, which fired before this script executed).
+      if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+        var savedSpeed = localStorage.getItem('autoScrollSpeed') || 'slow';
+        var speedMap = { slow: 0.6, medium: 1.2, fast: 2.4 };
+        var speedVal = speedMap[savedSpeed] || 0.6;
+        window.__autoScroll.setSpeed(speedVal);
+      }
+    } catch (e) { /* ignore localStorage errors */ }
+
     // Sync selectedIndex when a channel element receives native focus.
     channels.forEach(function (el) {
       el.addEventListener('focus', function () {
