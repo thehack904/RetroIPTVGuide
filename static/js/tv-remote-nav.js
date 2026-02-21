@@ -42,8 +42,9 @@
     /* Channel column */
     'body.tv-mode { --chan-col-width: 100px; }',
     'body.tv-mode .chan-col { width: 100px; }',
-    'body.tv-mode .chan-name { padding: 5px; gap: 3px; font-size: 0.75em; }',
-    'body.tv-mode .chan-name img { max-width: 50px; }',
+    'body.tv-mode .chan-name { height: 30px; flex-direction: row; align-items: center; overflow: hidden; padding: 3px 5px; gap: 4px; font-size: 0.65em; }',
+    'body.tv-mode .chan-name img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }',
+    'body.tv-mode .chan-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
     'body.tv-mode .chan-header { height: 17px; }',
     /* Program grid cells */
     'body.tv-mode .program { height: 24px !important; font-size: 9px; padding: 2px 3px; top: 3px; }',
