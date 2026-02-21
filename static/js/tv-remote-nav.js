@@ -26,12 +26,32 @@
     '}',
     /* guide-row highlight is applied via JS to avoid :has() compat issues */
     '.guide-row.tv-focused-row { background: rgba(255,153,0,0.07); }',
-    /* ── TV-mode player: reduce video + summary to ~50% of desktop defaults ── */
+    /* ── TV-mode: reduce entire UI proportionally to match 50% player ────── */
+    /* Player row */
     'body.tv-mode .player { padding: 6px; gap: 8px; }',
     'body.tv-mode #video  { width: 310px; height: 175px; }',
     'body.tv-mode .summary { font-size: 0.7em; padding: 4px 8px; }',
     'body.tv-mode .summary h3 { font-size: 1em; margin: 0 0 2px; }',
-    'body.tv-mode .summary p  { margin: 0; line-height: 1.3; }'
+    'body.tv-mode .summary p  { margin: 0; line-height: 1.3; }',
+    /* Header */
+    'body.tv-mode .header { height: 20px; padding: 0 5px; font-size: 11px; }',
+    'body.tv-mode .header .links > a,',
+    'body.tv-mode .header .links > .dropdown > .dropbtn,',
+    'body.tv-mode .header .links > span,',
+    'body.tv-mode .header .links > div { height: 20px; line-height: 20px; }',
+    /* Channel column */
+    'body.tv-mode { --chan-col-width: 100px; }',
+    'body.tv-mode .chan-col { width: 100px; }',
+    'body.tv-mode .chan-name { padding: 5px; gap: 3px; font-size: 0.75em; }',
+    'body.tv-mode .chan-name img { max-width: 50px; }',
+    'body.tv-mode .chan-header { height: 17px; }',
+    /* Program grid cells */
+    'body.tv-mode .program { height: 24px !important; font-size: 9px; padding: 2px 3px; top: 3px; }',
+    'body.tv-mode .time-cell { font-size: 9px; }',
+    /* Fixed time bar */
+    'body.tv-mode .time-header-fixed { height: 17px; }',
+    /* Guide outer: fill space below shorter header+player+timebar (20+175+17+18px padding ≈ 230px) */
+    'body.tv-mode .guide-outer { height: calc(100vh - 230px); }'
   ].join('\n');
   document.head.appendChild(style);
 
