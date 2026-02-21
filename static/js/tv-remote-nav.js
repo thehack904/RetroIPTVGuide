@@ -135,6 +135,26 @@
     }
   }
 
+  /* ── Fullscreen (hide browser nav bar) ───────────────────────────────────── */
+  // Browsers require a user gesture before allowing fullscreen. On Fire TV the
+  // first remote button press qualifies. We attempt once on the first keydown
+  // and never retry, so the handler cleans itself up immediately.
+  function requestTVFullscreen() {
+    var el = document.documentElement;
+    try {
+      // Note: mozRequestFullScreen uses capital 'S' — that is the correct legacy Mozilla name.
+      var fn = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen || el.msRequestFullscreen;
+      if (fn) fn.call(el);
+    } catch (e) {
+      console.debug('RetroIPTVGuide: fullscreen unavailable (expected on some browsers/devices)', e);
+    }
+  }
+
+  function onFirstKey() {
+    document.removeEventListener('keydown', onFirstKey, true);
+    requestTVFullscreen();
+  }
+
   /* ── Init ─────────────────────────────────────────────────────────────────── */
   function init() {
     var channels = getChannels();
@@ -189,6 +209,10 @@
     setFocus(0);
 
     document.addEventListener('keydown', onKeyDown);
+
+    // Fullscreen on first remote keypress (hides browser nav bar).
+    // Capturing phase so it fires before onKeyDown processes the key.
+    document.addEventListener('keydown', onFirstKey, true);
 
     console.log('RetroIPTVGuide: TV remote nav active (' + channels.length + ' channels)');
   }
