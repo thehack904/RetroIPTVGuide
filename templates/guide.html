@@ -569,6 +569,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 
+<!-- Screen-saver prevention: keep display awake while browsing the guide.
+     Loaded unconditionally so it works on any device (TV, tablet, phone). -->
+<script src="{{ url_for('static', filename='js/wakelock.js') }}" defer></script>
+
 <!-- Android / Fire / Google TV detection (keeps TV experience simple) -->
 <script>
 (function(){

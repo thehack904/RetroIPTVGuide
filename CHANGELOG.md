@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.6.0 - 2026-02-22
+
+### Fixed
+- **Fire TV / Silk Browser – screen saver prevention (wakelock.js)**
+  - Fixed a bug where the NoSleep canvas-stream video was paused by the browser
+    when the guide page was hidden (e.g. user switched to another Fire TV app)
+    but never resumed when the page became visible again, silently disabling
+    screen-saver prevention for the rest of the session.
+  - Fixed a race condition in the Screen Wake Lock API path where the sentinel's
+    `release` event could fire *after* the page-visible `visibilitychange` event,
+    leaving the lock unreleased with nothing to re-acquire it.
+  - The `visibilitychange` handler now: resumes a paused NoSleep video immediately,
+    re-requests the Wake Lock when the sentinel is gone, and pro-actively refreshes
+    an existing sentinel to win any release-event race.
+
+---
+
 ## v4.5.0 - 2026-02-15
 
 ### Added
