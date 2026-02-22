@@ -4,23 +4,21 @@
 */
 
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
-body.guide-page { height: 100%; overflow: hidden; }
+/* Use flex column so guide-outer fills all remaining vertical space automatically —
+   this is the mechanism that allows zoom to reveal more channels without blank space. */
+body.guide-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 html { height: 100%; }
 
 /* Display size scaling: applied via data-display-size on <html>.
    Acts like the browser's built-in zoom so fonts, header, guide, and channel
    column all scale together. Large = 100% (default), Medium = 80%, Small = 67%.
    The CSS `zoom` property is part of the CSS spec (Values and Units Level 4)
-   and is supported in all modern browsers (Chrome, Edge, Safari, Firefox 126+). */
-/* CSS zoom on html does NOT update window.innerWidth / 100vh in browsers, so the
-   html element must be explicitly expanded so it fills the viewport after zoom is
-   applied.  formula: layout_size = visual_size / zoom_factor.
-   The guide-outer height is handled by recomputeGuideHeight() in guide.html because
-   Chrome also scales 100vh by the zoom factor, making CSS calc() overrides ineffective.
-   The --display-zoom variable is read by getDisplayZoom() in guide.html so the
-   zoom factor lives in one place rather than being duplicated in JS. */
-html[data-display-size="medium"] { --display-zoom: 0.8;  zoom: 0.8;  width: calc(100vw / 0.8);  height: calc(100vh / 0.8);  }
-html[data-display-size="small"]  { --display-zoom: 0.67; zoom: 0.67; width: calc(100vw / 0.67); height: calc(100vh / 0.67); }
+   and is supported in all modern browsers (Chrome, Edge, Safari, Firefox 126+).
+   html width/height are set by display-size.js using window.innerWidth/innerHeight
+   so they reliably fill the viewport regardless of how the browser treats 100vh/100vw
+   in a zoomed context. */
+html[data-display-size="medium"] { --display-zoom: 0.8;  zoom: 0.8;  }
+html[data-display-size="small"]  { --display-zoom: 0.67; zoom: 0.67; }
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
@@ -204,7 +202,9 @@ body { font-family: Arial, sans-serif; margin:0; }
 }
 
 /* === Guide grid === */
-.guide-outer { height: calc(100vh - 420px); overflow-y: auto; padding-bottom: 80px; position: relative; }
+/* flex:1 + min-height:0 lets guide-outer fill all remaining vertical space in
+   the body flex column automatically, at any zoom level, without JS computation. */
+.guide-outer { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 80px; position: relative; }
 .guide-row { display:flex; }
 .chan-col { width: var(--chan-col-width, 200px); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
 
