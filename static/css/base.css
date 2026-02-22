@@ -150,11 +150,18 @@ body { font-family: Arial, sans-serif; margin:0; }
   user-select: none;
 }
 /* Triangular grip: linear-gradient places the 90° corner at the handle's
-   top-right, which is exactly at the video's bottom-left corner. */
+   top-right, which is exactly at the video's bottom-left corner.
+   The pseudo-element is smaller than the handle so the triangle is compact
+   while the clickable hit-area remains comfortably large. */
 .video-corner-handle::after {
   content: '';
   position: absolute;
-  inset: 0;
+  /* 12×12 triangle tucked into the top-right of the hit zone
+     (= the video's bottom-left corner) */
+  top: 0;
+  right: 0;
+  bottom: 8px;
+  left: 8px;
   background: linear-gradient(to bottom left,
     var(--resize-handle-active, #0af) 50%,
     transparent 50%);
