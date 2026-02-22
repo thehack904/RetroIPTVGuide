@@ -13,14 +13,14 @@ html { height: 100%; }
    The CSS `zoom` property is part of the CSS spec (Values and Units Level 4)
    and is supported in all modern browsers (Chrome, Edge, Safari, Firefox 126+). */
 /* CSS zoom on html does NOT update window.innerWidth / 100vh in browsers, so the
-   html element and guide-outer must be explicitly expanded so they fill the viewport
-   after zoom is applied.  formula: layout_size = visual_size / zoom_factor
+   html element must be explicitly expanded so it fills the viewport after zoom is
+   applied.  formula: layout_size = visual_size / zoom_factor.
+   The guide-outer height is handled by recomputeGuideHeight() in guide.html because
+   Chrome also scales 100vh by the zoom factor, making CSS calc() overrides ineffective.
    The --display-zoom variable is read by getDisplayZoom() in guide.html so the
-   zoom factor lives in one place (CSS) rather than being duplicated in JS. */
+   zoom factor lives in one place rather than being duplicated in JS. */
 html[data-display-size="medium"] { --display-zoom: 0.8;  zoom: 0.8;  width: calc(100vw / 0.8);  height: calc(100vh / 0.8);  }
 html[data-display-size="small"]  { --display-zoom: 0.67; zoom: 0.67; width: calc(100vw / 0.67); height: calc(100vh / 0.67); }
-html[data-display-size="medium"] .guide-outer { height: calc(100vh / 0.8  - 420px); }
-html[data-display-size="small"]  .guide-outer { height: calc(100vh / 0.67 - 420px); }
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }

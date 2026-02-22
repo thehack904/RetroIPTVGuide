@@ -172,6 +172,52 @@ function getDisplayZoom() {
     return (v > 0 && isFinite(v)) ? v : 1.0;
 }
 
+/**
+ * Recalculates and sets guide-outer's height so it fills the viewport below the
+ * player row at any CSS zoom level.
+ *
+ * Why JS and not CSS calc():
+ *   Chrome scales viewport units (100vh, 100vw) by the zoom factor when zoom is on
+ *   the html element, so calc(100vh / zoom - 420px) simply equals (100vh - 420px) —
+ *   identical to the base rule, with zero effect.
+ *   window.innerHeight and getBoundingClientRect() are immune to CSS zoom and always
+ *   report values in the true CSS viewport coordinate space.
+ *
+ * Scheduling:
+ *   Called via requestAnimationFrame from the resize handler so it always runs
+ *   AFTER createOrUpdateFixedTimeBar() has already set guideOuter.paddingTop in its
+ *   own rAF callback — ensuring padding is accounted for.
+ */
+function recomputeGuideHeight() {
+    const guideOuter = document.getElementById('guideOuter');
+    if (!guideOuter) return;
+    const zoom = getDisplayZoom();
+    if (zoom >= 1.0) {
+        // At full size let the base CSS rule handle it.
+        guideOuter.style.height = '';
+        return;
+    }
+    // getBoundingClientRect() returns visual (viewport) px — same coordinate space as
+    // window.innerHeight — so we can subtract directly to get available visual height.
+    const playerRow = document.getElementById('playerRow');
+    const aboveBottomPx = playerRow
+        ? playerRow.getBoundingClientRect().bottom
+        : Math.round(420 * zoom);
+    const availableVisualPx = Math.max(80, window.innerHeight - aboveBottomPx);
+
+    // guide-outer uses box-sizing: content-box, so height = content area only.
+    // Subtract padding (which getComputedStyle returns in html CSS px; convert to
+    // visual px by multiplying by zoom) so the total rendered height fits exactly.
+    const cs = window.getComputedStyle(guideOuter);
+    const padTopCss    = parseFloat(cs.paddingTop)    || 0;
+    const padBottomCss = parseFloat(cs.paddingBottom) || 0;
+    const paddingVisual = (padTopCss + padBottomCss) * zoom;
+
+    const contentVisualPx = Math.max(40, availableVisualPx - paddingVisual);
+    // Convert back to html CSS coordinate space.
+    guideOuter.style.height = Math.floor(contentVisualPx / zoom) + 'px';
+}
+
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
@@ -374,6 +420,9 @@ document.addEventListener("DOMContentLoaded", () => {
     createOrUpdateFixedTimeBar();
     if (typeof updateClock === 'function') updateClock();
     updateNowLine();
+    // Set guide-outer height for any saved display-size zoom (runs after createOrUpdateFixedTimeBar's
+    // rAF sets paddingTop, so padding is already accounted for).
+    requestAnimationFrame(recomputeGuideHeight);
 
     setInterval(updateClock, 1000);
     setInterval(updateNowLine, 60000);
@@ -384,6 +433,10 @@ window.addEventListener('resize', () => {
     // recompute fixed header placement and now-line
     if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
     if (typeof updateNowLine === 'function') updateNowLine();
+    // recompute guide height for display-size zoom; run in rAF so it executes after
+    // all synchronous resize handlers (e.g. grid-adapt) and after createOrUpdateFixedTimeBar's
+    // own rAF has set paddingTop on guideOuter.
+    requestAnimationFrame(recomputeGuideHeight);
 });
 
 /* --- Theme & UI helpers
