@@ -106,16 +106,20 @@ def validate_tuner_url(url, label="Tuner", check_reachability=False):
                 resolved_ip = socket.gethostbyname(host)
                 ip_obj = ipaddress.ip_address(resolved_ip)
                 
-                # Block localhost (127.0.0.0/8) and link-local (169.254.0.0/16)
-                if ip_obj.is_loopback or ip_obj.is_link_local:
-                    flash(f"⚠️ {label} reachability check blocked: Cannot check localhost or link-local addresses", "warning")
+                # Block localhost (127.0.0.0/8), link-local (169.254.0.0/16), and private ranges
+                if ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_private:
+                    flash(f"⚠️ {label} reachability check blocked: Cannot check localhost, link-local, or private addresses", "warning")
                     return False
             except (socket.gaierror, ValueError):
                 # If we can't resolve, let the request attempt fail naturally
                 pass
             
             try:
-                response = requests.head(url, timeout=10, allow_redirects=True)
+                parsed_url = urlparse(url)
+                if parsed_url.scheme not in ('http', 'https'):
+                    flash(f"⚠️ {label} reachability check blocked: Only http/https URLs are supported", "warning")
+                    return False
+                response = requests.head(url, timeout=10, allow_redirects=False)
                 if 200 <= response.status_code < 300:
                     flash(f"✅ {label} is reachable (HTTP {response.status_code})", "info")
                     return True
