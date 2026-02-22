@@ -6,30 +6,16 @@
     <!-- Responsive viewport for mobile stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-    <!-- Apply saved display size before paint to avoid layout flash -->
+    <!-- Apply saved display size before paint to avoid layout flash.
+         Setting data-display-size here means base.css rules
+         html[data-display-size=X] body.guide-page { height: calc(100vh / zoom) }
+         are active from the very first paint, closing the Chrome/Firefox blank-gap
+         without any JS body-height manipulation. -->
     <script>
     (function () {
       try {
         var ds = localStorage.getItem('displaySize');
-        if (ds && ds !== 'large') {
-          document.documentElement.setAttribute('data-display-size', ds);
-          // Inject a scoped CSS rule that sets body.guide-page height before the
-          // first paint. This closes the Chrome/Edge/Firefox timing window where
-          // body{height:100%} resolves to the raw viewport under CSS zoom, causing
-          // a blank gap until the deferred display-size.js script runs.
-          // The rule is scoped to html[data-display-size=X] so it automatically
-          // stops applying when the user switches back to Large (attribute removed).
-          // Zoom factors must match ZOOM_MAP in display-size.js.
-          var ZOOM_MAP = { medium: 0.8, small: 0.67 };
-          var z = ZOOM_MAP[ds];
-          if (z) {
-            var h = Math.ceil(window.innerHeight / z);
-            var s = document.createElement('style');
-            s.dataset.displaySizeInit = ds;
-            s.textContent = 'html[data-display-size="' + ds + '"] body.guide-page{height:' + h + 'px}';
-            document.head.appendChild(s);
-          }
-        }
+        if (ds && ds !== 'large') document.documentElement.setAttribute('data-display-size', ds);
       } catch (e) { /* ignore */ }
     })();
     </script>

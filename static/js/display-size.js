@@ -14,35 +14,28 @@
   var ZOOM_MAP = { large: 1.0, medium: 0.8, small: 0.67 };
 
   /**
-   * Set html element's width and height so that after CSS zoom is applied the
-   * element visually fills the entire viewport.
+   * Set html element's width and height inline so after CSS zoom is applied the
+   * element visually fills the entire viewport.  The same values are expressed as
+   * CSS calc() rules in base.css (so they apply from the very first paint); these
+   * inline styles keep html dimensions in sync on resize / orientation changes.
    *
-   * CSS zoom does NOT update window.innerWidth/innerHeight, and whether browsers
-   * scale 100vh/100vw by the zoom factor is inconsistent. Using window.innerWidth/
-   * innerHeight directly is the only reliable method — they always reflect the true
-   * physical viewport size regardless of CSS zoom.
+   * CSS zoom does NOT change window.innerWidth/innerHeight; 100vw/100vh are also
+   * always the raw viewport size regardless of zoom — both are CSS spec guarantees.
    *
-   *   html CSS size = window.innerWidth / zoom
-   *   html visual size = html CSS size × zoom = window.innerWidth  ✓
+   *   html CSS size   = window.innerWidth / zoom
+   *   html visual     = (window.innerWidth / zoom) × zoom = window.innerWidth  ✓
+   *
+   * body height is handled by CSS: html[data-display-size=X] body.guide-page { height: calc(100vh / zoom) }
+   * No JS body-height override is needed or set here.
    */
   function setHtmlDimensions(zoom) {
     var el = document.documentElement;
     if (zoom < 1.0) {
       el.style.width  = Math.ceil(window.innerWidth  / zoom) + 'px';
       el.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
-      // Also set body height explicitly. Chrome resolves body{height:100%} against
-      // the raw viewport (not html.style.height) under CSS zoom, leaving a blank gap.
-      // An inline style overrides the CSS cascade and is the only reliable cross-browser fix.
-      // video-resize.js sets this too on every resize event — this call ensures it is
-      // always in sync whenever the zoom level is first applied.
-      // Guard: setHtmlDimensions is called from the DOMContentLoaded handler (where body
-      // always exists), but also from the resize event handler which can theoretically
-      // fire very early on some mobile browsers before body is fully connected.
-      if (document.body) document.body.style.height = el.style.height;
     } else {
       el.style.width  = '';
       el.style.height = '';
-      if (document.body) document.body.style.height = '';
     }
   }
 

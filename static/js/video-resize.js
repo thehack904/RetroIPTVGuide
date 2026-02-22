@@ -29,38 +29,31 @@
     var guideOuter = document.getElementById('guideOuter');
     if (!guideOuter) return;
 
-    // Read the zoom factor via the shared global helper exposed by display-size.js.
     var zoom = (typeof window.getDisplayZoom === 'function')
       ? window.getDisplayZoom()
       : 1.0;
 
     if (zoom < 1) {
-      // BELT: set body height so the overflow:hidden clip on body.guide-page is at
-      // the correct viewport bottom. Chrome resolves body{height:100%} against the raw
-      // viewport instead of html.style.height under CSS zoom. display-size.js also sets
-      // body.style.height, and guide.html injects a CSS rule before first paint — this
-      // call is belt-and-suspenders to ensure the correct height is always active after
-      // any resize or display-size change event.
-      document.body.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
-
-      // SUSPENDERS: explicitly set guideOuter height so it fills to the viewport even
-      // if body.style.height doesn't take effect in an edge case.
-      // getBoundingClientRect() always returns visual (viewport) px, unaffected by zoom.
-      // Dividing by zoom converts visual px → CSS px in the zoom coordinate space.
+      // body height is fixed by CSS (base.css):
+      //   html[data-display-size=X] body.guide-page { height: calc(100vh / zoom) }
+      // 100vh is always the raw viewport height (CSS spec guarantee), so this rule
+      // produces the correct value on every browser without any JS override.
+      //
+      // Explicitly set guideOuter height so it always fills the remaining space, even
+      // during player-drag reflows where flex:1 alone may not update synchronously.
+      // getBoundingClientRect() returns visual (viewport) px; dividing by zoom converts
+      // to CSS px in the zoomed coordinate space.
       var header    = document.querySelector('.header');
       var playerRow = document.getElementById('playerRow');
       var headerH   = header    ? header.getBoundingClientRect().height    : 40;
       var playerH   = playerRow ? playerRow.getBoundingClientRect().height : 0;
       var heightCSS = Math.max(80, Math.floor((window.innerHeight - headerH - playerH) / zoom));
-      guideOuter.style.height    = heightCSS + 'px';
-      // flex:none (flex-grow:0 flex-shrink:0 flex-basis:auto) lets the explicit
-      // height take effect; the default flex:1 uses flex-basis:0 which overrides it.
-      guideOuter.style.flex      = 'none';
+      guideOuter.style.height = heightCSS + 'px';
+      // flex:none lets the explicit height take effect; flex:1's flex-basis:0 would override it.
+      guideOuter.style.flex   = 'none';
     } else {
-      // Large / 100% — restore defaults and let flex:1 + body{height:100%} handle it.
-      document.body.style.height = '';
-      guideOuter.style.height    = '';
-      guideOuter.style.flex      = '';
+      guideOuter.style.height = '';
+      guideOuter.style.flex   = '';
     }
   }
 
