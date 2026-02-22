@@ -6,6 +6,16 @@
     <!-- Responsive viewport: required for mobile layout stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+    <!-- Apply saved display size before paint to avoid layout flash -->
+    <script>
+    (function () {
+      try {
+        var ds = localStorage.getItem('displaySize');
+        if (ds && ds !== 'large') document.documentElement.setAttribute('data-display-size', ds);
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
+
     <!-- Small, immediate script to apply the saved theme before paint and provide a safe stub
          for setTheme so inline onclick handlers don't throw before the real script loads. -->
     <script>
@@ -84,6 +94,8 @@
     <!-- Theme script: included for all pages. Uses defer so it runs before DOMContentLoaded.
          It will replace the stub setTheme defined above with a fuller implementation. -->
     <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+    <!-- Display size scaling (Large/Medium/Small) -->
+    <script src="{{ url_for('static', filename='js/display-size.js') }}" defer></script>
 
     <!-- existing shared inline <script> content here (clock, helpers, etc) -->
     {% block scripts_extra %}

@@ -7,6 +7,14 @@
 body.guide-page { height: 100%; overflow: hidden; }
 html { height: 100%; }
 
+/* Display size scaling: applied via data-display-size on <html>.
+   Acts like the browser's built-in zoom so fonts, header, guide, and channel
+   column all scale together. Large = 100% (default), Medium = 90%, Small = 80%.
+   The CSS `zoom` property is part of the CSS spec (Values and Units Level 4)
+   and is supported in all modern browsers (Chrome, Edge, Safari, Firefox 126+). */
+html[data-display-size="medium"] body { zoom: 0.9; }
+html[data-display-size="small"]  body { zoom: 0.8; }
+
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
 .header {

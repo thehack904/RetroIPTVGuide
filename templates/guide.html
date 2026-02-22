@@ -6,6 +6,16 @@
     <!-- Responsive viewport for mobile stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+    <!-- Apply saved display size before paint to avoid layout flash -->
+    <script>
+    (function () {
+      try {
+        var ds = localStorage.getItem('displaySize');
+        if (ds && ds !== 'large') document.documentElement.setAttribute('data-display-size', ds);
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
+
     <!-- Small, immediate script to apply the saved theme before paint and provide a safe stub
          for setTheme so inline handlers won't throw while the full theme.js loads. -->
     <script>
@@ -39,6 +49,8 @@
 
     <!-- Theme script (deferred) provides setTheme/applyTheme and will wire theme controls -->
     <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+    <!-- Display size scaling (Large/Medium/Small) -->
+    <script src="{{ url_for('static', filename='js/display-size.js') }}" defer></script>
 
     <!-- small per-template style block to inject server-side dynamic values used by CSS -->
     <style>
@@ -677,6 +689,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 <li><a href="#" data-scroll-speed="fast">Fast</a></li>
               </ul>
             </li>
+          </ul>
+        </li>
+        <li class="submenu">
+          <a href="#">Display Size</a>
+          <ul class="submenu-content">
+            <li><a href="#" data-display-size-selector data-display-size="large">Large (100%)</a></li>
+            <li><a href="#" data-display-size-selector data-display-size="medium">Medium (90%)</a></li>
+            <li><a href="#" data-display-size-selector data-display-size="small">Small (80%)</a></li>
           </ul>
         </li>
       </div>`;
