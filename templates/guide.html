@@ -91,6 +91,8 @@
     <div class="guide-row" data-cid="{{ ch.tvg_id }}">
         <div class="chan-col">
             <div class="chan-name"
+                 tabindex="0"
+                 role="button"
                  data-url="{{ ch.url }}"
                  data-cid="{{ ch.tvg_id }}"
                  data-name="{{ ch.name|e }}"
@@ -547,12 +549,81 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script>
+// Scroll Speed Selection Handler
+document.addEventListener('DOMContentLoaded', () => {
+  const speedMapping = {
+    'slow': 0.6,
+    'medium': 1.2,
+    'fast': 2.4
+  };
+
+  // Apply saved speed on page load
+  function applySavedSpeed() {
+    try {
+      const savedSpeed = localStorage.getItem('autoScrollSpeed') || 'medium';
+      const speedValue = speedMapping[savedSpeed] || 1.2;
+      if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+        window.__autoScroll.setSpeed(speedValue);
+      }
+    } catch (e) {
+      console.debug('Failed to retrieve or apply saved auto-scroll speed from localStorage', e);
+    }
+  }
+
+  // Handle speed selection clicks
+  function handleSpeedClick(e) {
+    e.preventDefault();
+    const speed = e.target.dataset.scrollSpeed;
+    if (speed && speedMapping[speed]) {
+      try {
+        localStorage.setItem('autoScrollSpeed', speed);
+        const speedValue = speedMapping[speed];
+        if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+          window.__autoScroll.setSpeed(speedValue);
+          console.debug('Scroll speed set to', speed, '(' + speedValue + ' px/frame)');
+        }
+      } catch (e) {
+        console.error('Failed to save scroll speed preference', e);
+      }
+    }
+  }
+
+  // Attach event listeners to all speed selection links
+  document.querySelectorAll('[data-scroll-speed]').forEach(link => {
+    link.addEventListener('click', handleSpeedClick);
+  });
+
+  // Apply saved speed when auto-scroll initializes
+  applySavedSpeed();
+
+  // Re-apply speed when auto-scroll is loaded (in case it loads after DOMContentLoaded)
+  // Use a retry mechanism with maximum attempts to handle async script loading
+  let retryCount = 0;
+  const maxRetries = 5; // Max 5 attempts to find auto-scroll API
+  const retryInterval = 100; // 100ms between retries (total max wait: 500ms)
+  
+  function retryApplySavedSpeed() {
+    if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+      applySavedSpeed();
+    } else if (retryCount < maxRetries) {
+      retryCount++;
+      setTimeout(retryApplySavedSpeed, retryInterval);
+    }
+  }
+  
+  setTimeout(retryApplySavedSpeed, retryInterval);
+});
+</script>
+
 <!-- Mobile nav behavior (off-canvas toggle). Ensure this file contains the open/close and resize-dispatch code -->
 <script src="{{ url_for('static', filename='js/mobile-nav.js') }}" defer></script>
 <!-- Grid adapt script: computes scale on small screens so guide fits proportionally -->
 <script src="{{ url_for('static', filename='js/grid-adapt.js') }}" defer></script>
 <!-- Mobile player adapt script: adjusts video height based on viewport/header/fixed-timebar -->
 <script src="{{ url_for('static', filename='js/mobile-player-adapt.js') }}" defer></script>
+<!-- Video resize: drag handles for video/player/channel-column resizing -->
+<script src="{{ url_for('static', filename='js/video-resize.js') }}" defer></script>
 <!-- Mobile player adapt script: allow scrolling -->
 <script src="{{ url_for('static', filename='js/mobile-scroll-fix.js') }}" defer></script>
 
@@ -581,8 +652,37 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("settingsMenu")?.remove();
   document.getElementById("manageUsersMenu")?.remove();
 
+  // Load DPAD / TV-remote channel navigation module
+  var tvNavScript = document.createElement('script');
+  tvNavScript.src = "{{ url_for('static', filename='js/tv-remote-nav.js') }}";
+  document.body.appendChild(tvNavScript);
+
   const linksContainer = document.querySelector(".header .links");
   if (linksContainer){
+    // SETTINGS dropdown (Auto-Scroll only) — inserted before THEMES
+    const settingsTVMenu = document.createElement("div");
+    settingsTVMenu.className = "dropdown";
+    settingsTVMenu.innerHTML = `
+      <button class="dropbtn">SETTINGS ▾</button>
+      <div class="dropdown-content">
+        <li class="submenu">
+          <a href="#">Auto-Scroll</a>
+          <ul class="submenu-content">
+            <li><a href="#" id="toggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
+            <li class="submenu">
+              <a href="#">Scroll Speed</a>
+              <ul class="submenu-content">
+                <li><a href="#" data-scroll-speed="slow">Slow</a></li>
+                <li><a href="#" data-scroll-speed="medium">Medium</a></li>
+                <li><a href="#" data-scroll-speed="fast">Fast</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+      </div>`;
+    const logoutLink = document.querySelector('.header .links a[href*="logout"]');
+    linksContainer.insertBefore(settingsTVMenu, logoutLink);
+
     const themesMenu = document.createElement("div");
     themesMenu.className = "dropdown";
     themesMenu.innerHTML = `
@@ -597,7 +697,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="#" data-theme-selector data-theme="directv">DirecTV</a>
         <a href="#" data-theme-selector data-theme="comcast">Comcast</a>
       </div>`;
-    const logoutLink = document.querySelector('.header .links a[href*="logout"]');
     linksContainer.insertBefore(themesMenu, logoutLink);
   }
 })();

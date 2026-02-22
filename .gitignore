@@ -30,3 +30,4 @@ db/*.db
 # OS files
 .DS_Store
 Thumbs.db
+cookies.txt
