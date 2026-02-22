@@ -79,6 +79,26 @@
             font-weight: bold;
         }
 
+        /* TV mode — logo stacks above login box, no absolute overlap */
+        body.tv-mode {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+        }
+
+        body.tv-mode .logo {
+            position: static;
+            display: block;
+            max-width: 160px;
+            margin: 0 auto;
+        }
+
+        body.tv-mode .box {
+            width: 100%;
+            max-width: 320px;
+        }
+
         /* MOBILE ONLY OVERRIDES — desktop unchanged */
         @media (max-width: 600px) {
 
@@ -157,6 +177,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isAndroidTV && remember) {
         remember.style.display = "flex";
+    }
+
+    if (isAndroidTV) {
+        document.body.classList.add('tv-mode');
     }
 
     const rememberBox = document.getElementById("remember");
