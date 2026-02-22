@@ -6,12 +6,28 @@
     <!-- Responsive viewport: required for mobile layout stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
-    <!-- Apply saved display size before paint to avoid layout flash -->
+    <!-- Apply saved display size before paint to avoid layout flash.
+         Injects a CSS rule that pre-scales #appZoomRoot before display-size.js (defer)
+         runs, so there is no visible flash of unstyled/unscaled content. -->
     <script>
     (function () {
       try {
         var ds = localStorage.getItem('displaySize');
-        if (ds && ds !== 'large') document.documentElement.setAttribute('data-display-size', ds);
+        if (ds && ds !== 'large') {
+          document.documentElement.setAttribute('data-display-size', ds);
+          // Zoom factors must stay in sync with ZOOM_PRESETS in display-size.js.
+          // Duplication is intentional: this script runs synchronously before any
+          // external scripts (including display-size.js) load, so it cannot import.
+          var ZOOM = { medium: 0.8, small: 0.67 };
+          var z = ZOOM[ds];
+          if (z) {
+            var inv = (100 / z).toFixed(4);
+            var s = document.createElement('style');
+            s.id = '__dsinit';
+            s.textContent = '#appZoomRoot{transform:scale(' + z + ');transform-origin:top left;width:' + inv + '%;height:' + inv + '%}';
+            document.head.appendChild(s);
+          }
+        }
       } catch (e) { /* ignore */ }
     })();
     </script>
@@ -71,11 +87,13 @@
     {% endblock %}
 </head>
 <body>
+    <div id="appZoomRoot">
     {% include '_header.html' %}
 
     {% block content %}
     <!-- Page-specific content goes here -->
     {% endblock %}
+    </div><!-- #appZoomRoot -->
 
     <!-- shared scripts -->
     <script src="{{ url_for('static', filename='hls.js') }}"></script>

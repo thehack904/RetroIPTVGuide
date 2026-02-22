@@ -1,78 +1,88 @@
 /* display-size.js
    Manages the "Display Size" preference (Large / Medium / Small) which scales
-   the entire page similarly to the browser's built-in zoom:
+   the entire page the same way the browser's built-in Cmd/Ctrl +/- zoom does:
      Large  = 100% (no scaling)
      Medium =  80%
      Small  =  67%
+
+   Implementation: transform: scale(s) on #appZoomRoot (a single wrapper div that
+   contains all visual content in the page). The wrapper is expanded to
+   width/height = (100/s)% so that after scale(s) it fills exactly the viewport.
+   This is browser-zoom-equivalent and has none of the cross-browser quirks of the
+   CSS `zoom` property (body height resolution, fixed-position offsets, etc.).
+
    Preference is stored in localStorage under the key 'displaySize'.
 */
 (function () {
   'use strict';
-  var STORAGE_KEY = 'displaySize';
 
-  // Map size name -> zoom factor
-  var ZOOM_MAP = { large: 1.0, medium: 0.8, small: 0.67 };
+  var STORAGE_KEY = 'displaySize';
+  var ZOOM_PRESETS = { large: 1.0, medium: 0.8, small: 0.67 };
+
+  // Module-level scale — read by window.getDisplayZoom()
+  var _scale = 1.0;
 
   /**
-   * Set html element's width and height inline so after CSS zoom is applied the
-   * element visually fills the entire viewport.  The same values are expressed as
-   * CSS calc() rules in base.css (so they apply from the very first paint); these
-   * inline styles keep html dimensions in sync on resize / orientation changes.
+   * Apply transform: scale(s) + compensating width/height to #appZoomRoot.
+   * The compensation (width = 100/s %, height = 100/s %) ensures that after
+   * scaling the wrapper fills the full visual viewport.
    *
-   * CSS zoom does NOT change window.innerWidth/innerHeight; 100vw/100vh are also
-   * always the raw viewport size regardless of zoom — both are CSS spec guarantees.
-   *
-   *   html CSS size   = window.innerWidth / zoom
-   *   html visual     = (window.innerWidth / zoom) × zoom = window.innerWidth  ✓
-   *
-   * body height is handled by CSS: html[data-display-size=X] body.guide-page { height: calc(100vh / zoom) }
-   * No JS body-height override is needed or set here.
+   * Also sets --display-zoom as an inline CSS variable on <html> so that
+   * existing JS helpers (createOrUpdateFixedTimeBar, updateNowLine, grid-adapt)
+   * can read it via getComputedStyle without needing to know the implementation.
    */
-  function setHtmlDimensions(zoom) {
-    var el = document.documentElement;
-    if (zoom < 1.0) {
-      el.style.width  = Math.ceil(window.innerWidth  / zoom) + 'px';
-      el.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
-    } else {
-      el.style.width  = '';
-      el.style.height = '';
+  function applyUiZoom(scale) {
+    var root = document.getElementById('appZoomRoot');
+    if (root) {
+      if (scale < 1) {
+        var inv = (100 / scale).toFixed(4);
+        root.style.transform       = 'scale(' + scale + ')';
+        root.style.transformOrigin = 'top left';
+        root.style.width           = inv + '%';
+        root.style.height          = inv + '%';
+      } else {
+        root.style.transform       = '';
+        root.style.transformOrigin = '';
+        root.style.width           = '';
+        root.style.height          = '';
+      }
     }
+    // Keep --display-zoom in sync so CSS/JS consumers always read the right value
+    document.documentElement.style.setProperty('--display-zoom', String(scale));
   }
 
   function applyDisplaySize(size) {
-    var zoom = ZOOM_MAP[size] || 1.0;
+    var scale = ZOOM_PRESETS[size] || 1.0;
+    _scale = scale;
+
+    // Keep data-display-size attribute for CSS theming hooks
     if (!size || size === 'large') {
       document.documentElement.removeAttribute('data-display-size');
     } else {
       document.documentElement.setAttribute('data-display-size', size);
     }
-    setHtmlDimensions(zoom);
+
     try { localStorage.setItem(STORAGE_KEY, size || 'large'); } catch (e) { /* ignore */ }
 
-    // Notify other parts of the app (layout helpers, grid-adapt, etc.)
+    applyUiZoom(scale);
+
+    // Notify layout helpers (fixed timebar, now-line, grid-adapt, video-resize)
     try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
     try {
-      var ev = new CustomEvent('displaySize:applied', { detail: { size: size || 'large' } });
-      window.dispatchEvent(ev);
+      window.dispatchEvent(new CustomEvent('displaySize:applied', { detail: { size: size || 'large' } }));
     } catch (e) { /* ignore */ }
   }
 
-  // Expose global API
+  // Public API — same surface as before so all callers continue to work
   window.setDisplaySize = applyDisplaySize;
 
   /**
-   * Returns the active CSS zoom factor (e.g. 0.8 for Medium, 0.67 for Small,
-   * 1.0 for Large / no zoom).  Reads the --display-zoom CSS variable set in
-   * base.css so the value is always in sync with the applied CSS rule.
-   * Shared utility used by video-resize.js, grid-adapt.js, and guide.html so
-   * the zoom factor is never duplicated in multiple places.
+   * Returns the active scale factor (1.0 for Large, 0.8 for Medium, 0.67 for Small).
+   * Used by createOrUpdateFixedTimeBar, updateNowLine, and grid-adapt.js to convert
+   * getBoundingClientRect() visual pixels → CSS pixels in appZoomRoot's coordinate space:
+   *   cssPixels = visualPixels / getDisplayZoom()
    */
-  window.getDisplayZoom = function () {
-    var v = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--display-zoom')
-    );
-    return (v > 0 && isFinite(v)) ? v : 1.0;
-  };
+  window.getDisplayZoom = function () { return _scale; };
 
   // Delegated click handler for [data-display-size-selector] elements
   document.addEventListener('click', function (e) {
@@ -85,37 +95,37 @@
     } catch (err) { /* ignore */ }
   }, false);
 
-  // Keep html dimensions in sync when the real viewport is resized (e.g. window
-  // resize, orientation change) while a zoom level is active.
+  // Re-apply on real viewport resize (orientation change, window resize) so the
+  // compensating width/height stays correct.
   window.addEventListener('resize', function () {
     try {
-      var saved = localStorage.getItem(STORAGE_KEY);
-      if (saved && saved !== 'large') {
-        var zoom = ZOOM_MAP[saved] || 1.0;
-        setHtmlDimensions(zoom);
-      }
+      if (_scale < 1) applyUiZoom(_scale);
     } catch (e) { /* ignore */ }
   });
 
-  // Restore saved size on load. The inline early-apply script in the template already
-  // sets the html attribute for non-'large' values before paint. Here we handle the
-  // 'large' case (which the inline script skips) and any page that lacks the inline
-  // script. We avoid firing a second resize when the attribute was already applied.
+  // Restore saved preference on DOMContentLoaded.
+  // The inline <head> script already injected a CSS rule so #appZoomRoot is
+  // scaled on the very first paint (FOUC prevention).  Here we replace that CSS
+  // rule with authoritative inline styles and set _scale so getDisplayZoom()
+  // returns the correct value immediately.
   document.addEventListener('DOMContentLoaded', function () {
     try {
+      // Remove the FOUC-prevention style tag if present
+      var initStyle = document.getElementById('__dsinit');
+      if (initStyle) initStyle.parentNode.removeChild(initStyle);
+
       var saved = localStorage.getItem(STORAGE_KEY);
       if (!saved) return;
-      var current = document.documentElement.getAttribute('data-display-size') || 'large';
-      var expected = saved || 'large';
-      if (current !== expected) {
-        applyDisplaySize(saved);
-      } else if (saved !== 'large') {
-        // Attribute already set by inline script — still need to set html dimensions
-        // because the inline script doesn't do that.
-        var zoom = ZOOM_MAP[saved] || 1.0;
-        setHtmlDimensions(zoom);
-        // Also trigger resize so JS layout helpers (fixed bar, now-line) recompute
+      var scale = ZOOM_PRESETS[saved] || 1.0;
+      _scale = scale;
+
+      if (saved !== 'large') {
+        document.documentElement.setAttribute('data-display-size', saved);
+        applyUiZoom(scale);
+        // Trigger resize so timebar / now-line recompute with the correct scale
         try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+      } else {
+        applyUiZoom(1.0); // ensure any leftover transform is cleared
       }
     } catch (e) { /* ignore */ }
   });

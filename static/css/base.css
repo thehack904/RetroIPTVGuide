@@ -4,39 +4,28 @@
 */
 
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
-/* Use flex column so guide-outer fills all remaining vertical space automatically —
-   this is the mechanism that allows zoom to reveal more channels without blank space. */
-body.guide-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+/* #appZoomRoot is the transform-scale target for Display Size; it is a flex column that
+   fills the entire body and takes over the layout role body.guide-page used to have. */
+body.guide-page { height: 100%; overflow: hidden; }
 html { height: 100%; }
 
-/* Display size scaling: applied via data-display-size on <html>.
-   Acts like the browser's built-in zoom so fonts, header, guide, and channel
-   column all scale together. Large = 100% (default), Medium = 80%, Small = 67%.
+/* Display Size scaling via transform: scale on #appZoomRoot.
+   Large = 100% (no transform), Medium = 80%, Small = 67%.
+   display-size.js sets transform + width/height compensation on #appZoomRoot.
+   The CSS variable --display-zoom is set as an inline style by display-size.js
+   so JS code (createOrUpdateFixedTimeBar, updateNowLine) can read it via
+   getComputedStyle. The data-display-size attribute is kept for CSS theming hooks. */
 
-   The CSS `zoom` property scales everything inside <html> without changing the browser
-   layout viewport.  Two cross-browser quirks require CSS-level compensation:
-
-   1. html width/height: with zoom on html, the html element's auto width/height is
-      smaller than the viewport (e.g. 80% × 1280px = 1024px for medium), leaving blank
-      edges.  Setting width/height to calc(100vw / zoom) and calc(100vh / zoom) restores
-      full viewport coverage.  100vw/100vh are ALWAYS the raw viewport dimensions,
-      unaffected by CSS zoom on any element — this is guaranteed by the CSS spec.
-
-   2. body height: Chrome/Firefox resolve body { height: 100% } against the viewport ICB
-      (e.g. 720px), not against html.style.height (900px), leaving a blank gap at the
-      bottom.  The rule html[data-display-size=X] body.guide-page { height: calc(100vh/z) }
-      corrects this purely in CSS.  Because the inline head script sets data-display-size
-      before base.css is applied, the rule is active from the very first paint with no JS
-      needed and no timing window for a gap to appear.
-
-   display-size.js also sets html inline width/height on DOMContentLoaded and on resize
-   (same value as the CSS — belt-and-suspenders to handle orientation-change reflows). */
-html[data-display-size="medium"] { --display-zoom: 0.8;  zoom: 0.8;  width: calc(100vw / 0.8);  height: calc(100vh / 0.8);  }
-html[data-display-size="small"]  { --display-zoom: 0.67; zoom: 0.67; width: calc(100vw / 0.67); height: calc(100vh / 0.67); }
-
-/* Body height correction for Chrome/Firefox under CSS zoom (see comment above). */
-html[data-display-size="medium"] body.guide-page { height: calc(100vh / 0.8);  }
-html[data-display-size="small"]  body.guide-page { height: calc(100vh / 0.67); }
+/* appZoomRoot: the single scaling wrapper for the entire app UI. */
+#appZoomRoot {
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }

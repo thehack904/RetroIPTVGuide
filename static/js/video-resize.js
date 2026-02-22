@@ -28,33 +28,11 @@
   function updateGuideHeight() {
     var guideOuter = document.getElementById('guideOuter');
     if (!guideOuter) return;
-
-    var zoom = (typeof window.getDisplayZoom === 'function')
-      ? window.getDisplayZoom()
-      : 1.0;
-
-    if (zoom < 1) {
-      // body height is fixed by CSS (base.css):
-      //   html[data-display-size=X] body.guide-page { height: calc(100vh / zoom) }
-      // 100vh is always the raw viewport height (CSS spec guarantee), so this rule
-      // produces the correct value on every browser without any JS override.
-      //
-      // Explicitly set guideOuter height so it always fills the remaining space, even
-      // during player-drag reflows where flex:1 alone may not update synchronously.
-      // getBoundingClientRect() returns visual (viewport) px; dividing by zoom converts
-      // to CSS px in the zoomed coordinate space.
-      var header    = document.querySelector('.header');
-      var playerRow = document.getElementById('playerRow');
-      var headerH   = header    ? header.getBoundingClientRect().height    : 40;
-      var playerH   = playerRow ? playerRow.getBoundingClientRect().height : 0;
-      var heightCSS = Math.max(80, Math.floor((window.innerHeight - headerH - playerH) / zoom));
-      guideOuter.style.height = heightCSS + 'px';
-      // flex:none lets the explicit height take effect; flex:1's flex-basis:0 would override it.
-      guideOuter.style.flex   = 'none';
-    } else {
-      guideOuter.style.height = '';
-      guideOuter.style.flex   = '';
-    }
+    // #appZoomRoot is the flex column container; guideOuter has flex:1 and fills
+    // all remaining height automatically.  Clear any explicit height that may have
+    // been set by previous code so flex takes over.
+    guideOuter.style.height = '';
+    guideOuter.style.flex   = '';
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
