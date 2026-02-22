@@ -158,6 +158,20 @@
 let hlsInstance = null;
 let currentChannelId = null;
 
+/**
+ * Returns the CSS zoom factor currently applied to the root <html> element via
+ * data-display-size.  CSS zoom does NOT update window.innerWidth / 100vh, so any
+ * JS code that sets pixel positions on position:fixed elements or compares
+ * getBoundingClientRect() values (which are in visual/viewport pixels) against CSS
+ * property values must divide by this factor to stay in the same coordinate space.
+ * The actual value is read from the --display-zoom CSS variable set in base.css so
+ * the zoom factor lives in one place rather than being duplicated in JS.
+ */
+function getDisplayZoom() {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--display-zoom'));
+    return (v > 0 && isFinite(v)) ? v : 1.0;
+}
+
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
@@ -254,8 +268,9 @@ function createOrUpdateFixedTimeBar(){
       spacerWidth = firstChanCol ? Math.round(firstChanCol.getBoundingClientRect().width) : 200;
     }
 
-    spacer.style.width = spacer.style.minWidth = spacer.style.maxWidth = spacerWidth + 'px';
-    spacer.style.flex = '0 0 ' + spacerWidth + 'px';
+    const adjustedSpacerWidth = Math.ceil(spacerWidth / getDisplayZoom());
+    spacer.style.width = spacer.style.minWidth = spacer.style.maxWidth = adjustedSpacerWidth + 'px';
+    spacer.style.flex = '0 0 ' + adjustedSpacerWidth + 'px';
     spacer.style.height = '100%';
     spacer.style.pointerEvents = 'none';
 
@@ -281,22 +296,24 @@ function createOrUpdateFixedTimeBar(){
     fixedBar.appendChild(clonedGridContent);
 
     fixedBar.style.left = '0px';
-    fixedBar.style.width = window.innerWidth + 'px';
+    fixedBar.style.width = Math.ceil(window.innerWidth / getDisplayZoom()) + 'px';
 
     if (playerRow) {
         const rect = playerRow.getBoundingClientRect();
-        fixedBar.style.top = rect.bottom + 'px';
+        fixedBar.style.top = Math.ceil(rect.bottom / getDisplayZoom()) + 'px';
     } else {
         const header = document.querySelector('.header');
         const headerRect = header ? header.getBoundingClientRect() : { bottom: 40 };
-        fixedBar.style.top = headerRect.bottom + 'px';
+        fixedBar.style.top = Math.ceil(headerRect.bottom / getDisplayZoom()) + 'px';
     }
 
     requestAnimationFrame(() => {
-        const fbHeight = fixedBar.getBoundingClientRect().height || 34;
+        const zoom = getDisplayZoom();
+        // getBCR returns visual/viewport px; convert to CSS px by dividing by zoom
+        const fbHeightCss = Math.ceil((fixedBar.getBoundingClientRect().height || 34) / zoom);
         const currentPaddingTop = parseFloat(window.getComputedStyle(guideOuter).paddingTop) || 0;
-        if (currentPaddingTop < fbHeight) {
-            guideOuter.style.paddingTop = fbHeight + 'px';
+        if (currentPaddingTop < fbHeightCss) {
+            guideOuter.style.paddingTop = fbHeightCss + 'px';
         }
     });
 
@@ -313,7 +330,9 @@ function updateNowLine(){
       const leftPx = (minutesFromStart * scale);
 
       const firstChanCol = document.querySelector('.guide-row .chan-col');
-      const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width : 0;
+      // getBCR returns visual/viewport px; divide by zoom to get CSS px that
+      // align with leftPx (which is computed in CSS px from the server SCALE)
+      const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width / getDisplayZoom() : 0;
 
       const nlFixed = document.getElementById('nowLineFixed');
       if (nlFixed) nlFixed.style.left = (leftPx + chanColWidth) + 'px';

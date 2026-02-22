@@ -12,8 +12,15 @@ html { height: 100%; }
    column all scale together. Large = 100% (default), Medium = 90%, Small = 80%.
    The CSS `zoom` property is part of the CSS spec (Values and Units Level 4)
    and is supported in all modern browsers (Chrome, Edge, Safari, Firefox 126+). */
-html[data-display-size="medium"] { zoom: 0.9; }
-html[data-display-size="small"]  { zoom: 0.8; }
+/* CSS zoom on html does NOT update window.innerWidth / 100vh in browsers, so the
+   html element and guide-outer must be explicitly expanded so they fill the viewport
+   after zoom is applied.  formula: layout_size = visual_size / zoom_factor
+   The --display-zoom variable is read by getDisplayZoom() in guide.html so the
+   zoom factor lives in one place (CSS) rather than being duplicated in JS. */
+html[data-display-size="medium"] { --display-zoom: 0.9; zoom: 0.9; height: calc(100% / 0.9); }
+html[data-display-size="small"]  { --display-zoom: 0.8; zoom: 0.8; height: calc(100% / 0.8); }
+html[data-display-size="medium"] .guide-outer { height: calc(100vh / 0.9 - 420px); }
+html[data-display-size="small"]  .guide-outer { height: calc(100vh / 0.8 - 420px); }
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
