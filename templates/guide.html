@@ -167,7 +167,14 @@ let currentChannelId = null;
  * The actual value is read from the --display-zoom CSS variable set in base.css so
  * the zoom factor lives in one place rather than being duplicated in JS.
  */
+/**
+ * Returns the CSS zoom factor currently applied to the root <html> element via
+ * data-display-size.  Delegates to the shared global helper exposed by
+ * display-size.js when available; falls back to reading the CSS variable
+ * directly for robustness on pages where display-size.js loads after guide.html.
+ */
 function getDisplayZoom() {
+    if (typeof window.getDisplayZoom === 'function') return window.getDisplayZoom();
     const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--display-zoom'));
     return (v > 0 && isFinite(v)) ? v : 1.0;
 }

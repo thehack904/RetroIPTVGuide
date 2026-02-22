@@ -57,6 +57,20 @@
   // Expose global API
   window.setDisplaySize = applyDisplaySize;
 
+  /**
+   * Returns the active CSS zoom factor (e.g. 0.8 for Medium, 0.67 for Small,
+   * 1.0 for Large / no zoom).  Reads the --display-zoom CSS variable set in
+   * base.css so the value is always in sync with the applied CSS rule.
+   * Shared utility used by video-resize.js, grid-adapt.js, and guide.html so
+   * the zoom factor is never duplicated in multiple places.
+   */
+  window.getDisplayZoom = function () {
+    var v = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--display-zoom')
+    );
+    return (v > 0 && isFinite(v)) ? v : 1.0;
+  };
+
   // Delegated click handler for [data-display-size-selector] elements
   document.addEventListener('click', function (e) {
     try {

@@ -37,13 +37,14 @@
     var playerH = playerRow ? playerRow.getBoundingClientRect().height : 0;
     var availableVisual = window.innerHeight - headerH - playerH;
 
-    // Read the zoom factor from the CSS variable set in base.css.
-    // If zoom < 1 we must convert from visual px to CSS px (÷ zoom) because
-    // CSS properties on a zoomed element are in CSS coordinate space, not visual.
-    var zoom = parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue('--display-zoom')
-    );
-    if (!(zoom > 0 && isFinite(zoom))) zoom = 1;
+    // Read the zoom factor via the shared global helper exposed by display-size.js.
+    // Falls back to inline calculation for robustness if the helper isn't loaded yet.
+    var zoom = (typeof window.getDisplayZoom === 'function')
+      ? window.getDisplayZoom()
+      : (function () {
+          var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--display-zoom'));
+          return (v > 0 && isFinite(v)) ? v : 1;
+        }());
 
     var heightCSS = Math.max(100, Math.round(availableVisual / zoom));
     guideOuter.style.height = heightCSS + 'px';
@@ -231,4 +232,8 @@
     /* Re-sync guide height on viewport resize */
     window.addEventListener('resize', updateGuideHeight);
   });
+
+  /* Expose globally so grid-adapt.js and other modules can call the canonical
+     zoom-aware guide height computation rather than clearing the style. */
+  window.updateGuideHeight = updateGuideHeight;
 })();
