@@ -124,10 +124,74 @@ body { font-family: Arial, sans-serif; margin:0; }
 .summary { flex:1; }
 #video  { width:620px; height:350px; }
 
+/* === Resize handles === */
+/* Wrapper around #video to host the corner resize handle.
+   inline-block (not inline-flex) keeps the video as a normal replaced element
+   so flex-stretch never fights with explicitly set width/height. */
+.video-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* Bottom-left corner resize handle – sits OUTSIDE the video so native
+   browser video controls never intercept the mousedown event.
+   The handle's top-right corner is flush with the video's bottom-left corner. */
+.video-corner-handle {
+  position: absolute;
+  bottom: -20px;
+  left: -20px;
+  width: 20px;
+  height: 20px;
+  cursor: sw-resize;
+  z-index: 10;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+/* Triangular grip: linear-gradient places the 90° corner at the handle's
+   top-right, which is exactly at the video's bottom-left corner.
+   The pseudo-element is smaller than the handle so the triangle is compact
+   while the clickable hit-area remains comfortably large. */
+.video-corner-handle::after {
+  content: '';
+  position: absolute;
+  /* 12×12 triangle tucked into the top-right of the hit zone
+     (= the video's bottom-left corner) */
+  top: 0;
+  right: 0;
+  bottom: 8px;
+  left: 8px;
+  background: linear-gradient(to bottom left,
+    var(--resize-handle-active, #0af) 50%,
+    transparent 50%);
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+.video-corner-handle:hover::after,
+.video-corner-handle.dragging::after { opacity: 1; }
+
+/* Vertical drag handle – on the right edge of the channel column header */
+.chan-col-resize-handle {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 5px;
+  cursor: ew-resize;
+  z-index: 20;
+  background: transparent;
+  border-right: 2px solid var(--resize-handle-border, #555);
+  transition: background 0.15s;
+  user-select: none;
+  touch-action: none;
+}
+.chan-col-resize-handle:hover, .chan-col-resize-handle.dragging {
+  background: var(--resize-handle-active, rgba(0,170,255,0.35));
+}
+
 /* === Guide grid === */
 .guide-outer { height: calc(100vh - 420px); overflow-y: auto; padding-bottom: 80px; position: relative; }
 .guide-row { display:flex; }
-.chan-col { width: 200px; flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
+.chan-col { width: var(--chan-col-width, 200px); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
 
 /* grid-col allows vertical scrolling but we hide visual scrollbars by default */
 .grid-col {
