@@ -190,6 +190,44 @@
 
     document.addEventListener('keydown', onKeyDown);
 
+    // Auto-fullscreen: after 30 s of uninterrupted playback, expand the video.
+    // The timer is cancelled on pause/ended/emptied so switching channels or
+    // pausing always resets the countdown.
+    var fullscreenTimer = null;
+    var video = document.getElementById('video');
+    if (video) {
+      function cancelFullscreenTimer() {
+        if (fullscreenTimer !== null) {
+          clearTimeout(fullscreenTimer);
+          fullscreenTimer = null;
+        }
+      }
+
+      function scheduleVideoFullscreen() {
+        cancelFullscreenTimer();
+        fullscreenTimer = setTimeout(function () {
+          fullscreenTimer = null;
+          // Only enter fullscreen if still playing and not already fullscreen.
+          if (!video.paused && !document.fullscreenElement &&
+              !document.webkitFullscreenElement && !document.mozFullScreenElement &&
+              !document.msFullscreenElement) {
+            try {
+              var fn = video.requestFullscreen || video.webkitRequestFullscreen ||
+                       video.mozRequestFullScreen || video.msRequestFullscreen;
+              if (fn) fn.call(video);
+            } catch (e) {
+              console.debug('RetroIPTVGuide: video fullscreen unavailable', e);
+            }
+          }
+        }, 30000);
+      }
+
+      video.addEventListener('play', scheduleVideoFullscreen);
+      video.addEventListener('pause', cancelFullscreenTimer);
+      video.addEventListener('ended', cancelFullscreenTimer);
+      video.addEventListener('emptied', cancelFullscreenTimer);
+    }
+
     console.log('RetroIPTVGuide: TV remote nav active (' + channels.length + ' channels)');
   }
 
