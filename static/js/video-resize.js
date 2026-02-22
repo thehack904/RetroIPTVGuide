@@ -34,28 +34,34 @@
       ? window.getDisplayZoom()
       : 1.0;
 
-    // ROOT CAUSE FIX: Chrome resolves body { height: 100% } against the viewport
-    // (720px), NOT against our explicitly-set html.style.height (e.g. 900px at
-    // zoom 0.8).  This makes the body only 576px visual (720 × 0.8), leaving a
-    // 144px blank gap at the bottom of the page that no guideOuter fix could solve.
-    //
-    // Setting body.style.height directly as an inline style bypasses the 100%
-    // resolution entirely.  With body CSS = 900px at zoom 0.8:
-    //   body visual  = 900 × 0.8 = 720px  (fills viewport) ✓
-    //   guideOuter (flex:1) CSS = 900 − header − player  ✓
-    //   guideOuter visual = (900 − header − player) × 0.8 = viewport − above ✓
-    //
-    // window.innerHeight is always in physical/visual px — unaffected by CSS zoom.
     if (zoom < 1) {
+      // BELT: set body height so flex:1 resolves correctly when the browser allows it.
+      // Chrome resolves body{height:100%} against the raw viewport (720px) instead of
+      // html.style.height (900px at zoom 0.8), producing a 576px visual body and a
+      // 144px blank gap.  Inline style overrides the CSS 100% rule.
       document.body.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
-    } else {
-      document.body.style.height = '';
-    }
 
-    // Let flex:1 on guideOuter fill all remaining body height — no explicit
-    // height computation needed.  Clearing any previously-set explicit height
-    // ensures flex:1 takes effect.
-    guideOuter.style.height = '';
+      // SUSPENDERS: explicitly set guideOuter height so it fills to the viewport even
+      // if body.style.height doesn't resolve correctly in some browsers.
+      // getBoundingClientRect() always returns visual (viewport) px, unaffected by zoom.
+      // Dividing by zoom converts visual px → CSS px in the zoom coordinate space.
+      // overflow:hidden is on html (not body), so guideOuter can safely overflow a
+      // too-short body — it will still be clipped correctly at html's boundary.
+      var header    = document.querySelector('.header');
+      var playerRow = document.getElementById('playerRow');
+      var headerH   = header    ? header.getBoundingClientRect().height    : 40;
+      var playerH   = playerRow ? playerRow.getBoundingClientRect().height : 0;
+      var heightCSS = Math.max(80, Math.floor((window.innerHeight - headerH - playerH) / zoom));
+      guideOuter.style.height    = heightCSS + 'px';
+      // flex:none (flex-grow:0 flex-shrink:0 flex-basis:auto) lets the explicit
+      // height take effect; the default flex:1 uses flex-basis:0 which overrides it.
+      guideOuter.style.flex      = 'none';
+    } else {
+      // Large / 100% — restore defaults and let flex:1 + body{height:100%} handle it.
+      document.body.style.height = '';
+      guideOuter.style.height    = '';
+      guideOuter.style.flex      = '';
+    }
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
