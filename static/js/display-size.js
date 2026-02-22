@@ -35,11 +35,17 @@
     var root = document.getElementById('appZoomRoot');
     if (root) {
       if (scale < 1) {
-        var inv = (100 / scale).toFixed(4);
+        /* Use explicit px from window.innerWidth/Height — these always return the
+           visual viewport dimensions in CSS px and are immune to any CSS transform,
+           zoom property, overflow clipping, or containing-block resolution on any
+           ancestor element.  Using % or vw/vh can vary across browsers when body
+           has overflow:hidden.  Explicit px removes all such ambiguity:
+             width  = ceil(1280 / 0.8) = 1600px → scale(0.8) → 1280px visual ✓
+             height = ceil(720  / 0.8) = 900px  → scale(0.8) → 720px visual  ✓ */
         root.style.transform       = 'scale(' + scale + ')';
         root.style.transformOrigin = 'top left';
-        root.style.width           = inv + '%';
-        root.style.height          = inv + '%';
+        root.style.width           = Math.ceil(window.innerWidth  / scale) + 'px';
+        root.style.height          = Math.ceil(window.innerHeight / scale) + 'px';
       } else {
         root.style.transform       = '';
         root.style.transformOrigin = '';

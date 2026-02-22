@@ -21,10 +21,11 @@
           var ZOOM = { medium: 0.8, small: 0.67 };
           var z = ZOOM[ds];
           if (z) {
-            var inv = (100 / z).toFixed(4);
+            var wPx = Math.ceil(window.innerWidth  / z);
+            var hPx = Math.ceil(window.innerHeight / z);
             var s = document.createElement('style');
             s.id = '__dsinit';
-            s.textContent = '#appZoomRoot{transform:scale(' + z + ');transform-origin:top left;width:' + inv + '%;height:' + inv + '%}';
+            s.textContent = '#appZoomRoot{transform:scale(' + z + ');transform-origin:top left;width:' + wPx + 'px;height:' + hPx + 'px}';
             document.head.appendChild(s);
           }
         }
