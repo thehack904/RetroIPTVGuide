@@ -190,60 +190,6 @@
 
     document.addEventListener('keydown', onKeyDown);
 
-    // Auto-fullscreen: after 30 s of uninterrupted playback, expand the video.
-    // The timer is cancelled on pause/ended/emptied so switching channels or
-    // pausing always resets the countdown.
-    var fullscreenTimer = null;
-    var video = document.getElementById('video');
-    if (video) {
-      function cancelFullscreenTimer() {
-        if (fullscreenTimer !== null) {
-          clearTimeout(fullscreenTimer);
-          fullscreenTimer = null;
-        }
-      }
-
-      function scheduleVideoFullscreen() {
-        cancelFullscreenTimer();
-        fullscreenTimer = setTimeout(function () {
-          fullscreenTimer = null;
-          // Only enter fullscreen if still playing and not already fullscreen.
-          if (!video.paused && !document.fullscreenElement &&
-              !document.webkitFullscreenElement && !document.mozFullScreenElement &&
-              !document.msFullscreenElement) {
-            try {
-              // Use element-level fullscreen so the browser frame stays intact
-              // and navigation (LOGOUT etc.) remains reachable via the remote.
-              // webkitEnterFullscreen() is intentionally omitted — on Fire TV Silk
-              // it launches the native media-player overlay which hijacks all
-              // remote input and makes the in-app header unreachable.
-              if (typeof video.requestFullscreen === 'function') {
-                video.requestFullscreen();
-              } else if (typeof video.webkitRequestFullscreen === 'function') {
-                video.webkitRequestFullscreen();
-              } else if (typeof video.mozRequestFullScreen === 'function') {
-                video.mozRequestFullScreen();
-              } else if (typeof video.msRequestFullscreen === 'function') {
-                video.msRequestFullscreen();
-              } else if (typeof document.documentElement.requestFullscreen === 'function') {
-                // Last resort: go page-fullscreen
-                document.documentElement.requestFullscreen();
-              } else if (typeof document.documentElement.webkitRequestFullscreen === 'function') {
-                document.documentElement.webkitRequestFullscreen();
-              }
-            } catch (e) {
-              console.debug('RetroIPTVGuide: video fullscreen unavailable', e);
-            }
-          }
-        }, 30000);
-      }
-
-      video.addEventListener('play', scheduleVideoFullscreen);
-      video.addEventListener('pause', cancelFullscreenTimer);
-      video.addEventListener('ended', cancelFullscreenTimer);
-      video.addEventListener('emptied', cancelFullscreenTimer);
-    }
-
     console.log('RetroIPTVGuide: TV remote nav active (' + channels.length + ' channels)');
   }
 
