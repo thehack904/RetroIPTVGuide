@@ -172,46 +172,6 @@ function getDisplayZoom() {
     return (v > 0 && isFinite(v)) ? v : 1.0;
 }
 
-/**
- * Explicitly sets guide-outer's height so it fills the viewport below the
- * player row at any CSS zoom level.
- *
- * Why flex:1 alone is insufficient:
- *   Chrome resolves body { height: 100% } against the physical viewport (900px),
- *   not our explicitly-set html.style.height (e.g. 1125px at zoom 0.8).  This
- *   makes the body — and therefore the flex:1 guide-outer — SMALLER at zoom < 1
- *   than at zoom 1.0, causing the visible blank area.
- *
- * Why JS works:
- *   window.innerHeight and getBoundingClientRect() are always in physical/visual
- *   pixels and are completely unaffected by CSS zoom.  Dividing by the zoom factor
- *   converts to CSS px, giving the correct height to fill the viewport.
- *
- * guide-outer uses box-sizing:border-box (set in base.css) so the height we set
- * is the total box including padding — no need to subtract paddingTop/Bottom.
- * createOrUpdateFixedTimeBar sets paddingTop inside this box in its own rAF, which
- * runs before ours (FIFO order), so padding is settled when we read layout.
- */
-function recomputeGuideHeight() {
-    const guideOuter = document.getElementById('guideOuter');
-    if (!guideOuter) return;
-    const zoom = getDisplayZoom();
-    if (zoom >= 1.0) {
-        // At full size let flex:1 handle it; clear any override from a previous zoom.
-        guideOuter.style.height = '';
-        return;
-    }
-    const header    = document.querySelector('.header');
-    const playerRow = document.getElementById('playerRow');
-    // getBCR() returns visual px — same coordinate space as window.innerHeight.
-    let aboveVisual = 0;
-    if (header)    aboveVisual += header.getBoundingClientRect().height;
-    if (playerRow) aboveVisual += playerRow.getBoundingClientRect().height;
-    // CSS px = visual px / zoom  (because CSS px × zoom = visual px)
-    const heightCSS = Math.max(80, Math.floor((window.innerHeight - aboveVisual) / zoom));
-    guideOuter.style.height = heightCSS + 'px';
-}
-
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
@@ -414,7 +374,6 @@ document.addEventListener("DOMContentLoaded", () => {
     createOrUpdateFixedTimeBar();
     if (typeof updateClock === 'function') updateClock();
     updateNowLine();
-    requestAnimationFrame(recomputeGuideHeight);
 
     setInterval(updateClock, 1000);
     setInterval(updateNowLine, 60000);
@@ -425,10 +384,6 @@ window.addEventListener('resize', () => {
     // recompute fixed header placement and now-line
     if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
     if (typeof updateNowLine === 'function') updateNowLine();
-    // Recompute guide height in next frame so getBCR values reflect updated layout.
-    // createOrUpdateFixedTimeBar's own rAF (which sets paddingTop) is scheduled before
-    // this one and therefore runs first (FIFO), so padding is settled when we measure.
-    requestAnimationFrame(recomputeGuideHeight);
 });
 
 /* --- Theme & UI helpers

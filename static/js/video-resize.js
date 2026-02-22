@@ -31,10 +31,22 @@
     var header     = document.querySelector('.header');
     if (!guideOuter) return;
 
+    // getBoundingClientRect() returns visual (viewport) px — these are NOT affected
+    // by CSS zoom.  window.innerHeight is also always in physical/visual px.
     var headerH = header ? header.getBoundingClientRect().height : 40;
     var playerH = playerRow ? playerRow.getBoundingClientRect().height : 0;
-    var guideH  = window.innerHeight - headerH - playerH;
-    guideOuter.style.height = Math.max(100, Math.round(guideH)) + 'px';
+    var availableVisual = window.innerHeight - headerH - playerH;
+
+    // Read the zoom factor from the CSS variable set in base.css.
+    // If zoom < 1 we must convert from visual px to CSS px (÷ zoom) because
+    // CSS properties on a zoomed element are in CSS coordinate space, not visual.
+    var zoom = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue('--display-zoom')
+    );
+    if (!(zoom > 0 && isFinite(zoom))) zoom = 1;
+
+    var heightCSS = Math.max(100, Math.round(availableVisual / zoom));
+    guideOuter.style.height = heightCSS + 'px';
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
