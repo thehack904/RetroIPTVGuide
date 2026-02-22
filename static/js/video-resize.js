@@ -27,27 +27,35 @@
   /* ── Keep guide-outer height equal to remaining viewport space ── */
   function updateGuideHeight() {
     var guideOuter = document.getElementById('guideOuter');
-    var playerRow  = document.getElementById('playerRow');
-    var header     = document.querySelector('.header');
     if (!guideOuter) return;
 
-    // getBoundingClientRect() returns visual (viewport) px — these are NOT affected
-    // by CSS zoom.  window.innerHeight is also always in physical/visual px.
-    var headerH = header ? header.getBoundingClientRect().height : 40;
-    var playerH = playerRow ? playerRow.getBoundingClientRect().height : 0;
-    var availableVisual = window.innerHeight - headerH - playerH;
-
     // Read the zoom factor via the shared global helper exposed by display-size.js.
-    // Falls back to inline calculation for robustness if the helper isn't loaded yet.
     var zoom = (typeof window.getDisplayZoom === 'function')
       ? window.getDisplayZoom()
-      : (function () {
-          var v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--display-zoom'));
-          return (v > 0 && isFinite(v)) ? v : 1;
-        }());
+      : 1.0;
 
-    var heightCSS = Math.max(100, Math.round(availableVisual / zoom));
-    guideOuter.style.height = heightCSS + 'px';
+    // ROOT CAUSE FIX: Chrome resolves body { height: 100% } against the viewport
+    // (720px), NOT against our explicitly-set html.style.height (e.g. 900px at
+    // zoom 0.8).  This makes the body only 576px visual (720 × 0.8), leaving a
+    // 144px blank gap at the bottom of the page that no guideOuter fix could solve.
+    //
+    // Setting body.style.height directly as an inline style bypasses the 100%
+    // resolution entirely.  With body CSS = 900px at zoom 0.8:
+    //   body visual  = 900 × 0.8 = 720px  (fills viewport) ✓
+    //   guideOuter (flex:1) CSS = 900 − header − player  ✓
+    //   guideOuter visual = (900 − header − player) × 0.8 = viewport − above ✓
+    //
+    // window.innerHeight is always in physical/visual px — unaffected by CSS zoom.
+    if (zoom < 1) {
+      document.body.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
+    } else {
+      document.body.style.height = '';
+    }
+
+    // Let flex:1 on guideOuter fill all remaining body height — no explicit
+    // height computation needed.  Clearing any previously-set explicit height
+    // ensures flex:1 takes effect.
+    guideOuter.style.height = '';
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
