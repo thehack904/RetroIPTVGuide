@@ -125,34 +125,42 @@ body { font-family: Arial, sans-serif; margin:0; }
 #video  { width:620px; height:350px; }
 
 /* === Resize handles === */
-/* Horizontal drag handle – between program-info summary and video */
-.video-resize-handle {
-  width: 6px;
+/* Wrapper around #video to host the corner resize handle */
+.video-wrapper {
+  position: relative;
   flex-shrink: 0;
-  cursor: ew-resize;
-  background: var(--resize-handle-bg, #444);
-  border-left: 1px solid var(--resize-handle-border, #555);
-  border-right: 1px solid var(--resize-handle-border, #555);
-  border-radius: 2px;
-  transition: background 0.15s;
-  user-select: none;
-  touch-action: none;
+  display: inline-flex;
 }
-.video-resize-handle:hover, .video-resize-handle.dragging { background: var(--resize-handle-active, #0af); }
 
-/* Vertical drag handle – between player row and guide grid */
-.player-resize-handle {
-  height: 6px;
-  cursor: ns-resize;
-  background: var(--resize-handle-bg, #444);
-  border-top: 1px solid var(--resize-handle-border, #555);
-  border-bottom: 1px solid var(--resize-handle-border, #555);
-  border-radius: 2px;
-  transition: background 0.15s;
-  user-select: none;
+/* Bottom-left corner resize handle */
+.video-corner-handle {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 18px;
+  height: 18px;
+  cursor: sw-resize;
+  z-index: 10;
+  background: transparent;
   touch-action: none;
+  user-select: none;
 }
-.player-resize-handle:hover, .player-resize-handle.dragging { background: var(--resize-handle-active, #0af); }
+/* Triangular visual grip pointing toward bottom-left */
+.video-corner-handle::after {
+  content: '';
+  position: absolute;
+  bottom: 3px;
+  left: 3px;
+  width: 0;
+  height: 0;
+  border-style: solid;
+  border-width: 0 0 11px 11px;
+  border-color: transparent transparent var(--resize-handle-active, #0af) transparent;
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+.video-corner-handle:hover::after,
+.video-corner-handle.dragging::after { opacity: 1; }
 
 /* Vertical drag handle – on the right edge of the channel column header */
 .chan-col-resize-handle {

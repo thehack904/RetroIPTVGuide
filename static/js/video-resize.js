@@ -1,8 +1,9 @@
 /**
  * video-resize.js
- * Adds drag-to-resize handles so the user can resize the video player,
- * the program-info (summary) panel, and the channel column. Sizes are
- * persisted in localStorage and restored on page load.
+ * Adds a bottom-left corner drag handle to the video player so the user can
+ * resize it in both dimensions simultaneously (width and height).
+ * Also adds a channel-column width resize handle.
+ * Sizes are persisted in localStorage and restored on page load.
  */
 (function () {
   'use strict';
@@ -27,14 +28,12 @@
   function updateGuideHeight() {
     var guideOuter = document.getElementById('guideOuter');
     var playerRow  = document.getElementById('playerRow');
-    var handle     = document.getElementById('playerResizeHandle');
     var header     = document.querySelector('.header');
     if (!guideOuter) return;
 
     var headerH = header ? header.getBoundingClientRect().height : 40;
     var playerH = playerRow ? playerRow.getBoundingClientRect().height : 0;
-    var handleH = handle  ? handle.getBoundingClientRect().height  : 6;
-    var guideH  = window.innerHeight - headerH - playerH - handleH;
+    var guideH  = window.innerHeight - headerH - playerH;
     guideOuter.style.height = Math.max(100, Math.round(guideH)) + 'px';
   }
 
@@ -92,76 +91,66 @@
     }, { passive: false });
   }
 
-  /* ── 1. Vertical resize – player row height → guide height ─────── */
-  function initVerticalResize() {
-    var playerRow  = document.getElementById('playerRow');
-    var guideOuter = document.getElementById('guideOuter');
-    var video      = document.getElementById('video');
-    if (!playerRow || !guideOuter) return;
-
-    var handle = document.createElement('div');
-    handle.id        = 'playerResizeHandle';
-    handle.className = 'player-resize-handle';
-    handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'horizontal');
-    handle.setAttribute('title', 'Drag to resize player height');
-    handle.tabIndex  = 0;
-    playerRow.after(handle);
-
-    makeDraggable(handle, {
-      onStart: function (x, y) {
-        return { startY: y, startH: video ? video.getBoundingClientRect().height : 350 };
-      },
-      onMove: function (ctx, x, y) {
-        var newH = Math.max(MIN_VIDEO_HEIGHT, ctx.startH + (y - ctx.startY));
-        if (video) {
-          video.style.height   = newH + 'px';
-          video.style.removeProperty('max-height'); /* clear any mobile-adapt constraint */
-        }
-        updateGuideHeight();
-        reflow();
-      },
-      onEnd: function () {
-        if (video) {
-          try { localStorage.setItem(LS_VIDEO_H, video.style.height); } catch (e) {}
-        }
-        updateGuideHeight();
-        reflow();
-      }
-    });
-  }
-
-  /* ── 2. Horizontal resize – video width ↔ summary width ────────── */
-  function initHorizontalResize() {
+  /* ── 1. Bottom-left corner resize – both video width and height ── */
+  function initCornerResize() {
     var video   = document.getElementById('video');
-    var summary = document.getElementById('summary');
-    if (!video || !summary) return;
+    if (!video) return;
 
+    /* Wrap the video in a relative-positioned container to host the handle */
+    var wrapper = document.createElement('div');
+    wrapper.className = 'video-wrapper';
+    video.parentNode.insertBefore(wrapper, video);
+    wrapper.appendChild(video);
+
+    /* Corner handle */
     var handle = document.createElement('div');
-    handle.id        = 'videoResizeHandle';
-    handle.className = 'video-resize-handle';
+    handle.id        = 'videoCornerHandle';
+    handle.className = 'video-corner-handle';
     handle.setAttribute('role', 'separator');
-    handle.setAttribute('aria-orientation', 'vertical');
-    handle.setAttribute('title', 'Drag to resize video width');
+    handle.setAttribute('aria-label', 'Drag to resize video');
+    handle.setAttribute('title', 'Drag to resize video player');
     handle.tabIndex  = 0;
-    /* Insert between summary and video */
-    video.parentNode.insertBefore(handle, video);
+    wrapper.appendChild(handle);
 
     makeDraggable(handle, {
       onStart: function (x, y) {
-        return { startX: x, startW: video.getBoundingClientRect().width };
+        return {
+          startX: x,
+          startY: y,
+          startW: video.getBoundingClientRect().width,
+          startH: video.getBoundingClientRect().height
+        };
       },
       onMove: function (ctx, x, y) {
-        var newW = Math.max(MIN_VIDEO_WIDTH, ctx.startW + (x - ctx.startX));
-        video.style.width = newW + 'px';
+        var deltaX = x - ctx.startX;
+        var deltaY = y - ctx.startY;
+        /*
+         * Bottom-left corner semantics:
+         *   Drag LEFT  → left edge moves left  → video gets wider
+         *   Drag RIGHT → left edge moves right → video gets narrower (smaller)
+         *   Drag DOWN  → bottom edge moves down → video gets taller
+         *   Drag UP    → bottom edge moves up   → video gets shorter (smaller)
+         */
+        var newW = Math.max(MIN_VIDEO_WIDTH,  ctx.startW - deltaX);
+        var newH = Math.max(MIN_VIDEO_HEIGHT, ctx.startH + deltaY);
+        video.style.width  = newW + 'px';
+        video.style.height = newH + 'px';
+        video.style.removeProperty('max-height');
+        updateGuideHeight();
+        reflow();
       },
       onEnd: function () {
-        try { localStorage.setItem(LS_VIDEO_W, video.style.width); } catch (e) {}
+        try {
+          localStorage.setItem(LS_VIDEO_W, video.style.width);
+          localStorage.setItem(LS_VIDEO_H, video.style.height);
+        } catch (e) {}
+        updateGuideHeight();
+        reflow();
       }
     });
   }
 
-  /* ── 3. Channel-column width resize ────────────────────────────── */
+  /* ── 2. Channel-column width resize ────────────────────────────── */
   function initChanColResize() {
     /* Attach the handle to the header chan-col (first row) */
     var headerChanCol = document.querySelector('#gridTimeRow .chan-col');
@@ -210,8 +199,7 @@
 
   /* ── Bootstrap ─────────────────────────────────────────────────── */
   document.addEventListener('DOMContentLoaded', function () {
-    initVerticalResize();
-    initHorizontalResize();
+    initCornerResize();
     initChanColResize();
     restoreSizes();
 
