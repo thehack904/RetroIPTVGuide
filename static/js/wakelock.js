@@ -11,6 +11,9 @@
  *
  * The lock is acquired on page load and re-acquired whenever the page becomes
  * visible again (e.g. after the user switches back from another Fire TV app).
+ * Special care is taken to resume the NoSleep video if the browser paused it
+ * while the page was hidden, and to handle the race between the Wake Lock
+ * sentinel's release event and the visibilitychange event.
  */
 (function () {
   'use strict';
@@ -86,9 +89,33 @@
   // Re-acquire when the page becomes visible again
   // ---------------------------------------------------------------------------
   document.addEventListener('visibilitychange', function () {
-    // Only try to (re-)acquire if neither strategy is currently active.
-    if (document.visibilityState === 'visible' && !wakeLockSentinel && !noSleepVideo) {
+    if (document.visibilityState !== 'visible') return;
+
+    if (noSleepVideo) {
+      // The browser pauses media elements while the page is hidden.
+      // Resume the canvas-stream video so screen-saver prevention stays active.
+      if (noSleepVideo.paused) {
+        noSleepVideo.play().catch(function () {});
+      }
+    } else if (!wakeLockSentinel) {
+      // Wake Lock was released while hidden (or never acquired); re-acquire now.
+      // This also covers the race where the sentinel's release event fires just
+      // after the visibilitychange event for the hidden state.
       requestWakeLock();
+    } else {
+      // A sentinel exists but the browser may release it asynchronously right
+      // after this event; re-request now to stay ahead of that race.
+      navigator.wakeLock.request('screen').then(function (newSentinel) {
+        try { wakeLockSentinel.release(); } catch (e) {}
+        wakeLockSentinel = newSentinel;
+        newSentinel.addEventListener('release', function () {
+          wakeLockSentinel = null;
+        });
+      }).catch(function () {
+        // Wake Lock unavailable right now; fall back to the video strategy.
+        wakeLockSentinel = null;
+        startNoSleepVideo();
+      });
     }
   });
 
