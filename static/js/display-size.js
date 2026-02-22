@@ -2,8 +2,8 @@
    Manages the "Display Size" preference (Large / Medium / Small) which scales
    the entire page similarly to the browser's built-in zoom:
      Large  = 100% (no scaling)
-     Medium =  90%
-     Small  =  80%
+     Medium =  80%
+     Small  =  67%
    Preference is stored in localStorage under the key 'displaySize'.
 */
 (function () {
