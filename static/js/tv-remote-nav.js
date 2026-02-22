@@ -212,9 +212,24 @@
               !document.webkitFullscreenElement && !document.mozFullScreenElement &&
               !document.msFullscreenElement) {
             try {
-              var fn = video.requestFullscreen || video.webkitRequestFullscreen ||
-                       video.mozRequestFullScreen || video.msRequestFullscreen;
-              if (fn) fn.call(video);
+              // Fire TV Silk / iOS Safari: webkitEnterFullscreen() on the video
+              // element is the native way to trigger hardware-accelerated fullscreen.
+              if (typeof video.webkitEnterFullscreen === 'function') {
+                video.webkitEnterFullscreen();
+              } else if (typeof video.requestFullscreen === 'function') {
+                video.requestFullscreen();
+              } else if (typeof video.webkitRequestFullscreen === 'function') {
+                video.webkitRequestFullscreen();
+              } else if (typeof video.mozRequestFullScreen === 'function') {
+                video.mozRequestFullScreen();
+              } else if (typeof video.msRequestFullscreen === 'function') {
+                video.msRequestFullscreen();
+              } else if (typeof document.documentElement.requestFullscreen === 'function') {
+                // Last resort: go page-fullscreen
+                document.documentElement.requestFullscreen();
+              } else if (typeof document.documentElement.webkitRequestFullscreen === 'function') {
+                document.documentElement.webkitRequestFullscreen();
+              }
             } catch (e) {
               console.debug('RetroIPTVGuide: video fullscreen unavailable', e);
             }
