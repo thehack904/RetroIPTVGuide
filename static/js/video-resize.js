@@ -35,18 +35,18 @@
       : 1.0;
 
     if (zoom < 1) {
-      // BELT: set body height so flex:1 resolves correctly when the browser allows it.
-      // Chrome resolves body{height:100%} against the raw viewport (720px) instead of
-      // html.style.height (900px at zoom 0.8), producing a 576px visual body and a
-      // 144px blank gap.  Inline style overrides the CSS 100% rule.
+      // BELT: set body height so the overflow:hidden clip on body.guide-page is at
+      // the correct viewport bottom. Chrome resolves body{height:100%} against the raw
+      // viewport instead of html.style.height under CSS zoom. display-size.js also sets
+      // body.style.height, and guide.html injects a CSS rule before first paint — this
+      // call is belt-and-suspenders to ensure the correct height is always active after
+      // any resize or display-size change event.
       document.body.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
 
       // SUSPENDERS: explicitly set guideOuter height so it fills to the viewport even
-      // if body.style.height doesn't resolve correctly in some browsers.
+      // if body.style.height doesn't take effect in an edge case.
       // getBoundingClientRect() always returns visual (viewport) px, unaffected by zoom.
       // Dividing by zoom converts visual px → CSS px in the zoom coordinate space.
-      // overflow:hidden is on html (not body), so guideOuter can safely overflow a
-      // too-short body — it will still be clipped correctly at html's boundary.
       var header    = document.querySelector('.header');
       var playerRow = document.getElementById('playerRow');
       var headerH   = header    ? header.getBoundingClientRect().height    : 40;

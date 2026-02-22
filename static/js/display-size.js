@@ -30,9 +30,19 @@
     if (zoom < 1.0) {
       el.style.width  = Math.ceil(window.innerWidth  / zoom) + 'px';
       el.style.height = Math.ceil(window.innerHeight / zoom) + 'px';
+      // Also set body height explicitly. Chrome resolves body{height:100%} against
+      // the raw viewport (not html.style.height) under CSS zoom, leaving a blank gap.
+      // An inline style overrides the CSS cascade and is the only reliable cross-browser fix.
+      // video-resize.js sets this too on every resize event — this call ensures it is
+      // always in sync whenever the zoom level is first applied.
+      // Guard: setHtmlDimensions is called from the DOMContentLoaded handler (where body
+      // always exists), but also from the resize event handler which can theoretically
+      // fire very early on some mobile browsers before body is fully connected.
+      if (document.body) document.body.style.height = el.style.height;
     } else {
       el.style.width  = '';
       el.style.height = '';
+      if (document.body) document.body.style.height = '';
     }
   }
 

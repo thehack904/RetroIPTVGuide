@@ -6,12 +6,10 @@
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
 /* Use flex column so guide-outer fills all remaining vertical space automatically —
    this is the mechanism that allows zoom to reveal more channels without blank space. */
-/* overflow:hidden lives on html (not body) so that the explicit guideOuter height can
-   visually extend beyond a too-short body while still being clipped at the correct
-   viewport level (html.style.height is reliably set by display-size.js to
-   window.innerHeight / zoom, so html always fills the viewport exactly). */
-html:has(body.guide-page) { overflow: hidden; }
-body.guide-page { display: flex; flex-direction: column; height: 100%; }
+/* overflow:hidden is on body.guide-page. body.style.height is set by display-size.js and
+   video-resize.js to window.innerHeight/zoom so the body always fills the visual viewport,
+   ensuring the overflow clip is at exactly the right position on all browsers. */
+body.guide-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
 html { height: 100%; }
 
 /* Display size scaling: applied via data-display-size on <html>.
