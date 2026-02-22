@@ -91,7 +91,7 @@
     }, { passive: false });
   }
 
-  /* ── 1. Bottom-left corner resize – both video width and height ── */
+  /* ── 1. Bottom-left corner resize – aspect-ratio-locked ────────── */
   function initCornerResize() {
     var video   = document.getElementById('video');
     if (!video) return;
@@ -102,7 +102,7 @@
     video.parentNode.insertBefore(wrapper, video);
     wrapper.appendChild(video);
 
-    /* Corner handle */
+    /* Corner handle – sits outside the video so native controls don't block it */
     var handle = document.createElement('div');
     handle.id        = 'videoCornerHandle';
     handle.className = 'video-corner-handle';
@@ -114,25 +114,38 @@
 
     makeDraggable(handle, {
       onStart: function (x, y) {
+        var rect = video.getBoundingClientRect();
         return {
           startX: x,
           startY: y,
-          startW: video.getBoundingClientRect().width,
-          startH: video.getBoundingClientRect().height
+          startW: rect.width,
+          startH: rect.height,
+          /* diagonal length of the video at drag start */
+          startDiag: Math.sqrt(rect.width * rect.width + rect.height * rect.height)
         };
       },
       onMove: function (ctx, x, y) {
         var deltaX = x - ctx.startX;
         var deltaY = y - ctx.startY;
         /*
-         * Bottom-left corner semantics:
-         *   Drag LEFT  → left edge moves left  → video gets wider
-         *   Drag RIGHT → left edge moves right → video gets narrower (smaller)
-         *   Drag DOWN  → bottom edge moves down → video gets taller
-         *   Drag UP    → bottom edge moves up   → video gets shorter (smaller)
+         * Aspect-ratio-locked resize from the bottom-left corner:
+         *   – Right edge and top edge are fixed (anchored).
+         *   – Drag SW (left+down)  → bigger.
+         *   – Drag NE (right+up)   → smaller.
+         *
+         * We project the drag vector onto the SW-NE diagonal direction
+         * (-1, +1)/√2 and use the scalar change to scale both dimensions
+         * by the same factor, preserving the original aspect ratio.
          */
-        var newW = Math.max(MIN_VIDEO_WIDTH,  ctx.startW - deltaX);
-        var newH = Math.max(MIN_VIDEO_HEIGHT, ctx.startH + deltaY);
+        var proj    = (-deltaX + deltaY) / Math.SQRT2;
+        var minDiag = Math.sqrt(
+          MIN_VIDEO_WIDTH  * MIN_VIDEO_WIDTH +
+          MIN_VIDEO_HEIGHT * MIN_VIDEO_HEIGHT
+        );
+        var newDiag = Math.max(minDiag, ctx.startDiag + proj);
+        var scale   = newDiag / ctx.startDiag;
+        var newW    = Math.round(ctx.startW * scale);
+        var newH    = Math.round(ctx.startH * scale);
         video.style.width  = newW + 'px';
         video.style.height = newH + 'px';
         video.style.removeProperty('max-height');

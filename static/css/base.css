@@ -125,37 +125,39 @@ body { font-family: Arial, sans-serif; margin:0; }
 #video  { width:620px; height:350px; }
 
 /* === Resize handles === */
-/* Wrapper around #video to host the corner resize handle */
+/* Wrapper around #video to host the corner resize handle.
+   inline-block (not inline-flex) keeps the video as a normal replaced element
+   so flex-stretch never fights with explicitly set width/height. */
 .video-wrapper {
   position: relative;
   flex-shrink: 0;
-  display: inline-flex;
+  display: inline-block;
 }
 
-/* Bottom-left corner resize handle */
+/* Bottom-left corner resize handle – sits OUTSIDE the video so native
+   browser video controls never intercept the mousedown event.
+   The handle's top-right corner is flush with the video's bottom-left corner. */
 .video-corner-handle {
   position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 18px;
-  height: 18px;
+  bottom: -20px;
+  left: -20px;
+  width: 20px;
+  height: 20px;
   cursor: sw-resize;
   z-index: 10;
   background: transparent;
   touch-action: none;
   user-select: none;
 }
-/* Triangular visual grip pointing toward bottom-left */
+/* Triangular grip: linear-gradient places the 90° corner at the handle's
+   top-right, which is exactly at the video's bottom-left corner. */
 .video-corner-handle::after {
   content: '';
   position: absolute;
-  bottom: 3px;
-  left: 3px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0 0 11px 11px;
-  border-color: transparent transparent var(--resize-handle-active, #0af) transparent;
+  inset: 0;
+  background: linear-gradient(to bottom left,
+    var(--resize-handle-active, #0af) 50%,
+    transparent 50%);
   opacity: 0.65;
   transition: opacity 0.15s;
 }
