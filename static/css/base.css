@@ -202,9 +202,13 @@ body { font-family: Arial, sans-serif; margin:0; }
 }
 
 /* === Guide grid === */
-/* flex:1 + min-height:0 lets guide-outer fill all remaining vertical space in
-   the body flex column automatically, at any zoom level, without JS computation. */
-.guide-outer { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 80px; position: relative; }
+/* flex:1 + min-height:0 provides a reasonable baseline. The guide-outer height is
+   also set explicitly by recomputeGuideHeight() in JS because Chrome resolves
+   body { height: 100% } against the physical viewport, not our zoomed html height —
+   so flex:1 alone would be SMALLER than the viewport at any zoom < 1.
+   box-sizing:border-box so the JS-set height includes padding (paddingTop is set
+   dynamically by createOrUpdateFixedTimeBar; paddingBottom is 80px from this rule). */
+.guide-outer { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 80px; position: relative; box-sizing: border-box; }
 .guide-row { display:flex; }
 .chan-col { width: var(--chan-col-width, 200px); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
 
