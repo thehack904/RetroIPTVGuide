@@ -212,11 +212,12 @@
               !document.webkitFullscreenElement && !document.mozFullScreenElement &&
               !document.msFullscreenElement) {
             try {
-              // Fire TV Silk / iOS Safari: webkitEnterFullscreen() on the video
-              // element is the native way to trigger hardware-accelerated fullscreen.
-              if (typeof video.webkitEnterFullscreen === 'function') {
-                video.webkitEnterFullscreen();
-              } else if (typeof video.requestFullscreen === 'function') {
+              // Use element-level fullscreen so the browser frame stays intact
+              // and navigation (LOGOUT etc.) remains reachable via the remote.
+              // webkitEnterFullscreen() is intentionally omitted — on Fire TV Silk
+              // it launches the native media-player overlay which hijacks all
+              // remote input and makes the in-app header unreachable.
+              if (typeof video.requestFullscreen === 'function') {
                 video.requestFullscreen();
               } else if (typeof video.webkitRequestFullscreen === 'function') {
                 video.webkitRequestFullscreen();
