@@ -31,8 +31,9 @@
     // #appZoomRoot is the flex column container; guideOuter has flex:1 and fills
     // all remaining height automatically.  Clear any explicit height that may have
     // been set by previous code so flex takes over.
-    guideOuter.style.height = '';
-    guideOuter.style.flex   = '';
+    guideOuter.style.height    = '';
+    guideOuter.style.flex      = '';
+    guideOuter.style.maxHeight = '';
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
