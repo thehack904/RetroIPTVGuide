@@ -9,6 +9,21 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## v4.6.0 - 2026-02-23
 
 ### Added
+- **Auto-Scroll menu enhancements with flyout submenus**
+  - Settings dropdown now contains a nested Auto-Scroll flyout with Enable/Disable toggle and a Scroll Speed sub-flyout (Slow / Medium / Fast).
+  - Speed preference persisted to `localStorage` and restored on load; applied to the live `__autoScroll` API when already running.
+  - Display Size (Large / Medium / Small) added as a second flyout entry in the same Settings dropdown.
+  - All flyout entries use the existing `.submenu` / `.submenu-content` CSS pattern so they are consistent across themes.
+- **Tuner validation, duplicate prevention, and single-channel M3U8 support**
+  - New `_validate_url()` helper enforces non-empty, `http`/`https` scheme, and valid hostname on all tuner URLs before they are written to the database.
+  - `add_tuner()` now checks for an existing tuner with the same name and raises `ValueError` before inserting, preventing silent duplicates.
+  - `parse_m3u()` extended to detect single-channel M3U8 files (a bare URL with no `#EXTINF` entries); channel name is auto-derived from the URL filename.
+  - New **Single Stream Mode** in Tuner Management UI — a radio-button toggle switches the Add Tuner form between Standard Playlist mode (separate XML + M3U fields) and Single Stream mode (one M3U8 URL field). Server-side `single_stream` branch in `change_tuner` POST handler mirrors this.
+  - Unit tests added: `tests/test_tuner_validation.py` (URL validation + M3U parsing) and `tests/test_single_stream_mode.py` (single-stream and duplicate-prevention flows).
+- **Flash message display on Tuner Management page**
+  - `change_tuner.html` now renders categorised flash messages (`flash-info`, `flash-warning`, `flash-success`, `flash-default`) in a dedicated container below the page header.
+  - Each flash message includes a close (×) button for dismissal.
+  - Validation results from `validate_tuner_url()` (reachability, DNS resolution, scheme checks) surface immediately as inline flash messages after each tuner operation.
 - **Display Size setting (Large / Medium / Small) for all themes**
   - New persistent display size selector accessible from the Settings menu on every theme.
   - Three presets: Large (100%), Medium (80%), Small (67%) — matches the visual result of browser zoom without cross-browser layout quirks.
@@ -23,10 +38,11 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Fixed time bar re-measured after `tv-mode` class is applied to avoid layout offset on load.
   - Auto-scroll defaults to slow speed on TV mode; existing user preference is respected.
   - Login page reworked for TV viewports: stacked logo+form layout with proportional scaling.
-- **Video player aspect-ratio-locked resize handle**
+- **Video player aspect-ratio-locked resize handle** (`video-resize.js`)
   - Resize handle moved outside the video element bounds (`bottom: -20px; left: -20px`) to prevent browser native controls from blocking interaction.
   - Drag vector projected onto the SW–NE diagonal so resizing is always aspect-ratio-locked.
   - Triangle indicator fixed (now points to bottom-left corner) and reduced to a compact 12×12 visual with a 20×20 hit area.
+  - Video and channel column can also be resized via drag handles; guide height recomputed on each resize event.
 
 ### Changed
 - **Fixed time bar normalized across all themes**
@@ -35,6 +51,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 - `auto-scroll.js`: removed hardcoded `maxHeight: calc(100vh - 420px)` from `ensureStyles()` — `flex: 1` on `.guide-outer` now handles height at every zoom level.
 - `video-resize.js`: `updateGuideHeight()` now clears any stale inline `maxHeight` alongside `height` and `flex` on resize/zoom events.
 - `#appZoomRoot` changed to `position: fixed` flex-column to prevent ancestor `overflow: hidden` from clipping pre-scale layout.
+- Tuner Management form radio buttons (`tuner_mode_standard`, `tuner_mode_single_stream`) given explicit `id` attributes and matching `for` attributes on their `<label>` elements for full keyboard/screen-reader accessibility.
 
 ### Fixed
 - Fixed viewport gap at bottom of guide at Medium/Small display sizes.

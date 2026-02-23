@@ -11,8 +11,9 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ### 1. Tuner Management
 - [x] Add ability to **add/remove tuners** from the UI (v2.3.0).  
 - [x] Add ability to rename tuners via the UI (v2.3.0).  
-- [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
-- [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).  
+- [x] Support for **.m3u8 single-channel playlists** as tuner sources. *(v4.6.0)*
+- [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).
+- [x] Duplicate tuner name prevention in `add_tuner()`. *(v4.6.0)*  
 - [x] Optional auto-refresh of tuner lineup on a schedule. *(v4.3.0)*  
 - [ ] Add per-user tuner assignment and default tuner preferences.  
 - [ ] Introduce combined tuner builder (custom tuner aggregation).  
@@ -32,6 +33,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ### 3. Guide & Playback
 - [x] Auto-Scroll feature added for the Live Guide (v4.1.0).  
 - [x] Improved auto-scroll performance and modular handling (v4.2.0).  
+- [x] Auto-Scroll Settings flyout menu with Enable/Disable toggle and Slow/Medium/Fast speed sub-flyout. *(v4.6.0)*  
 - [x] Added responsive layout for mobile devices (v4.2.0).  
 - [ ] Add search/filter box to guide.  
 - [ ] Add ability to set favorites.  
