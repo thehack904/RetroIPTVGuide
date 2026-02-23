@@ -1,7 +1,7 @@
 # Installation Guide
 
-**Version:** v4.5.0  
-**Last Updated:** 2026-02-05
+**Version:** v4.6.0  
+**Last Updated:** 2026-02-23
 
 ---
 

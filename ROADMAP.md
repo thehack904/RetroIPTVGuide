@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.5.0 (2026-02-15)**
+# Current Version: **v4.6.0 (2026-02-23)**
 
 ## 🔮 Feature Upgrades
 
@@ -64,6 +64,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Added new mobile-specific CSS and JS (v4.3.0).  
 - [x] Added new templates: change_tuner.html, manage_users.html, logs.html. (v4.3.0)  
 - [x] Fixed scrolling on About, Logs, Tuner Management, and Manage Users pages. *(v4.5.0)*
+- [x] Display size setting (Large/Medium/Small) for all themes via transform scale. *(v4.6.0)*
+- [x] Fire TV / Android TV DPAD remote navigation + TV-mode proportional UI scaling. *(v4.6.0)*
+- [x] Video player aspect-ratio-locked resize handle. *(v4.6.0)*
+- [x] Fixed time bar style normalized across all themes. *(v4.6.0)*
 
 ---
 

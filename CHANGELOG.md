@@ -6,6 +6,44 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.6.0 - 2026-02-23
+
+### Added
+- **Display Size setting (Large / Medium / Small) for all themes**
+  - New persistent display size selector accessible from the Settings menu on every theme.
+  - Three presets: Large (100%), Medium (80%), Small (67%) — matches the visual result of browser zoom without cross-browser layout quirks.
+  - Implemented via `transform: scale` on a top-level `#appZoomRoot` wrapper in `display-size.js`.
+  - Setting is persisted to `localStorage` and restored before first paint to prevent flash of unstyled content.
+  - Fixed viewport gap at the bottom of the guide that appeared at non-100% zoom levels.
+- **Fire TV (Silk) / Android TV — DPAD remote navigation + TV-mode UI scaling** (`tv-remote-nav.js`)
+  - New JS module `static/js/tv-remote-nav.js` injected only when a TV user-agent is detected (AFT, Silk, Android TV, GoogleTV, etc.).
+  - Up/Down DPAD navigates channels; OK/Enter triggers playback via existing handler.
+  - `scrollIntoView` keeps the selected channel visible; `tv-focused` / `tv-focused-row` CSS classes provide a clear 10-foot UI highlight.
+  - Proportional TV-mode UI scaling (video, header, channel column, program cells, fixed time bar) applied via injected `body.tv-mode` CSS.
+  - Fixed time bar re-measured after `tv-mode` class is applied to avoid layout offset on load.
+  - Auto-scroll defaults to slow speed on TV mode; existing user preference is respected.
+  - Login page reworked for TV viewports: stacked logo+form layout with proportional scaling.
+- **Video player aspect-ratio-locked resize handle**
+  - Resize handle moved outside the video element bounds (`bottom: -20px; left: -20px`) to prevent browser native controls from blocking interaction.
+  - Drag vector projected onto the SW–NE diagonal so resizing is always aspect-ratio-locked.
+  - Triangle indicator fixed (now points to bottom-left corner) and reduced to a compact 12×12 visual with a 20×20 hit area.
+
+### Changed
+- **Fixed time bar normalized across all themes**
+  - All themes now share the same cell padding (`6px 10px`) and a consistent `border-bottom` on the fixed time bar, matching the RetroIPTV theme style as the baseline.
+  - Theme-specific overrides (RetroIPTV 2px border, tvguide1990 compact padding, mobile `!important` rules) remain unaffected.
+- `auto-scroll.js`: removed hardcoded `maxHeight: calc(100vh - 420px)` from `ensureStyles()` — `flex: 1` on `.guide-outer` now handles height at every zoom level.
+- `video-resize.js`: `updateGuideHeight()` now clears any stale inline `maxHeight` alongside `height` and `flex` on resize/zoom events.
+- `#appZoomRoot` changed to `position: fixed` flex-column to prevent ancestor `overflow: hidden` from clipping pre-scale layout.
+
+### Fixed
+- Fixed viewport gap at bottom of guide at Medium/Small display sizes.
+- Fixed mispositioned fixed time bar on Fire TV load when TV-mode scaling was applied after `DOMContentLoaded`.
+- Fixed overlapping logo/form on TV viewport login page.
+- SSRF hardening: private-IP block now covers loopback, link-local, and all RFC-1918 ranges; scheme restricted to `http`/`https`; redirects disabled.
+
+---
+
 ## v4.5.0 - 2026-02-15
 
 ### Added
