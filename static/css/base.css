@@ -37,6 +37,14 @@ body.guide-page { overflow: hidden; }
   -webkit-font-smoothing: antialiased;
 }
 
+/* Non-guide pages (Logs, About, Tuner Management, etc.) need their own scroll since they
+   do not have an internal scroll container like .guide-outer.  display-size.js also sets
+   this at runtime, but the CSS rule ensures correct behavior even before that script runs
+   (e.g. when no displaySize preference is stored and the JS early-returns). */
+body:not(.guide-page) #appZoomRoot {
+  overflow-y: auto;
+}
+
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
 .header {
