@@ -6,8 +6,8 @@
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
 /* #appZoomRoot is the transform-scale target for Display Size; it is a flex column that
    fills the entire body and takes over the layout role body.guide-page used to have. */
-body.guide-page { height: 100%; overflow: hidden; }
-html { height: 100%; }
+html, body { height: 100%; }
+body.guide-page { overflow: hidden; }
 
 /* Display Size scaling via transform: scale on #appZoomRoot.
    Large = 100% (no transform), Medium = 80%, Small = 67%.

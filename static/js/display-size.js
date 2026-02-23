@@ -31,26 +31,35 @@
    * existing JS helpers (createOrUpdateFixedTimeBar, updateNowLine, grid-adapt)
    * can read it via getComputedStyle without needing to know the implementation.
    */
+  function getViewportSize() {
+    var vv = window.visualViewport;
+    var w = (vv && vv.width) ? vv.width : window.innerWidth;
+    var h = (vv && vv.height) ? vv.height : window.innerHeight;
+    return { w: w, h: h };
+  }
+
   function applyUiZoom(scale) {
     var root = document.getElementById('appZoomRoot');
     if (root) {
+      // Enforce fixed wrapper so body/percent sizing cannot clip the scaled UI
+      root.style.position = 'fixed';
+      root.style.top = '0';
+      root.style.left = '0';
+      root.style.overflow = 'hidden';
+      root.style.transformOrigin = 'top left';
+
+      var vp = getViewportSize();
+
       if (scale < 1) {
-        /* Use explicit px from window.innerWidth/Height — these always return the
-           visual viewport dimensions in CSS px and are immune to any CSS transform,
-           zoom property, overflow clipping, or containing-block resolution on any
-           ancestor element.  Using % or vw/vh can vary across browsers when body
-           has overflow:hidden.  Explicit px removes all such ambiguity:
-             width  = ceil(1280 / 0.8) = 1600px → scale(0.8) → 1280px visual ✓
-             height = ceil(720  / 0.8) = 900px  → scale(0.8) → 720px visual  ✓ */
-        root.style.transform       = 'scale(' + scale + ')';
-        root.style.transformOrigin = 'top left';
-        root.style.width           = Math.ceil(window.innerWidth  / scale) + 'px';
-        root.style.height          = Math.ceil(window.innerHeight / scale) + 'px';
+        // Explicit px avoids 100%/vh resolution quirks when overflow:hidden is involved
+        root.style.transform = 'scale(' + scale + ')';
+        root.style.width = Math.ceil(vp.w / scale) + 'px';
+        root.style.height = Math.ceil(vp.h / scale) + 'px';
       } else {
-        root.style.transform       = '';
-        root.style.transformOrigin = '';
-        root.style.width           = '';
-        root.style.height          = '';
+        root.style.transform = '';
+        // Fixed + 100% resolves to the viewport
+        root.style.width = '100%';
+        root.style.height = '100%';
       }
     }
     // Keep --display-zoom in sync so CSS/JS consumers always read the right value
