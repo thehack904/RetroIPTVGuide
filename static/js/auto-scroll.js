@@ -58,9 +58,9 @@
     try {
       const cs = getComputedStyle(el);
       if (!/(auto|scroll)/.test(cs.overflowY)) el.style.overflowY = 'auto';
-      if (!el.style.maxHeight && cs.maxHeight === 'none') {
-        el.style.maxHeight = 'calc(100vh - 420px)';
-      }
+      // Do NOT set maxHeight here: guide-outer is sized by flex:1 inside #appZoomRoot.
+      // A hardcoded calc(100vh - 420px) would cap it at 300px regardless of display-size
+      // zoom level, leaving a blank theme-coloured gap below the channel rows.
       el.style.scrollBehavior = 'auto';
     } catch (e) {}
   }

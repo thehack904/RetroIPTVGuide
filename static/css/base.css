@@ -4,8 +4,38 @@
 */
 
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
-body.guide-page { height: 100%; overflow: hidden; }
-html { height: 100%; }
+/* #appZoomRoot is the transform-scale target for Display Size; it is a flex column that
+   fills the entire body and takes over the layout role body.guide-page used to have. */
+html, body { height: 100%; }
+body.guide-page { overflow: hidden; }
+
+/* Display Size scaling via transform: scale on #appZoomRoot.
+   Large = 100% (no transform), Medium = 80%, Small = 67%.
+   display-size.js sets transform + width/height compensation on #appZoomRoot.
+   The CSS variable --display-zoom is set as an inline style by display-size.js
+   so JS code (createOrUpdateFixedTimeBar, updateNowLine) can read it via
+   getComputedStyle. The data-display-size attribute is kept for CSS theming hooks. */
+
+/* appZoomRoot: the single scaling wrapper for the entire app UI.
+   position:fixed is essential — it removes the element from normal flow so that
+   body { overflow:hidden } does NOT clip it (fixed elements are clipped only by
+   the viewport, not ancestors).  Without this, body (height=100%=720px) clips
+   #appZoomRoot at 720px BEFORE transform:scale is applied, so only 720×0.8=576px
+   is visible and a 144px blank gap remains at the bottom.  With position:fixed,
+   width/height % values are resolved against the viewport (initial containing block),
+   so width:125%;height:125% = 125vw×125vh = 1600×900px → scale(0.8) → 1280×720px ✓ */
+#appZoomRoot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
@@ -189,7 +219,13 @@ body { font-family: Arial, sans-serif; margin:0; }
 }
 
 /* === Guide grid === */
-.guide-outer { height: calc(100vh - 420px); overflow-y: auto; padding-bottom: 80px; position: relative; }
+/* flex:1 + min-height:0 provides a reasonable baseline. The guide-outer height is
+   also set explicitly by recomputeGuideHeight() in JS because Chrome resolves
+   body { height: 100% } against the physical viewport, not our zoomed html height —
+   so flex:1 alone would be SMALLER than the viewport at any zoom < 1.
+   box-sizing:border-box so the JS-set height includes padding (paddingTop is set
+   dynamically by createOrUpdateFixedTimeBar; paddingBottom is 80px from this rule). */
+.guide-outer { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 80px; position: relative; box-sizing: border-box; }
 .guide-row { display:flex; }
 .chan-col { width: var(--chan-col-width, 200px); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
 

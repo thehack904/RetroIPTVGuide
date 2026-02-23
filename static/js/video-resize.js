@@ -27,14 +27,13 @@
   /* ── Keep guide-outer height equal to remaining viewport space ── */
   function updateGuideHeight() {
     var guideOuter = document.getElementById('guideOuter');
-    var playerRow  = document.getElementById('playerRow');
-    var header     = document.querySelector('.header');
     if (!guideOuter) return;
-
-    var headerH = header ? header.getBoundingClientRect().height : 40;
-    var playerH = playerRow ? playerRow.getBoundingClientRect().height : 0;
-    var guideH  = window.innerHeight - headerH - playerH;
-    guideOuter.style.height = Math.max(100, Math.round(guideH)) + 'px';
+    // #appZoomRoot is the flex column container; guideOuter has flex:1 and fills
+    // all remaining height automatically.  Clear any explicit height that may have
+    // been set by previous code so flex takes over.
+    guideOuter.style.height    = '';
+    guideOuter.style.flex      = '';
+    guideOuter.style.maxHeight = '';
   }
 
   /* ── Generic drag-handle helper (mouse + touch) ───────────────── */
@@ -219,4 +218,8 @@
     /* Re-sync guide height on viewport resize */
     window.addEventListener('resize', updateGuideHeight);
   });
+
+  /* Expose globally so grid-adapt.js and other modules can call the canonical
+     zoom-aware guide height computation rather than clearing the style. */
+  window.updateGuideHeight = updateGuideHeight;
 })();
