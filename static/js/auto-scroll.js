@@ -11,7 +11,7 @@
   function setPref(v) { localStorage.setItem(PREF_KEY, v ? 'true' : 'false'); }
 
   const SELECTOR_PRIORITY = ['#guideOuter', '.guide-outer', '.grid-col'];
-  const scrollSpeed = 1.2; // px per frame (visual)
+  let scrollSpeed = 1.2; // px per frame (visual)
   const idleDelay = 15000; // ms initial inactivity/start delay (15s)
   const waitForContentMs = 5000; // wait up to 5s for rows to be populated before cloning
   const contentSampleCount = 3; // sample when checking readiness
@@ -58,9 +58,9 @@
     try {
       const cs = getComputedStyle(el);
       if (!/(auto|scroll)/.test(cs.overflowY)) el.style.overflowY = 'auto';
-      if (!el.style.maxHeight && cs.maxHeight === 'none') {
-        el.style.maxHeight = 'calc(100vh - 420px)';
-      }
+      // Do NOT set maxHeight here: guide-outer is sized by flex:1 inside #appZoomRoot.
+      // A hardcoded calc(100vh - 420px) would cap it at 300px regardless of display-size
+      // zoom level, leaving a blank theme-coloured gap below the channel rows.
       el.style.scrollBehavior = 'auto';
     } catch (e) {}
   }
@@ -436,6 +436,15 @@
     window.__autoScroll.clearEnd = function(){ endReached = false; endReachedAt = 0; };
     window.__autoScroll.recompute = function(){ scroller = null; };
     window.__autoScroll.cloneNow = function(){ if (!scroller) scroller = findScroller(); return cloneOnce(scroller); };
+    window.__autoScroll.setSpeed = function(speed) {
+      if (typeof speed === 'number' && speed > 0) {
+        scrollSpeed = speed;
+        log('setSpeed ->', scrollSpeed);
+      } else {
+        log('setSpeed: invalid speed', speed);
+      }
+    };
+    window.__autoScroll.getSpeed = function(){ return scrollSpeed; };
     window.__autoScroll.status = function(){ return { isScrolling, pref: prefEnabled(), loopMode, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId: !!rafId, watchdog: !!watchdogInterval }; };
     window.__autoScroll.debug = function(){ return { lastActivity, idleDelay, scrollSpeed, isScrolling, pref: prefEnabled(), loopMode, endReached, endReachedAt, autoRestart, autoRestartDelayMs, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId, lastFrameTime, watchdogInterval }; };
 

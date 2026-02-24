@@ -4,8 +4,46 @@
 */
 
 /* Make the page itself non-scrollable so only the guide area scrolls (only on guide page) */
-body.guide-page { height: 100%; overflow: hidden; }
-html { height: 100%; }
+/* #appZoomRoot is the transform-scale target for Display Size; it is a flex column that
+   fills the entire body and takes over the layout role body.guide-page used to have. */
+html, body { height: 100%; }
+body.guide-page { overflow: hidden; }
+
+/* Display Size scaling via transform: scale on #appZoomRoot.
+   Large = 100% (no transform), Medium = 80%, Small = 67%.
+   display-size.js sets transform + width/height compensation on #appZoomRoot.
+   The CSS variable --display-zoom is set as an inline style by display-size.js
+   so JS code (createOrUpdateFixedTimeBar, updateNowLine) can read it via
+   getComputedStyle. The data-display-size attribute is kept for CSS theming hooks. */
+
+/* appZoomRoot: the single scaling wrapper for the entire app UI.
+   position:fixed is essential — it removes the element from normal flow so that
+   body { overflow:hidden } does NOT clip it (fixed elements are clipped only by
+   the viewport, not ancestors).  Without this, body (height=100%=720px) clips
+   #appZoomRoot at 720px BEFORE transform:scale is applied, so only 720×0.8=576px
+   is visible and a 144px blank gap remains at the bottom.  With position:fixed,
+   width/height % values are resolved against the viewport (initial containing block),
+   so width:125%;height:125% = 125vw×125vh = 1600×900px → scale(0.8) → 1280×720px ✓ */
+#appZoomRoot {
+  position: fixed;
+  top: 0;
+  left: 0;
+  transform-origin: top left;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Non-guide pages (Logs, About, Tuner Management, etc.) need their own scroll since they
+   do not have an internal scroll container like .guide-outer.  display-size.js also sets
+   this at runtime, but the CSS rule ensures correct behavior even before that script runs
+   (e.g. when no displaySize preference is stored and the JS early-returns). */
+body:not(.guide-page) #appZoomRoot {
+  overflow-y: auto;
+}
 
 /* Authoritative Header + menus (single source of truth for site) */
 body { font-family: Arial, sans-serif; margin:0; }
@@ -97,7 +135,8 @@ body { font-family: Arial, sans-serif; margin:0; }
 
 /* Submenu (fly-out for Themes) */
 .submenu { position: relative; }
-.submenu > a { display: flex; justify-content: space-between; align-items: center; }
+.submenu > a { display: flex; justify-content: space-between; align-items: center; padding-right: 28px !important; position: relative; }
+.submenu > a::after { content: "▸"; position: absolute; right: 10px; top: 50%; transform: translateY(-50%); }
 .submenu-content {
   display: none;
   position: absolute;
@@ -111,7 +150,7 @@ body { font-family: Arial, sans-serif; margin:0; }
 }
 .submenu-content li a { padding: 10px 14px; display: block; color: #eee; text-decoration: none; }
 .submenu-content li a:hover { background-color: #0af; color: #fff; }
-.submenu:hover .submenu-content { display: block; }
+.submenu:hover > .submenu-content { display: block; }
 
 /* Remove default list bullets and padding for all dropdowns & submenus */
 .dropdown-content,
@@ -123,10 +162,80 @@ body { font-family: Arial, sans-serif; margin:0; }
 .summary { flex:1; }
 #video  { width:620px; height:350px; }
 
+/* === Resize handles === */
+/* Wrapper around #video to host the corner resize handle.
+   inline-block (not inline-flex) keeps the video as a normal replaced element
+   so flex-stretch never fights with explicitly set width/height. */
+.video-wrapper {
+  position: relative;
+  flex-shrink: 0;
+  display: inline-block;
+}
+
+/* Bottom-left corner resize handle – sits OUTSIDE the video so native
+   browser video controls never intercept the mousedown event.
+   The handle's top-right corner is flush with the video's bottom-left corner. */
+.video-corner-handle {
+  position: absolute;
+  bottom: -20px;
+  left: -20px;
+  width: 20px;
+  height: 20px;
+  cursor: sw-resize;
+  z-index: 10;
+  background: transparent;
+  touch-action: none;
+  user-select: none;
+}
+/* Triangular grip: linear-gradient places the 90° corner at the handle's
+   top-right, which is exactly at the video's bottom-left corner.
+   The pseudo-element is smaller than the handle so the triangle is compact
+   while the clickable hit-area remains comfortably large. */
+.video-corner-handle::after {
+  content: '';
+  position: absolute;
+  /* 12×12 triangle tucked into the top-right of the hit zone
+     (= the video's bottom-left corner) */
+  top: 0;
+  right: 0;
+  bottom: 8px;
+  left: 8px;
+  background: linear-gradient(to bottom left,
+    var(--resize-handle-active, #0af) 50%,
+    transparent 50%);
+  opacity: 0.65;
+  transition: opacity 0.15s;
+}
+.video-corner-handle:hover::after,
+.video-corner-handle.dragging::after { opacity: 1; }
+
+/* Vertical drag handle – on the right edge of the channel column header */
+.chan-col-resize-handle {
+  position: absolute;
+  top: 0; right: 0; bottom: 0;
+  width: 5px;
+  cursor: ew-resize;
+  z-index: 20;
+  background: transparent;
+  border-right: 2px solid var(--resize-handle-border, #555);
+  transition: background 0.15s;
+  user-select: none;
+  touch-action: none;
+}
+.chan-col-resize-handle:hover, .chan-col-resize-handle.dragging {
+  background: var(--resize-handle-active, rgba(0,170,255,0.35));
+}
+
 /* === Guide grid === */
-.guide-outer { height: calc(100vh - 420px); overflow-y: auto; padding-bottom: 80px; position: relative; }
+/* flex:1 + min-height:0 provides a reasonable baseline. The guide-outer height is
+   also set explicitly by recomputeGuideHeight() in JS because Chrome resolves
+   body { height: 100% } against the physical viewport, not our zoomed html height —
+   so flex:1 alone would be SMALLER than the viewport at any zoom < 1.
+   box-sizing:border-box so the JS-set height includes padding (paddingTop is set
+   dynamically by createOrUpdateFixedTimeBar; paddingBottom is 80px from this rule). */
+.guide-outer { flex: 1; min-height: 0; overflow-y: auto; padding-bottom: 80px; position: relative; box-sizing: border-box; }
 .guide-row { display:flex; }
-.chan-col { width: 200px; flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
+.chan-col { width: var(--chan-col-width, 200px); flex-shrink:0; border-right:1px solid; position: relative; z-index: 2; background: var(--chan-col-bg, #1a1a1a); }
 
 /* grid-col allows vertical scrolling but we hide visual scrollbars by default */
 .grid-col {
@@ -212,6 +321,7 @@ body { font-family: Arial, sans-serif; margin:0; }
   overflow: hidden;
   background: transparent;
   box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  border-bottom: 1px solid var(--timebar-border, rgba(0,0,0,0.12));
   height: 34px;
   top: 0;
 }
@@ -220,7 +330,7 @@ body { font-family: Arial, sans-serif; margin:0; }
 .time-header-fixed .time-cell {
   display:inline-flex; align-items:center; justify-content:center;
   height:100%; border-right:1px solid var(--timebar-border, #ccc);
-  padding:0 6px; font-weight:600; background: var(--timebar-bg, rgba(255,255,255,0.95));
+  padding:6px 10px; font-weight:600; background: var(--timebar-bg, rgba(255,255,255,0.95));
   color:var(--timebar-color,#000);
 }
 .time-header-fixed .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:1300; pointer-events:none; }

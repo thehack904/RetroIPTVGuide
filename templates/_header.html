@@ -28,7 +28,20 @@
               <a href="{{ url_for('view_logs') }}">Logs</a>
               <li><a href="{{ url_for('about') }}">About</a></li>
               {% endif %}
-              <a href="#" id="toggleAutoScroll">Toggle Auto-Scroll</a>
+              <li class="submenu">
+                <a href="#">Auto-Scroll</a>
+                <ul class="submenu-content">
+                  <li><a href="#" id="toggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
+                  <li class="submenu">
+                    <a href="#">Scroll Speed</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" data-scroll-speed="slow">Slow</a></li>
+                      <li><a href="#" data-scroll-speed="medium">Medium</a></li>
+                      <li><a href="#" data-scroll-speed="fast">Fast</a></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
               <a href="{{ url_for('change_password') }}">Change Password</a>
               <li class="submenu">
                 <a href="#">Themes</a>
@@ -42,6 +55,14 @@
 		  <!-- <li><a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li> -->
                   <li><a href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
                   <li><a href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                </ul>
+              </li>
+              <li class="submenu">
+                <a href="#">Display Size</a>
+                <ul class="submenu-content">
+                  <li><a href="#" data-display-size-selector data-display-size="large">Large</a></li>
+                  <li><a href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
+                  <li><a href="#" data-display-size-selector data-display-size="small">Small</a></li>
                 </ul>
               </li>
           </div>
@@ -109,7 +130,36 @@
           <li role="none"><a role="menuitem" href="{{ url_for('view_logs') }}">Logs</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
           {% endif %}
-          <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Toggle Auto-Scroll</a></li>
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileAutoScrollList"
+              type="button">
+              Auto-Scroll
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileAutoScrollList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileScrollSpeedList"
+                  type="button">
+                  Scroll Speed
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+
+                <ul id="mobileScrollSpeedList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="slow">Slow</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="medium">Medium</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="fast">Fast</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
           <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
 
           <!-- Nested Themes submenu -->
@@ -133,6 +183,24 @@
 	      <!--<li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li> -->
               <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
               <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+            </ul>
+          </li>
+
+          <!-- Nested Display Size submenu -->
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileDisplaySizeList"
+              type="button">
+              Display Size
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileDisplaySizeList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="large">Large</a></li>
+              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
+              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="small">Small</a></li>
             </ul>
           </li>
 

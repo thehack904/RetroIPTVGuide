@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.5.0"
-APP_RELEASE_DATE = "2026-02-15"
+APP_VERSION = "v4.6.0"
+APP_RELEASE_DATE = "2026-02-23"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -59,13 +59,22 @@ def log_event(user, action):
         print(f"Warning: Could not write to log file: {e}", file=sys.stderr)
 
 # ------------------- URL Validation -------------------
-def validate_tuner_url(url, label="Tuner"):
-    """Warn if tuner URL uses DNS that can't be resolved or invalid IP ranges."""
+def validate_tuner_url(url, label="Tuner", check_reachability=False):
+    """Warn if tuner URL uses DNS that can't be resolved or invalid IP ranges.
+    
+    Args:
+        url: URL to validate
+        label: Label for flash messages
+        check_reachability: If True, perform HTTP HEAD request to check if URL is reachable
+    
+    Returns:
+        True if validation passes, False otherwise
+    """
     try:
         host = urlparse(url).hostname
         if not host:
             flash(f"⚠️ {label} URL seems invalid: {url}", "warning")
-            return
+            return False
 
         # If it's an IP, validate private vs public
         try:
@@ -73,7 +82,7 @@ def validate_tuner_url(url, label="Tuner"):
             if ip_obj.is_private:
                 flash(f"ℹ️ {label} is using a private IP ({host})", "info")
             else:
-                flash(f"ℹ️ {label} is using a public IP ({host}). Ensure it’s reachable.", "info")
+                flash(f"ℹ️ {label} is using a public IP ({host}). Ensure it's reachable.", "info")
         except ValueError:
             # Not an IP → must be a hostname
             try:
@@ -85,9 +94,54 @@ def validate_tuner_url(url, label="Tuner"):
                     flash(f"ℹ️ {label} hostname '{host}' resolved to public IP {resolved_ip}.", "info")
             except socket.gaierror:
                 flash(f"⚠️ {label} hostname '{host}' could not be resolved. Consider using IP instead.", "warning")
+                return False
+        
+        # Optionally check reachability
+        # Note: This performs an HTTP request to a user-provided URL.
+        # Security: Only admin users can trigger this, and we validate the hostname above.
+        # However, we block certain sensitive addresses to prevent SSRF attacks.
+        if check_reachability:
+            # Block localhost and link-local addresses for security
+            try:
+                resolved_ip = socket.gethostbyname(host)
+                ip_obj = ipaddress.ip_address(resolved_ip)
+                
+                # Block localhost (127.0.0.0/8), link-local (169.254.0.0/16), and private ranges
+                if ip_obj.is_loopback or ip_obj.is_link_local or ip_obj.is_private:
+                    flash(f"⚠️ {label} reachability check blocked: Cannot check localhost, link-local, or private addresses", "warning")
+                    return False
+            except (socket.gaierror, ValueError):
+                # If we can't resolve, let the request attempt fail naturally
+                pass
+            
+            try:
+                parsed_url = urlparse(url)
+                if parsed_url.scheme not in ('http', 'https'):
+                    flash(f"⚠️ {label} reachability check blocked: Only http/https URLs are supported", "warning")
+                    return False
+                response = requests.head(url, timeout=10, allow_redirects=False)
+                if 200 <= response.status_code < 300:
+                    flash(f"✅ {label} is reachable (HTTP {response.status_code})", "info")
+                    return True
+                else:
+                    flash(f"⚠️ {label} returned HTTP {response.status_code}", "warning")
+                    return False
+            except requests.Timeout:
+                flash(f"⚠️ {label} request timed out (10 seconds)", "warning")
+                return False
+            except requests.ConnectionError:
+                flash(f"⚠️ {label} connection failed", "warning")
+                return False
+            except Exception as e:
+                flash(f"⚠️ {label} reachability check failed: {str(e)}", "warning")
+                return False
+        
+        return True
 
     except Exception as e:
         flash(f"⚠️ Validation error for {label}: {str(e)}", "warning")
+        return False
+
 
 # ------------------- User Model -------------------
 class User(UserMixin):
@@ -197,7 +251,27 @@ def set_current_tuner(name):
         c.execute("UPDATE settings SET value=? WHERE key='current_tuner'", (name,))
         conn.commit()
 
+def _validate_url(url, field_name):
+    """Validate URL format (http/https scheme)."""
+    if not url or not url.strip():
+        raise ValueError(f"{field_name} cannot be empty")
+    
+    url = url.strip()
+    parsed = urlparse(url)
+    
+    if not parsed.scheme or parsed.scheme not in ('http', 'https'):
+        raise ValueError(f"{field_name} must start with http:// or https://")
+    
+    if not parsed.netloc:
+        raise ValueError(f"{field_name} is malformed (missing host)")
+    
+    return url
+
 def update_tuner_urls(name, xml_url, m3u_url):
+    # Validate URLs before updating
+    xml_url = _validate_url(xml_url, "XML URL")
+    m3u_url = _validate_url(m3u_url, "M3U URL")
+    
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
         c.execute("UPDATE tuners SET xml=?, m3u=? WHERE name=?", (xml_url, m3u_url, name))
@@ -205,13 +279,26 @@ def update_tuner_urls(name, xml_url, m3u_url):
 
 def add_tuner(name, xml_url, m3u_url):
     """Insert a new tuner into DB."""
+    # Validate URLs before adding
+    xml_url = _validate_url(xml_url, "XML URL")
+    m3u_url = _validate_url(m3u_url, "M3U URL")
+    
+    # Check for duplicate name
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
-        c.execute(
-            "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
-            (name, xml_url, m3u_url)
-        )
-        conn.commit()
+        c.execute("SELECT name FROM tuners WHERE name=?", (name,))
+        if c.fetchone():
+            raise ValueError(f"Tuner '{name}' already exists")
+        
+        # Insert new tuner
+        try:
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
+                (name, xml_url, m3u_url)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"Database error: {str(e)}")
 
 def delete_tuner(name):
     """Delete a tuner from DB (except current one)."""
@@ -272,8 +359,12 @@ def parse_m3u(m3u_url):
     except:
         return channels
     
+    # Track if we found any #EXTINF entries
+    found_extinf = False
+    
     for i, line in enumerate(lines):
         if line.startswith('#EXTINF:'):
+            found_extinf = True
             info = line.strip()
             name_match = re.search(r',(.+)$', info)
             name = name_match.group(1) if name_match else f'Channel {i}'
@@ -287,6 +378,36 @@ def parse_m3u(m3u_url):
                 url = url.replace('.ts', '.m3u8')
 
             channels.append({'name': name, 'logo': logo, 'url': url, 'tvg_id': tvg_id})
+    
+    # If no #EXTINF entries found, check for single-channel M3U8 (just a URL)
+    if not found_extinf:
+        for line in lines:
+            line = line.strip()
+            # Skip empty lines and comments
+            if not line or line.startswith('#'):
+                continue
+            # Simple protocol check (more lenient than _validate_url for parsing)
+            if line.startswith('http://') or line.startswith('https://'):
+                # Extract a channel name from the URL
+                parsed = urlparse(line)
+                # Get filename from path, or use 'stream' as default
+                path_parts = parsed.path.strip('/').split('/')
+                if path_parts and path_parts[-1]:
+                    filename = path_parts[-1]
+                    # Remove extension for cleaner name
+                    name = re.sub(r'\.(m3u8?|ts)$', '', filename, flags=re.IGNORECASE)
+                else:
+                    name = 'stream'
+                
+                channels.append({
+                    'name': name,
+                    'logo': '',
+                    'url': line,
+                    'tvg_id': name
+                })
+                # Only take the first valid URL for single-channel mode
+                break
+    
     return channels
 
 # ------------------- XMLTV EPG Parsing -------------------
@@ -486,11 +607,11 @@ def change_password():
                           (generate_password_hash(new), current_user.id))
                 conn.commit()
             log_event(current_user.username, "Changed password")
-            flash("Password updated successfully.")
+            flash("Password updated successfully.", "success")
             return redirect(url_for('guide'))
         else:
             log_event(current_user.username, "Failed password change attempt (invalid old password)")
-            flash("Old password incorrect.")
+            flash("Old password incorrect.", "error")
     return render_template("change_password.html", current_tuner=get_current_tuner())
 
 @app.route('/add_user', methods=['GET','POST'])
@@ -510,11 +631,11 @@ def add_user_route():
                           (new_username, generate_password_hash(new_password)))
                 conn.commit()
             log_event(current_user.username, f"Added user {new_username}")
-            flash(f"User {new_username} added successfully.")
+            flash(f"User {new_username} added successfully.", "success")
             return redirect(url_for('guide'))
         except sqlite3.IntegrityError:
             log_event(current_user.username, f"Failed to add user {new_username} (duplicate)")
-            flash("Username already exists.")
+            flash("Username already exists.", "warning")
     return render_template("add_user.html", current_tuner=get_current_tuner())
 
 @app.route('/delete_user', methods=['GET','POST'])
@@ -528,7 +649,7 @@ def delete_user():
         del_username = request.form['username']
         if del_username == 'admin':
             log_event(current_user.username, "Attempted to delete admin user (blocked)")
-            flash("You cannot delete the admin account.")
+            flash("You cannot delete the admin account.", "warning")
             return redirect(url_for('delete_user'))
 
         with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -536,7 +657,7 @@ def delete_user():
             c.execute('DELETE FROM users WHERE username=?', (del_username,))
             conn.commit()
         log_event(current_user.username, f"Deleted user {del_username}")
-        flash(f"User {del_username} deleted (if they existed).")
+        flash(f"User {del_username} deleted (if they existed).", "success")
         return redirect(url_for('guide'))
 
     with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -558,7 +679,7 @@ def manage_users():
     if current_user.username != 'admin' or is_tv:
         # Log unauthorized or TV-based attempt
         log_event(current_user.username, f"Unauthorized attempt to access /manage_users from UA: {ua}")
-        flash("Unauthorized access.")
+        flash("Unauthorized access.", "warning")
         return redirect(url_for('guide'))
 
     # ---- Normal admin logic below ----
@@ -574,7 +695,7 @@ def manage_users():
 
         if action == 'add':
             if not username or not password:
-                flash("Please provide both username and password.")
+                flash("Please provide both username and password.", "warning")
             else:
                 try:
                     with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -583,25 +704,25 @@ def manage_users():
                                   (username, generate_password_hash(password)))
                         conn.commit()
                     log_event(current_user.username, f"Added user {username}")
-                    flash(f"✅ User '{username}' added successfully.")
+                    flash(f"✅ User '{username}' added successfully.", "success")
                 except sqlite3.IntegrityError:
-                    flash("⚠️ Username already exists.")
+                    flash("⚠️ Username already exists.", "warning")
 
         elif action == 'delete':
             if username == 'admin':
-                flash("❌ Cannot delete the admin account.")
+                flash("❌ Cannot delete the admin account.", "error")
             else:
                 with sqlite3.connect(DATABASE, timeout=10) as conn:
                     c = conn.cursor()
                     c.execute('DELETE FROM users WHERE username=?', (username,))
                     conn.commit()
                 log_event(current_user.username, f"Deleted user {username}")
-                flash(f"🗑 Deleted user '{username}'.")
+                flash(f"🗑 Deleted user '{username}'.", "success")
 
         elif action == 'signout':
             revoke_user_sessions(username)
             log_event(current_user.username, f"Revoked sessions for {username}")
-            flash(f"🚪 Signed out all active logins for '{username}'.")
+            flash(f"🚪 Signed out all active logins for '{username}'.", "success")
 
         return redirect(url_for('manage_users'))
 
@@ -694,7 +815,7 @@ def change_tuner():
             new_tuner = request.form["tuner"]
             set_current_tuner(new_tuner)
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
-            flash(f"Active tuner switched to {new_tuner}")
+            flash(f"Active tuner switched to {new_tuner}", "success")
 
             # ✅ Refresh cached guide data immediately
             global cached_channels, cached_epg
@@ -711,16 +832,20 @@ def change_tuner():
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
 
-            # update DB
-            update_tuner_urls(tuner, xml_url, m3u_url)
-            log_event(current_user.username, f"Updated URLs for tuner {tuner}")
-            flash(f"Updated URLs for tuner {tuner}")
+            # update DB with validation
+            try:
+                update_tuner_urls(tuner, xml_url, m3u_url)
+                log_event(current_user.username, f"Updated URLs for tuner {tuner}")
+                flash(f"Updated URLs for tuner {tuner}", "success")
 
-            # ✅ Validate inputs
-            if xml_url:
-                validate_tuner_url(xml_url, label=f"{tuner} XML")
-            if m3u_url:
-                validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+                # ✅ Validate inputs (DNS/reachability check)
+                if xml_url:
+                    validate_tuner_url(xml_url, label=f"{tuner} XML")
+                if m3u_url:
+                    validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+            except ValueError as e:
+                flash(f"URL validation failed: {str(e)}", "warning")
+                logging.warning(f"URL validation failed for tuner {tuner}: {e}")
 
         elif action == "delete_tuner":
             tuner = request.form["tuner"]
@@ -730,7 +855,7 @@ def change_tuner():
             else:
                 delete_tuner(tuner)
                 log_event(current_user.username, f"Deleted tuner {tuner}")
-                flash(f"Tuner {tuner} deleted.")
+                flash(f"Tuner {tuner} deleted.", "success")
 
         elif action == "rename_tuner":
             old_name = request.form["tuner"]   # matches HTML <select name="tuner">
@@ -740,21 +865,48 @@ def change_tuner():
             else:
                 rename_tuner(old_name, new_name)
                 log_event(current_user.username, f"Renamed tuner {old_name} → {new_name}")
-                flash(f"Tuner {old_name} renamed to {new_name}")
+                flash(f"Tuner {old_name} renamed to {new_name}", "success")
 
         elif action == "add_tuner":
             name = request.form["tuner_name"].strip()
-            xml_url = request.form["xml_url"].strip()
-            m3u_url = request.form["m3u_url"].strip()
-
+            tuner_mode = request.form.get("tuner_mode", "standard")
+            
             if not name:
                 flash("Tuner name cannot be empty.", "warning")
-            elif name in get_tuners():
-                flash(f"Tuner {name} already exists.", "warning")
             else:
-                add_tuner(name, xml_url, m3u_url)
-                log_event(current_user.username, f"Added tuner {name}")
-                flash(f"Tuner {name} added successfully.")
+                try:
+                    if tuner_mode == "single_stream":
+                        # Single stream mode: use M3U8 stream URL for both XML and M3U
+                        m3u8_stream_url = request.form.get("m3u8_stream_url", "").strip()
+                        if not m3u8_stream_url:
+                            flash("M3U8 Stream URL is required for single stream mode.", "warning")
+                        else:
+                            # For single stream mode, we use the same URL for both fields
+                            # This allows the existing infrastructure to work without major changes
+                            add_tuner(name, m3u8_stream_url, m3u8_stream_url)
+                            log_event(current_user.username, f"Added single-stream tuner {name}")
+                            flash(f"Single-stream tuner {name} added successfully.", "success")
+                            
+                            # Validate URL (DNS/reachability check) after successful add
+                            validate_tuner_url(m3u8_stream_url, label=f"{name} M3U8")
+                    else:
+                        # Standard mode: require both XML and M3U URLs
+                        xml_url = request.form.get("xml_url", "").strip()
+                        m3u_url = request.form.get("m3u_url", "").strip()
+                        
+                        if not xml_url or not m3u_url:
+                            flash("Both XML URL and M3U URL are required for standard mode.", "warning")
+                        else:
+                            add_tuner(name, xml_url, m3u_url)
+                            log_event(current_user.username, f"Added tuner {name}")
+                            flash(f"Tuner {name} added successfully.", "success")
+                            
+                            # Validate URLs (DNS/reachability check) after successful add
+                            validate_tuner_url(xml_url, label=f"{name} XML")
+                            validate_tuner_url(m3u_url, label=f"{name} M3U")
+                except ValueError as e:
+                    flash(f"Failed to add tuner: {str(e)}", "warning")
+                    logging.warning(f"Failed to add tuner {name}: {e}")
 
         elif action == "update_auto_refresh":
             # Expect form fields: auto_refresh_enabled ('0' or '1') and auto_refresh_interval_hours (2/4/6/12/24)
@@ -1426,12 +1578,12 @@ def view_logs():
 @login_required
 def clear_logs():
     if current_user.username != 'admin':
-        flash("Unauthorized access.")
+        flash("Unauthorized access.", "warning")
         return redirect(url_for('view_logs'))
 
     open(LOG_PATH, "w").close()  # clear the file
     log_event("admin", "Cleared log file")
-    flash("🧹 Logs cleared successfully.")
+    flash("🧹 Logs cleared successfully.", "success")
     return redirect(url_for('view_logs'))
 
 

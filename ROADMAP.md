@@ -4,15 +4,16 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.5.0 (2026-02-15)**
+# Current Version: **v4.6.0 (2026-02-23)**
 
 ## 🔮 Feature Upgrades
 
 ### 1. Tuner Management
 - [x] Add ability to **add/remove tuners** from the UI (v2.3.0).  
 - [x] Add ability to rename tuners via the UI (v2.3.0).  
-- [ ] Support for **.m3u8 single-channel playlists** as tuner sources.  
-- [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).  
+- [x] Support for **.m3u8 single-channel playlists** as tuner sources. *(v4.6.0)*
+- [x] Validate tuner URLs (ping/check format before saving) (v2.0.0).
+- [x] Duplicate tuner name prevention in `add_tuner()`. *(v4.6.0)*  
 - [x] Optional auto-refresh of tuner lineup on a schedule. *(v4.3.0)*  
 - [ ] Add per-user tuner assignment and default tuner preferences.  
 - [ ] Introduce combined tuner builder (custom tuner aggregation).  
@@ -32,6 +33,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ### 3. Guide & Playback
 - [x] Auto-Scroll feature added for the Live Guide (v4.1.0).  
 - [x] Improved auto-scroll performance and modular handling (v4.2.0).  
+- [x] Auto-Scroll Settings flyout menu with Enable/Disable toggle and Slow/Medium/Fast speed sub-flyout. *(v4.6.0)*  
 - [x] Added responsive layout for mobile devices (v4.2.0).  
 - [ ] Add search/filter box to guide.  
 - [ ] Add ability to set favorites.  
@@ -64,6 +66,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Added new mobile-specific CSS and JS (v4.3.0).  
 - [x] Added new templates: change_tuner.html, manage_users.html, logs.html. (v4.3.0)  
 - [x] Fixed scrolling on About, Logs, Tuner Management, and Manage Users pages. *(v4.5.0)*
+- [x] Display size setting (Large/Medium/Small) for all themes via transform scale. *(v4.6.0)*
+- [x] Fire TV / Android TV DPAD remote navigation + TV-mode proportional UI scaling. *(v4.6.0)*
+- [x] Video player aspect-ratio-locked resize handle. *(v4.6.0)*
+- [x] Fixed time bar style normalized across all themes. *(v4.6.0)*
 
 ---
 

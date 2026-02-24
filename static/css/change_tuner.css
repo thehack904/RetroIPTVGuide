@@ -299,3 +299,293 @@ body.directv .container-change-tuner .page-header .lead {
 .container-change-tuner * {
   transition: background-color .12s ease, color .12s ease, border-color .12s ease !important;
 }
+
+/* ====================================================================== */
+/* Flash Messages                                                          */
+/* ====================================================================== */
+.flash-messages-container {
+  margin-bottom: 18px;
+}
+
+.flash-message {
+  position: sticky;
+  top: 20px;
+  z-index: 1000;
+  padding: 12px 40px 12px 20px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  opacity: 1;
+  transition: opacity 0.5s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.flash-message.fade-out {
+  opacity: 0;
+}
+
+.flash-content {
+  flex: 1;
+  margin-right: 10px;
+}
+
+.flash-close {
+  background: transparent;
+  border: none;
+  color: inherit;
+  font-size: 24px;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  opacity: 0.7;
+  transition: opacity 0.2s ease;
+}
+
+.flash-close:hover {
+  opacity: 1;
+}
+
+/* Flash message types */
+.flash-message.flash-success,
+.flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  color: rgb(34, 197, 94);
+}
+
+.flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: rgb(251, 191, 36);
+}
+
+.flash-message.flash-error,
+.flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  color: rgb(239, 68, 68);
+}
+
+.flash-message.flash-info {
+  background: rgba(59, 130, 246, 0.15);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: rgb(59, 130, 246);
+}
+
+/* Light theme adjustments */
+body.light .flash-message.flash-success,
+body.light .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.1);
+  color: rgb(22, 163, 74);
+}
+
+body.light .flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: rgb(217, 119, 6);
+}
+
+body.light .flash-message.flash-error,
+body.light .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: rgb(220, 38, 38);
+}
+
+body.light .flash-message.flash-info {
+  background: rgba(59, 130, 246, 0.1);
+  color: rgb(37, 99, 235);
+}
+
+/* Dark theme adjustments - High contrast on dark background */
+body.dark .flash-message.flash-success,
+body.dark .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.2);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: rgb(74, 222, 128);
+}
+
+body.dark .flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.2);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  color: rgb(253, 224, 71);
+}
+
+body.dark .flash-message.flash-error,
+body.dark .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: rgb(252, 165, 165);
+}
+
+body.dark .flash-message.flash-info {
+  background: rgba(59, 130, 246, 0.2);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  color: rgb(147, 197, 253);
+}
+
+/* RetroIPTV theme adjustments - Match warm retro palette */
+body.retroiptv .flash-message.flash-success,
+body.retroiptv .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.12);
+  border: 2px solid rgba(34, 197, 94, 0.5);
+  color: #48494a;
+}
+
+body.retroiptv .flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.12);
+  border: 2px solid rgba(251, 191, 36, 0.5);
+  color: #48494a;
+}
+
+body.retroiptv .flash-message.flash-error,
+body.retroiptv .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.12);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  color: #48494a;
+}
+
+body.retroiptv .flash-message.flash-info {
+  background: rgba(63, 183, 176, 0.12);
+  border: 2px solid rgba(63, 183, 176, 0.5);
+  color: #48494a;
+}
+
+/* Retro Magazine theme adjustments - Black text on white background theme */
+body.retro-magazine .flash-message.flash-success,
+body.retro-magazine .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.15);
+  border: 2px solid rgba(34, 197, 94, 0.6);
+  color: #48494a;
+}
+
+body.retro-magazine .flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.15);
+  border: 2px solid rgba(251, 191, 36, 0.6);
+  color: #48494a;
+}
+
+body.retro-magazine .flash-message.flash-error,
+body.retro-magazine .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid rgba(239, 68, 68, 0.6);
+  color: #48494a;
+}
+
+body.retro-magazine .flash-message.flash-info {
+  background: rgba(59, 130, 246, 0.15);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  color: #48494a;
+}
+
+/* DirecTV theme adjustments - Match blue corporate palette */
+body.directv .flash-message.flash-success,
+body.directv .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.2);
+  border: 2px solid rgba(34, 197, 94, 0.5);
+  color: rgb(74, 222, 128);
+}
+
+body.directv .flash-message.flash-warning {
+  background: rgba(255, 204, 0, 0.2);
+  border: 2px solid rgba(255, 204, 0, 0.5);
+  color: rgb(255, 215, 0);
+}
+
+body.directv .flash-message.flash-error,
+body.directv .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.2);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  color: rgb(252, 165, 165);
+}
+
+body.directv .flash-message.flash-info {
+  background: rgba(176, 220, 255, 0.2);
+  border: 2px solid rgba(176, 220, 255, 0.5);
+  color: rgb(216, 235, 255);
+}
+
+/* Comcast theme adjustments - Match blue/navy palette */
+body.comcast .flash-message.flash-success,
+body.comcast .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.2);
+  border: 2px solid rgba(34, 197, 94, 0.5);
+  color: rgb(74, 222, 128);
+}
+
+body.comcast .flash-message.flash-warning {
+  background: rgba(255, 204, 0, 0.2);
+  border: 2px solid rgba(255, 204, 0, 0.5);
+  color: rgb(255, 224, 102);
+}
+
+body.comcast .flash-message.flash-error,
+body.comcast .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.2);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  color: rgb(252, 165, 165);
+}
+
+body.comcast .flash-message.flash-info {
+  background: rgba(188, 216, 255, 0.2);
+  border: 2px solid rgba(188, 216, 255, 0.5);
+  color: rgb(188, 216, 255);
+}
+
+/* Retro AOL theme adjustments - Match teal/cyan and yellow palette */
+body.retro-aol .flash-message.flash-success,
+body.retro-aol .flash-message.flash-default {
+  background: rgba(51, 204, 204, 0.2);
+  border: 2px solid rgba(51, 204, 204, 0.5);
+  color: rgb(102, 255, 255);
+}
+
+body.retro-aol .flash-message.flash-warning {
+  background: rgba(255, 204, 1, 0.2);
+  border: 2px solid rgba(255, 204, 1, 0.5);
+  color: rgb(255, 221, 85);
+}
+
+body.retro-aol .flash-message.flash-error,
+body.retro-aol .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.2);
+  border: 2px solid rgba(239, 68, 68, 0.5);
+  color: rgb(252, 165, 165);
+}
+
+body.retro-aol .flash-message.flash-info {
+  background: rgba(102, 204, 255, 0.2);
+  border: 2px solid rgba(102, 204, 255, 0.5);
+  color: rgb(153, 238, 255);
+}
+
+/* TV Guide 1990 theme adjustments - Black/white newspaper style */
+body.tvguide1990 .flash-message.flash-success,
+body.tvguide1990 .flash-message.flash-default {
+  background: rgba(34, 197, 94, 0.15);
+  border: 2px solid rgba(34, 197, 94, 0.6);
+  color: rgb(21, 128, 61);
+}
+
+body.tvguide1990 .flash-message.flash-warning {
+  background: rgba(251, 191, 36, 0.15);
+  border: 2px solid rgba(251, 191, 36, 0.6);
+  color: rgb(146, 64, 14);
+}
+
+body.tvguide1990 .flash-message.flash-error,
+body.tvguide1990 .flash-message.flash-danger {
+  background: rgba(239, 68, 68, 0.15);
+  border: 2px solid rgba(239, 68, 68, 0.6);
+  color: rgb(153, 27, 27);
+}
+
+body.tvguide1990 .flash-message.flash-info {
+  background: rgba(59, 130, 246, 0.15);
+  border: 2px solid rgba(59, 130, 246, 0.6);
+  color: rgb(29, 78, 216);
+}
