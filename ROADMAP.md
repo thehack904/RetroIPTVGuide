@@ -122,9 +122,9 @@ These are **not yet implemented**, partially implemented, or completed in previo
 
 ## User Submitted Enhancements
 - [ ] Casting Support (Chromecast)
-- [ ] Resize Pop Out Video
-- [ ] Resize video on page
+- [x] Resize Pop Out Video *(v4.6.0)*
+- [x] Resize video on page *(v4.6.0)*
 - [ ] Auto load Channel from Guide / Hidden Channel / Sizzle Reels
-- [ ] Adjustable scrolling speed of the Guide
+- [x] Adjustable scrolling speed of the Guide *(v4.6.0)*
 - [ ] Output IPTV stream from built guide for re-broadcast as a channel
 - [x] Unraid Template - in *BETA*
