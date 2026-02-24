@@ -325,13 +325,25 @@ function createOrUpdateFixedTimeBar(){
     fixedBar.style.left = '0px';
     fixedBar.style.width = Math.ceil(window.innerWidth / getDisplayZoom()) + 'px';
 
+    // On mobile, #appZoomRoot is position:relative + transform:scale(s), so
+    // position:fixed children behave like position:absolute within appZoomRoot.
+    // The CSS top must compensate for window.scrollY so the bar stays in view:
+    //   top_css = (scrollY + desired_visual_y) / scale
+    // On desktop, appZoomRoot is position:fixed so position:fixed children are
+    // truly viewport-anchored and no scroll compensation is needed.
+    const isMobileZoom = window.innerWidth <= 900 && getDisplayZoom() < 1;
+    const scrollOff = isMobileZoom ? (window.scrollY || 0) : 0;
+
     if (playerRow) {
         const rect = playerRow.getBoundingClientRect();
-        fixedBar.style.top = Math.ceil(rect.bottom / getDisplayZoom()) + 'px';
+        // Clamp to 0: when player scrolls off the top, anchor timebar to viewport top.
+        const visualY = isMobileZoom ? Math.max(0, rect.bottom) : rect.bottom;
+        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
     } else {
         const header = document.querySelector('.header');
         const headerRect = header ? header.getBoundingClientRect() : { bottom: 40 };
-        fixedBar.style.top = Math.ceil(headerRect.bottom / getDisplayZoom()) + 'px';
+        const visualY = isMobileZoom ? Math.max(0, headerRect.bottom) : headerRect.bottom;
+        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
     }
 
     requestAnimationFrame(() => {
