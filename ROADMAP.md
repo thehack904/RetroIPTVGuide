@@ -83,9 +83,9 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ---
 
 ### 7. New Features
+- [ ] Begin integration path for PlutoTV / external IPTV services.  
 - [-] Add auto-play stream on login. *(partial JS scaffolding in tuner-settings.js)*  
 - [-] Default auto-play source selection. *(partial JS only, not wired to UI)*  
-- [ ] Begin integration path for PlutoTV / external IPTV services.  
 
 ---
 
