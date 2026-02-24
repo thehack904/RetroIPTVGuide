@@ -45,7 +45,9 @@
       root.style.position = 'fixed';
       root.style.top = '0';
       root.style.left = '0';
-      root.style.overflow = 'hidden';
+      // Guide page uses its own internal scroll container (.guide-outer); all other pages
+      // (Logs, About, Tuner Management, etc.) need the zoom root itself to be scrollable.
+      root.style.overflow = document.body.classList.contains('guide-page') ? 'hidden' : 'auto';
       root.style.transformOrigin = 'top left';
 
       var vp = getViewportSize();
