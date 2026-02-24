@@ -5,7 +5,18 @@
 */
 
 @media (max-width: 900px) {
-  /* Re-enable page scrolling on mobile so users can reach the guide and channels */
+  /* Re-enable page scrolling on mobile so users can reach the guide and channels.
+     #appZoomRoot is position:fixed + overflow:hidden on desktop so the internal
+     .guide-outer can scroll.  On mobile we want the *page* to scroll instead, so
+     we reset the wrapper to normal flow and let html/body scroll. */
+  #appZoomRoot {
+    position: relative !important;
+    width: 100% !important; /* fixed→relative changes width resolution; keep full-width explicitly */
+    height: auto !important;
+    overflow: visible !important;
+    transform: none !important;
+  }
+
   html, body {
     height: auto !important;
     min-height: 100% !important;
