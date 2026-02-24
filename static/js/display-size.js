@@ -41,27 +41,46 @@
   function applyUiZoom(scale) {
     var root = document.getElementById('appZoomRoot');
     if (root) {
-      // Enforce fixed wrapper so body/percent sizing cannot clip the scaled UI
-      root.style.position = 'fixed';
-      root.style.top = '0';
-      root.style.left = '0';
-      // Guide page uses its own internal scroll container (.guide-outer); all other pages
-      // (Logs, About, Tuner Management, etc.) need the zoom root itself to be scrollable.
-      root.style.overflow = document.body.classList.contains('guide-page') ? 'hidden' : 'auto';
+      var isMobile = window.innerWidth <= 900;
+      var vp = getViewportSize();
       root.style.transformOrigin = 'top left';
 
-      var vp = getViewportSize();
-
-      if (scale < 1) {
-        // Explicit px avoids 100%/vh resolution quirks when overflow:hidden is involved
-        root.style.transform = 'scale(' + scale + ')';
-        root.style.width = Math.ceil(vp.w / scale) + 'px';
-        root.style.height = Math.ceil(vp.h / scale) + 'px';
+      if (isMobile) {
+        // On mobile, normal document flow (position:relative, overflow:visible) is set
+        // by mobile-scroll-fix.css so the page can scroll.  We only set the transform
+        // and compensating width here so Display Size (Medium/Small) still works.
+        root.style.position = 'relative';
+        root.style.top = '';
+        root.style.left = '';
+        root.style.overflow = 'visible';
+        if (scale < 1) {
+          root.style.transform = 'scale(' + scale + ')';
+          root.style.width = Math.ceil(vp.w / scale) + 'px';
+          root.style.height = 'auto'; // let content height flow naturally for page scroll
+        } else {
+          root.style.transform = '';
+          root.style.width = '100%';
+          root.style.height = 'auto';
+        }
       } else {
-        root.style.transform = '';
-        // Fixed + 100% resolves to the viewport
-        root.style.width = '100%';
-        root.style.height = '100%';
+        // Desktop: fixed wrapper so body/percent sizing cannot clip the scaled UI.
+        root.style.position = 'fixed';
+        root.style.top = '0';
+        root.style.left = '0';
+        // Guide page uses its own internal scroll container (.guide-outer); all other pages
+        // (Logs, About, Tuner Management, etc.) need the zoom root itself to be scrollable.
+        root.style.overflow = document.body.classList.contains('guide-page') ? 'hidden' : 'auto';
+        if (scale < 1) {
+          // Explicit px avoids 100%/vh resolution quirks when overflow:hidden is involved
+          root.style.transform = 'scale(' + scale + ')';
+          root.style.width = Math.ceil(vp.w / scale) + 'px';
+          root.style.height = Math.ceil(vp.h / scale) + 'px';
+        } else {
+          root.style.transform = '';
+          // Fixed + 100% resolves to the viewport
+          root.style.width = '100%';
+          root.style.height = '100%';
+        }
       }
     }
     // Keep --display-zoom in sync so CSS/JS consumers always read the right value
@@ -113,10 +132,11 @@
   }, false);
 
   // Re-apply on real viewport resize (orientation change, window resize) so the
-  // compensating width/height stays correct.
+  // compensating width/height stays correct, and so mobile↔desktop strategy
+  // switches correctly when the viewport crosses the 900px breakpoint.
   window.addEventListener('resize', function () {
     try {
-      if (_scale < 1) applyUiZoom(_scale);
+      applyUiZoom(_scale);
     } catch (e) { /* ignore */ }
   });
 
