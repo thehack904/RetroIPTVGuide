@@ -22,13 +22,7 @@ import subprocess
 from datetime import datetime, timezone, timedelta
 import threading
 
-# New import: vlc control helper (optional - keep existing integration compatibility)
-try:
-    import vlc_control
-except Exception as e:
-    vlc_control = None
-    # Log the import failure so we can see why it failed when the app starts
-    logging.exception("Failed to import vlc_control: %s", e)
+
 
 APP_START_TIME = datetime.now()
 
@@ -547,14 +541,10 @@ def login():
 @app.route('/_debug/vlcinfo', methods=['GET'])
 def _debug_vlcinfo():
     """
-    Debug helper: returns last launch args and running vlc/cvlc processes.
+    Debug helper: returns running vlc/cvlc processes.
     This is safe to keep but can be removed once debugging is done.
     """
     info = {}
-    try:
-        info['last_launch'] = vlc_control.last_launch_info() if vlc_control else None
-    except Exception as e:
-        info['last_launch_error'] = str(e)
     try:
         # list vlc/cvlc processes (ps output)
         out = subprocess.check_output(['ps','-o','pid,cmd','-C','cvlc','-C','vlc'], stderr=subprocess.DEVNULL).decode(errors='ignore')
@@ -1048,13 +1038,15 @@ def crt():
     return render_template('crt.html')
 
 # ------------------- New playback/control API endpoints (VLC/mpv wrapper usage) -------------------
-# NOTE: these new endpoints complement your existing vlc_control-backed endpoints.
+# NOTE: these new endpoints use shell scripts for VLC control.
 # remote.html will call these endpoints to invoke the root-owned helper scripts via sudo.
 
 PLAY_SCRIPT = "/usr/local/bin/vlc-play.sh"
 STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
+VOLUME_SCRIPT = "/usr/local/bin/vlc-volume.sh"
 LOG_FILE = "/var/log/vlc-play.log"
 INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
+MAX_VOLUME = 512  # VLC volume range: 0-512
 
 def is_valid_stream_url(url: str) -> bool:
     try:
@@ -1203,6 +1195,103 @@ def api_stop_stream():
         logging.exception("Unexpected error in api_stop_stream: %s", e)
         return jsonify({"ok": False, "error": "unexpected server error", "trace": str(e)}), 500
 
+@app.route('/api/volume/<int:value>', methods=['POST'])
+@login_required
+def api_set_volume(value):
+    """
+    Set volume using the helper script.
+    Expects volume value in URL path (0-512 range).
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Clamp volume to reasonable range (0-MAX_VOLUME is VLC's range)
+        v = max(0, min(MAX_VOLUME, int(value)))
+        
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "set", str(v)]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, f"Set volume to {v}")
+            return jsonify({"ok": True, "volume": v, "message": "volume set"})
+        except subprocess.CalledProcessError as e:
+            logging.error("volume set failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.error("volume set timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_set_volume")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/volume_up', methods=['POST'])
+@login_required
+def api_volume_up():
+    """
+    Increase volume using the helper script.
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "up"]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, "Volume up")
+            return jsonify({"ok": True, "message": "volume increased"})
+        except subprocess.CalledProcessError as e:
+            logging.error("volume up failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.error("volume up timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_volume_up")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@app.route('/api/volume_down', methods=['POST'])
+@login_required
+def api_volume_down():
+    """
+    Decrease volume using the helper script.
+    The actual volume control is handled by the vlc-volume.sh script if installed.
+    """
+    try:
+        # Check if volume script exists
+        if not os.path.exists(VOLUME_SCRIPT):
+            return jsonify({
+                "ok": False,
+                "error": "Volume control not available - vlc-volume.sh script not installed"
+            }), 501  # Not Implemented
+        
+        cmd = ["sudo", VOLUME_SCRIPT, "down"]
+        try:
+            subprocess.check_call(cmd, timeout=5)
+            log_event(current_user.username, "Volume down")
+            return jsonify({"ok": True, "message": "volume decreased"})
+        except subprocess.CalledProcessError as e:
+            logging.error("volume down failed: %s", e)
+            return jsonify({"ok": False, "error": f"volume control failed: {e}"}), 500
+        except subprocess.TimeoutExpired:
+            logging.error("volume down timed out")
+            return jsonify({"ok": False, "error": "volume control timed out"}), 500
+            
+    except Exception as e:
+        logging.exception("Unexpected error in api_volume_down")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
 @app.route('/api/tail_logs', methods=['GET'])
 @login_required
 def api_tail_logs():
@@ -1221,8 +1310,7 @@ def api_tail_logs():
         logging.exception("tail_logs failed: %s", e)
         return jsonify({"ok": False, "error": str(e), "lines": []}), 500
 
-# ------------------- Existing vlc_control-backed endpoints kept below -------------------
-# (Your previous /api/play, /api/stop, /api/next, etc. are preserved.)
+# ------------------- Existing API endpoints -------------------
 @app.route('/api/channels', methods=['GET'])
 @login_required
 def api_channels():
@@ -1242,186 +1330,6 @@ def api_channels():
             'source': ch.get('source')
         })
     return jsonify({'channels': out, 'timestamp': datetime.now(timezone.utc).isoformat()})
-
-@app.route('/api/play', methods=['POST'])
-@login_required
-def api_play():
-    """
-    Start playback. Accepts JSON or form data with:
-      - url: direct stream URL
-      - tvg_id: channel id (will be resolved using cached_channels)
-      - playlist_index: integer index into the current tuner M3U (0-based)
-      - volume: optional 0-512 default volume for this session
-    """
-    global CURRENTLY_PLAYING
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-
-    data = request.get_json(silent=True) or request.form or {}
-    url = data.get('url')
-    tvg_id = data.get('tvg_id')
-    playlist_index = data.get('playlist_index')
-    try:
-        # Playlist mode: launch current tuner's M3U and start at specified index
-        if playlist_index is not None and playlist_index != "":
-            try:
-                playlist_index = int(playlist_index)
-            except:
-                return jsonify({'error': 'playlist_index must be an integer'}), 400
-            tuners = get_tuners()
-            current = get_current_tuner()
-            if not current or current not in tuners:
-                return jsonify({'error': 'No active tuner configured'}), 400
-            playlist_path = tuners[current]['m3u']
-            vlc_control.stop_player()
-            vlc_control.start_player(playlist_path, volume=vlc_control.VLC_VOLUME_DEFAULT, playlist_mode=True, playlist_start=playlist_index)
-            CURRENTLY_PLAYING = f"playlist:{playlist_path}@{playlist_index}"
-            log_event(current_user.username, f"Started playlist {playlist_path} index {playlist_index}")
-            return jsonify({'status': 'playing', 'mode': 'playlist', 'playlist': playlist_path, 'index': playlist_index})
-
-        # Resolve tvg_id -> url if needed
-        if tvg_id and not url:
-            target = None
-            for ch in cached_channels:
-                if ch.get('tvg_id') == tvg_id:
-                    target = ch.get('url')
-                    break
-            if not target:
-                return jsonify({'error': f'Unknown tvg_id: {tvg_id}'}), 404
-            url = target
-
-        if not url:
-            return jsonify({'error': 'Missing url/tvg_id/playlist_index'}), 400
-
-        volume = data.get('volume', getattr(vlc_control, 'VLC_VOLUME_DEFAULT', 320))
-        try:
-            vol_int = int(volume)
-        except:
-            vol_int = getattr(vlc_control, 'VLC_VOLUME_DEFAULT', 320)
-
-        vlc_control.stop_player()
-        vlc_control.start_player(url, volume=vol_int, playlist_mode=False)
-        CURRENTLY_PLAYING = url
-        log_event(current_user.username, f"Started playback of {url}")
-        return jsonify({'status': 'playing', 'url': url, 'volume': vol_int})
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/stop', methods=['POST'])
-@login_required
-def api_stop():
-    global CURRENTLY_PLAYING
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        vlc_control.stop_player()
-        CURRENTLY_PLAYING = None
-        log_event(current_user.username, "Stopped playback")
-        return jsonify({'status': 'stopped'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/next', methods=['POST'])
-@login_required
-def api_next():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.next_track()
-        log_event(current_user.username, "Sent VLC next")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/prev', methods=['POST'])
-@login_required
-def api_prev():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.prev_track()
-        log_event(current_user.username, "Sent VLC prev")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/status', methods=['GET'])
-@login_required
-def api_status():
-    """
-    Returns simple server-side status and VLC RC raw status.
-    Added: current_tvg_id and current_channel_url when resolvable so clients
-    can immediately identify the playing channel without probing.
-    """
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        raw = vlc_control.get_status()
-        lower = raw.lower() if isinstance(raw, str) else ""
-        state = "unknown"
-        if "state: playing" in lower or "state: play" in lower:
-            state = "playing"
-        elif "state: paused" in lower:
-            state = "paused"
-        elif "state: stopped" in lower:
-            state = "stopped"
-
-        # Attempt to resolve the currently playing tvg_id and channel url.
-        current_tvg_id = None
-        current_channel_url = None
-
-        # CURRENTLY_PLAYING may be a URL, an instance id, or other token.
-        # Try to match it against cached_channels first by url, then tvg_id.
-        try:
-            if CURRENTLY_PLAYING:
-                candidate = str(CURRENTLY_PLAYING)
-                for ch in cached_channels:
-                    if not ch:
-                        continue
-                    ch_url = ch.get('url') or ''
-                    ch_tvg = ch.get('tvg_id') or ''
-                    # exact URL match
-                    if ch_url and ch_url == candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-                    # URL substring (helper may include args)
-                    if ch_url and candidate and ch_url in candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-                    # tvg_id equality
-                    if ch_tvg and ch_tvg == candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-        except Exception:
-            current_tvg_id = None
-            current_channel_url = None
-
-        # Fallback: attempt to match a globally stored lastInstanceId to channel tvg_id
-        try:
-            last_inst = globals().get('lastInstanceId', None)
-            if not current_tvg_id and last_inst:
-                for ch in cached_channels:
-                    if ch.get('tvg_id') == last_inst:
-                        current_tvg_id = last_inst
-                        current_channel_url = ch.get('url')
-                        break
-        except Exception:
-            pass
-
-        return jsonify({
-            'now_playing': CURRENTLY_PLAYING,
-            'current_tvg_id': current_tvg_id,
-            'current_channel_url': current_channel_url,
-            'vlc_state': state,
-            'raw_status': raw
-        })
-    except Exception as e:
-        logging.exception("api_status error: %s", e)
-        return jsonify({'error': str(e)}), 500
 
 # ------------------- ADDED ROUTE: current_program -------------------
 @app.route('/api/current_program', methods=['GET'])
@@ -1499,43 +1407,6 @@ def api_current_program():
         logging.exception("api_current_program error: %s", e)
         return jsonify({"ok": False, "error": str(e)}), 500
 # ------------------- END ADDED ROUTE -------------------
-
-@app.route('/api/volume/<int:value>', methods=['POST'])
-@login_required
-def api_set_volume(value):
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        v = max(0, min(512, int(value)))
-        resp = vlc_control.set_volume(v)
-        log_event(current_user.username, f"Set volume {v}")
-        return jsonify({'status': 'ok', 'volume': v, 'resp': resp})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/volume_up', methods=['POST'])
-@login_required
-def api_volume_up():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.vol_up(32)
-        log_event(current_user.username, "Volume up")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/volume_down', methods=['POST'])
-@login_required
-def api_volume_down():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.vol_down(32)
-        log_event(current_user.username, "Volume down")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
 
 @app.route('/logs', methods=['GET'], endpoint='view_logs')
 @login_required
