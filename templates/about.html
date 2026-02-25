@@ -86,6 +86,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const setColor = (el, ok, stale=false) => {
                 if (!el) return;
+                if (ok === null || ok === undefined) {
+                    el.style.color = "gray";
+                    el.textContent = "● N/A";
+                    return;
+                }
                 el.style.color = ok ? (stale ? "gold" : "limegreen") : "red";
                 el.textContent = "● " + (ok ? (stale ? "STALE" : "OK") : "ERROR");
             };
@@ -100,9 +105,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (m3u) m3u.textContent = h.tuner_m3u || "Unavailable";
             if (xml) xml.textContent = h.tuner_xml || "Unavailable";
-            if (age) age.textContent = (typeof h.xmltv_age_hours === "number")
-                ? `${h.xmltv_age_hours.toFixed(1)} hours ago`
-                : "Unknown";
+            if (age) age.textContent = h.is_combined_tuner
+                ? "N/A (Combined Tuner)"
+                : (typeof h.xmltv_age_hours === "number")
+                    ? `${h.xmltv_age_hours.toFixed(1)} hours ago`
+                    : "Unknown";
 
         } catch (err) {
             console.error("Health panel error:", err);

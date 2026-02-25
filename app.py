@@ -1994,6 +1994,23 @@ def api_health():
     m3u_url = t.get("m3u", "")
     xml_url = t.get("xml", "")
 
+    # Detect single-stream / combined tuner (both fields share the same URL)
+    is_combined = bool(m3u_url and xml_url and m3u_url == xml_url)
+
+    if is_combined:
+        # M3U playlist, XMLTV, and EPG freshness checks are not applicable
+        # for combined/single-stream tuners — return null so the UI shows N/A
+        return jsonify({
+            "tuner": curr,
+            "is_combined_tuner": True,
+            "m3u_reachable": None,
+            "xml_reachable": None,
+            "xmltv_fresh": None,
+            "tuner_m3u": m3u_url,
+            "tuner_xml": xml_url,
+            "xmltv_age_hours": None
+        })
+
     # Reachability checks
     m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
     xml_ok = check_url_reachable(xml_url) if xml_url else False
@@ -2002,14 +2019,12 @@ def api_health():
     # If you don't compute age yet, return None so "Unknown" shows
     xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
 
-
     return jsonify({
         "tuner": curr,
+        "is_combined_tuner": False,
         "m3u_reachable": m3u_ok,
         "xml_reachable": xml_ok,
         "xmltv_fresh": xml_fresh,
-
-        # ADD THESE:
         "tuner_m3u": m3u_url,
         "tuner_xml": xml_url,
         "xmltv_age_hours": xml_age_hours
