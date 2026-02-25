@@ -135,7 +135,7 @@
               <!-- Mode selection -->
               <div class="mode-selection" style="margin-top: 12px;">
                 <label style="display: block; margin-bottom: 8px;">Tuner Mode</label>
-                <div style="display: flex; gap: 16px;">
+                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
                   <label for="tuner_mode_standard" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
                     <input type="radio" id="tuner_mode_standard" name="tuner_mode" value="standard" checked>
                     Standard Playlist Mode
@@ -144,8 +144,12 @@
                     <input type="radio" id="tuner_mode_single_stream" name="tuner_mode" value="single_stream">
                     Single Stream Mode
                   </label>
+                  <label for="tuner_mode_combined" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" id="tuner_mode_combined" name="tuner_mode" value="combined">
+                    Combined Tuner
+                  </label>
                 </div>
-                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL.</p>
+                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL. Combined mode merges channels and guide data from multiple existing tuners.</p>
               </div>
 
               <!-- Standard mode fields -->
@@ -162,6 +166,17 @@
                 <label for="m3u8_stream">M3U8 Stream URL</label>
                 <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
                 <p class="muted small" style="margin: 6px 0 0 0;">Direct link to a single M3U8 stream. Channel name will be auto-generated from the tuner name.</p>
+              </div>
+
+              <!-- Combined mode fields -->
+              <div id="combined-fields" style="display: none;">
+                <label for="source_tuners">Source Tuners (hold Ctrl/Cmd to select multiple)</label>
+                <select id="source_tuners" name="source_tuners" multiple size="4" style="min-height: 80px;">
+                  {% for tuner in tuners %}
+                  <option value="{{ tuner }}">{{ tuner }}</option>
+                  {% endfor %}
+                </select>
+                <p class="muted small" style="margin: 6px 0 0 0;">Select two or more tuners to combine. Their channels and guide data will be merged into a single tuner.</p>
               </div>
 
               <button type="submit" class="primary">Add Tuner</button>
@@ -338,31 +353,38 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
     const standardFields = document.getElementById('standard-fields');
     const streamFields = document.getElementById('stream-fields');
+    const combinedFields = document.getElementById('combined-fields');
     const xmlInput = document.getElementById('xml_new');
     const m3uInput = document.getElementById('m3u_new');
     const m3u8Input = document.getElementById('m3u8_stream');
+    const sourceTunersSelect = document.getElementById('source_tuners');
     const modeRadios = document.querySelectorAll('input[name="tuner_mode"]');
 
     function updateFormMode() {
       const selectedMode = document.querySelector('input[name="tuner_mode"]:checked');
-      if (selectedMode && selectedMode.value === 'single_stream') {
-        // Single stream mode
-        standardFields.style.display = 'none';
+      const mode = selectedMode ? selectedMode.value : 'standard';
+
+      // Hide all field groups first
+      standardFields.style.display = 'none';
+      streamFields.style.display = 'none';
+      combinedFields.style.display = 'none';
+
+      // Remove required from all optional inputs
+      xmlInput.removeAttribute('required');
+      m3uInput.removeAttribute('required');
+      m3u8Input.removeAttribute('required');
+
+      if (mode === 'single_stream') {
         streamFields.style.display = 'block';
-        // Remove required from standard fields
-        xmlInput.removeAttribute('required');
-        m3uInput.removeAttribute('required');
-        // Add required to stream field
         m3u8Input.setAttribute('required', 'required');
+      } else if (mode === 'combined') {
+        combinedFields.style.display = 'block';
+        // source_tuners select is validated server-side; no HTML required attribute on multi-select
       } else {
-        // Standard mode
+        // Standard mode (default)
         standardFields.style.display = 'block';
-        streamFields.style.display = 'none';
-        // Add required to standard fields
         xmlInput.setAttribute('required', 'required');
         m3uInput.setAttribute('required', 'required');
-        // Remove required from stream field
-        m3u8Input.removeAttribute('required');
       }
     }
 
