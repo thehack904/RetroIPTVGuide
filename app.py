@@ -204,6 +204,14 @@ def init_tuners_db():
                      (key TEXT PRIMARY KEY, value TEXT)''')
         conn.commit()
 
+        # Migrate: add tuner_type and sources columns for combined tuner support
+        for col, default in [("tuner_type", "standard"), ("sources", "")]:
+            try:
+                c.execute(f"ALTER TABLE tuners ADD COLUMN {col} TEXT DEFAULT '{default}'")
+                conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         # bootstrap if empty
         c.execute("SELECT COUNT(*) FROM tuners")
         if c.fetchone()[0] == 0:
@@ -235,8 +243,16 @@ def init_tuners_db():
 def get_tuners():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
-        c.execute("SELECT name, xml, m3u FROM tuners")
-        return {row[0]: {"xml": row[1], "m3u": row[2]} for row in c.fetchall()}
+        c.execute("SELECT name, xml, m3u, tuner_type, sources FROM tuners")
+        return {
+            row[0]: {
+                "xml": row[1],
+                "m3u": row[2],
+                "tuner_type": row[3] or "standard",
+                "sources": row[4] or ""
+            }
+            for row in c.fetchall()
+        }
 
 def get_current_tuner():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
@@ -299,6 +315,60 @@ def add_tuner(name, xml_url, m3u_url):
             conn.commit()
         except sqlite3.IntegrityError as e:
             raise ValueError(f"Database error: {str(e)}")
+
+def add_combined_tuner(name, source_names):
+    """Insert a new combined tuner that aggregates channels and EPG from multiple source tuners."""
+    if not source_names:
+        raise ValueError("A combined tuner requires at least one source tuner")
+
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("SELECT name FROM tuners WHERE name=?", (name,))
+        if c.fetchone():
+            raise ValueError(f"Tuner '{name}' already exists")
+        sources_str = ','.join(source_names)
+        try:
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u, tuner_type, sources) VALUES (?, ?, ?, ?, ?)",
+                (name, '', '', 'combined', sources_str)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"Database error: {str(e)}")
+
+def load_tuner_data(tuner_name):
+    """Load and return (channels, epg) for the given tuner.
+
+    Handles all tuner types:
+    - standard / single_stream: parse the tuner's own M3U and XML URLs
+    - combined: merge channels and EPG from all configured source tuners
+    """
+    tuners = get_tuners()
+    info = tuners.get(tuner_name, {})
+    tuner_type = info.get('tuner_type', 'standard')
+
+    if tuner_type == 'combined':
+        sources = [s.strip() for s in info.get('sources', '').split(',') if s.strip()]
+        channels = []
+        epg = {}
+        for src_name in sources:
+            src_info = tuners.get(src_name, {})
+            if not src_info:
+                logging.warning("load_tuner_data: combined source '%s' not found, skipping", src_name)
+                continue
+            src_channels = parse_m3u(src_info.get('m3u', '')) if src_info.get('m3u') else []
+            src_epg = parse_epg(src_info.get('xml', '')) if src_info.get('xml') else {}
+            channels.extend(src_channels)
+            epg.update(src_epg)
+        epg = apply_epg_fallback(channels, epg)
+        return channels, epg
+    else:
+        m3u_url = info.get('m3u', '')
+        xml_url = info.get('xml', '')
+        channels = parse_m3u(m3u_url) if m3u_url else []
+        epg = parse_epg(xml_url) if xml_url else {}
+        epg = apply_epg_fallback(channels, epg)
+        return channels, epg
 
 def delete_tuner(name):
     """Delete a tuner from DB (except current one)."""
@@ -518,16 +588,10 @@ def login():
             log_event(username, "Logged in")
 
             # reload cached guide after login
-            tuners = get_tuners()
             current_tuner = get_current_tuner()
-            m3u_url = tuners[current_tuner]["m3u"] if current_tuner and current_tuner in tuners else None
-            xml_url = tuners[current_tuner]["xml"] if current_tuner and current_tuner in tuners else None
             global cached_channels, cached_epg
-            if m3u_url:
-                cached_channels = parse_m3u(m3u_url)
-            if xml_url:
-                cached_epg = parse_epg(xml_url)
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+            if current_tuner:
+                cached_channels, cached_epg = load_tuner_data(current_tuner)
 
             # Determine next redirect target (prefer POSTed next, then query param)
             next_url = request.form.get('next') or request.args.get('next') or url_for('guide')
@@ -781,12 +845,7 @@ def set_tuner(name):
 
     # Refresh cached guide data
     global cached_channels, cached_epg
-    m3u_url = tuners[name].get("m3u")
-    xml_url = tuners[name].get("xml")
-
-    cached_channels = parse_m3u(m3u_url) if m3u_url else []
-    cached_epg = parse_epg(xml_url) if xml_url else {}
-    cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+    cached_channels, cached_epg = load_tuner_data(name)
 
     log_event(current_user.username, f"Quick switched active tuner to {name}")
     flash(f"Active tuner switched to {name}", "success")
@@ -817,15 +876,9 @@ def change_tuner():
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
             flash(f"Active tuner switched to {new_tuner}", "success")
 
-            # ✅ Refresh cached guide data immediately
+            # Refresh cached guide data immediately
             global cached_channels, cached_epg
-            tuners = get_tuners()
-            m3u_url = tuners[new_tuner]["m3u"]
-            xml_url = tuners[new_tuner]["xml"]
-            cached_channels = parse_m3u(m3u_url)
-            cached_epg = parse_epg(xml_url)
-            # ✅ Apply “No Guide Data Available” fallback
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
+            cached_channels, cached_epg = load_tuner_data(new_tuner)
 
         elif action == "update_urls":
             tuner = request.form["tuner"]
@@ -875,7 +928,17 @@ def change_tuner():
                 flash("Tuner name cannot be empty.", "warning")
             else:
                 try:
-                    if tuner_mode == "single_stream":
+                    if tuner_mode == "combined":
+                        # Combined mode: merge channels/EPG from multiple source tuners
+                        source_names = request.form.getlist("source_tuners")
+                        source_names = [s.strip() for s in source_names if s.strip()]
+                        if not source_names:
+                            flash("Select at least one source tuner for a combined tuner.", "warning")
+                        else:
+                            add_combined_tuner(name, source_names)
+                            log_event(current_user.username, f"Added combined tuner {name} from {source_names}")
+                            flash(f"Combined tuner '{name}' added successfully.", "success")
+                    elif tuner_mode == "single_stream":
                         # Single stream mode: use M3U8 stream URL for both XML and M3U
                         m3u8_stream_url = request.form.get("m3u8_stream_url", "").strip()
                         if not m3u8_stream_url:
@@ -1899,12 +1962,7 @@ def refresh_current_tuner(tuner_name=None):
             logging.warning("refresh_current_tuner: tuner %s not found", tuner_name)
             return False
 
-        m3u_url = info.get('m3u')
-        xml_url = info.get('xml')
-
-        new_channels = parse_m3u(m3u_url) if m3u_url else []
-        new_epg = parse_epg(xml_url) if xml_url else {}
-        new_epg = apply_epg_fallback(new_channels, new_epg)
+        new_channels, new_epg = load_tuner_data(tuner_name)
 
         # atomic swap
         global cached_channels, cached_epg
@@ -1991,8 +2049,23 @@ def api_health():
     curr = get_current_tuner()
     t = tuners.get(curr, {})
 
+    tuner_type = t.get("tuner_type", "standard")
     m3u_url = t.get("m3u", "")
     xml_url = t.get("xml", "")
+
+    # For combined tuners, reachability/freshness checks are not applicable at the top level
+    if tuner_type == "combined":
+        return jsonify({
+            "tuner": curr,
+            "tuner_type": tuner_type,
+            "sources": t.get("sources", ""),
+            "m3u_reachable": None,
+            "xml_reachable": None,
+            "xmltv_fresh": None,
+            "tuner_m3u": None,
+            "tuner_xml": None,
+            "xmltv_age_hours": None
+        })
 
     # Reachability checks
     m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
@@ -2005,6 +2078,7 @@ def api_health():
 
     return jsonify({
         "tuner": curr,
+        "tuner_type": tuner_type,
         "m3u_reachable": m3u_ok,
         "xml_reachable": xml_ok,
         "xmltv_fresh": xml_fresh,
@@ -2025,12 +2099,13 @@ if __name__ == '__main__':
     ensure_default_tuner()
 
     # preload guide cache
-    tuners = get_tuners()
     current_tuner = get_current_tuner()
-    if not current_tuner and tuners:  # fallback if no active tuner set
-        current_tuner = list(tuners.keys())[0]
-    cached_channels = parse_m3u(tuners[current_tuner]["m3u"])
-    cached_epg = parse_epg(tuners[current_tuner]["xml"])
+    if not current_tuner:
+        tuners = get_tuners()
+        if tuners:
+            current_tuner = list(tuners.keys())[0]
+    if current_tuner:
+        cached_channels, cached_epg = load_tuner_data(current_tuner)
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
