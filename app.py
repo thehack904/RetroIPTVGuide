@@ -2105,6 +2105,29 @@ def api_health():
     # If you don't compute age yet, return None so "Unknown" shows
     xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
 
+    # Data stats from in-memory cache
+    channels_loaded = len(cached_channels)
+    # Determine the EPG URL actually used (may differ from configured xml_url if
+    # extracted from the M3U header or if xml_url was left empty)
+    effective_epg_url = xml_url
+    if not effective_epg_url and m3u_url:
+        effective_epg_url = extract_epg_url_from_m3u(m3u_url) or None
+    elif effective_epg_url and effective_epg_url.lower().endswith(('.m3u', '.m3u8')):
+        effective_epg_url = extract_epg_url_from_m3u(effective_epg_url) or None
+
+    channels_with_epg = sum(
+        1 for ch in cached_channels
+        if ch.get('tvg_id') in cached_epg
+        and any(
+            p.get('title') and p.get('title') != 'No Guide Data Available'
+            for p in cached_epg[ch['tvg_id']]
+        )
+    )
+    total_programs = sum(
+        1 for progs in cached_epg.values()
+        for p in progs
+        if p.get('title') and p.get('title') != 'No Guide Data Available'
+    )
 
     return jsonify({
         "tuner": curr,
@@ -2112,11 +2135,13 @@ def api_health():
         "m3u_reachable": m3u_ok,
         "xml_reachable": xml_ok,
         "xmltv_fresh": xml_fresh,
-
-        # ADD THESE:
         "tuner_m3u": m3u_url,
         "tuner_xml": xml_url,
-        "xmltv_age_hours": xml_age_hours
+        "xmltv_age_hours": xml_age_hours,
+        "channels_loaded": channels_loaded,
+        "channels_with_epg": channels_with_epg,
+        "total_programs": total_programs,
+        "effective_epg_url": effective_epg_url,
     })
 
 
