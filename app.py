@@ -486,7 +486,11 @@ def parse_m3u(m3u_url):
 # ------------------- EPG URL extraction from M3U -------------------
 def extract_epg_url_from_m3u(m3u_url):
     """Fetch an M3U/M3U8 file and return the url-tvg or x-tvg-url EPG reference
-    embedded in the #EXTM3U header line, or None if not present."""
+    embedded in the #EXTM3U header line, or None if not present.
+
+    The url-tvg attribute may contain a comma-separated list of URLs (as used
+    by many public playlists); only the first URL is returned.
+    """
     try:
         r = requests.get(m3u_url, timeout=10)
         r.raise_for_status()
@@ -496,13 +500,25 @@ def extract_epg_url_from_m3u(m3u_url):
                 for attr in ('url-tvg', 'x-tvg-url'):
                     m = re.search(rf'{attr}="([^"]+)"', line, re.IGNORECASE)
                     if m:
-                        return m.group(1)
+                        # The value may be a comma-separated list; use the first entry only
+                        first_url = m.group(1).split(',')[0].strip()
+                        return first_url if first_url else None
                 break  # only the first #EXTM3U line matters
     except Exception:
         pass
     return None
 
 # ------------------- XMLTV EPG Parsing -------------------
+def _fetch_xmltv_content(xml_url, timeout=15):
+    """Fetch XMLTV content from *xml_url*, transparently decompressing gzip."""
+    import gzip as _gzip
+    r = requests.get(xml_url, timeout=timeout)
+    r.raise_for_status()
+    content = r.content
+    if xml_url.lower().endswith('.gz') or content[:2] == b'\x1f\x8b':
+        content = _gzip.decompress(content)
+    return content
+
 def parse_epg(xml_url):
     programs = {}
     
@@ -514,9 +530,8 @@ def parse_epg(xml_url):
         return programs  # empty, fallback will fill it later
         
     try:
-        r = requests.get(xml_url, timeout=15)
-        r.raise_for_status()
-        root = ET.fromstring(r.content)
+        content = _fetch_xmltv_content(xml_url)
+        root = ET.fromstring(content)
     except:
         return programs
 
@@ -1896,10 +1911,8 @@ def check_url_reachable(url, timeout=5):
 
 def check_xmltv_freshness(xml_url, max_age_hours=6):
     try:
-        r = requests.get(xml_url, timeout=10)
-        r.raise_for_status()
-
-        root = ET.fromstring(r.content)
+        content = _fetch_xmltv_content(xml_url, timeout=10)
+        root = ET.fromstring(content)
 
         now = datetime.now(timezone.utc)
         past_starts = []
@@ -2099,21 +2112,27 @@ def api_health():
 
     # Reachability checks
     m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
-    xml_ok = check_url_reachable(xml_url) if xml_url else False
 
-    # Freshness check (keep your current function)
-    # If you don't compute age yet, return None so "Unknown" shows
-    xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
-
-    # Data stats from in-memory cache
-    channels_loaded = len(cached_channels)
     # Determine the EPG URL actually used (may differ from configured xml_url if
-    # extracted from the M3U header or if xml_url was left empty)
+    # extracted from the M3U header or if xml_url was left empty).
+    # Must be computed before the XMLTV reachability / freshness checks so those
+    # checks run against the real EPG source rather than the M3U file.
     effective_epg_url = xml_url
     if not effective_epg_url and m3u_url:
         effective_epg_url = extract_epg_url_from_m3u(m3u_url) or None
     elif effective_epg_url and effective_epg_url.lower().endswith(('.m3u', '.m3u8')):
         effective_epg_url = extract_epg_url_from_m3u(effective_epg_url) or None
+
+    # XMLTV reachability: use the effective EPG URL (not the raw configured XML url
+    # which may be an M3U file when the EPG source is embedded in the header).
+    xml_check_url = effective_epg_url or xml_url
+    xml_ok = check_url_reachable(xml_check_url) if xml_check_url else False
+
+    # Freshness check against the real EPG source
+    xml_fresh, xml_age_hours = check_xmltv_freshness(xml_check_url) if xml_check_url else (False, None)
+
+    # Data stats from in-memory cache
+    channels_loaded = len(cached_channels)
 
     channels_with_epg = sum(
         1 for ch in cached_channels

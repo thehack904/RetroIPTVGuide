@@ -171,6 +171,20 @@ class TestExtractEpgUrlFromM3U:
         assert result == "http://example.com/guide.xml"
 
     @patch('app.requests.get')
+    def test_extract_multi_url_returns_first(self, mock_get):
+        """Test that only the first URL is returned when url-tvg has a comma-separated list"""
+        mock_response = Mock()
+        mock_response.text = (
+            '#EXTM3U url-tvg="http://example.com/epg1.xml,http://example.com/epg2.xml,'
+            'http://example.com/epg3.xml"\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+        )
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        result = extract_epg_url_from_m3u("http://example.com/playlist.m3u")
+        assert result == "http://example.com/epg1.xml"
+
+    @patch('app.requests.get')
     def test_no_epg_url_returns_none(self, mock_get):
         """Test that None is returned when no EPG URL attribute is present"""
         mock_response = Mock()
@@ -231,6 +245,87 @@ class TestParseEpgWithM3UInput:
 
         programs = parse_epg("http://example.com/playlist.m3u")
         assert programs == {}
+
+    @patch('app.requests.get')
+    def test_m3u_with_multi_url_tvg_uses_first(self, mock_get):
+        """Test that parse_epg uses only the first URL when url-tvg is a comma-separated list"""
+        epg_xml = b"""<?xml version="1.0"?>
+<tv>
+  <channel id="ch1"><display-name>Channel One</display-name></channel>
+  <programme channel="ch1" start="20260226030000 +0000" stop="20260226040000 +0000">
+    <title>Multi-Source Show</title>
+    <desc></desc>
+  </programme>
+</tv>"""
+
+        def side_effect(url, **kwargs):
+            resp = Mock()
+            resp.raise_for_status = Mock()
+            if url.endswith('.m3u8'):
+                resp.text = (
+                    '#EXTM3U url-tvg="http://example.com/epg1.xml,http://example.com/epg2.xml"\n'
+                    '#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+                )
+            else:
+                # Only first URL should be fetched
+                assert url == "http://example.com/epg1.xml", f"Unexpected URL fetched: {url}"
+                resp.content = epg_xml
+            return resp
+
+        mock_get.side_effect = side_effect
+
+        programs = parse_epg("http://example.com/playlist.m3u8")
+        assert 'ch1' in programs
+
+
+class TestParseEpgGzip:
+    """Test parse_epg with gzip-compressed XMLTV sources"""
+
+    @patch('app.requests.get')
+    def test_parse_epg_gzip_url(self, mock_get):
+        """Test that parse_epg decompresses .xml.gz content transparently"""
+        import gzip
+        epg_xml = b"""<?xml version="1.0"?>
+<tv>
+  <channel id="ch1"><display-name>Channel One</display-name></channel>
+  <programme channel="ch1" start="20260226030000 +0000" stop="20260226040000 +0000">
+    <title>Gzip Show</title>
+    <desc>From a gzipped source</desc>
+  </programme>
+</tv>"""
+        compressed = gzip.compress(epg_xml)
+
+        mock_response = Mock()
+        mock_response.content = compressed
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        programs = parse_epg("http://example.com/epg.xml.gz")
+        assert 'ch1' in programs
+        assert programs['ch1'][0]['title'] == 'Gzip Show'
+
+    @patch('app.requests.get')
+    def test_parse_epg_gzip_magic_bytes(self, mock_get):
+        """Test that parse_epg detects gzip by magic bytes even without .gz extension"""
+        import gzip
+        epg_xml = b"""<?xml version="1.0"?>
+<tv>
+  <channel id="ch2"><display-name>Channel Two</display-name></channel>
+  <programme channel="ch2" start="20260226030000 +0000" stop="20260226040000 +0000">
+    <title>Magic Bytes Show</title>
+    <desc></desc>
+  </programme>
+</tv>"""
+        compressed = gzip.compress(epg_xml)
+
+        mock_response = Mock()
+        mock_response.content = compressed
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        programs = parse_epg("http://example.com/epg.xml")
+        assert 'ch2' in programs
+        assert programs['ch2'][0]['title'] == 'Magic Bytes Show'
 
 
 if __name__ == '__main__':
