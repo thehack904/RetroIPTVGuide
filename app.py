@@ -885,20 +885,25 @@ def change_tuner():
             xml_url = request.form["xml_url"]
             m3u_url = request.form["m3u_url"]
 
-            # update DB with validation
-            try:
-                update_tuner_urls(tuner, xml_url, m3u_url)
-                log_event(current_user.username, f"Updated URLs for tuner {tuner}")
-                flash(f"Updated URLs for tuner {tuner}", "success")
+            # Combined tuners have no direct URLs — their sources define them
+            tuner_info = get_tuners().get(tuner, {})
+            if tuner_info.get("tuner_type") == "combined":
+                flash("Combined tuners do not have individual URLs. Edit the source tuners instead.", "warning")
+            else:
+                # update DB with validation
+                try:
+                    update_tuner_urls(tuner, xml_url, m3u_url)
+                    log_event(current_user.username, f"Updated URLs for tuner {tuner}")
+                    flash(f"Updated URLs for tuner {tuner}", "success")
 
-                # ✅ Validate inputs (DNS/reachability check)
-                if xml_url:
-                    validate_tuner_url(xml_url, label=f"{tuner} XML")
-                if m3u_url:
-                    validate_tuner_url(m3u_url, label=f"{tuner} M3U")
-            except ValueError as e:
-                flash(f"URL validation failed: {str(e)}", "warning")
-                logging.warning(f"URL validation failed for tuner {tuner}: {e}")
+                    # ✅ Validate inputs (DNS/reachability check)
+                    if xml_url:
+                        validate_tuner_url(xml_url, label=f"{tuner} XML")
+                    if m3u_url:
+                        validate_tuner_url(m3u_url, label=f"{tuner} M3U")
+                except ValueError as e:
+                    flash(f"URL validation failed: {str(e)}", "warning")
+                    logging.warning(f"URL validation failed for tuner {tuner}: {e}")
 
         elif action == "delete_tuner":
             tuner = request.form["tuner"]

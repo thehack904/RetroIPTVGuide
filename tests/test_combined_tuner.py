@@ -157,6 +157,35 @@ class TestCombinedTuner:
         assert len(channels) == 1
         assert channels[0]["name"] == "Ch1"
 
+    # ------------------------------------------------------------------ #
+    # /api/health — combined tuner returns N/A fields                     #
+    # ------------------------------------------------------------------ #
+
+    def test_api_health_combined_tuner_returns_na_fields(self):
+        """api_health returns null for reachability fields when active tuner is combined."""
+        import app as app_module
+        self._add_source_tuners()
+        add_combined_tuner("My Combined", ["Source A", "Source B"])
+        app_module.set_current_tuner("My Combined")
+
+        # Create a test user and log in
+        app_module.add_user("testuser", "testpass")
+        app.config["TESTING"] = True
+
+        with app.test_client() as client:
+            client.post("/login", data={"username": "testuser", "password": "testpass"},
+                        follow_redirects=True)
+            resp = client.get("/api/health")
+            assert resp.status_code == 200
+            data = resp.get_json()
+
+        assert data["tuner_type"] == "combined"
+        assert data["m3u_reachable"] is None
+        assert data["xml_reachable"] is None
+        assert data["xmltv_fresh"] is None
+        assert data["tuner_m3u"] is None
+        assert data["tuner_xml"] is None
+
 
 if __name__ == '__main__':
     pytest.main([__file__, '-v'])

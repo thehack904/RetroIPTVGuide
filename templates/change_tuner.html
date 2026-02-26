@@ -108,7 +108,9 @@
               <label for="tuner_update">Select Tuner</label>
               <select name="tuner" id="tuner_update" required onchange="populateUrls(this.value)">
                 {% for tuner in tuners %}
+                {% if TUNERS[tuner].tuner_type != 'combined' %}
                 <option value="{{ tuner }}">{{ tuner }}</option>
+                {% endif %}
                 {% endfor %}
               </select>
 
