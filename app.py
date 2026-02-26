@@ -366,7 +366,10 @@ def load_tuner_data(tuner_name):
         m3u_url = info.get('m3u', '')
         xml_url = info.get('xml', '')
         channels = parse_m3u(m3u_url) if m3u_url else []
-        epg = parse_epg(xml_url) if xml_url else {}
+        # If no XML URL is configured, pass the M3U URL to parse_epg so it can
+        # detect any embedded url-tvg/x-tvg-url EPG reference in the #EXTM3U header.
+        effective_xml = xml_url if xml_url else m3u_url
+        epg = parse_epg(effective_xml) if effective_xml else {}
         epg = apply_epg_fallback(channels, epg)
         return channels, epg
 
@@ -480,18 +483,55 @@ def parse_m3u(m3u_url):
     
     return channels
 
+# ------------------- EPG URL extraction from M3U -------------------
+def extract_epg_url_from_m3u(m3u_url):
+    """Fetch an M3U/M3U8 file and return the url-tvg or x-tvg-url EPG reference
+    embedded in the #EXTM3U header line, or None if not present.
+
+    The url-tvg attribute may contain a comma-separated list of URLs (as used
+    by many public playlists); only the first URL is returned.
+    """
+    try:
+        r = requests.get(m3u_url, timeout=10)
+        r.raise_for_status()
+        for line in r.text.splitlines():
+            line = line.strip()
+            if line.startswith('#EXTM3U'):
+                for attr in ('url-tvg', 'x-tvg-url'):
+                    m = re.search(rf'{attr}="([^"]+)"', line, re.IGNORECASE)
+                    if m:
+                        # The value may be a comma-separated list; use the first entry only
+                        first_url = m.group(1).split(',')[0].strip()
+                        return first_url if first_url else None
+                break  # only the first #EXTM3U line matters
+    except Exception:
+        pass
+    return None
+
 # ------------------- XMLTV EPG Parsing -------------------
+def _fetch_xmltv_content(xml_url, timeout=15):
+    """Fetch XMLTV content from *xml_url*, transparently decompressing gzip."""
+    import gzip as _gzip
+    r = requests.get(xml_url, timeout=timeout)
+    r.raise_for_status()
+    content = r.content
+    if xml_url.lower().endswith('.gz') or content[:2] == b'\x1f\x8b':
+        content = _gzip.decompress(content)
+    return content
+
 def parse_epg(xml_url):
     programs = {}
     
-    # ✅ Handle when user pastes same .m3u for XML
+    # ✅ Handle when user pastes same .m3u for XML — try to pull embedded EPG URL
     if xml_url.lower().endswith(('.m3u', '.m3u8')):
+        epg_url = extract_epg_url_from_m3u(xml_url)
+        if epg_url:
+            return parse_epg(epg_url)
         return programs  # empty, fallback will fill it later
         
     try:
-        r = requests.get(xml_url, timeout=15)
-        r.raise_for_status()
-        root = ET.fromstring(r.content)
+        content = _fetch_xmltv_content(xml_url)
+        root = ET.fromstring(content)
     except:
         return programs
 
@@ -1871,10 +1911,8 @@ def check_url_reachable(url, timeout=5):
 
 def check_xmltv_freshness(xml_url, max_age_hours=6):
     try:
-        r = requests.get(xml_url, timeout=10)
-        r.raise_for_status()
-
-        root = ET.fromstring(r.content)
+        content = _fetch_xmltv_content(xml_url, timeout=10)
+        root = ET.fromstring(content)
 
         now = datetime.now(timezone.utc)
         past_starts = []
@@ -2074,12 +2112,41 @@ def api_health():
 
     # Reachability checks
     m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
-    xml_ok = check_url_reachable(xml_url) if xml_url else False
 
-    # Freshness check (keep your current function)
-    # If you don't compute age yet, return None so "Unknown" shows
-    xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
+    # Determine the EPG URL actually used (may differ from configured xml_url if
+    # extracted from the M3U header or if xml_url was left empty).
+    # Must be computed before the XMLTV reachability / freshness checks so those
+    # checks run against the real EPG source rather than the M3U file.
+    effective_epg_url = xml_url
+    if not effective_epg_url and m3u_url:
+        effective_epg_url = extract_epg_url_from_m3u(m3u_url) or None
+    elif effective_epg_url and effective_epg_url.lower().endswith(('.m3u', '.m3u8')):
+        effective_epg_url = extract_epg_url_from_m3u(effective_epg_url) or None
 
+    # XMLTV reachability: use the effective EPG URL (not the raw configured XML url
+    # which may be an M3U file when the EPG source is embedded in the header).
+    xml_check_url = effective_epg_url or xml_url
+    xml_ok = check_url_reachable(xml_check_url) if xml_check_url else False
+
+    # Freshness check against the real EPG source
+    xml_fresh, xml_age_hours = check_xmltv_freshness(xml_check_url) if xml_check_url else (False, None)
+
+    # Data stats from in-memory cache
+    channels_loaded = len(cached_channels)
+
+    channels_with_epg = sum(
+        1 for ch in cached_channels
+        if ch.get('tvg_id') in cached_epg
+        and any(
+            p.get('title') and p.get('title') != 'No Guide Data Available'
+            for p in cached_epg[ch['tvg_id']]
+        )
+    )
+    total_programs = sum(
+        1 for progs in cached_epg.values()
+        for p in progs
+        if p.get('title') and p.get('title') != 'No Guide Data Available'
+    )
 
     return jsonify({
         "tuner": curr,
@@ -2087,11 +2154,13 @@ def api_health():
         "m3u_reachable": m3u_ok,
         "xml_reachable": xml_ok,
         "xmltv_fresh": xml_fresh,
-
-        # ADD THESE:
         "tuner_m3u": m3u_url,
         "tuner_xml": xml_url,
-        "xmltv_age_hours": xml_age_hours
+        "xmltv_age_hours": xml_age_hours,
+        "channels_loaded": channels_loaded,
+        "channels_with_epg": channels_with_epg,
+        "total_programs": total_programs,
+        "effective_epg_url": effective_epg_url,
     })
 
 

@@ -35,11 +35,24 @@
       <p><strong>XMLTV URL:</strong><br>
          <span id="diag-xml-url"></span></p>
 
+      <p><strong>Effective EPG Source:</strong><br>
+         <span id="diag-epg-source"></span></p>
+
       <p><strong>Last XMLTV Update:</strong><br>
          <span id="diag-xml-age"></span></p>
 
       <p><strong>Allowed XMLTV age threshold:</strong><br>
          6 hours</p>
+
+      <!-- Data load stats -->
+      <div id="diag-data-stats" class="diag-auto-refresh">
+        <p><strong>Loaded Data</strong></p>
+        <ul class="health-list auto-refresh-list">
+          <li><strong>Channels loaded</strong><span id="diag-channels-loaded">Loading…</span></li>
+          <li><strong>Channels with guide data</strong><span id="diag-channels-with-epg">Loading…</span></li>
+          <li><strong>Total program entries</strong><span id="diag-total-programs">Loading…</span></li>
+        </ul>
+      </div>
 
       <!-- Auto-refresh info inserted here -->
       <div id="diag-auto-refresh" class="diag-auto-refresh">
@@ -110,19 +123,41 @@ document.addEventListener("DOMContentLoaded", () => {
 
             const m3u = document.getElementById("diag-m3u-url");
             const xml = document.getElementById("diag-xml-url");
+            const epgSrc = document.getElementById("diag-epg-source");
             const age = document.getElementById("diag-xml-age");
+            const chLoaded = document.getElementById("diag-channels-loaded");
+            const chEpg = document.getElementById("diag-channels-with-epg");
+            const totalProg = document.getElementById("diag-total-programs");
 
             if (isCombined) {
                 if (m3u) m3u.textContent = "N/A – sources: " + (h.sources || "");
                 if (xml) xml.textContent = "N/A – sources: " + (h.sources || "");
+                if (epgSrc) epgSrc.textContent = "N/A";
                 if (age) age.textContent = "N/A";
             } else {
                 if (m3u) m3u.textContent = h.tuner_m3u || "Unavailable";
-                if (xml) xml.textContent = h.tuner_xml || "Unavailable";
+                if (xml) xml.textContent = h.tuner_xml || "Not configured";
+                if (epgSrc) {
+                    const src = h.effective_epg_url || "";
+                    const configured = h.tuner_xml || "";
+                    if (!src) {
+                        epgSrc.textContent = "None detected";
+                    } else if (src !== configured) {
+                        epgSrc.textContent = src + " (auto-detected from M3U)";
+                    } else {
+                        epgSrc.textContent = src;
+                    }
+                }
                 if (age) age.textContent = (typeof h.xmltv_age_hours === "number")
                     ? `${h.xmltv_age_hours.toFixed(1)} hours ago`
                     : "Unknown";
             }
+
+            if (chLoaded) chLoaded.textContent = typeof h.channels_loaded === "number" ? h.channels_loaded : "—";
+            if (chEpg) chEpg.textContent = (typeof h.channels_with_epg === "number" && typeof h.channels_loaded === "number")
+                ? `${h.channels_with_epg} / ${h.channels_loaded}`
+                : "—";
+            if (totalProg) totalProg.textContent = typeof h.total_programs === "number" ? h.total_programs : "—";
 
         } catch (err) {
             console.error("Health panel error:", err);
