@@ -22,13 +22,26 @@
     <div class="table-wrap">
       <table class="users-table">
           <thead>
-            <tr><th>Username</th><th>Last Login</th><th>Actions</th></tr>
+            <tr><th>Username</th><th>Last Login</th><th>Assigned Tuner</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
             <tr>
               <td>{{ user.username }}</td>
               <td>{{ user.last_login | format_datetime }}</td>
+              <td>
+                <form method="POST" class="inline-form assign-tuner-form">
+                  <input type="hidden" name="username" value="{{ user.username }}">
+                  <input type="hidden" name="action" value="assign_tuner">
+                  <select name="tuner_name" title="Assign tuner to {{ user.username }}">
+                    <option value="">— No specific tuner —</option>
+                    {% for t in tuner_names %}
+                    <option value="{{ t }}" {% if user.assigned_tuner == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn add" type="submit">Assign</button>
+                </form>
+              </td>
               <td class="actions">
                 <form method="POST" class="inline-form">
                   <input type="hidden" name="username" value="{{ user.username }}">

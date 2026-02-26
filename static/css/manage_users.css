@@ -158,6 +158,8 @@ body.light .container-manage-users {
 /* Actions & inline forms */
 .actions { display:flex; gap:8px; }
 .inline-form { display:inline; margin:0; padding:0; }
+.assign-tuner-form { display:flex !important; gap:6px; align-items:center; }
+.assign-tuner-form select { width: auto; }
 
 /* Flash messages */
 .flash-messages { margin-top: 12px; }
