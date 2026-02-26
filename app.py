@@ -366,7 +366,10 @@ def load_tuner_data(tuner_name):
         m3u_url = info.get('m3u', '')
         xml_url = info.get('xml', '')
         channels = parse_m3u(m3u_url) if m3u_url else []
-        epg = parse_epg(xml_url) if xml_url else {}
+        # If no XML URL is configured, pass the M3U URL to parse_epg so it can
+        # detect any embedded url-tvg/x-tvg-url EPG reference in the #EXTM3U header.
+        effective_xml = xml_url if xml_url else m3u_url
+        epg = parse_epg(effective_xml) if effective_xml else {}
         epg = apply_epg_fallback(channels, epg)
         return channels, epg
 
@@ -480,12 +483,34 @@ def parse_m3u(m3u_url):
     
     return channels
 
+# ------------------- EPG URL extraction from M3U -------------------
+def extract_epg_url_from_m3u(m3u_url):
+    """Fetch an M3U/M3U8 file and return the url-tvg or x-tvg-url EPG reference
+    embedded in the #EXTM3U header line, or None if not present."""
+    try:
+        r = requests.get(m3u_url, timeout=10)
+        r.raise_for_status()
+        for line in r.text.splitlines():
+            line = line.strip()
+            if line.startswith('#EXTM3U'):
+                for attr in ('url-tvg', 'x-tvg-url'):
+                    m = re.search(rf'{attr}="([^"]+)"', line, re.IGNORECASE)
+                    if m:
+                        return m.group(1)
+                break  # only the first #EXTM3U line matters
+    except Exception:
+        pass
+    return None
+
 # ------------------- XMLTV EPG Parsing -------------------
 def parse_epg(xml_url):
     programs = {}
     
-    # ✅ Handle when user pastes same .m3u for XML
+    # ✅ Handle when user pastes same .m3u for XML — try to pull embedded EPG URL
     if xml_url.lower().endswith(('.m3u', '.m3u8')):
+        epg_url = extract_epg_url_from_m3u(xml_url)
+        if epg_url:
+            return parse_epg(epg_url)
         return programs  # empty, fallback will fill it later
         
     try:

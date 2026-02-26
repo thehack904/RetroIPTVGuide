@@ -6,7 +6,7 @@ import os
 # Add parent directory to path to import app
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import _validate_url, parse_m3u
+from app import _validate_url, parse_m3u, extract_epg_url_from_m3u, parse_epg
 from unittest.mock import Mock, patch
 from urllib.parse import urlparse
 
@@ -143,6 +143,94 @@ https://example.com/stream.m3u8"""
         channels = parse_m3u("http://example.com/playlist.m3u")
         
         assert len(channels) == 0
+
+
+class TestExtractEpgUrlFromM3U:
+    """Test EPG URL extraction from M3U headers"""
+
+    @patch('app.requests.get')
+    def test_extract_url_tvg(self, mock_get):
+        """Test extracting url-tvg attribute from #EXTM3U header"""
+        mock_response = Mock()
+        mock_response.text = '#EXTM3U url-tvg="http://example.com/epg.xml"\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        result = extract_epg_url_from_m3u("http://example.com/playlist.m3u")
+        assert result == "http://example.com/epg.xml"
+
+    @patch('app.requests.get')
+    def test_extract_x_tvg_url(self, mock_get):
+        """Test extracting x-tvg-url attribute from #EXTM3U header"""
+        mock_response = Mock()
+        mock_response.text = '#EXTM3U x-tvg-url="http://example.com/guide.xml"\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        result = extract_epg_url_from_m3u("http://example.com/playlist.m3u")
+        assert result == "http://example.com/guide.xml"
+
+    @patch('app.requests.get')
+    def test_no_epg_url_returns_none(self, mock_get):
+        """Test that None is returned when no EPG URL attribute is present"""
+        mock_response = Mock()
+        mock_response.text = '#EXTM3U\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        result = extract_epg_url_from_m3u("http://example.com/playlist.m3u")
+        assert result is None
+
+    @patch('app.requests.get')
+    def test_network_error_returns_none(self, mock_get):
+        """Test that None is returned on network error"""
+        mock_get.side_effect = Exception("Network error")
+
+        result = extract_epg_url_from_m3u("http://example.com/playlist.m3u")
+        assert result is None
+
+
+class TestParseEpgWithM3UInput:
+    """Test parse_epg when an M3U URL is provided as the xml_url"""
+
+    @patch('app.requests.get')
+    def test_m3u_with_embedded_epg_url(self, mock_get):
+        """Test that parse_epg follows embedded url-tvg to retrieve EPG data"""
+        epg_xml = b"""<?xml version="1.0"?>
+<tv>
+  <channel id="ch1"><display-name>Channel One</display-name></channel>
+  <programme channel="ch1" start="20260226030000 +0000" stop="20260226040000 +0000">
+    <title>Test Show</title>
+    <desc>A test show</desc>
+  </programme>
+</tv>"""
+
+        def side_effect(url, **kwargs):
+            resp = Mock()
+            resp.raise_for_status = Mock()
+            if url.endswith('.m3u'):
+                resp.text = '#EXTM3U url-tvg="http://example.com/epg.xml"\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+            else:
+                resp.content = epg_xml
+            return resp
+
+        mock_get.side_effect = side_effect
+
+        programs = parse_epg("http://example.com/playlist.m3u")
+        assert 'ch1' in programs
+        assert len(programs['ch1']) == 1
+        assert programs['ch1'][0]['title'] == 'Test Show'
+
+    @patch('app.requests.get')
+    def test_m3u_without_embedded_epg_returns_empty(self, mock_get):
+        """Test that parse_epg returns empty dict when M3U has no url-tvg"""
+        mock_response = Mock()
+        mock_response.text = '#EXTM3U\n#EXTINF:-1,Channel\nhttp://example.com/stream.m3u8'
+        mock_response.raise_for_status = Mock()
+        mock_get.return_value = mock_response
+
+        programs = parse_epg("http://example.com/playlist.m3u")
+        assert programs == {}
 
 
 if __name__ == '__main__':
