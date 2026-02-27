@@ -145,11 +145,12 @@ def validate_tuner_url(url, label="Tuner", check_reachability=False):
 
 # ------------------- User Model -------------------
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, last_login=None):
+    def __init__(self, id, username, password_hash, last_login=None, assigned_tuner=None):
         self.id = id
         self.username = username
         self.password_hash = password_hash
         self.last_login = last_login
+        self.assigned_tuner = assigned_tuner
 
 # ------------------- Init DBs -------------------
 def init_db():
@@ -168,6 +169,14 @@ def init_db():
             # Column already exists
             pass
 
+        # Add assigned_tuner column if it doesn't exist (for existing databases)
+        try:
+            c.execute('ALTER TABLE users ADD COLUMN assigned_tuner TEXT DEFAULT NULL')
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
 def add_user(username, password):
     password_hash = generate_password_hash(password)
     with sqlite3.connect(DATABASE, timeout=10) as conn:
@@ -178,20 +187,20 @@ def add_user(username, password):
 def get_user(username):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password, last_login FROM users WHERE username=?', (username,))
+        c.execute('SELECT id, username, password, last_login, assigned_tuner FROM users WHERE username=?', (username,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3])
+        return User(row[0], row[1], row[2], row[3], row[4])
     return None
 
 @login_manager.user_loader
 def load_user(user_id):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password, last_login FROM users WHERE id=?', (user_id,))
+        c.execute('SELECT id, username, password, last_login, assigned_tuner FROM users WHERE id=?', (user_id,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3])
+        return User(row[0], row[1], row[2], row[3], row[4])
     return None
 
 # ------------------- Tuner DB -------------------
@@ -789,8 +798,8 @@ def manage_users():
     # ---- Normal admin logic below ----
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT username, last_login FROM users WHERE username != "admin"')
-        users = [{'username': row[0], 'last_login': row[1]} for row in c.fetchall()]
+        c.execute('SELECT username, last_login, assigned_tuner FROM users WHERE username != "admin"')
+        users = [{'username': row[0], 'last_login': row[1], 'assigned_tuner': row[2]} for row in c.fetchall()]
 
     if request.method == 'POST':
         action = request.form.get('action')
@@ -828,9 +837,23 @@ def manage_users():
             log_event(current_user.username, f"Revoked sessions for {username}")
             flash(f"🚪 Signed out all active logins for '{username}'.", "success")
 
+        elif action == 'assign_tuner':
+            tuner_name = request.form.get('tuner_name') or None
+            with sqlite3.connect(DATABASE, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute('UPDATE users SET assigned_tuner=? WHERE username=?', (tuner_name, username))
+                conn.commit()
+            if tuner_name:
+                log_event(current_user.username, f"Assigned tuner '{tuner_name}' to user '{username}'")
+                flash(f"✅ Tuner '{tuner_name}' assigned to '{username}'.", "success")
+            else:
+                log_event(current_user.username, f"Cleared tuner assignment for user '{username}'")
+                flash(f"✅ Tuner assignment cleared for '{username}'.", "success")
+
         return redirect(url_for('manage_users'))
 
-    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner())
+    tuner_names = list(get_tuners().keys())
+    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner(), tuner_names=tuner_names)
 
 
 @app.route("/about")
@@ -1100,30 +1123,32 @@ def guide():
     total_width = slots * SLOT_MINUTES * SCALE
     minutes_from_start = (now - grid_start).total_seconds() / 60.0
     now_offset = int(minutes_from_start * SCALE)
-    
-    # --- DEBUG: Show alignment between M3U and EPG ---
-    #print("\n=== DEBUG: Cached Channels and EPG Keys ===")
-    #print("First 5 channel IDs from M3U:")
-    #for ch in cached_channels[:5]:
-    #    print("  ", ch.get('tvg_id'))
 
-    #print("\nFirst 5 EPG keys:")
-    #for key in list(cached_epg.keys())[:5]:
-    #    print("  ", key)
-    #print("==========================================\n")
-
+    # Use the user's assigned tuner if set; otherwise fall back to the global active tuner
+    user_tuner = current_user.assigned_tuner
+    if user_tuner:
+        tuners = get_tuners()
+        if user_tuner in tuners:
+            channels, epg = load_tuner_data(user_tuner)
+            active_tuner = user_tuner
+        else:
+            channels, epg = cached_channels, cached_epg
+            active_tuner = get_current_tuner()
+    else:
+        channels, epg = cached_channels, cached_epg
+        active_tuner = get_current_tuner()
 
     return render_template(
         'guide.html',
-        channels=cached_channels,
-        epg=cached_epg,
+        channels=channels,
+        epg=epg,
         now=now,
         grid_start=grid_start,
         hours_header=hours_header,
         SCALE=SCALE,
         total_width=total_width,
         now_offset=now_offset,
-        current_tuner=get_current_tuner()
+        current_tuner=active_tuner
     )
 
 @app.route('/play_channel', methods=['POST'])
