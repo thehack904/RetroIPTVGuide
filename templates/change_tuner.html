@@ -146,12 +146,16 @@
                     <input type="radio" id="tuner_mode_single_stream" name="tuner_mode" value="single_stream">
                     Single Stream Mode
                   </label>
+                  <label for="tuner_mode_xtream" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" id="tuner_mode_xtream" name="tuner_mode" value="xtream">
+                    Xtream Codes
+                  </label>
                   <label for="tuner_mode_combined" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
                     <input type="radio" id="tuner_mode_combined" name="tuner_mode" value="combined">
                     Combined Tuner
                   </label>
                 </div>
-                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL. Combined mode merges channels and guide data from multiple existing tuners.</p>
+                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL. Xtream Codes mode builds playlist and EPG URLs from your server credentials. Combined mode merges channels and guide data from multiple existing tuners.</p>
               </div>
 
               <!-- Standard mode fields -->
@@ -168,6 +172,17 @@
                 <label for="m3u8_stream">M3U8 Stream URL</label>
                 <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
                 <p class="muted small" style="margin: 6px 0 0 0;">Direct link to a single M3U8 stream. Channel name will be auto-generated from the tuner name.</p>
+              </div>
+
+              <!-- Xtream Codes mode fields -->
+              <div id="xtream-fields" style="display: none;">
+                <label for="xtream_server">Server URL</label>
+                <input type="text" id="xtream_server" name="xtream_server" placeholder="http://yourserver.com:8080">
+                <label for="xtream_username">Username</label>
+                <input type="text" id="xtream_username" name="xtream_username" placeholder="your_username" autocomplete="username">
+                <label for="xtream_password">Password</label>
+                <input type="password" id="xtream_password" name="xtream_password" placeholder="your_password" autocomplete="current-password">
+                <p class="muted small" style="margin: 6px 0 0 0;">Playlist and EPG URLs will be constructed automatically from your Xtream Codes credentials.</p>
               </div>
 
               <!-- Combined mode fields -->
@@ -355,10 +370,14 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
     const standardFields = document.getElementById('standard-fields');
     const streamFields = document.getElementById('stream-fields');
+    const xtreamFields = document.getElementById('xtream-fields');
     const combinedFields = document.getElementById('combined-fields');
     const xmlInput = document.getElementById('xml_new');
     const m3uInput = document.getElementById('m3u_new');
     const m3u8Input = document.getElementById('m3u8_stream');
+    const xtreamServerInput = document.getElementById('xtream_server');
+    const xtreamUsernameInput = document.getElementById('xtream_username');
+    const xtreamPasswordInput = document.getElementById('xtream_password');
     const sourceTunersSelect = document.getElementById('source_tuners');
     const modeRadios = document.querySelectorAll('input[name="tuner_mode"]');
 
@@ -369,16 +388,25 @@ document.addEventListener("DOMContentLoaded", () => {
       // Hide all field groups first
       standardFields.style.display = 'none';
       streamFields.style.display = 'none';
+      xtreamFields.style.display = 'none';
       combinedFields.style.display = 'none';
 
       // Remove required from all optional inputs
       xmlInput.removeAttribute('required');
       m3uInput.removeAttribute('required');
       m3u8Input.removeAttribute('required');
+      xtreamServerInput.removeAttribute('required');
+      xtreamUsernameInput.removeAttribute('required');
+      xtreamPasswordInput.removeAttribute('required');
 
       if (mode === 'single_stream') {
         streamFields.style.display = 'block';
         m3u8Input.setAttribute('required', 'required');
+      } else if (mode === 'xtream') {
+        xtreamFields.style.display = 'block';
+        xtreamServerInput.setAttribute('required', 'required');
+        xtreamUsernameInput.setAttribute('required', 'required');
+        xtreamPasswordInput.setAttribute('required', 'required');
       } else if (mode === 'combined') {
         combinedFields.style.display = 'block';
         // source_tuners select is validated server-side; no HTML required attribute on multi-select

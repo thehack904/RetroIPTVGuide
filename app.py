@@ -15,7 +15,7 @@ import datetime
 import requests
 import time
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, quote as _url_quote
 import socket
 import ipaddress
 import logging
@@ -402,6 +402,33 @@ def add_combined_tuner(name, source_names):
             c.execute(
                 "INSERT INTO tuners (name, xml, m3u, tuner_type, sources) VALUES (?, ?, ?, ?, ?)",
                 (name, '', '', 'combined', sources_str)
+            )
+            conn.commit()
+        except sqlite3.IntegrityError as e:
+            raise ValueError(f"Database error: {str(e)}")
+
+def add_xtream_tuner(name, server_url, username, password):
+    """Insert a new Xtream Codes tuner, constructing the M3U and EPG URLs from credentials."""
+    server_url = _validate_url(server_url.rstrip('/'), "Server URL")
+    if not username or not username.strip():
+        raise ValueError("Xtream Codes username cannot be empty")
+    if not password or not password.strip():
+        raise ValueError("Xtream Codes password cannot be empty")
+    username = username.strip()
+    password = password.strip()
+
+    m3u_url = f"{server_url}/get.php?username={_url_quote(username, safe='')}&password={_url_quote(password, safe='')}&type=m3u_plus&output=ts"
+    xml_url = f"{server_url}/xmltv.php?username={_url_quote(username, safe='')}&password={_url_quote(password, safe='')}"
+
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("SELECT name FROM tuners WHERE name=?", (name,))
+        if c.fetchone():
+            raise ValueError(f"Tuner '{name}' already exists")
+        try:
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u, tuner_type) VALUES (?, ?, ?, ?)",
+                (name, xml_url, m3u_url, 'xtream')
             )
             conn.commit()
         except sqlite3.IntegrityError as e:
@@ -1135,6 +1162,17 @@ def change_tuner():
                             add_combined_tuner(name, source_names)
                             log_event(current_user.username, f"Added combined tuner {name} from {source_names}")
                             flash(f"Combined tuner '{name}' added successfully.", "success")
+                    elif tuner_mode == "xtream":
+                        # Xtream Codes mode: build M3U/EPG URLs from server + credentials
+                        xtream_server = request.form.get("xtream_server", "").strip()
+                        xtream_username = request.form.get("xtream_username", "").strip()
+                        xtream_password = request.form.get("xtream_password", "").strip()
+                        if not xtream_server or not xtream_username or not xtream_password:
+                            flash("Server URL, username and password are all required for Xtream Codes mode.", "warning")
+                        else:
+                            add_xtream_tuner(name, xtream_server, xtream_username, xtream_password)
+                            log_event(current_user.username, f"Added Xtream Codes tuner {name}")
+                            flash(f"Xtream Codes tuner '{name}' added successfully.", "success")
                     elif tuner_mode == "single_stream":
                         # Single stream mode: use M3U8 stream URL for both XML and M3U
                         m3u8_stream_url = request.form.get("m3u8_stream_url", "").strip()
