@@ -107,32 +107,6 @@
                       {% endif %}
                     </div>
 
-                    <!-- Sizzle reels -->
-                    <div class="prefs-field">
-                      <label class="prefs-checkbox-label">
-                        <input type="checkbox" name="sizzle_reels_enabled" value="1"
-                               {% if user.prefs.sizzle_reels_enabled %}checked{% endif %}>
-                        🎬 Sizzle Reels (hover preview)
-                      </label>
-                    </div>
-
-                    <!-- Hidden channels -->
-                    <div class="prefs-field prefs-hidden-channels">
-                      <label>🙈 Hidden Channels</label>
-                      {% if user.prefs.hidden_channels %}
-                      <ul class="hidden-ch-list">
-                        {% for cid in user.prefs.hidden_channels %}
-                        <li>{{ cid }}</li>
-                        {% endfor %}
-                      </ul>
-                      <label class="prefs-checkbox-label">
-                        <input type="checkbox" name="clear_hidden" value="1">
-                        Clear all hidden channels
-                      </label>
-                      {% else %}
-                      <span class="prefs-hint">No hidden channels.</span>
-                      {% endif %}
-                    </div>
                   </div>
 
                   <div class="prefs-form-actions">
