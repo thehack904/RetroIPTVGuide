@@ -107,7 +107,7 @@
   // ─── Auto-load channel ────────────────────────────────────────────────────
   function syncAutoLoadButton() {
     const al = prefs.auto_load_channel;
-    const label = al ? `📌 Auto-Load: ${al.name}` : '📌 Set Auto-Load Channel';
+    const label = al ? `Auto-Load: ${al.name}` : 'Set Auto-Load Channel';
     const showClear = !!al;
 
     ['setAutoLoadChannel', 'mobileSetAutoLoadChannel'].forEach(function (id) {
@@ -303,7 +303,7 @@
     }
 
     menu.appendChild(item('ctxPlay',      '▶  Play Channel'));
-    menu.appendChild(item('ctxAutoLoad',  '📌 Set as Auto-Load Channel'));
+    menu.appendChild(item('ctxAutoLoad',  'Set as Auto-Load Channel'));
     menu.appendChild(item('ctxHide',      '🙈 Hide Channel'));
     menu.appendChild(item('ctxUnhide',    '👁  Unhide Channel'));
 
