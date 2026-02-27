@@ -172,6 +172,9 @@
 
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
 
+<!-- Inject per-user preferences so user-prefs.js can act before an extra round-trip -->
+<script>window.__initialUserPrefs = {{ user_prefs | tojson }};</script>
+
 <script>
 // --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
 
@@ -202,6 +205,8 @@ function getDisplayZoom() {
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
+    // Expose currently-playing channel for user-prefs.js (auto-load / context menu)
+    window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
 
     fetch("/play_channel", {
@@ -707,6 +712,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Right Hand Clock Fix -->
 <script src="{{ url_for('static', filename='js/clock-fix.js') }}" defer></script>
+
+<!-- Per-user channel preferences: auto-load channel, hidden channels, sizzle reels -->
+<script src="{{ url_for('static', filename='js/user-prefs.js') }}" defer></script>
 
 
 

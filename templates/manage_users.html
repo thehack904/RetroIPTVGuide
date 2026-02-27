@@ -53,6 +53,67 @@
                   <input type="hidden" name="action" value="signout">
                   <button class="btn warn" type="submit">Sign Out All</button>
                 </form>
+                <button class="btn prefs-toggle" type="button"
+                        onclick="togglePrefsPanel('{{ user.username }}')">⚙ Prefs</button>
+              </td>
+            </tr>
+            <!-- Expandable channel preferences panel for {{ user.username }} -->
+            <tr id="prefs-panel-{{ user.username }}" class="prefs-panel-row" style="display:none">
+              <td colspan="4">
+                <form method="POST" class="prefs-form">
+                  <input type="hidden" name="action" value="set_user_prefs">
+                  <input type="hidden" name="username" value="{{ user.username }}">
+
+                  <div class="prefs-form-grid">
+                    <!-- Auto-load channel -->
+                    <div class="prefs-field">
+                      <label for="auto-load-{{ user.username }}">📌 Auto-Load Channel</label>
+                      <select id="auto-load-{{ user.username }}" name="auto_load_channel_id">
+                        <option value="">— None (no auto-load) —</option>
+                        {% for ch in channel_list %}
+                        <option value="{{ ch.id }}"
+                          {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id == ch.id %}selected{% endif %}>
+                          {{ ch.name }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                      {% if not channel_list %}
+                      <small class="prefs-hint">No channels loaded — switch to the guide first to populate the list.</small>
+                      {% endif %}
+                    </div>
+
+                    <!-- Sizzle reels -->
+                    <div class="prefs-field">
+                      <label class="prefs-checkbox-label">
+                        <input type="checkbox" name="sizzle_reels_enabled" value="1"
+                               {% if user.prefs.sizzle_reels_enabled %}checked{% endif %}>
+                        🎬 Sizzle Reels (hover preview)
+                      </label>
+                    </div>
+
+                    <!-- Hidden channels -->
+                    <div class="prefs-field prefs-hidden-channels">
+                      <label>🙈 Hidden Channels</label>
+                      {% if user.prefs.hidden_channels %}
+                      <ul class="hidden-ch-list">
+                        {% for cid in user.prefs.hidden_channels %}
+                        <li>{{ cid }}</li>
+                        {% endfor %}
+                      </ul>
+                      <label class="prefs-checkbox-label">
+                        <input type="checkbox" name="clear_hidden" value="1">
+                        Clear all hidden channels
+                      </label>
+                      {% else %}
+                      <span class="prefs-hint">No hidden channels.</span>
+                      {% endif %}
+                    </div>
+                  </div>
+
+                  <div class="prefs-form-actions">
+                    <button class="btn add" type="submit">Save Preferences</button>
+                  </div>
+                </form>
               </td>
             </tr>
             {% endfor %}
@@ -75,6 +136,12 @@
 
 {% block scripts_extra %}
 <script>
+function togglePrefsPanel(username) {
+  const row = document.getElementById('prefs-panel-' + username);
+  if (!row) return;
+  row.style.display = (row.style.display === 'none' || row.style.display === '') ? 'table-row' : 'none';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // Apply saved theme (base.html provides setTheme/updateClock)
   const saved = localStorage.getItem("theme") || "dark";

@@ -6,6 +6,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
+import json
 import re
 import sys
 import platform
@@ -176,6 +177,66 @@ def init_db():
         except sqlite3.OperationalError:
             # Column already exists
             pass
+
+        # Per-user channel preferences (auto-load channel, hidden channels, sizzle reels)
+        c.execute('''CREATE TABLE IF NOT EXISTS user_preferences
+                     (username TEXT PRIMARY KEY, prefs TEXT NOT NULL DEFAULT '{}')''')
+        conn.commit()
+
+# ------------------- User Preferences -------------------
+_DEFAULT_PREFS = {'auto_load_channel': None, 'hidden_channels': [], 'sizzle_reels_enabled': False}
+
+def get_user_prefs(username):
+    """Return the channel preferences dict for *username*.
+
+    Safe to call before the DB is fully migrated: if the user_preferences
+    table does not exist yet (e.g., app code was deployed but not yet
+    restarted to run init_db), the function returns default values and logs
+    a warning instead of raising an exception.
+    """
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute('SELECT prefs FROM user_preferences WHERE username=?', (username,))
+            row = c.fetchone()
+        if row and row[0]:
+            try:
+                prefs = json.loads(row[0])
+                # Ensure all expected keys are present
+                return {**_DEFAULT_PREFS, **prefs}
+            except (json.JSONDecodeError, TypeError):
+                pass
+    except sqlite3.OperationalError:
+        # Table does not exist yet — first startup after upgrade. init_db()
+        # will create it on the next full app restart; return safe defaults now.
+        logging.warning("user_preferences table missing; returning defaults for %s", username)
+    return dict(_DEFAULT_PREFS)
+
+def save_user_prefs(username, prefs):
+    """Persist *prefs* dict for *username*.
+
+    If the user_preferences table does not exist yet (upgrade before restart),
+    this function calls init_db() to create it, then retries once.
+    """
+    prefs_json = json.dumps(prefs)
+    def _write(conn):
+        conn.execute(
+            '''INSERT INTO user_preferences (username, prefs) VALUES (?, ?)
+               ON CONFLICT(username) DO UPDATE SET prefs=excluded.prefs''',
+            (username, prefs_json)
+        )
+
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            _write(conn)
+            conn.commit()
+    except sqlite3.OperationalError:
+        # Table is missing — run migration and retry once
+        logging.warning("user_preferences table missing; running init_db() before save")
+        init_db()
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            _write(conn)
+            conn.commit()
 
 def add_user(username, password):
     password_hash = generate_password_hash(password)
@@ -850,10 +911,34 @@ def manage_users():
                 log_event(current_user.username, f"Cleared tuner assignment for user '{username}'")
                 flash(f"✅ Tuner assignment cleared for '{username}'.", "success")
 
+        elif action == 'set_user_prefs':
+            prefs = get_user_prefs(username)
+            auto_load_id = request.form.get('auto_load_channel_id', '').strip()
+            if auto_load_id:
+                ch_name = next(
+                    (ch['name'] for ch in cached_channels if ch['tvg_id'] == auto_load_id),
+                    auto_load_id
+                )
+                prefs['auto_load_channel'] = {'id': auto_load_id, 'name': ch_name}
+            else:
+                prefs['auto_load_channel'] = None
+            prefs['sizzle_reels_enabled'] = bool(request.form.get('sizzle_reels_enabled'))
+            if request.form.get('clear_hidden'):
+                prefs['hidden_channels'] = []
+            save_user_prefs(username, prefs)
+            log_event(current_user.username, f"Updated channel preferences for user '{username}'")
+            flash(f"✅ Channel preferences updated for '{username}'.", "success")
+
         return redirect(url_for('manage_users'))
 
     tuner_names = list(get_tuners().keys())
-    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner(), tuner_names=tuner_names)
+    # Attach each user's channel prefs so the template can display them
+    for user in users:
+        user['prefs'] = get_user_prefs(user['username'])
+    # Channel list for auto-load channel selector (uses currently cached channels)
+    channel_list = [{'id': ch['tvg_id'], 'name': ch['name']} for ch in cached_channels]
+    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner(),
+                           tuner_names=tuner_names, channel_list=channel_list)
 
 
 @app.route("/about")
@@ -1148,7 +1233,8 @@ def guide():
         SCALE=SCALE,
         total_width=total_width,
         now_offset=now_offset,
-        current_tuner=active_tuner
+        current_tuner=active_tuner,
+        user_prefs=get_user_prefs(current_user.username)
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1158,6 +1244,37 @@ def play_channel():
     if channel_name:
         log_event(current_user.username, f"Started playback of channel {channel_name}")
     return ("", 204)
+
+
+@app.route('/api/user_prefs', methods=['GET', 'POST'])
+@login_required
+def api_user_prefs():
+    """GET: return current user's channel preferences.
+    POST (JSON): partially update current user's channel preferences.
+    Accepted keys: auto_load_channel (object|null), hidden_channels (list), sizzle_reels_enabled (bool).
+    """
+    if request.method == 'GET':
+        return jsonify(get_user_prefs(current_user.username))
+
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'invalid json'}), 400
+
+    prefs = get_user_prefs(current_user.username)
+    if 'auto_load_channel' in data:
+        val = data['auto_load_channel']
+        prefs['auto_load_channel'] = (
+            {'id': str(val['id']), 'name': str(val.get('name', val['id']))}
+            if isinstance(val, dict) and val.get('id') else None
+        )
+    if 'hidden_channels' in data:
+        prefs['hidden_channels'] = [str(c) for c in data['hidden_channels'] if c]
+    if 'sizzle_reels_enabled' in data:
+        prefs['sizzle_reels_enabled'] = bool(data['sizzle_reels_enabled'])
+
+    save_user_prefs(current_user.username, prefs)
+    log_event(current_user.username, "Updated channel preferences")
+    return jsonify({'status': 'ok', 'prefs': prefs})
 
 
 @app.route('/remote')

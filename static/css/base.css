@@ -636,3 +636,21 @@ body.light{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
     list-style: none;
     height: 0;
 }
+
+/* ── Per-user channel preferences ───────────────────────────────────────────── */
+
+/* Hidden channels: rows are hidden by default; .chan-hidden-visible reveals them
+   temporarily when the user toggles "Show Hidden Channels" from the menu */
+.guide-row.chan-hidden { display: none; }
+.guide-row.chan-hidden.chan-hidden-visible { display: flex; opacity: 0.45; }
+
+/* Auto-load channel: subtle left-border highlight so the user can see which
+   channel will auto-play on next guide load */
+.guide-row.chan-autoload > .chan-col {
+  border-left: 3px solid var(--primary-color, #1ed3ce);
+}
+.guide-row.chan-autoload > .chan-col .chan-name::after {
+  content: ' 📌';
+  font-size: 0.75em;
+  opacity: 0.8;
+}
