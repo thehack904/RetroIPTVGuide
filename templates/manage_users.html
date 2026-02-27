@@ -30,7 +30,9 @@
               <td>{{ user.username }}</td>
               <td>{{ user.last_login | format_datetime }}</td>
               <td>
-                <form method="POST" class="inline-form assign-tuner-form">
+                <form method="POST" class="inline-form assign-tuner-form"
+                      data-current-tuner="{{ user.assigned_tuner or '' }}"
+                      data-autoload-name="{{ user.prefs.auto_load_channel.name | e if user.prefs.auto_load_channel else '' }}">
                   <input type="hidden" name="username" value="{{ user.username }}">
                   <input type="hidden" name="action" value="assign_tuner">
                   <select name="tuner_name" title="Assign tuner to {{ user.username }}">
@@ -170,6 +172,21 @@ document.addEventListener("DOMContentLoaded", () => {
   const saved = localStorage.getItem("theme") || "dark";
   if (typeof setTheme === 'function') setTheme(saved);
   if (typeof updateClock === 'function') updateClock();
+
+  // Confirm dialog when a tuner reassignment would clear the user's auto-load channel.
+  document.querySelectorAll('.assign-tuner-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      var currentTuner  = form.dataset.currentTuner  || '';
+      var autoloadName  = form.dataset.autoloadName  || '';
+      var selectedTuner = (form.querySelector('[name="tuner_name"]') || {}).value || '';
+      if (autoloadName && selectedTuner !== currentTuner) {
+        var msg = 'Changing the tuner will clear the auto-load channel\n"' + autoloadName + '"\nfor this user.\n\nContinue?';
+        if (!confirm(msg)) {
+          e.preventDefault();
+        }
+      }
+    });
+  });
 });
 </script>
 {% endblock %}

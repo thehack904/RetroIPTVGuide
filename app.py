@@ -900,10 +900,24 @@ def manage_users():
 
         elif action == 'assign_tuner':
             tuner_name = request.form.get('tuner_name') or None
+            # Read the current assigned tuner and update it in one transaction so
+            # we can detect a change atomically and clear the auto-load channel
+            # if the tuner has switched.
             with sqlite3.connect(DATABASE, timeout=10) as conn:
                 c = conn.cursor()
+                c.execute('SELECT assigned_tuner FROM users WHERE username=?', (username,))
+                row = c.fetchone()
+                old_tuner = row[0] if row else None
                 c.execute('UPDATE users SET assigned_tuner=? WHERE username=?', (tuner_name, username))
                 conn.commit()
+            tuner_changed = (tuner_name != old_tuner)
+            # When the tuner changes, the previously-saved auto-load channel belongs
+            # to the old tuner and will not be valid on the new one — clear it.
+            if tuner_changed:
+                prefs = get_user_prefs(username)
+                if prefs.get('auto_load_channel'):
+                    prefs['auto_load_channel'] = None
+                    save_user_prefs(username, prefs)
             if tuner_name:
                 log_event(current_user.username, f"Assigned tuner '{tuner_name}' to user '{username}'")
                 flash(f"✅ Tuner '{tuner_name}' assigned to '{username}'.", "success")

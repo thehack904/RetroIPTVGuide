@@ -307,3 +307,68 @@ class TestManageUsersSetPrefs:
         assert resp.status_code == 200
         # The saved channel name should appear in the rendered page
         assert b"Test Ch" in resp.data
+
+    def test_user_api_update_reflected_in_admin_panel(self, client):
+        """When the user updates their auto_load_channel via /api/user_prefs,
+        the admin manage_users page should reflect the new value."""
+        # User logs in and sets their channel via the REST API
+        login(client, "testuser", "testpass")
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"auto_load_channel": {"id": "api-set-ch", "name": "API Set Channel"}}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        # Log out testuser, log in as admin
+        client.get("/logout")
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b"API Set Channel" in resp.data
+
+    def test_assign_tuner_change_clears_auto_load_channel(self, client):
+        """Reassigning a user to a different tuner must wipe their auto-load channel."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": {"id": "old-ch", "name": "Old Tuner Channel"},
+            "hidden_channels": [],
+            "sizzle_reels_enabled": False,
+        })
+        # Give testuser an initial assigned_tuner
+        login(client, "admin", "adminpass")
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "Tuner 1",
+        }, follow_redirects=True)
+        # auto_load was set, tuner was None → Tuner 1, so it should be cleared
+        assert get_user_prefs("testuser")["auto_load_channel"] is None
+
+    def test_assign_tuner_same_tuner_keeps_auto_load_channel(self, client):
+        """Re-assigning the SAME tuner must NOT clear the auto-load channel."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": {"id": "keep-ch", "name": "Keep This Channel"},
+            "hidden_channels": [],
+            "sizzle_reels_enabled": False,
+        })
+        login(client, "admin", "adminpass")
+        # First, assign Tuner 1 to testuser (tuner was None → Tuner 1, so auto_load clears here)
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "Tuner 1",
+        }, follow_redirects=True)
+        # Now set prefs again after the tuner is already Tuner 1
+        save_user_prefs("testuser", {
+            "auto_load_channel": {"id": "keep-ch", "name": "Keep This Channel"},
+            "hidden_channels": [],
+            "sizzle_reels_enabled": False,
+        })
+        # Re-assign the SAME tuner — channel must be preserved
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "Tuner 1",
+        }, follow_redirects=True)
+        prefs = get_user_prefs("testuser")
+        assert prefs["auto_load_channel"] is not None
+        assert prefs["auto_load_channel"]["id"] == "keep-ch"
