@@ -372,3 +372,11 @@ class TestManageUsersSetPrefs:
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"] is not None
         assert prefs["auto_load_channel"]["id"] == "keep-ch"
+
+    def test_manage_users_response_has_no_store_header(self, client):
+        """GET /manage_users must return Cache-Control: no-store so browsers
+        always fetch a fresh copy rather than serving a cached page."""
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert 'no-store' in resp.headers.get('Cache-Control', '')

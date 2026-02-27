@@ -2,7 +2,7 @@
 APP_VERSION = "v4.7.0 dev"
 APP_RELEASE_DATE = "2026-02-23"
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -969,8 +969,10 @@ def manage_users():
                 _tuner_ch_cache[assigned] = global_channel_list
         user['channel_list'] = _tuner_ch_cache.get(assigned, global_channel_list)
 
-    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner(),
-                           tuner_names=tuner_names)
+    resp = make_response(render_template('manage_users.html', users=users, current_tuner=get_current_tuner(),
+                           tuner_names=tuner_names))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.route("/about")
