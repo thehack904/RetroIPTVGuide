@@ -184,7 +184,8 @@ def init_db():
         conn.commit()
 
 # ------------------- User Preferences -------------------
-_DEFAULT_PREFS = {'auto_load_channel': None, 'hidden_channels': [], 'sizzle_reels_enabled': False}
+_DEFAULT_PREFS = {'auto_load_channel': None, 'hidden_channels': [], 'sizzle_reels_enabled': False, 'default_theme': None}
+VALID_THEMES = {'auto', 'dark', 'light', 'retroiptv', 'retro-aol', 'retro-magazine', 'directv', 'comcast', 'tvguide1990'}
 
 def get_user_prefs(username):
     """Return the channel preferences dict for *username*.
@@ -939,6 +940,8 @@ def manage_users():
             prefs['sizzle_reels_enabled'] = bool(request.form.get('sizzle_reels_enabled'))
             if request.form.get('clear_hidden'):
                 prefs['hidden_channels'] = []
+            default_theme = request.form.get('default_theme', '').strip()
+            prefs['default_theme'] = default_theme if default_theme in VALID_THEMES else None
             save_user_prefs(username, prefs)
             log_event(current_user.username, f"Updated channel preferences for user '{username}'")
             flash(f"✅ Channel preferences updated for '{username}'.", "success")
@@ -1305,6 +1308,9 @@ def api_user_prefs():
         prefs['hidden_channels'] = [str(c) for c in data['hidden_channels'] if c]
     if 'sizzle_reels_enabled' in data:
         prefs['sizzle_reels_enabled'] = bool(data['sizzle_reels_enabled'])
+    if 'default_theme' in data:
+        val = str(data['default_theme']).strip() if data['default_theme'] else None
+        prefs['default_theme'] = val if val in VALID_THEMES else None
 
     save_user_prefs(current_user.username, prefs)
     log_event(current_user.username, "Updated channel preferences")

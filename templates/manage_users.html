@@ -107,6 +107,22 @@
                       {% endif %}
                     </div>
 
+                    <!-- Default theme -->
+                    <div class="prefs-field">
+                      <label for="default-theme-{{ user.username }}">🎨 Default Theme</label>
+                      <select id="default-theme-{{ user.username }}" name="default_theme">
+                        <option value="" {% if not user.prefs.default_theme %}selected{% endif %}>— No preference (use browser/localStorage) —</option>
+                        <option value="auto"         {% if user.prefs.default_theme == 'auto' %}selected{% endif %}>Auto (System)</option>
+                        <option value="dark"         {% if user.prefs.default_theme == 'dark' %}selected{% endif %}>Dark</option>
+                        <option value="light"        {% if user.prefs.default_theme == 'light' %}selected{% endif %}>Light</option>
+                        <option value="retroiptv"    {% if user.prefs.default_theme == 'retroiptv' %}selected{% endif %}>RetroIPTV</option>
+                        <option value="retro-aol"    {% if user.prefs.default_theme == 'retro-aol' %}selected{% endif %}>AOL / CompuServe</option>
+                        <option value="retro-magazine" {% if user.prefs.default_theme == 'retro-magazine' %}selected{% endif %}>TV Guide (Refresh)</option>
+                        <option value="directv"      {% if user.prefs.default_theme == 'directv' %}selected{% endif %}>DirecTV</option>
+                        <option value="comcast"      {% if user.prefs.default_theme == 'comcast' %}selected{% endif %}>Comcast</option>
+                      </select>
+                    </div>
+
                   </div>
 
                   <div class="prefs-form-actions">
