@@ -39,6 +39,13 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
+        // If no localStorage value, seed from the server-side default (set via user prefs).
+        {% if user_default_theme %}
+        if (!t) {
+          t = {{ user_default_theme | tojson }};
+          try { localStorage.setItem('theme', t); } catch (e) {}
+        }
+        {% endif %}
         if (t) {
           // Handle 'auto' theme
           if (t === 'auto') {
