@@ -172,6 +172,9 @@
 
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
 
+<!-- Inject per-user preferences so user-prefs.js can act before an extra round-trip -->
+<script>window.__initialUserPrefs = {{ user_prefs | tojson }};</script>
+
 <script>
 // --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
 
@@ -202,6 +205,8 @@ function getDisplayZoom() {
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
+    // Expose currently-playing channel for user-prefs.js (auto-load / context menu)
+    window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
 
     fetch("/play_channel", {
@@ -215,10 +220,20 @@ function playChannel(url, cid, name) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            // Try normal play; if blocked by browser autoplay policy, retry muted
+            // so auto-load still starts (user can unmute via the player controls).
+            video.play().catch(() => {
+                video.muted = true;
+                video.play().catch(()=>{});
+            });
+        });
     } else {
         video.src = url;
-        video.play().catch(()=>{});
+        video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(()=>{});
+        });
     }
 }
 
@@ -707,6 +722,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Right Hand Clock Fix -->
 <script src="{{ url_for('static', filename='js/clock-fix.js') }}" defer></script>
+
+<!-- Per-user channel preferences: auto-load channel, hidden channels, sizzle reels -->
+<script src="{{ url_for('static', filename='js/user-prefs.js') }}" defer></script>
 
 
 

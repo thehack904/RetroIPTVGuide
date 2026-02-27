@@ -6,6 +6,31 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.7.0 - 2026-02-27
+
+### Added
+- **Per-user channel preferences: Auto-Load Channel, Hidden Channels, Sizzle Reels**
+  - **Auto-Load Channel** — each user can designate one channel that automatically begins playing when the guide page opens. The channel is played after a short delay once the page has fully loaded.
+    - *Regular users* set this via **Settings → Channel Preferences → Set Auto-Load Channel** (plays the currently-selected channel) or via the right-click context menu on any channel row.
+    - *Admins* set or clear it for any user from the **Manage Users** page via the expandable Preferences panel for each user.
+  - **Hidden Channels** — users can hide channels they never watch from their guide view.
+    - Right-click any channel name to access **Hide Channel** / **Unhide Channel**.
+    - The **Settings → Channel Preferences → Show Hidden Channels** toggle temporarily reveals hidden rows without permanently unhiding them.
+    - Admins can clear all hidden channels for a user from the Manage Users preferences panel.
+  - **Sizzle Reels** — when enabled, hovering over a channel name for 1.5 seconds starts a small muted live-stream preview in the bottom-right corner; moving away stops the preview.
+    - Toggled per user via **Settings → Channel Preferences → Sizzle Reels: On/Off**.
+    - Admins can enable/disable Sizzle Reels for any user from the Manage Users preferences panel.
+  - All three preferences are stored server-side per user in the new `user_preferences` SQLite table and survive browser changes, device switches, and logouts.
+
+### Database migration
+- **New table: `user_preferences`** — added to `users.db` alongside the existing `users` table.
+  - Schema: `(username TEXT PRIMARY KEY, prefs TEXT NOT NULL DEFAULT '{}')`
+  - **Fresh installs**: the table is created automatically on first startup — no action required.
+  - **Upgrades from any prior version**: the table is created automatically the next time the application starts (i.e., after the code is deployed and the process is restarted). No manual SQL or migration script is needed.
+  - If the application is reloaded without a full process restart (rare hot-reload scenario), `get_user_prefs()` returns safe defaults and `save_user_prefs()` self-heals by calling `init_db()` before retrying the write.
+
+---
+
 ## v4.6.0 - 2026-02-23
 
 ### Added

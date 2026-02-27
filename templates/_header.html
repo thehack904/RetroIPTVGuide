@@ -43,6 +43,19 @@
                 </ul>
               </li>
               <a href="{{ url_for('change_password') }}">Change Password</a>
+              {% if request.endpoint == 'guide' %}
+              <li class="submenu">
+                <a href="#">Channel Preferences</a>
+                <ul class="submenu-content">
+                  <li><a href="#" id="setAutoLoadChannel">Set Auto-Load Channel</a></li>
+                  <li><a href="#" id="clearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+                  {% if current_user is defined and current_user.username == 'admin' %}
+                  <li><a href="#" id="toggleSizzleReels">🎬 Sizzle Reels: Off</a></li>
+                  <li><a href="#" id="toggleShowHidden">👁 Show Hidden Channels</a></li>
+                  {% endif %}
+                </ul>
+              </li>
+              {% endif %}
               <li class="submenu">
                 <a href="#">Themes</a>
                 <ul class="submenu-content">
@@ -161,6 +174,29 @@
             </ul>
           </li>
           <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
+
+          {% if request.endpoint == 'guide' %}
+          <!-- Channel Preferences submenu (guide page only) -->
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileChannelPrefsList"
+              type="button">
+              Channel Preferences
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileChannelPrefsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Set Auto-Load Channel</a></li>
+              <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+              {% if current_user is defined and current_user.username == 'admin' %}
+              <li role="none"><a role="menuitem" href="#" id="mobileToggleSizzleReels">🎬 Sizzle Reels: Off</a></li>
+              <li role="none"><a role="menuitem" href="#" id="mobileToggleShowHidden">👁 Show Hidden Channels</a></li>
+              {% endif %}
+            </ul>
+          </li>
+          {% endif %}
 
           <!-- Nested Themes submenu -->
           <li class="mobile-submenu" role="none">
