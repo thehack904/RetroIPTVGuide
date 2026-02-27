@@ -258,3 +258,52 @@ class TestManageUsersSetPrefs:
         }, follow_redirects=True)
         # Non-admins are redirected away from manage_users
         assert get_user_prefs("testuser")["sizzle_reels_enabled"] is False
+
+    def test_auto_load_channel_name_from_form_field(self, client):
+        """Channel name must come from the submitted auto_load_channel_name form
+        field, not from a server-side lookup against cached_channels."""
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "auto_load_channel_id": "tvg-xyz",
+            "auto_load_channel_name": "My Channel XYZ",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["auto_load_channel"]["id"] == "tvg-xyz"
+        # Name must be what the form submitted, not a cached_channels lookup
+        assert prefs["auto_load_channel"]["name"] == "My Channel XYZ"
+
+    def test_auto_load_channel_name_falls_back_to_id(self, client):
+        """If auto_load_channel_name is missing, the ID is used as the name."""
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "auto_load_channel_id": "tvg-fallback",
+            # no auto_load_channel_name submitted
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["auto_load_channel"]["id"] == "tvg-fallback"
+        assert prefs["auto_load_channel"]["name"] == "tvg-fallback"
+
+    def test_manage_users_get_returns_200_for_admin(self, client):
+        """GET /manage_users renders without error for admin."""
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+
+    def test_manage_users_includes_user_prefs_in_response(self, client):
+        """After setting prefs, a GET of manage_users reflects the saved values."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": {"id": "ch99", "name": "Test Ch"},
+            "hidden_channels": [],
+            "sizzle_reels_enabled": False,
+        })
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        # The saved channel name should appear in the rendered page
+        assert b"Test Ch" in resp.data

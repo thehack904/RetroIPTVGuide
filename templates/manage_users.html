@@ -68,17 +68,40 @@
                     <!-- Auto-load channel -->
                     <div class="prefs-field">
                       <label for="auto-load-{{ user.username }}">📌 Auto-Load Channel</label>
-                      <select id="auto-load-{{ user.username }}" name="auto_load_channel_id">
-                        <option value="">— None (no auto-load) —</option>
-                        {% for ch in channel_list %}
+                      <select id="auto-load-{{ user.username }}" name="auto_load_channel_id"
+                              onchange="document.getElementById('auto-load-name-{{ user.username }}').value = this.options[this.selectedIndex].dataset.chname || ''">
+                        <option value="" data-chname="">— None (no auto-load) —</option>
+                        {# If the currently-set channel is not in this user's channel list
+                           (e.g. they set it from a different tuner), show it as a clearly-
+                           labelled first option so the admin can always see what's set. #}
+                        {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id %}
+                          {% set ns = namespace(found=false) %}
+                          {% for ch in user.channel_list %}
+                            {% if ch.id == user.prefs.auto_load_channel.id %}
+                              {% set ns.found = true %}
+                            {% endif %}
+                          {% endfor %}
+                          {% if not ns.found %}
+                          <option value="{{ user.prefs.auto_load_channel.id }}"
+                                  data-chname="{{ user.prefs.auto_load_channel.name | e }}"
+                                  selected>{{ user.prefs.auto_load_channel.name }} ↩ (currently set)</option>
+                          {% endif %}
+                        {% endif %}
+                        {% for ch in user.channel_list %}
                         <option value="{{ ch.id }}"
-                          {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id == ch.id %}selected{% endif %}>
+                                data-chname="{{ ch.name | e }}"
+                                {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id == ch.id %}selected{% endif %}>
                           {{ ch.name }}
                         </option>
                         {% endfor %}
                       </select>
-                      {% if not channel_list %}
-                      <small class="prefs-hint">No channels loaded — switch to the guide first to populate the list.</small>
+                      {# Hidden field carries the human-readable name to the server so no
+                         channel-lookup is needed in the POST handler. #}
+                      <input type="hidden" name="auto_load_channel_name"
+                             id="auto-load-name-{{ user.username }}"
+                             value="{{ user.prefs.auto_load_channel.name | e if user.prefs.auto_load_channel else '' }}">
+                      {% if not user.channel_list %}
+                      <small class="prefs-hint">No channels loaded for this user's assigned tuner.</small>
                       {% endif %}
                     </div>
 

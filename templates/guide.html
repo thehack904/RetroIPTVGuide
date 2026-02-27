@@ -220,10 +220,20 @@ function playChannel(url, cid, name) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            // Try normal play; if blocked by browser autoplay policy, retry muted
+            // so auto-load still starts (user can unmute via the player controls).
+            video.play().catch(() => {
+                video.muted = true;
+                video.play().catch(()=>{});
+            });
+        });
     } else {
         video.src = url;
-        video.play().catch(()=>{});
+        video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(()=>{});
+        });
     }
 }
 

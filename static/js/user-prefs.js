@@ -156,17 +156,36 @@
   function scheduleAutoLoad() {
     const al = prefs.auto_load_channel;
     if (!al || !al.id) return;
-    setTimeout(() => {
-      const chanEl = document.querySelector(`.guide-row[data-cid="${CSS.escape(al.id)}"] .chan-name`);
-      if (!chanEl) { log('auto-load channel not found in guide', al.id); return; }
-      const url  = chanEl.dataset.url;
-      const name = chanEl.dataset.name || al.name;
-      if (!url) { log('auto-load channel has no URL'); return; }
-      log('auto-loading channel', name);
-      if (typeof window.playChannel === 'function') {
-        window.playChannel(url, al.id, name);
-      }
-    }, 800);
+
+    function tryPlay() {
+      setTimeout(function () {
+        // Use dataset comparison instead of CSS.escape-based selector for robustness
+        // with channel IDs that contain special characters.
+        let chanEl = null;
+        document.querySelectorAll('.chan-name').forEach(function (el) {
+          if (el.dataset.cid === al.id) chanEl = el;
+        });
+        if (!chanEl) { log('auto-load channel not found in guide', al.id); return; }
+        const url  = chanEl.dataset.url;
+        const name = chanEl.dataset.name || al.name;
+        if (!url) { log('auto-load channel has no URL'); return; }
+        log('auto-loading channel', name);
+        if (typeof window.playChannel === 'function') {
+          window.playChannel(url, al.id, name);
+        }
+      }, 800);
+    }
+
+    // Always wait for DOMContentLoaded before attempting auto-play so that the
+    // page is fully interactive and all deferred scripts have run.
+    // When user-prefs.js runs as a defer script, readyState is 'interactive'
+    // and DOMContentLoaded is about to fire — adding the listener here fires
+    // tryPlay() right after that event, then the 800 ms grace period follows.
+    if (document.readyState === 'complete') {
+      tryPlay();
+    } else {
+      document.addEventListener('DOMContentLoaded', tryPlay, { once: true });
+    }
   }
 
   // ─── Sizzle reels ─────────────────────────────────────────────────────────

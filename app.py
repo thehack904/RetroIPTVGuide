@@ -915,10 +915,10 @@ def manage_users():
             prefs = get_user_prefs(username)
             auto_load_id = request.form.get('auto_load_channel_id', '').strip()
             if auto_load_id:
-                ch_name = next(
-                    (ch['name'] for ch in cached_channels if ch['tvg_id'] == auto_load_id),
-                    auto_load_id
-                )
+                # Channel name is submitted by the form (populated from the dropdown's
+                # data-chname attribute via JS onchange), so no server-side channel
+                # lookup is needed — this is correct regardless of which tuner is active.
+                ch_name = request.form.get('auto_load_channel_name', '').strip() or auto_load_id
                 prefs['auto_load_channel'] = {'id': auto_load_id, 'name': ch_name}
             else:
                 prefs['auto_load_channel'] = None
@@ -932,13 +932,31 @@ def manage_users():
         return redirect(url_for('manage_users'))
 
     tuner_names = list(get_tuners().keys())
-    # Attach each user's channel prefs so the template can display them
+    # Attach each user's prefs and a per-user channel list drawn from their
+    # assigned tuner (not the global cache).  Each unique tuner is loaded once
+    # within this request to avoid redundant network calls.
+    current_tuner_name = get_current_tuner()
+    global_channel_list = [{'id': ch['tvg_id'], 'name': ch['name']} for ch in cached_channels]
+    _tuner_ch_cache = {}
+    if current_tuner_name:
+        _tuner_ch_cache[current_tuner_name] = global_channel_list
+
     for user in users:
         user['prefs'] = get_user_prefs(user['username'])
-    # Channel list for auto-load channel selector (uses currently cached channels)
-    channel_list = [{'id': ch['tvg_id'], 'name': ch['name']} for ch in cached_channels]
+        assigned = user['assigned_tuner']
+        if assigned and assigned not in _tuner_ch_cache:
+            try:
+                t_channels, _ = load_tuner_data(assigned)
+                _tuner_ch_cache[assigned] = [
+                    {'id': c['tvg_id'], 'name': c['name']} for c in t_channels
+                ]
+            except Exception:
+                logging.warning("manage_users: could not load channels for tuner '%s'", assigned)
+                _tuner_ch_cache[assigned] = global_channel_list
+        user['channel_list'] = _tuner_ch_cache.get(assigned, global_channel_list)
+
     return render_template('manage_users.html', users=users, current_tuner=get_current_tuner(),
-                           tuner_names=tuner_names, channel_list=channel_list)
+                           tuner_names=tuner_names)
 
 
 @app.route("/about")

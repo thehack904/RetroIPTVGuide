@@ -70,7 +70,7 @@ body.light .container-manage-users {
 
 /* Layout */
 .container-manage-users {
-  max-width: 720px;
+  max-width: 960px;
   margin: 60px auto;
   padding: 12px;
   box-sizing: border-box;
@@ -156,7 +156,7 @@ body.light .container-manage-users {
 }
 
 /* Actions & inline forms */
-.actions { display:flex; gap:8px; }
+.actions { display:flex; gap:8px; flex-wrap: wrap; align-items: center; }
 .inline-form { display:inline; margin:0; padding:0; }
 .assign-tuner-form { display:flex !important; gap:6px; align-items:center; }
 .assign-tuner-form select { width: auto; }
