@@ -944,9 +944,6 @@ def manage_users():
                 prefs['auto_load_channel'] = {'id': auto_load_id, 'name': ch_name}
             else:
                 prefs['auto_load_channel'] = None
-            prefs['sizzle_reels_enabled'] = bool(request.form.get('sizzle_reels_enabled'))
-            if request.form.get('clear_hidden'):
-                prefs['hidden_channels'] = []
             default_theme = request.form.get('default_theme', '').strip()
             prefs['default_theme'] = default_theme if default_theme in VALID_THEMES else None
             save_user_prefs(username, prefs)

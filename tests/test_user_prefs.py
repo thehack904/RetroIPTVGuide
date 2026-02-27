@@ -226,38 +226,14 @@ class TestApiUserPrefsPost:
 # ─── Admin: manage_users set_user_prefs action ───────────────────────────────
 
 class TestManageUsersSetPrefs:
-    def test_set_sizzle_reels_for_user(self, client):
-        login(client, "admin", "adminpass")
-        resp = client.post("/manage_users", data={
-            "action": "set_user_prefs",
-            "username": "testuser",
-            "sizzle_reels_enabled": "1",
-        }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert get_user_prefs("testuser")["sizzle_reels_enabled"] is True
-
-    def test_clear_hidden_channels_for_user(self, client):
-        save_user_prefs("testuser", {"auto_load_channel": None,
-                                     "hidden_channels": ["ch1", "ch2"],
-                                     "sizzle_reels_enabled": False})
-        login(client, "admin", "adminpass")
-        resp = client.post("/manage_users", data={
-            "action": "set_user_prefs",
-            "username": "testuser",
-            "clear_hidden": "1",
-        }, follow_redirects=True)
-        assert resp.status_code == 200
-        assert get_user_prefs("testuser")["hidden_channels"] == []
-
     def test_non_admin_cannot_set_prefs(self, client):
         login(client, "testuser", "testpass")
         resp = client.post("/manage_users", data={
             "action": "set_user_prefs",
             "username": "testuser",
-            "sizzle_reels_enabled": "1",
         }, follow_redirects=True)
-        # Non-admins are redirected away from manage_users
-        assert get_user_prefs("testuser")["sizzle_reels_enabled"] is False
+        # Non-admins are redirected away from manage_users; prefs remain unchanged
+        assert get_user_prefs("testuser")["auto_load_channel"] is None
 
     def test_auto_load_channel_name_from_form_field(self, client):
         """Channel name must come from the submitted auto_load_channel_name form
