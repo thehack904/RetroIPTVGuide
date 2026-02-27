@@ -114,11 +114,25 @@
                 {% endfor %}
               </select>
 
+              <!-- Standard edit fields (shown for standard/single_stream tuners) -->
+              <div id="edit-standard-fields">
               <label for="xml_url">XML URL (.xml)</label>
-              <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)" required>
+              <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)">
 
               <label for="m3u_url">M3U URL (.m3u)</label>
-              <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)" required>
+              <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)">
+              </div>
+
+              <!-- Xtream Codes edit fields (shown only for xtream tuners) -->
+              <div id="edit-xtream-fields" style="display:none;">
+                <label for="edit_xtream_server">Server URL</label>
+                <input type="text" id="edit_xtream_server" name="xtream_server" placeholder="http://yourserver.com:8080">
+                <label for="edit_xtream_username">Username</label>
+                <input type="text" id="edit_xtream_username" name="xtream_username" placeholder="your_username" autocomplete="username">
+                <label for="edit_xtream_password">Password</label>
+                <input type="password" id="edit_xtream_password" name="xtream_password" placeholder="Enter new password" autocomplete="new-password">
+                <p class="muted small" style="margin: 4px 0 0 0;">Leave password blank to keep the existing password unchanged.</p>
+              </div>
 
               <div class="form-row form-row-inline">
                 <button type="submit" class="primary">Update URLs</button>
@@ -255,12 +269,46 @@
 const tunerData = {{ TUNERS|tojson }};
 
 function populateUrls(tuner) {
+    const standardGroup = document.getElementById('edit-standard-fields');
+    const xtreamGroup = document.getElementById('edit-xtream-fields');
+    const xmlInput = document.getElementById('xml_url');
+    const m3uInput = document.getElementById('m3u_url');
+    const xtreamServerInput = document.getElementById('edit_xtream_server');
+    const xtreamUsernameInput = document.getElementById('edit_xtream_username');
+    const xtreamPasswordInput = document.getElementById('edit_xtream_password');
+
     if (tunerData && tunerData[tuner]) {
-        document.getElementById('xml_url').value = tunerData[tuner].xml || "";
-        document.getElementById('m3u_url').value = tunerData[tuner].m3u || "";
+        const info = tunerData[tuner];
+        if (info.tuner_type === 'xtream') {
+            // Show Xtream fields, hide standard fields
+            if (standardGroup) standardGroup.style.display = 'none';
+            if (xtreamGroup) xtreamGroup.style.display = 'block';
+            if (xmlInput) { xmlInput.removeAttribute('required'); xmlInput.value = ''; }
+            if (m3uInput) { m3uInput.removeAttribute('required'); m3uInput.value = ''; }
+            // Extract server and username from the stored m3u URL
+            try {
+                const url = new URL(info.m3u || '');
+                // Server is everything before /get.php
+                const serverMatch = (info.m3u || '').match(/^(https?:\/\/[^/]+)/);
+                if (xtreamServerInput) xtreamServerInput.value = serverMatch ? serverMatch[1] : '';
+                if (xtreamUsernameInput) xtreamUsernameInput.value = url.searchParams.get('username') || '';
+            } catch(e) {
+                if (xtreamServerInput) xtreamServerInput.value = '';
+                if (xtreamUsernameInput) xtreamUsernameInput.value = '';
+            }
+            if (xtreamPasswordInput) xtreamPasswordInput.value = '';
+        } else {
+            // Show standard fields, hide Xtream fields
+            if (standardGroup) standardGroup.style.display = 'block';
+            if (xtreamGroup) xtreamGroup.style.display = 'none';
+            if (xmlInput) { xmlInput.setAttribute('required', 'required'); xmlInput.value = info.xml || ''; }
+            if (m3uInput) { m3uInput.setAttribute('required', 'required'); m3uInput.value = info.m3u || ''; }
+        }
     } else {
-        document.getElementById('xml_url').value = "";
-        document.getElementById('m3u_url').value = "";
+        if (standardGroup) standardGroup.style.display = 'block';
+        if (xtreamGroup) xtreamGroup.style.display = 'none';
+        if (xmlInput) { xmlInput.setAttribute('required', 'required'); xmlInput.value = ''; }
+        if (m3uInput) { m3uInput.setAttribute('required', 'required'); m3uInput.value = ''; }
     }
 }
 

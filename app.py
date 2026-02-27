@@ -15,7 +15,7 @@ import datetime
 import requests
 import time
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin, quote as _url_quote
+from urllib.parse import urlparse, urljoin, quote as _url_quote, parse_qs as _parse_qs
 import socket
 import ipaddress
 import logging
@@ -359,6 +359,24 @@ def update_tuner_urls(name, xml_url, m3u_url):
     xml_url = _validate_url(xml_url, "XML URL")
     m3u_url = _validate_url(m3u_url, "M3U URL")
     
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute("UPDATE tuners SET xml=?, m3u=? WHERE name=?", (xml_url, m3u_url, name))
+        conn.commit()
+
+def update_xtream_tuner(name, server_url, username, password):
+    """Update an existing Xtream Codes tuner, reconstructing M3U and EPG URLs from new credentials."""
+    server_url = _validate_url(server_url.rstrip('/'), "Server URL")
+    if not username or not username.strip():
+        raise ValueError("Xtream Codes username cannot be empty")
+    if not password or not password.strip():
+        raise ValueError("Xtream Codes password cannot be empty")
+    username = username.strip()
+    password = password.strip()
+
+    m3u_url = f"{server_url}/get.php?username={_url_quote(username, safe='')}&password={_url_quote(password, safe='')}&type=m3u_plus&output=ts"
+    xml_url = f"{server_url}/xmltv.php?username={_url_quote(username, safe='')}&password={_url_quote(password, safe='')}"
+
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
         c.execute("UPDATE tuners SET xml=?, m3u=? WHERE name=?", (xml_url, m3u_url, name))
@@ -1101,14 +1119,40 @@ def change_tuner():
 
         elif action == "update_urls":
             tuner = request.form["tuner"]
-            xml_url = request.form["xml_url"]
-            m3u_url = request.form["m3u_url"]
 
             # Combined tuners have no direct URLs — their sources define them
             tuner_info = get_tuners().get(tuner, {})
             if tuner_info.get("tuner_type") == "combined":
                 flash("Combined tuners do not have individual URLs. Edit the source tuners instead.", "warning")
+            elif tuner_info.get("tuner_type") == "xtream":
+                # Xtream Codes tuner: rebuild URLs from server + credentials
+                xtream_server = request.form.get("xtream_server", "").strip()
+                xtream_username = request.form.get("xtream_username", "").strip()
+                xtream_password = request.form.get("xtream_password", "").strip()
+                if not xtream_server or not xtream_username:
+                    flash("Server URL and username are required for Xtream Codes tuners.", "warning")
+                else:
+                    # If password is blank, reuse the existing one from the stored M3U URL
+                    if not xtream_password:
+                        try:
+                            existing_m3u = tuner_info.get('m3u', '')
+                            _parsed = urlparse(existing_m3u)
+                            xtream_password = _parse_qs(_parsed.query).get('password', [''])[0]
+                        except Exception:
+                            xtream_password = ''
+                    if not xtream_password:
+                        flash("Password is required (no existing password found).", "warning")
+                    else:
+                        try:
+                            update_xtream_tuner(tuner, xtream_server, xtream_username, xtream_password)
+                            log_event(current_user.username, f"Updated Xtream Codes credentials for tuner {tuner}")
+                            flash(f"Updated Xtream Codes credentials for tuner {tuner}", "success")
+                        except ValueError as e:
+                            flash(f"Update failed: {str(e)}", "warning")
+                            logging.warning(f"Xtream update failed for tuner {tuner}: {e}")
             else:
+                xml_url = request.form.get("xml_url", "")
+                m3u_url = request.form.get("m3u_url", "")
                 # update DB with validation
                 try:
                     update_tuner_urls(tuner, xml_url, m3u_url)
