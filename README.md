@@ -27,10 +27,16 @@ Includes **Docker and TrueNAS SCALE deployment** for easy installation and persi
 
 ## 🚀 Features
 - 🧰 Unified installers for Linux, Raspberry Pi, and Windows
-- 🧭 Integrated channel guide (EPG) viewer
+- 📺 Self-hosted IPTV Electronic Program Guide (EPG)
+- 📡 M3U / M3U8 playlist support with XMLTV integration
+- 🧭 Integrated channel guide with auto-scroll navigation
+- 📱 TV-optimized web UI (Android TV / Fire TV compatible)
+- 🎛️ Display scaling modes (Large / Medium / Small)
+- 🎨 Multiple customizable retro-inspired themes
 - 👥 User management web interface (`manage_users.html`)
+- 🐳 Docker support with Linux, Raspberry Pi, and Windows installers
 - ⚙️ Lightweight Flask backend, easy to self-host
-- 🔐 Local-only by default — no external dependencies
+- 🔐 Local-first by default — no cloud or external dependencies
 
 ## 📦 Image Information
 
