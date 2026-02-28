@@ -358,8 +358,8 @@ class TestManageUsersSetPrefs:
         assert 'no-store' in resp.headers.get('Cache-Control', '')
 
     def test_combined_tuner_channels_shown_in_manage_users(self, client):
-        """A user assigned to a combined tuner should have its merged channel
-        list available in the manage_users page channel-selector dropdown."""
+        """A user assigned to a combined tuner (non-active) should have its merged
+        channel list available in the manage_users page channel-selector dropdown."""
         from app import add_combined_tuner
         from unittest.mock import patch
 
@@ -387,3 +387,36 @@ class TestManageUsersSetPrefs:
         assert resp.status_code == 200
         assert b"Combined Channel One" in resp.data
         assert b"Combined Channel Two" in resp.data
+
+    def test_active_combined_tuner_channels_shown_in_manage_users(self, client):
+        """When the combined tuner IS the active (current) tuner, its merged
+        channels must still appear in manage_users for users defaulting to that tuner.
+
+        This exercises the path where cached_channels is populated via
+        load_tuner_data() during a tuner switch rather than via raw m3u access.
+        """
+        from app import add_combined_tuner
+        from unittest.mock import patch
+        import app as app_module
+
+        add_combined_tuner("Active Combined", ["Tuner 1", "Tuner 2"])
+
+        fake_channels = [
+            {"tvg_id": "act-ch1", "name": "Active Combined Channel", "url": "", "logo": ""},
+        ]
+
+        login(client, "admin", "adminpass")
+        # Switch to the combined tuner; the fixed code calls load_tuner_data() to
+        # populate cached_channels so combined tuners' channels are available.
+        with patch("app.load_tuner_data", return_value=(fake_channels, {})):
+            client.post("/change_tuner", data={
+                "action": "switch_tuner",
+                "tuner": "Active Combined",
+            }, follow_redirects=True)
+
+        # testuser has no assigned_tuner, so manage_users uses curr_tuner
+        # ("Active Combined") and falls into the `ch_list = cached_channels` path.
+        # cached_channels must now contain the fake channels set during the switch.
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b"Active Combined Channel" in resp.data

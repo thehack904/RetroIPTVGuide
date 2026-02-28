@@ -941,13 +941,9 @@ def set_tuner(name):
     # Update current tuner
     set_current_tuner(name)
 
-    # Refresh cached guide data
+    # Refresh cached guide data (use load_tuner_data so combined tuners work).
     global cached_channels, cached_epg
-    m3u_url = tuners[name].get("m3u")
-    xml_url = tuners[name].get("xml")
-
-    cached_channels = parse_m3u(m3u_url) if m3u_url else []
-    cached_epg = parse_epg(xml_url) if xml_url else {}
+    cached_channels, cached_epg = load_tuner_data(name)
     cached_epg = apply_epg_fallback(cached_channels, cached_epg)
 
     log_event(current_user.username, f"Quick switched active tuner to {name}")
@@ -979,13 +975,9 @@ def change_tuner():
             log_event(current_user.username, f"Switched active tuner to {new_tuner}")
             flash(f"Active tuner switched to {new_tuner}")
 
-            # ✅ Refresh cached guide data immediately
+            # ✅ Refresh cached guide data immediately (use load_tuner_data so combined tuners work)
             global cached_channels, cached_epg
-            tuners = get_tuners()
-            m3u_url = tuners[new_tuner]["m3u"]
-            xml_url = tuners[new_tuner]["xml"]
-            cached_channels = parse_m3u(m3u_url)
-            cached_epg = parse_epg(xml_url)
+            cached_channels, cached_epg = load_tuner_data(new_tuner)
             # ✅ Apply “No Guide Data Available” fallback
             cached_epg = apply_epg_fallback(cached_channels, cached_epg)
 
@@ -2069,11 +2061,9 @@ def refresh_current_tuner(tuner_name=None):
             logging.warning("refresh_current_tuner: tuner %s not found", tuner_name)
             return False
 
-        m3u_url = info.get('m3u')
-        xml_url = info.get('xml')
-
-        new_channels = parse_m3u(m3u_url) if m3u_url else []
-        new_epg = parse_epg(xml_url) if xml_url else {}
+        # Use load_tuner_data so combined tuners (which have no direct m3u/xml)
+        # are handled correctly by merging their source tuners' feeds.
+        new_channels, new_epg = load_tuner_data(tuner_name)
         new_epg = apply_epg_fallback(new_channels, new_epg)
 
         # atomic swap
@@ -2209,8 +2199,8 @@ if __name__ == '__main__':
     current_tuner = get_current_tuner()
     if not current_tuner and tuners:  # fallback if no active tuner set
         current_tuner = list(tuners.keys())[0]
-    cached_channels = parse_m3u(tuners[current_tuner]["m3u"])
-    cached_epg = parse_epg(tuners[current_tuner]["xml"])
+    # Use load_tuner_data so combined tuners are handled correctly at startup.
+    cached_channels, cached_epg = load_tuner_data(current_tuner)
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
