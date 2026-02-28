@@ -9,10 +9,33 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## v4.7.1 - 2026-02-28
 
 ### Fixed
+- **Guide page returning 500/503 after login**
+  - `get_tuners()` crashed on existing databases that lacked the new `tuner_type` and `sources` columns. Added safe `ALTER TABLE` migration guards and a schema-fallback query path so the function works on both old and new databases.
+  - `get_user_prefs()` crashed when the `user_preferences` table did not yet exist on existing installs. Added automatic table creation in `init_db()` and a safe `sqlite3.OperationalError` fallback in `save_user_prefs()`.
+  - Guide route now calls `get_user_prefs()` to pass `user_prefs` and `user_default_theme` to the template; previously these variables were missing, causing a `TemplateRuntimeError`.
+
+- **Manage Users page returning 500**
+  - `manage_users` SELECT queried the non-existent `assigned_tuner` column on fresh or pre-4.7 databases. Added `ALTER TABLE users ADD COLUMN assigned_tuner TEXT` migration in `init_db()` so the column is created automatically on startup.
+  - Channel lists for users assigned to non-active or combined tuners now load correctly: `manage_users` now calls `load_tuner_data()` (which handles combined tuners) and caches results per tuner to avoid redundant network fetches within a single request.
+  - Added `Cache-Control: no-store` response header via `make_response()` to prevent stale admin pages from being served from the browser cache after back-navigation.
+
 - **Combined tuner creation blocked by "M3U URL is required" error**
-  - The `Add Tuner` route handler always called `add_tuner()` regardless of the selected tuner mode, causing it to validate M3U URL even when creating a combined tuner (which has no M3U URL).
-  - Fixed by reading `tuner_mode` from the submitted form and dispatching to `add_combined_tuner()` when mode is `combined`, so no M3U URL is required or expected.
-  - Combined tuners can now be created through the UI by selecting "Combined Tuner" mode, choosing source tuners, and submitting — without any URL fields.
+  - The `Add Tuner` POST handler unconditionally called `add_tuner()` regardless of the selected tuner mode, so creating a combined tuner (which has no M3U/XML URLs) always raised a validation error.
+  - Fixed by reading `tuner_mode` from the form and routing to `add_combined_tuner()` when mode is `combined`; standard and single-stream paths are unchanged.
+
+- **Switching to a combined tuner left guide data empty**
+  - The `switch_tuner` action previously called `parse_m3u()` and `parse_epg()` directly, which does not work for combined tuners (no M3U/XML URLs).
+  - Changed to call `load_tuner_data()`, which merges channels and EPG from all source tuners, so `cached_channels` is correctly populated after a switch.
+
+- **Open redirect vulnerability in login `?next=` parameter**
+  - The login route blindly redirected to any value in `?next=` without validation, allowing an attacker to redirect users to an external URL after authentication.
+  - Added `is_safe_url()` helper that validates the redirect target is on the same host; invalid targets now return HTTP 400.
+
+- **Missing database schema columns caused crashes on existing installs**
+  - `user_preferences` table not created → crash on any route that reads user prefs.
+  - `users.assigned_tuner` column absent → crash in `manage_users`.
+  - `tuners.tuner_type` and `tuners.sources` columns absent → crash in `get_tuners()`.
+  - All three are now created automatically at startup with backward-compatible `IF NOT EXISTS` / `ALTER TABLE … ADD COLUMN` guards.
 
 ---
 
