@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.7.0 (2026-02-28)**
+# Current Version: **v4.7.1 (2026-02-28)**
 
 ---
 
