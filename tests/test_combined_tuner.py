@@ -186,6 +186,50 @@ class TestCombinedTuner:
         assert data["tuner_m3u"] is None
         assert data["tuner_xml"] is None
 
+    # ------------------------------------------------------------------ #
+    # /change_tuner POST — add_tuner with tuner_mode=combined             #
+    # ------------------------------------------------------------------ #
 
-if __name__ == '__main__':
-    pytest.main([__file__, '-v'])
+    def test_add_combined_tuner_via_route(self):
+        """POSTing action=add_tuner with tuner_mode=combined creates a combined tuner
+        without requiring an M3U URL (previously raised 'M3U URL is required')."""
+        import app as app_module
+        self._add_source_tuners()
+        app_module.add_user("admin", "adminpass")
+        app.config["TESTING"] = True
+
+        with app.test_client() as client:
+            client.post("/login", data={"username": "admin", "password": "adminpass"},
+                        follow_redirects=True)
+            resp = client.post("/change_tuner", data={
+                "action": "add_tuner",
+                "tuner_name": "Route Combined",
+                "tuner_mode": "combined",
+                "source_tuners": ["Source A", "Source B"],
+            }, follow_redirects=True)
+
+        assert resp.status_code == 200
+        tuners = get_tuners()
+        assert "Route Combined" in tuners
+        assert tuners["Route Combined"]["tuner_type"] == "combined"
+        assert set(tuners["Route Combined"]["sources"]) == {"Source A", "Source B"}
+
+    def test_add_combined_tuner_via_route_no_sources_flashes_error(self):
+        """POSTing action=add_tuner with tuner_mode=combined but no sources gives an error flash."""
+        import app as app_module
+        app_module.add_user("admin", "adminpass")
+        app.config["TESTING"] = True
+
+        with app.test_client() as client:
+            client.post("/login", data={"username": "admin", "password": "adminpass"},
+                        follow_redirects=True)
+            resp = client.post("/change_tuner", data={
+                "action": "add_tuner",
+                "tuner_name": "Empty Combined",
+                "tuner_mode": "combined",
+            }, follow_redirects=True)
+
+        assert resp.status_code == 200
+        # Tuner should not have been created
+        assert "Empty Combined" not in get_tuners()
+        assert b"Combined tuner requires at least one source tuner" in resp.data

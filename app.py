@@ -1018,13 +1018,23 @@ def change_tuner():
                 flash(f"Tuner {old_name} renamed to {new_name}")
 
         elif action == "add_tuner":
-            name = request.form["tuner_name"].strip()
-            xml_url = request.form["xml_url"].strip()
-            m3u_url = request.form["m3u_url"].strip()
+            name = request.form.get("tuner_name", "").strip()
+            tuner_mode = request.form.get("tuner_mode", "standard")
 
             if not name:
                 flash("Tuner name cannot be empty.", "warning")
+            elif tuner_mode == "combined":
+                sources = request.form.getlist("source_tuners")
+                try:
+                    add_combined_tuner(name, sources)
+                    log_event(current_user.username, f"Added combined tuner {name}")
+                    flash(f"Combined tuner {name} added successfully.")
+                except ValueError as e:
+                    flash(str(e), "warning")
+                    log_event(current_user.username, f"Failed to add combined tuner {name}: {str(e)}")
             else:
+                xml_url = request.form.get("xml_url", "").strip()
+                m3u_url = request.form.get("m3u_url", "").strip()
                 try:
                     add_tuner(name, xml_url, m3u_url)
                     log_event(current_user.username, f"Added tuner {name}")
