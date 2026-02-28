@@ -6,28 +6,39 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.7.0 - 2026-02-27
+## v4.7.0 - 2026-02-28
 
 ### Added
-- **Per-user channel preferences: Auto-Load Channel, Hidden Channels, Sizzle Reels**
-  - **Auto-Load Channel** — each user can designate one channel that automatically begins playing when the guide page opens. The channel is played after a short delay once the page has fully loaded.
-    - *Regular users* set this via **Settings → Channel Preferences → Set Auto-Load Channel** (plays the currently-selected channel) or via the right-click context menu on any channel row.
-    - *Admins* set or clear it for any user from the **Manage Users** page via the expandable Preferences panel for each user.
-  - **Hidden Channels** — users can hide channels they never watch from their guide view.
-    - Right-click any channel name to access **Hide Channel** / **Unhide Channel**.
-    - The **Settings → Channel Preferences → Show Hidden Channels** toggle temporarily reveals hidden rows without permanently unhiding them.
-    - Admins can clear all hidden channels for a user from the Manage Users preferences panel.
-  - **Sizzle Reels** — when enabled, hovering over a channel name for 1.5 seconds starts a small muted live-stream preview in the bottom-right corner; moving away stops the preview.
-    - Toggled per user via **Settings → Channel Preferences → Sizzle Reels: On/Off**.
-    - Admins can enable/disable Sizzle Reels for any user from the Manage Users preferences panel.
-  - All three preferences are stored server-side per user in the new `user_preferences` SQLite table and survive browser changes, device switches, and logouts.
+- **Per-user Auto-Load Channel (server-side)**
+  - Each user can designate one channel that automatically begins playing when the guide page opens.
+  - Playback starts after a short delay once the page has fully loaded.
+  - Regular users set this via **Settings → Channel Preferences → Set Auto-Load Channel**.
+  - Admins can set or clear Auto-Load Channel for any user from the **Manage Users** page.
 
-### Database migration
-- **New table: `user_preferences`** — added to `users.db` alongside the existing `users` table.
+- **Assigned Tuner per User**
+  - Admins can assign a specific tuner to each user from the Manage Users page.
+  - Users only see channels from their assigned tuner.
+  - Safeguards prevent invalid auto-load channel references when tuner assignments change.
+
+- **Combined Tuner Mode**
+  - New tuner type that merges channels and EPG data from multiple existing tuners.
+  - Combined tuners behave like standard tuners for playback and guide rendering.
+  - Health indicators adjust appropriately for combined sources.
+
+- **About / Diagnostics Improvements**
+  - Displays effective EPG source.
+  - Shows loaded channel count, channels with EPG, and total program count.
+
+- **Improved Autoplay Handling**
+  - If browser audio autoplay is blocked, playback falls back to muted.
+  - An on-screen **Unmute** button is displayed when needed.
+
+### Database Migration
+- **New table: `user_preferences`**
   - Schema: `(username TEXT PRIMARY KEY, prefs TEXT NOT NULL DEFAULT '{}')`
-  - **Fresh installs**: the table is created automatically on first startup — no action required.
-  - **Upgrades from any prior version**: the table is created automatically the next time the application starts (i.e., after the code is deployed and the process is restarted). No manual SQL or migration script is needed.
-  - If the application is reloaded without a full process restart (rare hot-reload scenario), `get_user_prefs()` returns safe defaults and `save_user_prefs()` self-heals by calling `init_db()` before retrying the write.
+  - Automatically created on first startup.
+  - Automatically created during upgrade after process restart.
+  - Safe fallback handling if table does not yet exist during hot reload.
 
 ---
 
