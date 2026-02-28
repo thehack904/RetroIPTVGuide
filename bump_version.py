@@ -139,7 +139,7 @@ def update_readme_md(v_version: str) -> None:
 
     # Header line
     text, n1 = re.subn(
-        r'^(# 📺 RetroIPTVGuide v)\d+\.\d+\.\d+',
+        r'^(# 📺 RetroIPTVGuide )v\d+\.\d+\.\d+',
         rf"\g<1>{v_version}",
         text,
         flags=re.MULTILINE,
@@ -147,7 +147,7 @@ def update_readme_md(v_version: str) -> None:
 
     # Version badge
     text, n2 = re.subn(
-        r'(version-v)\d+\.\d+\.\d+(-blue)',
+        r'(version-)v\d+\.\d+\.\d+(-blue)',
         rf"\1{v_version}\2",
         text,
     )
