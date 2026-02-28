@@ -11,6 +11,21 @@
     return parseFloat(String(value).replace('px','')) || NaN;
   }
 
+  /**
+   * Reset guide-outer height to the correct zoom-aware value.
+   * Delegates to the canonical zoom-aware helper in video-resize.js when
+   * available; falls back to clearing to '' (letting flex:1 handle it)
+   * only when no zoom helper is registered.
+   */
+  function resetGuideHeight() {
+    if (typeof window.updateGuideHeight === 'function') {
+      window.updateGuideHeight();
+    } else {
+      const guideOuter = document.getElementById('guideOuter');
+      if (guideOuter) guideOuter.style.height = '';
+    }
+  }
+
   function findGridContent() {
     // Prefer the main guide grid-content inside guide-outer
     let el = document.querySelector('#guideOuter .grid-content');
@@ -28,9 +43,7 @@
       if (window.innerWidth > MOBILE_MAX) {
         gridContent.style.transform = '';
         gridContent.style.transformOrigin = '';
-        // restore guide-outer height if modified
-        const guideOuter = document.getElementById('guideOuter');
-        if (guideOuter) guideOuter.style.height = '';
+        resetGuideHeight();
         return;
       }
 
@@ -80,7 +93,9 @@
           const minHeight = 220;
           guideOuter.style.height = Math.max(minHeight, scaledHeight + 180) + 'px';
         } else {
-          guideOuter.style.height = '';
+          // Use the zoom-aware helper rather than clearing to '' so the correct
+          // height is always set when a display-size zoom is active.
+          resetGuideHeight();
         }
       }
 

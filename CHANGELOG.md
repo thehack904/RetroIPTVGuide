@@ -6,6 +6,86 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.7.0 - 2026-02-27
+
+### Added
+- **Per-user channel preferences: Auto-Load Channel, Hidden Channels, Sizzle Reels**
+  - **Auto-Load Channel** — each user can designate one channel that automatically begins playing when the guide page opens. The channel is played after a short delay once the page has fully loaded.
+    - *Regular users* set this via **Settings → Channel Preferences → Set Auto-Load Channel** (plays the currently-selected channel) or via the right-click context menu on any channel row.
+    - *Admins* set or clear it for any user from the **Manage Users** page via the expandable Preferences panel for each user.
+  - **Hidden Channels** — users can hide channels they never watch from their guide view.
+    - Right-click any channel name to access **Hide Channel** / **Unhide Channel**.
+    - The **Settings → Channel Preferences → Show Hidden Channels** toggle temporarily reveals hidden rows without permanently unhiding them.
+    - Admins can clear all hidden channels for a user from the Manage Users preferences panel.
+  - **Sizzle Reels** — when enabled, hovering over a channel name for 1.5 seconds starts a small muted live-stream preview in the bottom-right corner; moving away stops the preview.
+    - Toggled per user via **Settings → Channel Preferences → Sizzle Reels: On/Off**.
+    - Admins can enable/disable Sizzle Reels for any user from the Manage Users preferences panel.
+  - All three preferences are stored server-side per user in the new `user_preferences` SQLite table and survive browser changes, device switches, and logouts.
+
+### Database migration
+- **New table: `user_preferences`** — added to `users.db` alongside the existing `users` table.
+  - Schema: `(username TEXT PRIMARY KEY, prefs TEXT NOT NULL DEFAULT '{}')`
+  - **Fresh installs**: the table is created automatically on first startup — no action required.
+  - **Upgrades from any prior version**: the table is created automatically the next time the application starts (i.e., after the code is deployed and the process is restarted). No manual SQL or migration script is needed.
+  - If the application is reloaded without a full process restart (rare hot-reload scenario), `get_user_prefs()` returns safe defaults and `save_user_prefs()` self-heals by calling `init_db()` before retrying the write.
+
+---
+
+## v4.6.0 - 2026-02-23
+
+### Added
+- **Auto-Scroll menu enhancements with flyout submenus**
+  - Settings dropdown now contains a nested Auto-Scroll flyout with Enable/Disable toggle and a Scroll Speed sub-flyout (Slow / Medium / Fast).
+  - Speed preference persisted to `localStorage` and restored on load; applied to the live `__autoScroll` API when already running.
+  - Display Size (Large / Medium / Small) added as a second flyout entry in the same Settings dropdown.
+  - All flyout entries use the existing `.submenu` / `.submenu-content` CSS pattern so they are consistent across themes.
+- **Tuner validation, duplicate prevention, and single-channel M3U8 support**
+  - New `_validate_url()` helper enforces non-empty, `http`/`https` scheme, and valid hostname on all tuner URLs before they are written to the database.
+  - `add_tuner()` now checks for an existing tuner with the same name and raises `ValueError` before inserting, preventing silent duplicates.
+  - `parse_m3u()` extended to detect single-channel M3U8 files (a bare URL with no `#EXTINF` entries); channel name is auto-derived from the URL filename.
+  - New **Single Stream Mode** in Tuner Management UI — a radio-button toggle switches the Add Tuner form between Standard Playlist mode (separate XML + M3U fields) and Single Stream mode (one M3U8 URL field). Server-side `single_stream` branch in `change_tuner` POST handler mirrors this.
+  - Unit tests added: `tests/test_tuner_validation.py` (URL validation + M3U parsing) and `tests/test_single_stream_mode.py` (single-stream and duplicate-prevention flows).
+- **Flash message display on Tuner Management page**
+  - `change_tuner.html` now renders categorised flash messages (`flash-info`, `flash-warning`, `flash-success`, `flash-default`) in a dedicated container below the page header.
+  - Each flash message includes a close (×) button for dismissal.
+  - Validation results from `validate_tuner_url()` (reachability, DNS resolution, scheme checks) surface immediately as inline flash messages after each tuner operation.
+- **Display Size setting (Large / Medium / Small) for all themes**
+  - New persistent display size selector accessible from the Settings menu on every theme.
+  - Three presets: Large (100%), Medium (80%), Small (67%) — matches the visual result of browser zoom without cross-browser layout quirks.
+  - Implemented via `transform: scale` on a top-level `#appZoomRoot` wrapper in `display-size.js`.
+  - Setting is persisted to `localStorage` and restored before first paint to prevent flash of unstyled content.
+  - Fixed viewport gap at the bottom of the guide that appeared at non-100% zoom levels.
+- **Fire TV (Silk) / Android TV — DPAD remote navigation + TV-mode UI scaling** (`tv-remote-nav.js`)
+  - New JS module `static/js/tv-remote-nav.js` injected only when a TV user-agent is detected (AFT, Silk, Android TV, GoogleTV, etc.).
+  - Up/Down DPAD navigates channels; OK/Enter triggers playback via existing handler.
+  - `scrollIntoView` keeps the selected channel visible; `tv-focused` / `tv-focused-row` CSS classes provide a clear 10-foot UI highlight.
+  - Proportional TV-mode UI scaling (video, header, channel column, program cells, fixed time bar) applied via injected `body.tv-mode` CSS.
+  - Fixed time bar re-measured after `tv-mode` class is applied to avoid layout offset on load.
+  - Auto-scroll defaults to slow speed on TV mode; existing user preference is respected.
+  - Login page reworked for TV viewports: stacked logo+form layout with proportional scaling.
+- **Video player aspect-ratio-locked resize handle** (`video-resize.js`)
+  - Resize handle moved outside the video element bounds (`bottom: -20px; left: -20px`) to prevent browser native controls from blocking interaction.
+  - Drag vector projected onto the SW–NE diagonal so resizing is always aspect-ratio-locked.
+  - Triangle indicator fixed (now points to bottom-left corner) and reduced to a compact 12×12 visual with a 20×20 hit area.
+  - Video and channel column can also be resized via drag handles; guide height recomputed on each resize event.
+
+### Changed
+- **Fixed time bar normalized across all themes**
+  - All themes now share the same cell padding (`6px 10px`) and a consistent `border-bottom` on the fixed time bar, matching the RetroIPTV theme style as the baseline.
+  - Theme-specific overrides (RetroIPTV 2px border, tvguide1990 compact padding, mobile `!important` rules) remain unaffected.
+- `auto-scroll.js`: removed hardcoded `maxHeight: calc(100vh - 420px)` from `ensureStyles()` — `flex: 1` on `.guide-outer` now handles height at every zoom level.
+- `video-resize.js`: `updateGuideHeight()` now clears any stale inline `maxHeight` alongside `height` and `flex` on resize/zoom events.
+- `#appZoomRoot` changed to `position: fixed` flex-column to prevent ancestor `overflow: hidden` from clipping pre-scale layout.
+- Tuner Management form radio buttons (`tuner_mode_standard`, `tuner_mode_single_stream`) given explicit `id` attributes and matching `for` attributes on their `<label>` elements for full keyboard/screen-reader accessibility.
+
+### Fixed
+- Fixed viewport gap at bottom of guide at Medium/Small display sizes.
+- Fixed mispositioned fixed time bar on Fire TV load when TV-mode scaling was applied after `DOMContentLoaded`.
+- Fixed overlapping logo/form on TV viewport login page.
+- SSRF hardening: private-IP block now covers loopback, link-local, and all RFC-1918 ranges; scheme restricted to `http`/`https`; redirects disabled.
+
+---
+
 ## v4.5.0 - 2026-02-15
 
 ### Added

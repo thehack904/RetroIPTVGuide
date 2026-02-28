@@ -91,6 +91,18 @@
       var ev = new CustomEvent('theme:applied', { detail: { theme: name } });
       window.dispatchEvent(ev);
     } catch (e) {}
+
+    // Persist default_theme to server-side prefs so the admin can see it on the Manage Users page.
+    try {
+      if (window.fetch) {
+        window.fetch('/api/user_prefs', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ default_theme: name })
+        }).catch(function () { /* ignore – user may not be logged in */ });
+      }
+    } catch (e) { /* ignore */ }
   }
 
   // Expose global API (keeps existing inline onclick="setTheme(...)" working).

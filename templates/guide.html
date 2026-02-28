@@ -6,12 +6,48 @@
     <!-- Responsive viewport for mobile stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+    <!-- Apply saved display size before paint to avoid layout flash.
+         Injects a CSS rule that pre-scales #appZoomRoot before display-size.js (defer)
+         runs, so there is no visible flash of unstyled/unscaled content.
+         display-size.js removes this tag on DOMContentLoaded and takes over with
+         authoritative inline styles. -->
+    <script>
+    (function () {
+      try {
+        var ds = localStorage.getItem('displaySize');
+        if (ds && ds !== 'large') {
+          document.documentElement.setAttribute('data-display-size', ds);
+          // Zoom factors must stay in sync with ZOOM_PRESETS in display-size.js.
+          // Duplication is intentional: this script runs synchronously before any
+          // external scripts (including display-size.js) load, so it cannot import.
+          var ZOOM = { medium: 0.8, small: 0.67 };
+          var z = ZOOM[ds];
+          if (z) {
+            var wPx = Math.ceil(window.innerWidth  / z);
+            var hPx = Math.ceil(window.innerHeight / z);
+            var s = document.createElement('style');
+            s.id = '__dsinit';
+            s.textContent = '#appZoomRoot{transform:scale(' + z + ');transform-origin:top left;width:' + wPx + 'px;height:' + hPx + 'px}';
+            document.head.appendChild(s);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
+
     <!-- Small, immediate script to apply the saved theme before paint and provide a safe stub
          for setTheme so inline handlers won't throw while the full theme.js loads. -->
     <script>
     (function () {
       try {
         var t = localStorage.getItem('theme');
+        // If no localStorage value, seed from the server-side default (set via user prefs).
+        {% if user_default_theme %}
+        if (!t) {
+          t = {{ user_default_theme | tojson }};
+          try { localStorage.setItem('theme', t); } catch (e) {}
+        }
+        {% endif %}
         if (t) document.documentElement.setAttribute('data-theme', t);
       } catch (e) { /* ignore */ }
 
@@ -39,6 +75,8 @@
 
     <!-- Theme script (deferred) provides setTheme/applyTheme and will wire theme controls -->
     <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+    <!-- Display size scaling (Large/Medium/Small) -->
+    <script src="{{ url_for('static', filename='js/display-size.js') }}" defer></script>
 
     <!-- small per-template style block to inject server-side dynamic values used by CSS -->
     <style>
@@ -49,9 +87,30 @@
         /* optional: expose channel column width if you compute it server-side or want to override */
         --chan-col-width: 200px;
     }
+    .video-player-wrap {
+        position: relative;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    .unmute-btn {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 20;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .unmute-btn:hover { background: rgba(0, 0, 0, 0.9); }
     </style>
 </head>
 <body class="guide-page">
+<div id="appZoomRoot">
 {% include '_header.html' %}
 
 <!-- Player row: summary left, video right -->
@@ -60,7 +119,10 @@
         <h3>Program Info</h3>
         <p>Click a channel on the left to start playback.</p>
     </div>
-    <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
+    <div class="video-player-wrap" id="videoPlayerWrap">
+        <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
+        <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+    </div>
 </div>
 
 <!-- FIXED time header (will be populated/positioned by JS) -->
@@ -91,6 +153,8 @@
     <div class="guide-row" data-cid="{{ ch.tvg_id }}">
         <div class="chan-col">
             <div class="chan-name"
+                 tabindex="0"
+                 role="button"
                  data-url="{{ ch.url }}"
                  data-cid="{{ ch.tvg_id }}"
                  data-name="{{ ch.name|e }}"
@@ -138,15 +202,41 @@
 
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
 
+<!-- Inject per-user preferences so user-prefs.js can act before an extra round-trip -->
+<script>window.__initialUserPrefs = {{ user_prefs | tojson }};</script>
+
 <script>
 // --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
 
 let hlsInstance = null;
 let currentChannelId = null;
 
+/**
+ * Returns the CSS zoom factor currently applied to the root <html> element via
+ * data-display-size.  CSS zoom does NOT update window.innerWidth / 100vh, so any
+ * JS code that sets pixel positions on position:fixed elements or compares
+ * getBoundingClientRect() values (which are in visual/viewport pixels) against CSS
+ * property values must divide by this factor to stay in the same coordinate space.
+ * The actual value is read from the --display-zoom CSS variable set in base.css so
+ * the zoom factor lives in one place rather than being duplicated in JS.
+ */
+/**
+ * Returns the CSS zoom factor currently applied to the root <html> element via
+ * data-display-size.  Delegates to the shared global helper exposed by
+ * display-size.js when available; falls back to reading the CSS variable
+ * directly for robustness on pages where display-size.js loads after guide.html.
+ */
+function getDisplayZoom() {
+    if (typeof window.getDisplayZoom === 'function') return window.getDisplayZoom();
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--display-zoom'));
+    return (v > 0 && isFinite(v)) ? v : 1.0;
+}
+
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
+    // Expose currently-playing channel for user-prefs.js (auto-load / context menu)
+    window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
 
     fetch("/play_channel", {
@@ -155,15 +245,28 @@ function playChannel(url, cid, name) {
         body: "channel_name=" + encodeURIComponent(name)
     });
 
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    if (unmuteBtn) unmuteBtn.hidden = true;
+
+    // Try normal play; if blocked by browser autoplay policy, retry muted
+    // and show the unmute button so the user can restore audio with one click.
+    function tryPlay() {
+        video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(()=>{});
+            if (unmuteBtn) unmuteBtn.hidden = false;
+        });
+    }
+
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (Hls.isSupported()) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, tryPlay);
     } else {
         video.src = url;
-        video.play().catch(()=>{});
+        tryPlay();
     }
 }
 
@@ -240,8 +343,9 @@ function createOrUpdateFixedTimeBar(){
       spacerWidth = firstChanCol ? Math.round(firstChanCol.getBoundingClientRect().width) : 200;
     }
 
-    spacer.style.width = spacer.style.minWidth = spacer.style.maxWidth = spacerWidth + 'px';
-    spacer.style.flex = '0 0 ' + spacerWidth + 'px';
+    const adjustedSpacerWidth = Math.ceil(spacerWidth / getDisplayZoom());
+    spacer.style.width = spacer.style.minWidth = spacer.style.maxWidth = adjustedSpacerWidth + 'px';
+    spacer.style.flex = '0 0 ' + adjustedSpacerWidth + 'px';
     spacer.style.height = '100%';
     spacer.style.pointerEvents = 'none';
 
@@ -267,22 +371,36 @@ function createOrUpdateFixedTimeBar(){
     fixedBar.appendChild(clonedGridContent);
 
     fixedBar.style.left = '0px';
-    fixedBar.style.width = window.innerWidth + 'px';
+    fixedBar.style.width = Math.ceil(window.innerWidth / getDisplayZoom()) + 'px';
+
+    // On mobile, #appZoomRoot is position:relative + transform:scale(s), so
+    // position:fixed children behave like position:absolute within appZoomRoot.
+    // The CSS top must compensate for window.scrollY so the bar stays in view:
+    //   top_css = (scrollY + desired_visual_y) / scale
+    // On desktop, appZoomRoot is position:fixed so position:fixed children are
+    // truly viewport-anchored and no scroll compensation is needed.
+    const isMobileZoom = window.innerWidth <= 900 && getDisplayZoom() < 1;
+    const scrollOff = isMobileZoom ? (window.scrollY || 0) : 0;
 
     if (playerRow) {
         const rect = playerRow.getBoundingClientRect();
-        fixedBar.style.top = rect.bottom + 'px';
+        // Clamp to 0: when player scrolls off the top, anchor timebar to viewport top.
+        const visualY = isMobileZoom ? Math.max(0, rect.bottom) : rect.bottom;
+        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
     } else {
         const header = document.querySelector('.header');
         const headerRect = header ? header.getBoundingClientRect() : { bottom: 40 };
-        fixedBar.style.top = headerRect.bottom + 'px';
+        const visualY = isMobileZoom ? Math.max(0, headerRect.bottom) : headerRect.bottom;
+        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
     }
 
     requestAnimationFrame(() => {
-        const fbHeight = fixedBar.getBoundingClientRect().height || 34;
+        const zoom = getDisplayZoom();
+        // getBCR returns visual/viewport px; convert to CSS px by dividing by zoom
+        const fbHeightCss = Math.ceil((fixedBar.getBoundingClientRect().height || 34) / zoom);
         const currentPaddingTop = parseFloat(window.getComputedStyle(guideOuter).paddingTop) || 0;
-        if (currentPaddingTop < fbHeight) {
-            guideOuter.style.paddingTop = fbHeight + 'px';
+        if (currentPaddingTop < fbHeightCss) {
+            guideOuter.style.paddingTop = fbHeightCss + 'px';
         }
     });
 
@@ -299,7 +417,9 @@ function updateNowLine(){
       const leftPx = (minutesFromStart * scale);
 
       const firstChanCol = document.querySelector('.guide-row .chan-col');
-      const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width : 0;
+      // getBCR returns visual/viewport px; divide by zoom to get CSS px that
+      // align with leftPx (which is computed in CSS px from the server SCALE)
+      const chanColWidth = firstChanCol ? firstChanCol.getBoundingClientRect().width / getDisplayZoom() : 0;
 
       const nlFixed = document.getElementById('nowLineFixed');
       if (nlFixed) nlFixed.style.left = (leftPx + chanColWidth) + 'px';
@@ -326,6 +446,15 @@ document.addEventListener("DOMContentLoaded", () => {
             playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
         });
     });
+
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    if (unmuteBtn) {
+        unmuteBtn.addEventListener('click', () => {
+            const video = document.getElementById('video');
+            if (video) video.muted = false;
+            unmuteBtn.hidden = true;
+        });
+    }
 
     document.querySelectorAll('.time-cell').forEach(cell => {
         const utc = new Date(cell.dataset.utc);
@@ -547,12 +676,81 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
+<script>
+// Scroll Speed Selection Handler
+document.addEventListener('DOMContentLoaded', () => {
+  const speedMapping = {
+    'slow': 0.6,
+    'medium': 1.2,
+    'fast': 2.4
+  };
+
+  // Apply saved speed on page load
+  function applySavedSpeed() {
+    try {
+      const savedSpeed = localStorage.getItem('autoScrollSpeed') || 'medium';
+      const speedValue = speedMapping[savedSpeed] || 1.2;
+      if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+        window.__autoScroll.setSpeed(speedValue);
+      }
+    } catch (e) {
+      console.debug('Failed to retrieve or apply saved auto-scroll speed from localStorage', e);
+    }
+  }
+
+  // Handle speed selection clicks
+  function handleSpeedClick(e) {
+    e.preventDefault();
+    const speed = e.target.dataset.scrollSpeed;
+    if (speed && speedMapping[speed]) {
+      try {
+        localStorage.setItem('autoScrollSpeed', speed);
+        const speedValue = speedMapping[speed];
+        if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+          window.__autoScroll.setSpeed(speedValue);
+          console.debug('Scroll speed set to', speed, '(' + speedValue + ' px/frame)');
+        }
+      } catch (e) {
+        console.error('Failed to save scroll speed preference', e);
+      }
+    }
+  }
+
+  // Attach event listeners to all speed selection links
+  document.querySelectorAll('[data-scroll-speed]').forEach(link => {
+    link.addEventListener('click', handleSpeedClick);
+  });
+
+  // Apply saved speed when auto-scroll initializes
+  applySavedSpeed();
+
+  // Re-apply speed when auto-scroll is loaded (in case it loads after DOMContentLoaded)
+  // Use a retry mechanism with maximum attempts to handle async script loading
+  let retryCount = 0;
+  const maxRetries = 5; // Max 5 attempts to find auto-scroll API
+  const retryInterval = 100; // 100ms between retries (total max wait: 500ms)
+  
+  function retryApplySavedSpeed() {
+    if (window.__autoScroll && typeof window.__autoScroll.setSpeed === 'function') {
+      applySavedSpeed();
+    } else if (retryCount < maxRetries) {
+      retryCount++;
+      setTimeout(retryApplySavedSpeed, retryInterval);
+    }
+  }
+  
+  setTimeout(retryApplySavedSpeed, retryInterval);
+});
+</script>
+
 <!-- Mobile nav behavior (off-canvas toggle). Ensure this file contains the open/close and resize-dispatch code -->
 <script src="{{ url_for('static', filename='js/mobile-nav.js') }}" defer></script>
 <!-- Grid adapt script: computes scale on small screens so guide fits proportionally -->
 <script src="{{ url_for('static', filename='js/grid-adapt.js') }}" defer></script>
 <!-- Mobile player adapt script: adjusts video height based on viewport/header/fixed-timebar -->
 <script src="{{ url_for('static', filename='js/mobile-player-adapt.js') }}" defer></script>
+<!-- Video resize: drag handles for video/player/channel-column resizing -->
+<script src="{{ url_for('static', filename='js/video-resize.js') }}" defer></script>
 <!-- Mobile player adapt script: allow scrolling -->
 <script src="{{ url_for('static', filename='js/mobile-scroll-fix.js') }}" defer></script>
 
@@ -566,6 +764,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Right Hand Clock Fix -->
 <script src="{{ url_for('static', filename='js/clock-fix.js') }}" defer></script>
+
+<!-- Per-user channel preferences: auto-load channel, hidden channels, sizzle reels -->
+<script src="{{ url_for('static', filename='js/user-prefs.js') }}" defer></script>
 
 
 
@@ -581,8 +782,45 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById("settingsMenu")?.remove();
   document.getElementById("manageUsersMenu")?.remove();
 
+  // Load DPAD / TV-remote channel navigation module
+  var tvNavScript = document.createElement('script');
+  tvNavScript.src = "{{ url_for('static', filename='js/tv-remote-nav.js') }}";
+  document.body.appendChild(tvNavScript);
+
   const linksContainer = document.querySelector(".header .links");
   if (linksContainer){
+    // SETTINGS dropdown (Auto-Scroll only) — inserted before THEMES
+    const settingsTVMenu = document.createElement("div");
+    settingsTVMenu.className = "dropdown";
+    settingsTVMenu.innerHTML = `
+      <button class="dropbtn">SETTINGS ▾</button>
+      <div class="dropdown-content">
+        <li class="submenu">
+          <a href="#">Auto-Scroll</a>
+          <ul class="submenu-content">
+            <li><a href="#" id="toggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
+            <li class="submenu">
+              <a href="#">Scroll Speed</a>
+              <ul class="submenu-content">
+                <li><a href="#" data-scroll-speed="slow">Slow</a></li>
+                <li><a href="#" data-scroll-speed="medium">Medium</a></li>
+                <li><a href="#" data-scroll-speed="fast">Fast</a></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li class="submenu">
+          <a href="#">Display Size</a>
+          <ul class="submenu-content">
+            <li><a href="#" data-display-size-selector data-display-size="large">Large</a></li>
+            <li><a href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
+            <li><a href="#" data-display-size-selector data-display-size="small">Small</a></li>
+          </ul>
+        </li>
+      </div>`;
+    const logoutLink = document.querySelector('.header .links a[href*="logout"]');
+    linksContainer.insertBefore(settingsTVMenu, logoutLink);
+
     const themesMenu = document.createElement("div");
     themesMenu.className = "dropdown";
     themesMenu.innerHTML = `
@@ -597,11 +835,11 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="#" data-theme-selector data-theme="directv">DirecTV</a>
         <a href="#" data-theme-selector data-theme="comcast">Comcast</a>
       </div>`;
-    const logoutLink = document.querySelector('.header .links a[href*="logout"]');
     linksContainer.insertBefore(themesMenu, logoutLink);
   }
 })();
 </script>
 
+</div><!-- #appZoomRoot -->
 </body>
 </html>

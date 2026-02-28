@@ -12,6 +12,20 @@
     <p class="lead">Switch the active tuner, edit tuner sources, and manage tuners. Dangerous actions are separated below to avoid accidental deletion.</p>
   </header>
 
+  <!-- Flash Messages -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-messages-container">
+        {% for category, message in messages %}
+          <div class="flash-message flash-{{ category if category else 'default' }}">
+            <span class="flash-content">{{ message }}</span>
+            <button class="flash-close" aria-label="Close message">&times;</button>
+          </div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
   <main class="card-grid">
     <!-- Active tuner + Auto-refresh combined -->
     <section class="card card-primary" aria-labelledby="lbl-active-tuner">
@@ -94,7 +108,9 @@
               <label for="tuner_update">Select Tuner</label>
               <select name="tuner" id="tuner_update" required onchange="populateUrls(this.value)">
                 {% for tuner in tuners %}
+                {% if TUNERS[tuner].tuner_type != 'combined' %}
                 <option value="{{ tuner }}">{{ tuner }}</option>
+                {% endif %}
                 {% endfor %}
               </select>
 
@@ -118,11 +134,52 @@
               <label for="tuner_name">Add new tuner</label>
               <input type="text" id="tuner_name" name="tuner_name" placeholder="New Tuner Name" required>
 
-              <label for="xml_new">XML URL</label>
-              <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml" required>
+              <!-- Mode selection -->
+              <div class="mode-selection" style="margin-top: 12px;">
+                <label style="display: block; margin-bottom: 8px;">Tuner Mode</label>
+                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
+                  <label for="tuner_mode_standard" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" id="tuner_mode_standard" name="tuner_mode" value="standard" checked>
+                    Standard Playlist Mode
+                  </label>
+                  <label for="tuner_mode_single_stream" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" id="tuner_mode_single_stream" name="tuner_mode" value="single_stream">
+                    Single Stream Mode
+                  </label>
+                  <label for="tuner_mode_combined" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
+                    <input type="radio" id="tuner_mode_combined" name="tuner_mode" value="combined">
+                    Combined Tuner
+                  </label>
+                </div>
+                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL. Combined mode merges channels and guide data from multiple existing tuners.</p>
+              </div>
 
-              <label for="m3u_new">M3U URL</label>
-              <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u" required>
+              <!-- Standard mode fields -->
+              <div id="standard-fields">
+                <label for="xml_new">XML URL</label>
+                <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml">
+
+                <label for="m3u_new">M3U URL</label>
+                <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u">
+              </div>
+
+              <!-- Single stream mode fields -->
+              <div id="stream-fields" style="display: none;">
+                <label for="m3u8_stream">M3U8 Stream URL</label>
+                <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
+                <p class="muted small" style="margin: 6px 0 0 0;">Direct link to a single M3U8 stream. Channel name will be auto-generated from the tuner name.</p>
+              </div>
+
+              <!-- Combined mode fields -->
+              <div id="combined-fields" style="display: none;">
+                <label for="source_tuners">Source Tuners (hold Ctrl/Cmd to select multiple)</label>
+                <select id="source_tuners" name="source_tuners" multiple size="4" style="min-height: 80px;">
+                  {% for tuner in tuners %}
+                  <option value="{{ tuner }}">{{ tuner }}</option>
+                  {% endfor %}
+                </select>
+                <p class="muted small" style="margin: 6px 0 0 0;">Select two or more tuners to combine. Their channels and guide data will be merged into a single tuner.</p>
+              </div>
 
               <button type="submit" class="primary">Add Tuner</button>
             </form>
@@ -198,6 +255,38 @@ document.addEventListener("DOMContentLoaded", () => {
     var sel = document.getElementById('tuner_update');
     if (sel) populateUrls(sel.value);
 
+    // Flash message auto-dismiss and manual close
+    try {
+      const flashMessages = document.querySelectorAll('.flash-message');
+      if (flashMessages.length > 0) {
+        // Add close button handlers
+        flashMessages.forEach(msg => {
+          const closeBtn = msg.querySelector('.flash-close');
+          if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+              msg.classList.add('fade-out');
+              setTimeout(() => msg.remove(), 500);
+            });
+          }
+        });
+
+        // Auto-dismiss after 8 seconds
+        setTimeout(() => {
+          flashMessages.forEach(msg => {
+            if (msg.parentNode) { // Check if still in DOM
+              msg.classList.add('fade-out');
+              setTimeout(() => {
+                if (msg.parentNode) msg.remove();
+              }, 500);
+            }
+          });
+        }, 8000);
+      }
+    } catch (e) {
+      // Flash messages will remain visible if auto-dismiss fails
+      console.error('Flash message initialization failed:', e);
+    }
+
     // Run Now (uses existing endpoint)
     const runNow = document.getElementById('btn-run-now');
     if (runNow) {
@@ -261,6 +350,57 @@ document.addEventListener("DOMContentLoaded", () => {
         selRename.value = selUpdate.value;
       }
     } catch (e) {}
+
+    // Mode switching for Add Tuner form
+    try {
+    const standardFields = document.getElementById('standard-fields');
+    const streamFields = document.getElementById('stream-fields');
+    const combinedFields = document.getElementById('combined-fields');
+    const xmlInput = document.getElementById('xml_new');
+    const m3uInput = document.getElementById('m3u_new');
+    const m3u8Input = document.getElementById('m3u8_stream');
+    const sourceTunersSelect = document.getElementById('source_tuners');
+    const modeRadios = document.querySelectorAll('input[name="tuner_mode"]');
+
+    function updateFormMode() {
+      const selectedMode = document.querySelector('input[name="tuner_mode"]:checked');
+      const mode = selectedMode ? selectedMode.value : 'standard';
+
+      // Hide all field groups first
+      standardFields.style.display = 'none';
+      streamFields.style.display = 'none';
+      combinedFields.style.display = 'none';
+
+      // Remove required from all optional inputs
+      xmlInput.removeAttribute('required');
+      m3uInput.removeAttribute('required');
+      m3u8Input.removeAttribute('required');
+
+      if (mode === 'single_stream') {
+        streamFields.style.display = 'block';
+        m3u8Input.setAttribute('required', 'required');
+      } else if (mode === 'combined') {
+        combinedFields.style.display = 'block';
+        // source_tuners select is validated server-side; no HTML required attribute on multi-select
+      } else {
+        // Standard mode (default)
+        standardFields.style.display = 'block';
+        xmlInput.setAttribute('required', 'required');
+        m3uInput.setAttribute('required', 'required');
+      }
+    }
+
+    // Initialize mode on load
+    updateFormMode();
+
+    // Handle mode change
+    modeRadios.forEach(radio => {
+      radio.addEventListener('change', updateFormMode);
+    });
+  } catch (e) {
+    // Log error if mode switching setup fails - form will still submit with default standard mode
+    console.error('Mode switching initialization failed:', e);
+  }
 });
 </script>
 {% endblock %}

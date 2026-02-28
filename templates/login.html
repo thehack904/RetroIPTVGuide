@@ -79,6 +79,47 @@
             font-weight: bold;
         }
 
+        /* TV mode — logo stacks above login box, no absolute overlap.
+           Scale factor ~64% (logo: 250px → 160px) applied throughout.
+           Box base is desktop width: 300px × 0.64 ≈ 195px. */
+        body.tv-mode {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+        }
+
+        body.tv-mode .logo {
+            position: static;
+            display: block;
+            max-width: 160px;
+            margin: 0 auto;
+        }
+
+        body.tv-mode .box {
+            width: 100%;
+            max-width: 195px;
+            padding: 13px;
+            border-radius: 5px;
+            font-size: 10px;
+        }
+
+        body.tv-mode .box h2 {
+            font-size: 15px;
+            margin: 0 0 8px;
+        }
+
+        body.tv-mode input {
+            padding: 5px;
+            font-size: 10px;
+            margin: 3px 0;
+        }
+
+        body.tv-mode button {
+            padding: 6px;
+            font-size: 10px;
+        }
+
         /* MOBILE ONLY OVERRIDES — desktop unchanged */
         @media (max-width: 600px) {
 
@@ -157,6 +198,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isAndroidTV && remember) {
         remember.style.display = "flex";
+    }
+
+    if (isAndroidTV) {
+        document.body.classList.add('tv-mode');
     }
 
     const rememberBox = document.getElementById("remember");

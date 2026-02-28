@@ -6,12 +6,46 @@
     <!-- Responsive viewport: required for mobile layout stability -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+    <!-- Apply saved display size before paint to avoid layout flash.
+         Injects a CSS rule that pre-scales #appZoomRoot before display-size.js (defer)
+         runs, so there is no visible flash of unstyled/unscaled content. -->
+    <script>
+    (function () {
+      try {
+        var ds = localStorage.getItem('displaySize');
+        if (ds && ds !== 'large') {
+          document.documentElement.setAttribute('data-display-size', ds);
+          // Zoom factors must stay in sync with ZOOM_PRESETS in display-size.js.
+          // Duplication is intentional: this script runs synchronously before any
+          // external scripts (including display-size.js) load, so it cannot import.
+          var ZOOM = { medium: 0.8, small: 0.67 };
+          var z = ZOOM[ds];
+          if (z) {
+            var wPx = Math.ceil(window.innerWidth  / z);
+            var hPx = Math.ceil(window.innerHeight / z);
+            var s = document.createElement('style');
+            s.id = '__dsinit';
+            s.textContent = '#appZoomRoot{transform:scale(' + z + ');transform-origin:top left;width:' + wPx + 'px;height:' + hPx + 'px}';
+            document.head.appendChild(s);
+          }
+        }
+      } catch (e) { /* ignore */ }
+    })();
+    </script>
+
     <!-- Small, immediate script to apply the saved theme before paint and provide a safe stub
          for setTheme so inline onclick handlers don't throw before the real script loads. -->
     <script>
     (function () {
       try {
         var t = localStorage.getItem('theme');
+        // If no localStorage value, seed from the server-side default (set via user prefs).
+        {% if user_default_theme %}
+        if (!t) {
+          t = {{ user_default_theme | tojson }};
+          try { localStorage.setItem('theme', t); } catch (e) {}
+        }
+        {% endif %}
         if (t) {
           // Handle 'auto' theme
           if (t === 'auto') {
@@ -61,11 +95,13 @@
     {% endblock %}
 </head>
 <body>
+    <div id="appZoomRoot">
     {% include '_header.html' %}
 
     {% block content %}
     <!-- Page-specific content goes here -->
     {% endblock %}
+    </div><!-- #appZoomRoot -->
 
     <!-- shared scripts -->
     <script src="{{ url_for('static', filename='hls.js') }}"></script>
@@ -84,6 +120,8 @@
     <!-- Theme script: included for all pages. Uses defer so it runs before DOMContentLoaded.
          It will replace the stub setTheme defined above with a fuller implementation. -->
     <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
+    <!-- Display size scaling (Large/Medium/Small) -->
+    <script src="{{ url_for('static', filename='js/display-size.js') }}" defer></script>
 
     <!-- existing shared inline <script> content here (clock, helpers, etc) -->
     {% block scripts_extra %}
