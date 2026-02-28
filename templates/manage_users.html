@@ -22,13 +22,28 @@
     <div class="table-wrap">
       <table class="users-table">
           <thead>
-            <tr><th>Username</th><th>Last Login</th><th>Actions</th></tr>
+            <tr><th>Username</th><th>Last Login</th><th>Assigned Tuner</th><th>Actions</th></tr>
           </thead>
           <tbody>
             {% for user in users %}
             <tr>
               <td>{{ user.username }}</td>
               <td>{{ user.last_login | format_datetime }}</td>
+              <td>
+                <form method="POST" class="inline-form assign-tuner-form"
+                      data-current-tuner="{{ user.assigned_tuner or '' }}"
+                      data-autoload-name="{{ user.prefs.auto_load_channel.name | e if user.prefs.auto_load_channel else '' }}">
+                  <input type="hidden" name="username" value="{{ user.username }}">
+                  <input type="hidden" name="action" value="assign_tuner">
+                  <select name="tuner_name" title="Assign tuner to {{ user.username }}">
+                    <option value="">— No specific tuner —</option>
+                    {% for t in tuner_names %}
+                    <option value="{{ t }}" {% if user.assigned_tuner == t %}selected{% endif %}>{{ t }}</option>
+                    {% endfor %}
+                  </select>
+                  <button class="btn add" type="submit">Assign</button>
+                </form>
+              </td>
               <td class="actions">
                 <form method="POST" class="inline-form">
                   <input type="hidden" name="username" value="{{ user.username }}">
@@ -39,6 +54,80 @@
                   <input type="hidden" name="username" value="{{ user.username }}">
                   <input type="hidden" name="action" value="signout">
                   <button class="btn warn" type="submit">Sign Out All</button>
+                </form>
+                <button class="btn prefs-toggle" type="button"
+                        onclick="togglePrefsPanel('{{ user.username }}')">⚙ Prefs</button>
+              </td>
+            </tr>
+            <!-- Expandable channel preferences panel for {{ user.username }} -->
+            <tr id="prefs-panel-{{ user.username }}" class="prefs-panel-row" style="display:none">
+              <td colspan="4">
+                <form method="POST" class="prefs-form">
+                  <input type="hidden" name="action" value="set_user_prefs">
+                  <input type="hidden" name="username" value="{{ user.username }}">
+
+                  <div class="prefs-form-grid">
+                    <!-- Auto-load channel -->
+                    <div class="prefs-field">
+                      <label for="auto-load-{{ user.username }}">📌 Auto-Load Channel</label>
+                      <select id="auto-load-{{ user.username }}" name="auto_load_channel_id"
+                              onchange="document.getElementById('auto-load-name-{{ user.username }}').value = this.options[this.selectedIndex].dataset.chname || ''">
+                        <option value="" data-chname="">— None (no auto-load) —</option>
+                        {# If the currently-set channel is not in this user's channel list
+                           (e.g. they set it from a different tuner), show it as a clearly-
+                           labelled first option so the admin can always see what's set. #}
+                        {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id %}
+                          {% set ns = namespace(found=false) %}
+                          {% for ch in user.channel_list %}
+                            {% if ch.id == user.prefs.auto_load_channel.id %}
+                              {% set ns.found = true %}
+                            {% endif %}
+                          {% endfor %}
+                          {% if not ns.found %}
+                          <option value="{{ user.prefs.auto_load_channel.id }}"
+                                  data-chname="{{ user.prefs.auto_load_channel.name | e }}"
+                                  selected>{{ user.prefs.auto_load_channel.name }} ↩ (currently set)</option>
+                          {% endif %}
+                        {% endif %}
+                        {% for ch in user.channel_list %}
+                        <option value="{{ ch.id }}"
+                                data-chname="{{ ch.name | e }}"
+                                {% if user.prefs.auto_load_channel and user.prefs.auto_load_channel.id == ch.id %}selected{% endif %}>
+                          {{ ch.name }}
+                        </option>
+                        {% endfor %}
+                      </select>
+                      {# Hidden field carries the human-readable name to the server so no
+                         channel-lookup is needed in the POST handler. #}
+                      <input type="hidden" name="auto_load_channel_name"
+                             id="auto-load-name-{{ user.username }}"
+                             value="{{ user.prefs.auto_load_channel.name | e if user.prefs.auto_load_channel else '' }}">
+                      {% if not user.channel_list %}
+                      <small class="prefs-hint">No channels loaded for this user's assigned tuner.</small>
+                      {% endif %}
+                    </div>
+
+                    <!-- Default theme -->
+                    <div class="prefs-field">
+                      <label for="default-theme-{{ user.username }}">🎨 Default Theme</label>
+                      <select id="default-theme-{{ user.username }}" name="default_theme">
+                        <option value="" {% if not user.prefs.default_theme %}selected{% endif %}>— No preference (use browser/localStorage) —</option>
+                        <option value="auto"         {% if user.prefs.default_theme == 'auto' %}selected{% endif %}>Auto (System)</option>
+                        <option value="dark"         {% if user.prefs.default_theme == 'dark' %}selected{% endif %}>Dark</option>
+                        <option value="light"        {% if user.prefs.default_theme == 'light' %}selected{% endif %}>Light</option>
+                        <option value="retroiptv"    {% if user.prefs.default_theme == 'retroiptv' %}selected{% endif %}>RetroIPTV</option>
+                        <option value="retro-aol"    {% if user.prefs.default_theme == 'retro-aol' %}selected{% endif %}>AOL / CompuServe</option>
+                        <option value="retro-magazine" {% if user.prefs.default_theme == 'retro-magazine' %}selected{% endif %}>TV Guide (Refresh)</option>
+                        <option value="directv"      {% if user.prefs.default_theme == 'directv' %}selected{% endif %}>DirecTV</option>
+                        <option value="comcast"      {% if user.prefs.default_theme == 'comcast' %}selected{% endif %}>Comcast</option>
+                      </select>
+                    </div>
+
+                  </div>
+
+                  <div class="prefs-form-actions">
+                    <button class="btn add" type="submit">Save Preferences</button>
+                  </div>
                 </form>
               </td>
             </tr>
@@ -62,11 +151,32 @@
 
 {% block scripts_extra %}
 <script>
+function togglePrefsPanel(username) {
+  const row = document.getElementById('prefs-panel-' + username);
+  if (!row) return;
+  row.style.display = (row.style.display === 'none' || row.style.display === '') ? 'table-row' : 'none';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   // Apply saved theme (base.html provides setTheme/updateClock)
   const saved = localStorage.getItem("theme") || "dark";
   if (typeof setTheme === 'function') setTheme(saved);
   if (typeof updateClock === 'function') updateClock();
+
+  // Confirm dialog when a tuner reassignment would clear the user's auto-load channel.
+  document.querySelectorAll('.assign-tuner-form').forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      var currentTuner  = form.dataset.currentTuner  || '';
+      var autoloadName  = form.dataset.autoloadName  || '';
+      var selectedTuner = (form.querySelector('[name="tuner_name"]') || {}).value || '';
+      if (autoloadName && selectedTuner !== currentTuner) {
+        var msg = 'Changing the tuner will clear the auto-load channel\n"' + autoloadName + '"\nfor this user.\n\nContinue?';
+        if (!confirm(msg)) {
+          e.preventDefault();
+        }
+      }
+    });
+  });
 });
 </script>
 {% endblock %}

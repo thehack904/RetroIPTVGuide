@@ -41,6 +41,13 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
+        // If no localStorage value, seed from the server-side default (set via user prefs).
+        {% if user_default_theme %}
+        if (!t) {
+          t = {{ user_default_theme | tojson }};
+          try { localStorage.setItem('theme', t); } catch (e) {}
+        }
+        {% endif %}
         if (t) document.documentElement.setAttribute('data-theme', t);
       } catch (e) { /* ignore */ }
 
@@ -80,6 +87,26 @@
         /* optional: expose channel column width if you compute it server-side or want to override */
         --chan-col-width: 200px;
     }
+    .video-player-wrap {
+        position: relative;
+        display: inline-block;
+        flex-shrink: 0;
+    }
+    .unmute-btn {
+        position: absolute;
+        top: 8px;
+        left: 8px;
+        z-index: 20;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 12px;
+        font-size: 14px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .unmute-btn:hover { background: rgba(0, 0, 0, 0.9); }
     </style>
 </head>
 <body class="guide-page">
@@ -92,7 +119,10 @@
         <h3>Program Info</h3>
         <p>Click a channel on the left to start playback.</p>
     </div>
-    <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
+    <div class="video-player-wrap" id="videoPlayerWrap">
+        <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
+        <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+    </div>
 </div>
 
 <!-- FIXED time header (will be populated/positioned by JS) -->
@@ -172,6 +202,9 @@
 
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
 
+<!-- Inject per-user preferences so user-prefs.js can act before an extra round-trip -->
+<script>window.__initialUserPrefs = {{ user_prefs | tojson }};</script>
+
 <script>
 // --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
 
@@ -202,6 +235,8 @@ function getDisplayZoom() {
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
     currentChannelId = cid;
+    // Expose currently-playing channel for user-prefs.js (auto-load / context menu)
+    window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
 
     fetch("/play_channel", {
@@ -210,15 +245,28 @@ function playChannel(url, cid, name) {
         body: "channel_name=" + encodeURIComponent(name)
     });
 
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    if (unmuteBtn) unmuteBtn.hidden = true;
+
+    // Try normal play; if blocked by browser autoplay policy, retry muted
+    // and show the unmute button so the user can restore audio with one click.
+    function tryPlay() {
+        video.play().catch(() => {
+            video.muted = true;
+            video.play().catch(()=>{});
+            if (unmuteBtn) unmuteBtn.hidden = false;
+        });
+    }
+
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (Hls.isSupported()) {
         hlsInstance = new Hls();
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => video.play().catch(()=>{}));
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, tryPlay);
     } else {
         video.src = url;
-        video.play().catch(()=>{});
+        tryPlay();
     }
 }
 
@@ -398,6 +446,15 @@ document.addEventListener("DOMContentLoaded", () => {
             playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
         });
     });
+
+    const unmuteBtn = document.getElementById('unmuteBtn');
+    if (unmuteBtn) {
+        unmuteBtn.addEventListener('click', () => {
+            const video = document.getElementById('video');
+            if (video) video.muted = false;
+            unmuteBtn.hidden = true;
+        });
+    }
 
     document.querySelectorAll('.time-cell').forEach(cell => {
         const utc = new Date(cell.dataset.utc);
@@ -707,6 +764,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
 <!-- Right Hand Clock Fix -->
 <script src="{{ url_for('static', filename='js/clock-fix.js') }}" defer></script>
+
+<!-- Per-user channel preferences: auto-load channel, hidden channels, sizzle reels -->
+<script src="{{ url_for('static', filename='js/user-prefs.js') }}" defer></script>
 
 
 

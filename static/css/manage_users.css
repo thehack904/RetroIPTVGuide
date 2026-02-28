@@ -70,7 +70,7 @@ body.light .container-manage-users {
 
 /* Layout */
 .container-manage-users {
-  max-width: 720px;
+  max-width: 960px;
   margin: 60px auto;
   padding: 12px;
   box-sizing: border-box;
@@ -156,8 +156,10 @@ body.light .container-manage-users {
 }
 
 /* Actions & inline forms */
-.actions { display:flex; gap:8px; }
+.actions { display:flex; gap:8px; flex-wrap: wrap; align-items: center; }
 .inline-form { display:inline; margin:0; padding:0; }
+.assign-tuner-form { display:flex !important; gap:6px; align-items:center; }
+.assign-tuner-form select { width: auto; }
 
 /* Flash messages */
 .flash-messages { margin-top: 12px; }
@@ -187,4 +189,71 @@ body.directv .container-manage-users h3 {
   .container-manage-users { margin: 40px 12px; padding: 8px; }
   .actions { flex-direction: column; gap: 6px; }
   .users-table thead th, .users-table tbody td { padding: 8px 6px; font-size: 0.92rem; }
+}
+
+/* ── Channel Preferences panel ─────────────────────────────────────────────── */
+.btn.prefs-toggle {
+  background: rgba(30,211,206,0.15);
+  color: var(--primary-color, #1ed3ce);
+  border: 1px solid rgba(30,211,206,0.3);
+}
+.btn.prefs-toggle:hover { background: rgba(30,211,206,0.28); }
+
+.prefs-panel-row > td {
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--panel-bg) 92%, rgba(30,211,206,0.08) 8%);
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.prefs-form-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.prefs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1 1 200px;
+}
+
+.prefs-field label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--label-color);
+}
+
+.prefs-field select {
+  max-width: 280px;
+}
+
+.prefs-checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 400 !important;
+  cursor: pointer;
+}
+
+.prefs-hidden-channels .hidden-ch-list {
+  margin: 4px 0 6px;
+  padding-left: 18px;
+  font-size: 0.88rem;
+  color: var(--muted-color);
+  max-height: 80px;
+  overflow-y: auto;
+}
+
+.prefs-hint {
+  font-size: 0.83rem;
+  color: var(--muted-color);
+}
+
+.prefs-form-actions { margin-top: 4px; }
+
+@media (max-width: 640px) {
+  .prefs-form-grid { flex-direction: column; }
+  .prefs-field select { max-width: 100%; }
 }

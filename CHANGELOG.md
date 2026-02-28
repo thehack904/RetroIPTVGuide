@@ -6,6 +6,42 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.7.0 - 2026-02-28
+
+### Added
+- **Per-user Auto-Load Channel (server-side)**
+  - Each user can designate one channel that automatically begins playing when the guide page opens.
+  - Playback starts after a short delay once the page has fully loaded.
+  - Regular users set this via **Settings → Channel Preferences → Set Auto-Load Channel**.
+  - Admins can set or clear Auto-Load Channel for any user from the **Manage Users** page.
+
+- **Assigned Tuner per User**
+  - Admins can assign a specific tuner to each user from the Manage Users page.
+  - Users only see channels from their assigned tuner.
+  - Safeguards prevent invalid auto-load channel references when tuner assignments change.
+
+- **Combined Tuner Mode**
+  - New tuner type that merges channels and EPG data from multiple existing tuners.
+  - Combined tuners behave like standard tuners for playback and guide rendering.
+  - Health indicators adjust appropriately for combined sources.
+
+- **About / Diagnostics Improvements**
+  - Displays effective EPG source.
+  - Shows loaded channel count, channels with EPG, and total program count.
+
+- **Improved Autoplay Handling**
+  - If browser audio autoplay is blocked, playback falls back to muted.
+  - An on-screen **Unmute** button is displayed when needed.
+
+### Database Migration
+- **New table: `user_preferences`**
+  - Schema: `(username TEXT PRIMARY KEY, prefs TEXT NOT NULL DEFAULT '{}')`
+  - Automatically created on first startup.
+  - Automatically created during upgrade after process restart.
+  - Safe fallback handling if table does not yet exist during hot reload.
+
+---
+
 ## v4.6.0 - 2026-02-23
 
 ### Added

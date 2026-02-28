@@ -4,7 +4,9 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.6.0 (2026-02-23)**
+# Current Version: **v4.7.0 (2026-02-28)**
+
+---
 
 ## 🔮 Feature Upgrades
 
@@ -37,6 +39,14 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Added responsive layout for mobile devices (v4.2.0).  
 - [ ] Add search/filter box to guide.  
 - [ ] Add ability to set favorites.  
+- [ ] Channel Info Banner (lower-third overlay with channel #, logo, current/next, progress bar).  
+- [ ] Channel number entry with digit buffer + “Tuning to…” overlay.  
+- [ ] Last channel quick return.  
+- [ ] Browse mode (navigate without tuning until confirmed).  
+- [ ] “What’s On Now” dashboard view.  
+- [ ] Continue Watching row (per-user recent channels).  
+- [ ] Channel health monitoring (stream indicators + pre-check).  
+- [ ] Mini Guide overlay (video continues while grid overlays).  
 - [x] Fallback message for missing EPG info (v3.0.1).  
 - [ ] Add reminders/notifications for upcoming programs.  
 - [ ] Add EPG caching for faster guide reloads.  
@@ -49,6 +59,8 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [ ] Add email or 2FA support for login.  
 - [x] Show last login time in admin panel. *(v4.5.0)*  
 - [ ] User role/channel restrictions.  
+- [ ] Per-user favorites storage.  
+- [ ] Per-user continue watching history.  
 
 ---
 
@@ -70,6 +82,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Fire TV / Android TV DPAD remote navigation + TV-mode proportional UI scaling. *(v4.6.0)*
 - [x] Video player aspect-ratio-locked resize handle. *(v4.6.0)*
 - [x] Fixed time bar style normalized across all themes. *(v4.6.0)*
+- [ ] Retro Theme Packs (1997 Analog, 2002 Digital Cable, TV Guide style, Modern Clean).
+- [ ] Advanced Mode toggle (hide/show power-user features).
+- [ ] Screen saver / burn-in protection mode.
+- [ ] Multi-device sync (same-user follow mode).
 
 ---
 
@@ -83,6 +99,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ---
 
 ### 7. New Features
+- [ ] Multi-device Remote Control page (remote.html controlling active guide session).
+- [ ] WebSocket-based same-user remote session routing.
+- [ ] Favorites system (per-user channel starring).
+- [ ] Smart filtering (genre, HD only, live now, favorites).
 - [ ] Begin integration path for PlutoTV / external IPTV services.  
 - [-] Add auto-play stream on login. *(partial JS scaffolding in tuner-settings.js)*  
 - [-] Default auto-play source selection. *(partial JS only, not wired to UI)*  
