@@ -6,6 +6,16 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.7.1 - 2026-02-28
+
+### Fixed
+- **Combined tuner creation blocked by "M3U URL is required" error**
+  - The `Add Tuner` route handler always called `add_tuner()` regardless of the selected tuner mode, causing it to validate M3U URL even when creating a combined tuner (which has no M3U URL).
+  - Fixed by reading `tuner_mode` from the submitted form and dispatching to `add_combined_tuner()` when mode is `combined`, so no M3U URL is required or expected.
+  - Combined tuners can now be created through the UI by selecting "Combined Tuner" mode, choosing source tuners, and submitting — without any URL fields.
+
+---
+
 ## v4.7.0 - 2026-02-28
 
 ### Added

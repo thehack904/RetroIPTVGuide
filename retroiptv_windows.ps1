@@ -1,7 +1,7 @@
 <# 
 RetroIPTVGuide Windows Installer/Uninstaller
 Filename: retroiptv_windows.ps1
-Version: 4.7.0
+Version: 4.7.1
 
 License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -55,7 +55,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "4.7.0"
+$VERSION = "4.7.1"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
