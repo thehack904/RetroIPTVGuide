@@ -149,7 +149,31 @@
         </div>
     </div>
 
+    <!-- Channel 1: Virtual Weather Channel (hidden when weather feature is disabled) -->
+    <div class="guide-row{% if not weather_enabled %} weather-ch-hidden{% endif %}" data-cid="__weather__">
+        <div class="chan-col">
+            <div class="chan-name"
+                 tabindex="0"
+                 role="button"
+                 data-url=""
+                 data-cid="__weather__"
+                 data-name="🌤 Ch 1 — Weather Channel"
+                 data-logo="">
+                <span>🌤 Ch 1 — Weather Channel</span>
+            </div>
+        </div>
+        <div class="grid-col">
+            <div class="grid-content">
+                <div class="program" style="left:0px; width:{{ total_width }}px;">
+                    Weather Channel
+                </div>
+            </div>
+        </div>
+    </div>
+
     {% for ch in channels %}
+    {# Skip any real tuner channel whose tvg_id collides with the virtual weather channel #}
+    {% if ch.tvg_id != '__weather__' %}
     <div class="guide-row" data-cid="{{ ch.tvg_id }}">
         <div class="chan-col">
             <div class="chan-name"
@@ -197,6 +221,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
     {% endfor %}
 </div>
 

@@ -410,6 +410,9 @@ _DEFAULT_PREFS = {
     "hidden_channels": [],
     "sizzle_reels_enabled": False,
     "default_theme": None,
+    "weather_enabled": False,
+    "weather_zip": "",
+    "weather_units": "F",
 }
 
 
@@ -1156,6 +1159,7 @@ def guide():
         current_tuner=get_current_tuner(),
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
+        weather_enabled=user_prefs.get("weather_enabled", False),
     )
 
 @app.route('/play_channel', methods=['POST'])

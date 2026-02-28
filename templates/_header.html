@@ -51,6 +51,20 @@
                   <li><a href="#" id="clearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
                 </ul>
               </li>
+              <li class="submenu">
+                <a href="#">Weather Settings</a>
+                <ul class="submenu-content">
+                  <li><a href="#" id="toggleWeatherChannel">Enable/Disable Weather Channel</a></li>
+                  <li><a href="#" id="setWeatherZip">Set ZIP Code</a></li>
+                  <li class="submenu">
+                    <a href="#">Units</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" id="setWeatherUnitsF">°F (Fahrenheit)</a></li>
+                      <li><a href="#" id="setWeatherUnitsC">°C (Celsius)</a></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
               {% endif %}
               <li class="submenu">
                 <a href="#">Themes</a>
@@ -186,6 +200,37 @@
             <ul id="mobileChannelPrefsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
               <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Set Auto-Load Channel</a></li>
               <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+            </ul>
+          </li>
+
+          <!-- Weather Settings submenu (guide page only) -->
+          <li class="mobile-submenu" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileWeatherSettingsList"
+              type="button">
+              Weather Settings
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+
+            <ul id="mobileWeatherSettingsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="#" id="mobileToggleWeatherChannel">Enable/Disable Weather Channel</a></li>
+              <li role="none"><a role="menuitem" href="#" id="mobileSetWeatherZip">Set ZIP Code</a></li>
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileWeatherUnitsList"
+                  type="button">
+                  Units
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileWeatherUnitsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" id="mobileSetWeatherUnitsF">°F (Fahrenheit)</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileSetWeatherUnitsC">°C (Celsius)</a></li>
+                </ul>
+              </li>
             </ul>
           </li>
           {% endif %}

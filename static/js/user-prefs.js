@@ -20,9 +20,14 @@
 (function () {
   'use strict';
 
+  // ─── Constants ────────────────────────────────────────────────────────────
+  const WEATHER_CHANNEL_ID  = '__weather__';
+  const WEATHER_ZIP_UNSET   = '(not set)';
+
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
-    { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false },
+    { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false,
+      weather_enabled: false, weather_zip: '', weather_units: 'F' },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
@@ -61,6 +66,9 @@
     const hidden = prefs.hidden_channels || [];
     document.querySelectorAll('.guide-row[data-cid]').forEach(row => {
       const cid = row.dataset.cid;
+      // Never apply user-hidden class to the virtual weather channel; it has
+      // its own separate weather-ch-hidden toggle.
+      if (cid === WEATHER_CHANNEL_ID) return;
       if (hidden.includes(cid)) {
         row.classList.add('chan-hidden');
       } else {
@@ -268,6 +276,66 @@
     });
   }
 
+  // ─── Weather settings ─────────────────────────────────────────────────────
+
+  /** Show/hide the virtual Channel 1 row based on weather_enabled pref. */
+  function applyWeatherEnabled() {
+    const enabled = !!prefs.weather_enabled;
+    document.querySelectorAll('.guide-row[data-cid="' + WEATHER_CHANNEL_ID + '"]').forEach(function (row) {
+      row.classList.toggle('weather-ch-hidden', !enabled);
+    });
+  }
+
+  function syncWeatherButton() {
+    const enabled = !!prefs.weather_enabled;
+    const zip = prefs.weather_zip || WEATHER_ZIP_UNSET;
+    const units = prefs.weather_units || 'F';
+
+    ['toggleWeatherChannel', 'mobileToggleWeatherChannel'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = enabled ? '🌤 Weather: On (Click to Disable)' : '🌤 Weather: Off (Click to Enable)';
+    });
+    ['setWeatherZip', 'mobileSetWeatherZip'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = 'ZIP Code: ' + zip;
+    });
+    ['setWeatherUnitsF', 'mobileSetWeatherUnitsF'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = units === 'F' ? '✓ °F (Fahrenheit)' : '°F (Fahrenheit)';
+    });
+    ['setWeatherUnitsC', 'mobileSetWeatherUnitsC'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = units === 'C' ? '✓ °C (Celsius)' : '°C (Celsius)';
+    });
+  }
+
+  async function toggleWeatherChannel() {
+    await savePatch({ weather_enabled: !prefs.weather_enabled });
+    syncWeatherButton();
+    applyWeatherEnabled();
+    log('weather channel', prefs.weather_enabled ? 'enabled' : 'disabled');
+  }
+
+  async function setWeatherZip() {
+    const zip = prompt('Enter your ZIP code for weather:', prefs.weather_zip || '');
+    if (zip === null) return;
+    await savePatch({ weather_zip: zip.trim() });
+    syncWeatherButton();
+    log('weather zip set to', prefs.weather_zip);
+  }
+
+  async function setWeatherUnitsF() {
+    await savePatch({ weather_units: 'F' });
+    syncWeatherButton();
+    log('weather units set to F');
+  }
+
+  async function setWeatherUnitsC() {
+    await savePatch({ weather_units: 'C' });
+    syncWeatherButton();
+    log('weather units set to C');
+  }
+
   // ─── Right-click context menu ──────────────────────────────────────────────
   let ctxMenu = null;
   let ctxTarget = null;   // the .chan-name element that was right-clicked
@@ -339,9 +407,11 @@
     if (!ctxMenu) ctxMenu = createContextMenu();
     ctxTarget = chanEl;
     const cid = chanEl.dataset.cid;
-    const isHidden = (prefs.hidden_channels || []).includes(cid);
-    ctxMenu.querySelector('#ctxHide').style.display   = isHidden ? 'none' : '';
-    ctxMenu.querySelector('#ctxUnhide').style.display = isHidden ? ''     : 'none';
+    const isWeather = (cid === WEATHER_CHANNEL_ID);
+    const isHidden = !isWeather && (prefs.hidden_channels || []).includes(cid);
+    // Hide/Unhide actions are not available for the virtual weather channel
+    ctxMenu.querySelector('#ctxHide').style.display   = (isWeather || isHidden) ? 'none' : '';
+    ctxMenu.querySelector('#ctxUnhide').style.display = (!isWeather && isHidden) ? '' : 'none';
 
     ctxMenu.style.display = 'block';
     // Keep within viewport
@@ -361,9 +431,11 @@
   function init() {
     applyHiddenChannels();
     applyAutoLoadMarker();
+    applyWeatherEnabled();
     syncAutoLoadButton();
     syncSizzleButton();
     syncShowHiddenButton();
+    syncWeatherButton();
     scheduleAutoLoad();
 
     if (prefs.sizzle_reels_enabled) {
@@ -375,14 +447,22 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
     }
-    wire('setAutoLoadChannel',       setAutoLoad);
-    wire('clearAutoLoadChannel',     clearAutoLoad);
-    wire('toggleSizzleReels',        toggleSizzleReels);
-    wire('toggleShowHidden',         toggleShowHidden);
-    wire('mobileSetAutoLoadChannel', setAutoLoad);
+    wire('setAutoLoadChannel',         setAutoLoad);
+    wire('clearAutoLoadChannel',       clearAutoLoad);
+    wire('toggleSizzleReels',          toggleSizzleReels);
+    wire('toggleShowHidden',           toggleShowHidden);
+    wire('mobileSetAutoLoadChannel',   setAutoLoad);
     wire('mobileClearAutoLoadChannel', clearAutoLoad);
-    wire('mobileToggleSizzleReels',  toggleSizzleReels);
-    wire('mobileToggleShowHidden',   toggleShowHidden);
+    wire('mobileToggleSizzleReels',    toggleSizzleReels);
+    wire('mobileToggleShowHidden',     toggleShowHidden);
+    wire('toggleWeatherChannel',       toggleWeatherChannel);
+    wire('setWeatherZip',              setWeatherZip);
+    wire('setWeatherUnitsF',           setWeatherUnitsF);
+    wire('setWeatherUnitsC',           setWeatherUnitsC);
+    wire('mobileToggleWeatherChannel', toggleWeatherChannel);
+    wire('mobileSetWeatherZip',        setWeatherZip);
+    wire('mobileSetWeatherUnitsF',     setWeatherUnitsF);
+    wire('mobileSetWeatherUnitsC',     setWeatherUnitsC);
 
     // Right-click context menu on channel names
     document.querySelectorAll('.chan-name').forEach(function (el) {
@@ -405,13 +485,17 @@
   // ─── Public API ───────────────────────────────────────────────────────────
   window.__userPrefs = {
     get prefs() { return prefs; },
-    save:             savePatch,
-    setAutoLoad:      setAutoLoad,
-    clearAutoLoad:    clearAutoLoad,
-    toggleSizzleReels: toggleSizzleReels,
-    toggleShowHidden: toggleShowHidden,
-    hideChannel:      hideChannel,
-    unhideChannel:    unhideChannel
+    save:                 savePatch,
+    setAutoLoad:          setAutoLoad,
+    clearAutoLoad:        clearAutoLoad,
+    toggleSizzleReels:    toggleSizzleReels,
+    toggleShowHidden:     toggleShowHidden,
+    hideChannel:          hideChannel,
+    unhideChannel:        unhideChannel,
+    toggleWeatherChannel: toggleWeatherChannel,
+    setWeatherZip:        setWeatherZip,
+    setWeatherUnitsF:     setWeatherUnitsF,
+    setWeatherUnitsC:     setWeatherUnitsC,
   };
 
   // Bootstrap when DOM is ready

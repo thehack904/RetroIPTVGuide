@@ -644,6 +644,9 @@ body.light{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
 .guide-row.chan-hidden { display: none; }
 .guide-row.chan-hidden.chan-hidden-visible { display: flex; opacity: 0.45; }
 
+/* Weather Channel (Channel 1): hidden when weather feature is disabled */
+.guide-row.weather-ch-hidden { display: none; }
+
 /* Auto-load channel: subtle left-border highlight so the user can see which
    channel will auto-play on next guide load */
 .guide-row.chan-autoload > .chan-col {
