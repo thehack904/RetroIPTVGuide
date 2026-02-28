@@ -356,3 +356,34 @@ class TestManageUsersSetPrefs:
         resp = client.get("/manage_users")
         assert resp.status_code == 200
         assert 'no-store' in resp.headers.get('Cache-Control', '')
+
+    def test_combined_tuner_channels_shown_in_manage_users(self, client):
+        """A user assigned to a combined tuner should have its merged channel
+        list available in the manage_users page channel-selector dropdown."""
+        from app import add_combined_tuner
+        from unittest.mock import patch
+
+        # The default tuners DB already has Tuner 1 and Tuner 2.
+        # Create a combined tuner that merges both.
+        add_combined_tuner("My Combined", ["Tuner 1", "Tuner 2"])
+
+        # Assign testuser to the combined tuner.
+        login(client, "admin", "adminpass")
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "My Combined",
+        }, follow_redirects=True)
+
+        # Mock load_tuner_data so we control what channels come back without
+        # real network calls.
+        fake_channels = [
+            {"tvg_id": "combo-ch1", "name": "Combined Channel One", "url": "", "logo": ""},
+            {"tvg_id": "combo-ch2", "name": "Combined Channel Two", "url": "", "logo": ""},
+        ]
+        with patch("app.load_tuner_data", return_value=(fake_channels, {})):
+            resp = client.get("/manage_users")
+
+        assert resp.status_code == 200
+        assert b"Combined Channel One" in resp.data
+        assert b"Combined Channel Two" in resp.data

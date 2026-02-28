@@ -854,17 +854,28 @@ def manage_users():
         rows = c.fetchall()
 
     curr_tuner = get_current_tuner()
+    # Cache load_tuner_data results so we don't re-fetch the same tuner's M3U for
+    # every user that shares it.
+    tuner_channel_cache = {}
     users = []
     for row in rows:
         uname, last_login, assigned_tuner = row[0], row[1], row[2]
         prefs = get_user_prefs(uname)
-        # Use cached channels only for the currently active tuner to avoid
-        # blocking page loads with live M3U fetches for every assigned tuner.
         tuner_name = assigned_tuner or curr_tuner
         if tuner_name == curr_tuner:
+            # Use the in-memory cache for the active tuner (already fetched).
             ch_list = cached_channels
         else:
-            ch_list = []
+            # For any other tuner (including combined tuners) load its channels.
+            # Results are memoized within this request to avoid redundant fetches
+            # when multiple users share the same non-active tuner.
+            if tuner_name not in tuner_channel_cache:
+                try:
+                    fetched, _ = load_tuner_data(tuner_name)
+                except Exception:
+                    fetched = []
+                tuner_channel_cache[tuner_name] = fetched
+            ch_list = tuner_channel_cache[tuner_name]
         # Convert to simple {id, name} dicts for template
         channel_list = [{"id": ch.get("tvg_id", ""), "name": ch.get("name", "")} for ch in ch_list]
         users.append({
