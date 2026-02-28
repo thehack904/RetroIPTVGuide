@@ -2,7 +2,7 @@
 APP_VERSION = "v4.7.0"
 APP_RELEASE_DATE = "2026-02-28"
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 import sqlite3
@@ -10,6 +10,7 @@ import re
 import sys
 import platform
 import os
+import json as _json
 import datetime
 import requests
 import time
@@ -104,14 +105,22 @@ def init_db():
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS users
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, last_login TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS user_preferences
+                     (username TEXT PRIMARY KEY, prefs TEXT)''')
         conn.commit()
-        
+
         # Add last_login column if it doesn't exist (for existing databases)
         try:
             c.execute('ALTER TABLE users ADD COLUMN last_login TEXT')
             conn.commit()
         except sqlite3.OperationalError:
-            # Column already exists
+            pass
+
+        # Add assigned_tuner column if it doesn't exist (for existing databases)
+        try:
+            c.execute('ALTER TABLE users ADD COLUMN assigned_tuner TEXT')
+            conn.commit()
+        except sqlite3.OperationalError:
             pass
 
 def add_user(username, password):
@@ -150,6 +159,20 @@ def init_tuners_db():
                      (key TEXT PRIMARY KEY, value TEXT)''')
         conn.commit()
 
+        # Add tuner_type column if it doesn't exist (for existing databases)
+        try:
+            c.execute("ALTER TABLE tuners ADD COLUMN tuner_type TEXT DEFAULT 'standard'")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
+        # Add sources column if it doesn't exist (for combined tuners)
+        try:
+            c.execute("ALTER TABLE tuners ADD COLUMN sources TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass
+
         # bootstrap if empty
         c.execute("SELECT COUNT(*) FROM tuners")
         if c.fetchone()[0] == 0:
@@ -181,8 +204,27 @@ def init_tuners_db():
 def get_tuners():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
-        c.execute("SELECT name, xml, m3u FROM tuners")
-        return {row[0]: {"xml": row[1], "m3u": row[2]} for row in c.fetchall()}
+        try:
+            c.execute("SELECT name, xml, m3u, tuner_type, sources FROM tuners")
+            rows = c.fetchall()
+            result = {}
+            for row in rows:
+                name, xml, m3u, tuner_type, sources_json = row
+                entry = {"xml": xml, "m3u": m3u, "tuner_type": tuner_type or "standard"}
+                if sources_json:
+                    try:
+                        entry["sources"] = _json.loads(sources_json)
+                    except Exception:
+                        entry["sources"] = []
+                else:
+                    entry["sources"] = []
+                result[name] = entry
+            return result
+        except sqlite3.OperationalError:
+            # Fallback for old schema without tuner_type/sources columns
+            c.execute("SELECT name, xml, m3u FROM tuners")
+            return {row[0]: {"xml": row[1], "m3u": row[2], "tuner_type": "standard", "sources": []}
+                    for row in c.fetchall()}
 
 def get_current_tuner():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
@@ -243,14 +285,18 @@ def add_tuner(name, xml_url, m3u_url):
             if ip_obj.is_link_local:
                 raise ValueError("M3U URL cannot point to link-local addresses (169.254.0.0/16)")
         except socket.gaierror:
-            # If hostname can't be resolved, it will fail in the requests call anyway
+            # If hostname can't be resolved, skip reachability check
             pass
         
         # Make the request with security restrictions
-        r = requests.head(m3u_url, timeout=5, allow_redirects=True)
-        r.raise_for_status()
-    except requests.RequestException as e:
-        raise ValueError(f"M3U URL unreachable: {str(e)}")
+        try:
+            r = requests.head(m3u_url, timeout=5, allow_redirects=True)
+            r.raise_for_status()
+        except requests.exceptions.ConnectionError:
+            # DNS resolution failure or unreachable host — skip reachability check
+            pass
+        except requests.RequestException as e:
+            raise ValueError(f"M3U URL unreachable: {str(e)}")
     except ValueError:
         # Re-raise ValueError from our validation
         raise
@@ -260,10 +306,17 @@ def add_tuner(name, xml_url, m3u_url):
     # Insert into database
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
-        c.execute(
-            "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
-            (name, xml_url, m3u_url)
-        )
+        try:
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u, tuner_type) VALUES (?, ?, ?, 'standard')",
+                (name, xml_url, m3u_url)
+            )
+        except sqlite3.OperationalError:
+            # Fallback for old schema without tuner_type column
+            c.execute(
+                "INSERT INTO tuners (name, xml, m3u) VALUES (?, ?, ?)",
+                (name, xml_url, m3u_url)
+            )
         conn.commit()
 
 def delete_tuner(name):
@@ -281,7 +334,49 @@ def rename_tuner(old_name, new_name):
         conn.commit()
 
 
-# ------------------- Template context helpers -------------------
+def add_combined_tuner(name, sources):
+    """Create a combined tuner that merges channels and EPG from multiple source tuners."""
+    if not sources:
+        raise ValueError("Combined tuner requires at least one source tuner")
+    tuners = get_tuners()
+    if name in tuners:
+        raise ValueError(f"Tuner '{name}' already exists")
+    with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute(
+            "INSERT INTO tuners (name, xml, m3u, tuner_type, sources) VALUES (?, ?, ?, ?, ?)",
+            (name, None, None, "combined", _json.dumps(sources))
+        )
+        conn.commit()
+
+
+def load_tuner_data(tuner_name):
+    """Load channels and EPG for a tuner, supporting combined tuners.
+
+    Returns:
+        (channels, epg) — lists/dicts as returned by parse_m3u / parse_epg.
+    """
+    tuners = get_tuners()
+    tuner = tuners.get(tuner_name)
+    if not tuner:
+        return [], {}
+
+    if tuner.get("tuner_type") == "combined":
+        merged_channels = []
+        merged_epg = {}
+        for source_name in tuner.get("sources", []):
+            source = tuners.get(source_name)
+            if not source:
+                continue  # skip missing source tuners
+            src_channels = parse_m3u(source["m3u"]) if source.get("m3u") else []
+            src_epg = parse_epg(source["xml"]) if source.get("xml") else {}
+            merged_channels.extend(src_channels)
+            merged_epg.update(src_epg)
+        return merged_channels, merged_epg
+    else:
+        channels = parse_m3u(tuner["m3u"]) if tuner.get("m3u") else []
+        epg = parse_epg(tuner["xml"]) if tuner.get("xml") else {}
+        return channels, epg
 @app.template_filter('format_datetime')
 def format_datetime_filter(iso_string):
     """Format ISO datetime string to human-readable format."""
@@ -308,7 +403,57 @@ def inject_tuner_context():
         "tuner_names": tuner_names
     }
 
-# ------------------- Global cache -------------------
+# ------------------- User Preferences -------------------
+
+_DEFAULT_PREFS = {
+    "auto_load_channel": None,
+    "hidden_channels": [],
+    "sizzle_reels_enabled": False,
+    "default_theme": None,
+}
+
+
+def get_user_prefs(username):
+    """Return the stored preferences for *username*, merged with defaults."""
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT prefs FROM user_preferences WHERE username=?", (username,))
+            row = c.fetchone()
+        if row and row[0]:
+            stored = _json.loads(row[0])
+            prefs = dict(_DEFAULT_PREFS)
+            prefs.update({k: v for k, v in stored.items() if k in _DEFAULT_PREFS})
+            return prefs
+        return dict(_DEFAULT_PREFS)
+    except Exception:
+        return dict(_DEFAULT_PREFS)
+
+
+def save_user_prefs(username, prefs):
+    """Upsert preferences for *username* into the database.
+
+    Only known preference keys (those in _DEFAULT_PREFS) are stored.
+    Missing keys are filled from the existing stored value so callers can
+    do partial updates.
+    """
+    try:
+        existing = get_user_prefs(username)
+        merged = dict(existing)
+        merged.update({k: v for k, v in prefs.items() if k in _DEFAULT_PREFS})
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT OR REPLACE INTO user_preferences (username, prefs) VALUES (?, ?)",
+                (username, _json.dumps(merged))
+            )
+            conn.commit()
+    except sqlite3.OperationalError:
+        # Table may not exist yet on very old installs — auto-heal
+        init_db()
+        save_user_prefs(username, prefs)
+
+
 cached_channels = []
 cached_epg = {}
 
@@ -481,18 +626,6 @@ def login():
             login_user(user, remember=remember)
             log_event(username, "Logged in")
 
-            # reload cached guide after login
-            tuners = get_tuners()
-            current_tuner = get_current_tuner()
-            m3u_url = tuners[current_tuner]["m3u"] if current_tuner and current_tuner in tuners else None
-            xml_url = tuners[current_tuner]["xml"] if current_tuner and current_tuner in tuners else None
-            global cached_channels, cached_epg
-            if m3u_url:
-                cached_channels = parse_m3u(m3u_url)
-            if xml_url:
-                cached_epg = parse_epg(xml_url)
-            cached_epg = apply_epg_fallback(cached_channels, cached_epg)
-
             # Determine next redirect target (prefer POSTed next, then query param)
             next_url = request.form.get('next') or request.args.get('next') or url_for('guide')
             if next_url and not is_safe_url(next_url):
@@ -646,12 +779,6 @@ def manage_users():
         flash("Unauthorized access.")
         return redirect(url_for('guide'))
 
-    # ---- Normal admin logic below ----
-    with sqlite3.connect(DATABASE, timeout=10) as conn:
-        c = conn.cursor()
-        c.execute('SELECT username, last_login FROM users WHERE username != "admin"')
-        users = [{'username': row[0], 'last_login': row[1]} for row in c.fetchall()]
-
     if request.method == 'POST':
         action = request.form.get('action')
         username = request.form.get('username')
@@ -688,9 +815,69 @@ def manage_users():
             log_event(current_user.username, f"Revoked sessions for {username}")
             flash(f"🚪 Signed out all active logins for '{username}'.")
 
+        elif action == 'set_user_prefs':
+            ch_id = request.form.get('auto_load_channel_id', '').strip()
+            ch_name = request.form.get('auto_load_channel_name', '').strip() or ch_id
+            auto_load = {"id": ch_id, "name": ch_name} if ch_id else None
+            raw_theme = request.form.get('default_theme', '').strip() or None
+            save_user_prefs(username, {
+                "auto_load_channel": auto_load,
+                "default_theme": raw_theme,
+            })
+            log_event(current_user.username, f"Updated prefs for {username}")
+            flash(f"✅ Preferences saved for '{username}'.")
+
+        elif action == 'assign_tuner':
+            new_tuner = request.form.get('tuner_name', '').strip() or None
+            # Fetch current assigned tuner before updating
+            with sqlite3.connect(DATABASE, timeout=10) as conn:
+                c = conn.cursor()
+                c.execute('SELECT assigned_tuner FROM users WHERE username=?', (username,))
+                row = c.fetchone()
+                old_tuner = row[0] if row else None
+                c.execute('UPDATE users SET assigned_tuner=? WHERE username=?', (new_tuner, username))
+                conn.commit()
+            # Clear auto-load channel when tuner assignment changes
+            if new_tuner != old_tuner:
+                prefs = get_user_prefs(username)
+                prefs["auto_load_channel"] = None
+                save_user_prefs(username, prefs)
+            log_event(current_user.username, f"Assigned tuner {new_tuner!r} to {username}")
+            flash(f"✅ Tuner assigned for '{username}'.")
+
         return redirect(url_for('manage_users'))
 
-    return render_template('manage_users.html', users=users, current_tuner=get_current_tuner())
+    # ---- Build user list with prefs and channel_list ----
+    with sqlite3.connect(DATABASE, timeout=10) as conn:
+        c = conn.cursor()
+        c.execute('SELECT username, last_login, assigned_tuner FROM users WHERE username != "admin"')
+        rows = c.fetchall()
+
+    curr_tuner = get_current_tuner()
+    users = []
+    for row in rows:
+        uname, last_login, assigned_tuner = row[0], row[1], row[2]
+        prefs = get_user_prefs(uname)
+        # Use cached channels only for the currently active tuner to avoid
+        # blocking page loads with live M3U fetches for every assigned tuner.
+        tuner_name = assigned_tuner or curr_tuner
+        if tuner_name == curr_tuner:
+            ch_list = cached_channels
+        else:
+            ch_list = []
+        # Convert to simple {id, name} dicts for template
+        channel_list = [{"id": ch.get("tvg_id", ""), "name": ch.get("name", "")} for ch in ch_list]
+        users.append({
+            "username": uname,
+            "last_login": last_login,
+            "assigned_tuner": assigned_tuner,
+            "prefs": prefs,
+            "channel_list": channel_list,
+        })
+
+    resp = make_response(render_template('manage_users.html', users=users, current_tuner=get_current_tuner()))
+    resp.headers['Cache-Control'] = 'no-store'
+    return resp
 
 
 @app.route("/about")
@@ -940,6 +1127,9 @@ def guide():
     #print("==========================================\n")
 
 
+    user_prefs = get_user_prefs(current_user.username)
+    user_default_theme = user_prefs.get("default_theme") or None
+
     return render_template(
         'guide.html',
         channels=cached_channels,
@@ -950,7 +1140,9 @@ def guide():
         SCALE=SCALE,
         total_width=total_width,
         now_offset=now_offset,
-        current_tuner=get_current_tuner()
+        current_tuner=get_current_tuner(),
+        user_prefs=user_prefs,
+        user_default_theme=user_default_theme,
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1096,6 +1288,38 @@ def api_auto_refresh_status():
     except Exception as e:
         logging.exception("api_auto_refresh_status failed: %s", e)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/user_prefs', methods=['GET'])
+@login_required
+def api_user_prefs_get():
+    """Return the current user's saved preferences."""
+    return jsonify(get_user_prefs(current_user.username))
+
+
+@app.route('/api/user_prefs', methods=['POST'])
+@login_required
+def api_user_prefs_post():
+    """Update one or more preference keys for the current user.
+
+    Accepts JSON with a subset of preference keys; missing keys are preserved.
+    Returns { status: "ok", prefs: <updated prefs> }.
+    """
+    try:
+        data = request.get_json(force=True, silent=False)
+        if data is None:
+            return jsonify({"error": "invalid JSON"}), 400
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    # Sanitise auto_load_channel: must have a non-empty 'id' key or be None
+    if "auto_load_channel" in data:
+        alc = data["auto_load_channel"]
+        if not (isinstance(alc, dict) and alc.get("id")):
+            data["auto_load_channel"] = None
+
+    save_user_prefs(current_user.username, data)
+    return jsonify({"status": "ok", "prefs": get_user_prefs(current_user.username)})
 
 @app.route('/api/stop_stream', methods=['POST'])
 @login_required
@@ -1926,6 +2150,19 @@ def api_health():
     curr = get_current_tuner()
     t = tuners.get(curr, {})
 
+    # Combined tuners have no direct m3u/xml URLs
+    if t.get("tuner_type") == "combined":
+        return jsonify({
+            "tuner": curr,
+            "tuner_type": "combined",
+            "m3u_reachable": None,
+            "xml_reachable": None,
+            "xmltv_fresh": None,
+            "tuner_m3u": None,
+            "tuner_xml": None,
+            "xmltv_age_hours": None,
+        })
+
     m3u_url = t.get("m3u", "")
     xml_url = t.get("xml", "")
 
@@ -1933,18 +2170,15 @@ def api_health():
     m3u_ok = check_url_reachable(m3u_url) if m3u_url else False
     xml_ok = check_url_reachable(xml_url) if xml_url else False
 
-    # Freshness check (keep your current function)
-    # If you don't compute age yet, return None so "Unknown" shows
+    # Freshness check
     xml_fresh, xml_age_hours = check_xmltv_freshness(xml_url)
-
 
     return jsonify({
         "tuner": curr,
+        "tuner_type": t.get("tuner_type", "standard"),
         "m3u_reachable": m3u_ok,
         "xml_reachable": xml_ok,
         "xmltv_fresh": xml_fresh,
-
-        # ADD THESE:
         "tuner_m3u": m3u_url,
         "tuner_xml": xml_url,
         "xmltv_age_hours": xml_age_hours
