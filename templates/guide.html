@@ -155,7 +155,7 @@
             <div class="chan-name"
                  tabindex="0"
                  role="button"
-                 data-url=""
+                 data-url="{{ weather_stream_url }}"
                  data-cid="__weather__"
                  data-name="🌤 Ch 1 — Weather Channel"
                  data-logo="">
@@ -269,6 +269,32 @@ function playChannel(url, cid, name) {
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: "channel_name=" + encodeURIComponent(name)
     });
+
+    // If no stream URL is configured, stop here — feeding an empty URL to HLS.js
+    // causes it to spin/buffer forever.  Show a helpful message instead.
+    if (!url) {
+        const summary = document.getElementById('summary');
+        if (summary) {
+            summary.innerHTML = '';
+            const h3 = document.createElement('h3');
+            h3.textContent = name;
+            summary.appendChild(h3);
+            const p1 = document.createElement('p');
+            p1.textContent = '⚙️ No stream URL configured for this channel.';
+            summary.appendChild(p1);
+            const p2 = document.createElement('p');
+            const strong = document.createElement('strong');
+            strong.textContent = 'Settings → Weather Settings → Set Stream URL';
+            p2.appendChild(document.createTextNode('Go to '));
+            p2.appendChild(strong);
+            p2.appendChild(document.createTextNode(' and paste the HLS stream URL from ErsatzTV (or another source).'));
+            summary.appendChild(p2);
+        }
+        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+        video.removeAttribute('src');
+        video.load();
+        return;
+    }
 
     const unmuteBtn = document.getElementById('unmuteBtn');
     if (unmuteBtn) unmuteBtn.hidden = true;

@@ -27,7 +27,7 @@
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
     { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false,
-      weather_enabled: false, weather_zip: '', weather_units: 'F' },
+      weather_enabled: false, weather_zip: '', weather_units: 'F', weather_stream_url: '' },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
@@ -290,10 +290,15 @@
     const enabled = !!prefs.weather_enabled;
     const zip = prefs.weather_zip || WEATHER_ZIP_UNSET;
     const units = prefs.weather_units || 'F';
+    const streamUrl = prefs.weather_stream_url || '';
 
     ['toggleWeatherChannel', 'mobileToggleWeatherChannel'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.textContent = enabled ? '🌤 Weather: On (Click to Disable)' : '🌤 Weather: Off (Click to Enable)';
+    });
+    ['setWeatherStreamUrl', 'mobileSetWeatherStreamUrl'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = streamUrl ? '🔗 Stream URL: (configured)' : '🔗 Set Stream URL';
     });
     ['setWeatherZip', 'mobileSetWeatherZip'].forEach(function (id) {
       const el = document.getElementById(id);
@@ -314,6 +319,25 @@
     syncWeatherButton();
     applyWeatherEnabled();
     log('weather channel', prefs.weather_enabled ? 'enabled' : 'disabled');
+  }
+
+  async function setWeatherStreamUrl() {
+    const current = prefs.weather_stream_url || '';
+    const url = prompt('Enter the HLS stream URL for the Weather Channel\n(e.g. your ErsatzTV HLS Segmenter URL):', current);
+    if (url === null) return;  // user cancelled
+    const trimmed = url.trim();
+    // Basic validation: must be empty (to clear) or start with http/https
+    if (trimmed && !/^https?:\/\/.+/.test(trimmed)) {
+      alert('Please enter a valid URL starting with http:// or https://');
+      return;
+    }
+    await savePatch({ weather_stream_url: trimmed });
+    // Patch the data-url attribute live so the next click uses the new URL immediately
+    document.querySelectorAll('.chan-name[data-cid="' + WEATHER_CHANNEL_ID + '"]').forEach(function (el) {
+      el.dataset.url = trimmed;
+    });
+    syncWeatherButton();
+    log('weather stream url set to', trimmed);
   }
 
   async function setWeatherZip() {
@@ -456,10 +480,12 @@
     wire('mobileToggleSizzleReels',    toggleSizzleReels);
     wire('mobileToggleShowHidden',     toggleShowHidden);
     wire('toggleWeatherChannel',       toggleWeatherChannel);
+    wire('setWeatherStreamUrl',        setWeatherStreamUrl);
     wire('setWeatherZip',              setWeatherZip);
     wire('setWeatherUnitsF',           setWeatherUnitsF);
     wire('setWeatherUnitsC',           setWeatherUnitsC);
     wire('mobileToggleWeatherChannel', toggleWeatherChannel);
+    wire('mobileSetWeatherStreamUrl',  setWeatherStreamUrl);
     wire('mobileSetWeatherZip',        setWeatherZip);
     wire('mobileSetWeatherUnitsF',     setWeatherUnitsF);
     wire('mobileSetWeatherUnitsC',     setWeatherUnitsC);
@@ -485,17 +511,18 @@
   // ─── Public API ───────────────────────────────────────────────────────────
   window.__userPrefs = {
     get prefs() { return prefs; },
-    save:                 savePatch,
-    setAutoLoad:          setAutoLoad,
-    clearAutoLoad:        clearAutoLoad,
-    toggleSizzleReels:    toggleSizzleReels,
-    toggleShowHidden:     toggleShowHidden,
-    hideChannel:          hideChannel,
-    unhideChannel:        unhideChannel,
-    toggleWeatherChannel: toggleWeatherChannel,
-    setWeatherZip:        setWeatherZip,
-    setWeatherUnitsF:     setWeatherUnitsF,
-    setWeatherUnitsC:     setWeatherUnitsC,
+    save:                  savePatch,
+    setAutoLoad:           setAutoLoad,
+    clearAutoLoad:         clearAutoLoad,
+    toggleSizzleReels:     toggleSizzleReels,
+    toggleShowHidden:      toggleShowHidden,
+    hideChannel:           hideChannel,
+    unhideChannel:         unhideChannel,
+    toggleWeatherChannel:  toggleWeatherChannel,
+    setWeatherStreamUrl:   setWeatherStreamUrl,
+    setWeatherZip:         setWeatherZip,
+    setWeatherUnitsF:      setWeatherUnitsF,
+    setWeatherUnitsC:      setWeatherUnitsC,
   };
 
   // Bootstrap when DOM is ready

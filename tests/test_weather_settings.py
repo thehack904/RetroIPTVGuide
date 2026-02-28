@@ -61,6 +61,12 @@ class TestWeatherDefaultPrefs:
     def test_weather_units_default_is_fahrenheit(self):
         assert _DEFAULT_PREFS["weather_units"] == "F"
 
+    def test_weather_stream_url_in_defaults(self):
+        assert "weather_stream_url" in _DEFAULT_PREFS
+
+    def test_weather_stream_url_default_is_empty_string(self):
+        assert _DEFAULT_PREFS["weather_stream_url"] == ""
+
 
 # ─── DB helpers: get/save weather settings ───────────────────────────────────
 
@@ -71,6 +77,7 @@ class TestWeatherPrefsHelpers:
         assert prefs["weather_enabled"] is False
         assert prefs["weather_zip"] == ""
         assert prefs["weather_units"] == "F"
+        assert prefs["weather_stream_url"] == ""
 
     def test_save_and_retrieve_weather_enabled(self):
         save_user_prefs("testuser", {"weather_enabled": True})
@@ -88,11 +95,12 @@ class TestWeatherPrefsHelpers:
         assert prefs["weather_units"] == "C"
 
     def test_disable_preserves_zip_and_units(self):
-        """Disabling weather must not wipe ZIP or units (settings preserved)."""
+        """Disabling weather must not wipe ZIP, units, or stream URL (settings preserved)."""
         save_user_prefs("testuser", {
             "weather_enabled": True,
             "weather_zip": "10001",
             "weather_units": "C",
+            "weather_stream_url": "http://ersatz.lan:8409/iptv/channel1.m3u8",
         })
         # Now disable
         save_user_prefs("testuser", {"weather_enabled": False})
@@ -100,10 +108,11 @@ class TestWeatherPrefsHelpers:
         assert prefs["weather_enabled"] is False
         assert prefs["weather_zip"] == "10001"
         assert prefs["weather_units"] == "C"
+        assert prefs["weather_stream_url"] == "http://ersatz.lan:8409/iptv/channel1.m3u8"
 
     def test_all_weather_keys_present_in_returned_prefs(self):
         prefs = get_user_prefs("testuser")
-        for key in ("weather_enabled", "weather_zip", "weather_units"):
+        for key in ("weather_enabled", "weather_zip", "weather_units", "weather_stream_url"):
             assert key in prefs
 
     def test_weather_prefs_dont_overwrite_other_prefs(self):
@@ -130,6 +139,7 @@ class TestApiWeatherPrefsGet:
         assert "weather_enabled" in data
         assert "weather_zip" in data
         assert "weather_units" in data
+        assert "weather_stream_url" in data
 
     def test_get_returns_defaults_for_new_user(self, client):
         login(client)
@@ -138,6 +148,7 @@ class TestApiWeatherPrefsGet:
         assert data["weather_enabled"] is False
         assert data["weather_zip"] == ""
         assert data["weather_units"] == "F"
+        assert data["weather_stream_url"] == ""
 
 
 # ─── API: POST /api/user_prefs saves weather fields ──────────────────────────
@@ -189,13 +200,14 @@ class TestApiWeatherPrefsPost:
         assert get_user_prefs("testuser")["weather_units"] == "F"
 
     def test_disable_weather_preserves_zip_and_units(self, client):
-        """Disabling weather via API must not erase ZIP or units."""
+        """Disabling weather via API must not erase ZIP, units, or stream URL."""
         login(client)
         client.post("/api/user_prefs",
                     data=json.dumps({
                         "weather_enabled": True,
                         "weather_zip": "60601",
                         "weather_units": "C",
+                        "weather_stream_url": "http://ersatz.lan:8409/iptv/ch1.m3u8",
                     }),
                     content_type="application/json")
         # Disable only
@@ -206,6 +218,25 @@ class TestApiWeatherPrefsPost:
         assert prefs["weather_enabled"] is False
         assert prefs["weather_zip"] == "60601"
         assert prefs["weather_units"] == "C"
+        assert prefs["weather_stream_url"] == "http://ersatz.lan:8409/iptv/ch1.m3u8"
+
+    def test_set_stream_url(self, client):
+        login(client)
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"weather_stream_url": "http://ersatz.lan:8409/iptv/ch1.m3u8"}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["weather_stream_url"] == "http://ersatz.lan:8409/iptv/ch1.m3u8"
+
+    def test_clear_stream_url(self, client):
+        login(client)
+        client.post("/api/user_prefs",
+                    data=json.dumps({"weather_stream_url": "http://old.example/stream.m3u8"}),
+                    content_type="application/json")
+        client.post("/api/user_prefs",
+                    data=json.dumps({"weather_stream_url": ""}),
+                    content_type="application/json")
+        assert get_user_prefs("testuser")["weather_stream_url"] == ""
 
     def test_weather_update_preserves_unrelated_prefs(self, client):
         login(client)
@@ -230,6 +261,7 @@ class TestApiWeatherPrefsPost:
         assert "weather_enabled" in body["prefs"]
         assert "weather_zip" in body["prefs"]
         assert "weather_units" in body["prefs"]
+        assert "weather_stream_url" in body["prefs"]
 
 
 # ─── Guard: __weather__ must never appear in hidden_channels ─────────────────

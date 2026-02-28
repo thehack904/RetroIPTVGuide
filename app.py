@@ -413,6 +413,7 @@ _DEFAULT_PREFS = {
     "weather_enabled": False,
     "weather_zip": "",
     "weather_units": "F",
+    "weather_stream_url": "",
 }
 
 
@@ -1160,6 +1161,7 @@ def guide():
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
         weather_enabled=user_prefs.get("weather_enabled", False),
+        weather_stream_url=user_prefs.get("weather_stream_url", ""),
     )
 
 @app.route('/play_channel', methods=['POST'])
