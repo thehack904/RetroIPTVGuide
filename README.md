@@ -1,4 +1,4 @@
-# 📺 RetroIPTVGuide vv4.7.1
+# 📺 RetroIPTVGuide v4.7.1
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
