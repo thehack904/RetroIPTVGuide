@@ -1,0 +1,99 @@
+/* Virtual Channels v1 (Loop + Overlay) */
+
+#virtual-overlay-root {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  pointer-events: none;
+  display: block;
+}
+
+#virtual-overlay-root.hidden {
+  display: none;
+}
+
+.vc-overlay {
+  position: absolute;
+  inset: 0;
+  display: block;
+  font-family: inherit;
+}
+
+.vc-safe {
+  position: absolute;
+  inset: 6% 4%;
+}
+
+/* Ticker */
+.vc-ticker {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 6%;
+  padding: 0.35rem 0.6rem;
+  overflow: hidden;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: clamp(12px, 1.6vw, 18px);
+}
+
+.vc-ticker__track {
+  display: inline-block;
+  will-change: transform;
+  animation: vc-scroll-left 24s linear infinite;
+}
+
+@keyframes vc-scroll-left {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(-100%); }
+}
+
+/* Lower third */
+.vc-l3 {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  bottom: 13%;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.4rem;
+}
+
+.vc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  font-size: clamp(11px, 1.35vw, 14px);
+  opacity: 0.92;
+}
+
+.vc-stack {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.vc-headline {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.6rem;
+  align-items: baseline;
+  padding: 0.4rem 0.6rem;
+  border-radius: 12px;
+  font-size: clamp(12px, 1.55vw, 16px);
+  line-height: 1.2;
+}
+
+.vc-source {
+  font-size: clamp(10px, 1.2vw, 12px);
+  opacity: 0.85;
+}
+
+/* Errors */
+.vc-error {
+  position: absolute;
+  top: 6%;
+  right: 4%;
+}
