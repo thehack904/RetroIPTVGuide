@@ -730,6 +730,90 @@ def get_all_channel_appearances():
     """Return dict of tvg_id -> appearance for all virtual channels."""
     return {ch['tvg_id']: get_channel_overlay_appearance(ch['tvg_id']) for ch in VIRTUAL_CHANNELS}
 
+def get_news_feed_url():
+    """Return the configured RSS/Atom news feed URL, or empty string if not set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='news.rss_url'")
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_news_feed_url failed")
+        return ''
+
+def save_news_feed_url(url):
+    """Persist the RSS/Atom news feed URL. Validates scheme is http/https."""
+    url = str(url).strip()
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.rss_url', ?)", (url,))
+            conn.commit()
+    except Exception:
+        logging.exception("save_news_feed_url failed")
+        raise
+
+_RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
+
+def fetch_rss_headlines(feed_url, max_items=20):
+    """Fetch a RSS 2.0 or Atom feed and return a list of headline dicts.
+
+    Each item: {'title': str, 'source': str, 'url': str, 'ts': ISO8601 str}
+    Returns empty list on any error (non-throwing).
+    """
+    try:
+        resp = requests.get(feed_url, timeout=8, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+    except Exception:
+        logging.exception("fetch_rss_headlines: failed to fetch or parse %r", feed_url)
+        return []
+
+    items = []
+    tag = root.tag.lower()
+
+    # Strip namespace for tag detection
+    local = root.tag.split('}')[-1].lower() if '}' in root.tag else tag
+
+    if local == 'feed':
+        # Atom feed
+        channel_title = ''
+        t = root.find('{http://www.w3.org/2005/Atom}title')
+        if t is not None:
+            channel_title = (t.text or '').strip()
+        for entry in root.findall('{http://www.w3.org/2005/Atom}entry')[:max_items]:
+            title_el = entry.find('{http://www.w3.org/2005/Atom}title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = entry.find('{http://www.w3.org/2005/Atom}link')
+            link = (link_el.get('href', '') if link_el is not None else '').strip()
+            ts_el = entry.find('{http://www.w3.org/2005/Atom}updated') or entry.find('{http://www.w3.org/2005/Atom}published')
+            ts = (ts_el.text or '').strip() if ts_el is not None else ''
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+    else:
+        # RSS 2.0 / RSS 1.0
+        channel = root.find('channel') or root
+        channel_title = ''
+        ct = channel.find('title')
+        if ct is not None:
+            channel_title = (ct.text or '').strip()
+        for item in channel.findall('item')[:max_items]:
+            title_el = item.find('title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = item.find('link')
+            link = (link_el.text or '').strip() if link_el is not None else ''
+            pub_el = item.find('pubDate')
+            ts = (pub_el.text or '').strip() if pub_el is not None else ''
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+
+    return items
+
 def get_virtual_channels():
     """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
     import copy

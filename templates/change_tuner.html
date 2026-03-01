@@ -209,70 +209,73 @@
       </div>
       <div class="card-body">
         <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Use <strong>⚙ Overlay</strong> to customize each channel's overlay colors and test banner.</p>
-        <form method="POST" class="compact-form" id="form-virtual-channels">
+        <!-- form element is empty here so prefs sub-forms can live outside it.
+             Checkboxes and the Save button reference it via form="form-virtual-channels". -->
+        <form method="POST" id="form-virtual-channels">
           <input type="hidden" name="action" value="update_virtual_channels">
-          <div class="vc-channel-list">
-            {% for ch in VIRTUAL_CHANNELS %}
-            {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
-            <div class="vc-channel-item">
-              <label class="vc-toggle-label">
-                <input type="checkbox"
-                       name="vc_{{ ch.tvg_id }}"
-                       value="1"
-                       {% if vc_settings.get(ch.tvg_id, true) %}checked{% endif %}>
-                <span class="vc-toggle-name">
-                  {% if ch.logo %}
-                  <img src="{{ ch.logo }}" alt="" class="vc-logo">
-                  {% endif %}
-                  {{ ch.name }}
-                </span>
-                <span class="muted small vc-type">{{ ch.overlay_type }}</span>
-              </label>
-              <button type="button" class="secondary small vc-prefs-btn"
-                      aria-expanded="false"
-                      aria-controls="vc-prefs-{{ loop.index }}"
-                      data-panel="vc-prefs-{{ loop.index }}">⚙ Overlay</button>
-            </div>
-            <div class="vc-prefs-panel" id="vc-prefs-{{ loop.index }}" hidden>
-              <form method="POST" class="compact-form vc-prefs-form">
-                <input type="hidden" name="action" value="update_channel_overlay_appearance">
-                <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
-                <div class="vc-prefs-fields">
-                  <div class="vc-prefs-field">
-                    <label>Text Color</label>
-                    <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                      <input type="color" name="ch_text_color"
-                             value="{{ ch_app.text_color or '#ffffff' }}">
-                      <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
-                    </div>
-                  </div>
-                  <div class="vc-prefs-field">
-                    <label>Background Color</label>
-                    <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                      <input type="color" name="ch_bg_color"
-                             value="{{ ch_app.bg_color or '#000000' }}">
-                      <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
-                    </div>
-                  </div>
-                  <div class="vc-prefs-field vc-prefs-field-wide">
-                    <label>Test Banner Text</label>
-                    <input type="text" name="ch_test_text"
-                           value="{{ ch_app.test_text }}"
-                           placeholder="Text shown as a banner on this overlay (blank to hide)…"
-                           maxlength="120">
-                  </div>
-                </div>
-                <div class="form-row form-row-inline" style="margin-top:10px;">
-                  <button type="submit" class="primary small">Save</button>
-                </div>
-              </form>
-            </div>
-            {% endfor %}
-          </div>
-          <div class="form-row form-row-inline" style="margin-top:14px;">
-            <button type="submit" class="primary">Save Channel List</button>
-          </div>
         </form>
+        <div class="vc-channel-list">
+          {% for ch in VIRTUAL_CHANNELS %}
+          {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
+          <div class="vc-channel-item">
+            <label class="vc-toggle-label">
+              <input type="checkbox"
+                     form="form-virtual-channels"
+                     name="vc_{{ ch.tvg_id }}"
+                     value="1"
+                     {% if vc_settings.get(ch.tvg_id, true) %}checked{% endif %}>
+              <span class="vc-toggle-name">
+                {% if ch.logo %}
+                <img src="{{ ch.logo }}" alt="" class="vc-logo">
+                {% endif %}
+                {{ ch.name }}
+              </span>
+              <span class="muted small vc-type">{{ ch.overlay_type }}</span>
+            </label>
+            <button type="button" class="secondary small vc-prefs-btn"
+                    aria-expanded="false"
+                    aria-controls="vc-prefs-{{ loop.index }}"
+                    data-panel="vc-prefs-{{ loop.index }}">⚙ Overlay</button>
+          </div>
+          <div class="vc-prefs-panel" id="vc-prefs-{{ loop.index }}" hidden>
+            <form method="POST" class="compact-form vc-prefs-form">
+              <input type="hidden" name="action" value="update_channel_overlay_appearance">
+              <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
+              <div class="vc-prefs-fields">
+                <div class="vc-prefs-field">
+                  <label>Text Color</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="color" name="ch_text_color"
+                           value="{{ ch_app.text_color or '#ffffff' }}">
+                    <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
+                  </div>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Background Color</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="color" name="ch_bg_color"
+                           value="{{ ch_app.bg_color or '#000000' }}">
+                    <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>Test Banner Text</label>
+                  <input type="text" name="ch_test_text"
+                         value="{{ ch_app.test_text }}"
+                         placeholder="Text shown as a banner on this overlay (blank to hide)…"
+                         maxlength="120">
+                </div>
+              </div>
+              <div class="form-row form-row-inline" style="margin-top:10px;">
+                <button type="submit" class="primary small">Save</button>
+              </div>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-row form-row-inline" style="margin-top:14px;">
+          <button type="submit" form="form-virtual-channels" class="primary">Save Channel List</button>
+        </div>
       </div>
     </section>
 
