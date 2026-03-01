@@ -242,6 +242,7 @@
               <input type="hidden" name="action" value="update_channel_overlay_appearance">
               <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
               <div class="vc-prefs-fields">
+                {% if ch.tvg_id != 'virtual.weather' %}
                 <div class="vc-prefs-field">
                   <label>Text Color</label>
                   <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
@@ -258,13 +259,7 @@
                     <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
                   </div>
                 </div>
-                <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>Test Banner Text</label>
-                  <input type="text" name="ch_test_text"
-                         value="{{ ch_app.test_text }}"
-                         placeholder="Text shown as a banner on this overlay (blank to hide)…"
-                         maxlength="120">
-                </div>
+                {% endif %}
                 {% if ch.tvg_id == 'virtual.news' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
                   <label>News Feed URL (RSS/Atom)</label>
@@ -274,6 +269,64 @@
                          maxlength="500">
                 </div>
                 {% endif %}
+                {% if ch.tvg_id == 'virtual.weather' %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>US Zip Code Lookup</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="text" id="vc-zip-input" placeholder="e.g. 33101" maxlength="5"
+                           inputmode="numeric" pattern="\d{5}" autocomplete="postal-code"
+                           style="max-width:120px;">
+                    <button type="button" id="vc-zip-lookup-btn" class="secondary small">Look Up</button>
+                    <span id="vc-zip-status" class="zip-status" aria-live="polite"></span>
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>Location Name</label>
+                  <input type="text" id="vc-weather-location" name="ch_weather_location"
+                         value="{{ weather_config.location_name }}"
+                         placeholder="e.g. Miami, FL"
+                         maxlength="120">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Latitude</label>
+                  <input type="text" id="vc-weather-lat" name="ch_weather_lat"
+                         value="{{ weather_config.lat }}"
+                         placeholder="e.g. 25.77"
+                         maxlength="20"
+                         inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Longitude</label>
+                  <input type="text" id="vc-weather-lon" name="ch_weather_lon"
+                         value="{{ weather_config.lon }}"
+                         placeholder="e.g. -80.19"
+                         maxlength="20"
+                         inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Units</label>
+                  <select name="ch_weather_units">
+                    <option value="F" {% if weather_config.units != 'C' %}selected{% endif %}>°F — Fahrenheit</option>
+                    <option value="C" {% if weather_config.units == 'C' %}selected{% endif %}>°C — Celsius</option>
+                  </select>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                  <a href="/weather" target="_blank" class="btn-link small">🌤 Preview Weather Page ↗</a>
+                  <span class="muted small" style="margin-left:8px;">Opens in a new tab — save settings first.</span>
+                </div>
+                {% endif %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>🎵 Background Music</label>
+                  <select name="ch_music_file">
+                    <option value="">— None —</option>
+                    {% for af in audio_files %}
+                    <option value="{{ af }}" {% if channel_music_files.get(ch.tvg_id) == af %}selected{% endif %}>{{ af }}</option>
+                    {% endfor %}
+                  </select>
+                  {% if not audio_files %}
+                  <span class="muted small">No audio files uploaded yet. Use the upload section below.</span>
+                  {% endif %}
+                </div>
               </div>
               <div class="form-row form-row-inline" style="margin-top:10px;">
                 <button type="submit" class="primary small">Save</button>
@@ -284,6 +337,32 @@
         </div>
         <div class="form-row form-row-inline" style="margin-top:14px;">
           <button type="submit" form="form-virtual-channels" class="primary">Save Channel List</button>
+        </div>
+
+        <!-- Audio file upload section -->
+        <div class="audio-upload-section" id="audio-upload-section">
+          <div class="audio-upload-head">
+            <span class="audio-upload-title">🎵 Audio Files</span>
+            <span class="muted small">Upload music files to use as background audio on virtual channel pages. Allowed: mp3, ogg, wav, aac, m4a, flac.</span>
+          </div>
+          <div class="audio-upload-row">
+            <input type="file" id="audio-file-input" accept=".mp3,.ogg,.wav,.aac,.m4a,.flac" style="flex:1;">
+            <button type="button" id="audio-upload-btn" class="primary small">Upload</button>
+            <span id="audio-upload-status" class="audio-upload-status" aria-live="polite"></span>
+          </div>
+          <ul class="audio-file-list" id="audio-file-list">
+            {% for af in audio_files %}
+            <li class="audio-file-item" data-filename="{{ af }}">
+              <span class="audio-file-name">{{ af }}</span>
+              <audio controls preload="none" class="audio-preview">
+                <source src="{{ url_for('static', filename='audio/' + af) }}">
+              </audio>
+              <button type="button" class="secondary small audio-delete-btn" data-filename="{{ af }}">Delete</button>
+            </li>
+            {% else %}
+            <li class="audio-file-empty muted small" id="audio-file-empty">No audio files uploaded yet.</li>
+            {% endfor %}
+          </ul>
         </div>
       </div>
     </section>
@@ -509,5 +588,173 @@ document.querySelectorAll('.vc-prefs-reset').forEach(function (btn) {
     }
   });
 });
+
+// US Zip Code → lat/lon/location auto-fill via zippopotam.us
+(function () {
+  var btn    = document.getElementById('vc-zip-lookup-btn');
+  var zipEl  = document.getElementById('vc-zip-input');
+  var latEl  = document.getElementById('vc-weather-lat');
+  var lonEl  = document.getElementById('vc-weather-lon');
+  var locEl  = document.getElementById('vc-weather-location');
+  var status = document.getElementById('vc-zip-status');
+  if (!btn || !zipEl) return;
+
+  function doLookup() {
+    var zip = zipEl.value.trim();
+    if (!/^\d{5}$/.test(zip)) {
+      status.textContent = 'Enter a 5-digit US zip code.';
+      status.className = 'zip-status zip-status-error';
+      return;
+    }
+    btn.disabled = true;
+    status.textContent = 'Looking up…';
+    status.className = 'zip-status';
+    fetch('https://api.zippopotam.us/us/' + zip)
+      .then(function (r) {
+        if (!r.ok) throw new Error('not found');
+        return r.json();
+      })
+      .then(function (data) {
+        var place = data.places && data.places[0];
+        if (!place) throw new Error('no places');
+        var lat = parseFloat(place.latitude);
+        var lon = parseFloat(place.longitude);
+        if (isNaN(lat) || isNaN(lon)) throw new Error('invalid coords');
+        var loc = place['place name'] + ', ' + place['state abbreviation'];
+        latEl.value = lat.toFixed(4);
+        lonEl.value = lon.toFixed(4);
+        locEl.value = loc;
+        status.textContent = '✓ Found: ' + loc;
+        status.className = 'zip-status zip-status-ok';
+      })
+      .catch(function () {
+        status.textContent = 'Zip code not found.';
+        status.className = 'zip-status zip-status-error';
+      })
+      .finally(function () {
+        btn.disabled = false;
+      });
+  }
+
+  btn.addEventListener('click', doLookup);
+  zipEl.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); doLookup(); }
+  });
+})();
+
+// Audio file upload and delete
+(function () {
+  var uploadBtn  = document.getElementById('audio-upload-btn');
+  var fileInput  = document.getElementById('audio-file-input');
+  var statusEl   = document.getElementById('audio-upload-status');
+  var fileList   = document.getElementById('audio-file-list');
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.className = 'audio-upload-status ' + (isError ? 'audio-upload-status-error' : 'audio-upload-status-ok');
+  }
+
+  function addFileToList(filename) {
+    // Remove empty placeholder if present
+    var empty = document.getElementById('audio-file-empty');
+    if (empty) empty.remove();
+
+    // Avoid duplicates
+    if (fileList.querySelector('[data-filename="' + CSS.escape(filename) + '"]')) return;
+
+    var li = document.createElement('li');
+    li.className = 'audio-file-item';
+    li.dataset.filename = filename;
+
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'audio-file-name';
+    nameSpan.textContent = filename;
+
+    var audioEl = document.createElement('audio');
+    audioEl.controls = true;
+    audioEl.preload = 'none';
+    audioEl.className = 'audio-preview';
+    var sourceEl = document.createElement('source');
+    sourceEl.src = '/static/audio/' + encodeURIComponent(filename);
+    audioEl.appendChild(sourceEl);
+
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'secondary small audio-delete-btn';
+    delBtn.dataset.filename = filename;
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', handleDelete);
+
+    li.appendChild(nameSpan);
+    li.appendChild(audioEl);
+    li.appendChild(delBtn);
+    fileList.appendChild(li);
+
+    // Also add to all music dropdowns
+    document.querySelectorAll('select[name="ch_music_file"]').forEach(function (sel) {
+      var opt = document.createElement('option');
+      opt.value = filename;
+      opt.textContent = filename;
+      sel.appendChild(opt);
+    });
+  }
+
+  function handleDelete(e) {
+    var filename = e.currentTarget.dataset.filename;
+    if (!confirm('Delete "' + filename + '"? This cannot be undone.')) return;
+    fetch('/api/audio/delete/' + encodeURIComponent(filename), { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          var li = fileList.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+          if (li) li.remove();
+          if (!fileList.querySelector('.audio-file-item')) {
+            var empty = document.createElement('li');
+            empty.id = 'audio-file-empty';
+            empty.className = 'audio-file-empty muted small';
+            empty.textContent = 'No audio files uploaded yet.';
+            fileList.appendChild(empty);
+          }
+          // Remove from all music dropdowns
+          document.querySelectorAll('select[name="ch_music_file"] option[value="' + CSS.escape(filename) + '"]').forEach(function (opt) { opt.remove(); });
+          setStatus('Deleted: ' + filename, false);
+        } else {
+          setStatus(data.error || 'Delete failed.', true);
+        }
+      })
+      .catch(function () { setStatus('Delete request failed.', true); });
+  }
+
+  // Attach delete handlers for server-rendered items
+  document.querySelectorAll('.audio-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', handleDelete);
+  });
+
+  if (uploadBtn && fileInput) {
+    uploadBtn.addEventListener('click', function () {
+      if (!fileInput.files || !fileInput.files[0]) {
+        setStatus('Please select a file first.', true);
+        return;
+      }
+      var formData = new FormData();
+      formData.append('audio_file', fileInput.files[0]);
+      uploadBtn.disabled = true;
+      setStatus('Uploading…', false);
+      fetch('/api/audio/upload', { method: 'POST', body: formData, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            addFileToList(data.filename);
+            setStatus('Uploaded: ' + data.filename, false);
+            fileInput.value = '';
+          } else {
+            setStatus(data.error || 'Upload failed.', true);
+          }
+        })
+        .catch(function () { setStatus('Upload request failed.', true); })
+        .finally(function () { uploadBtn.disabled = false; });
+    });
+  }
+})();
 </script>
 {% endblock %}

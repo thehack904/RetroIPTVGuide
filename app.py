@@ -5,6 +5,7 @@ APP_RELEASE_DATE = "2026-02-28"
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import sqlite3
 import re
 import sys
@@ -20,7 +21,7 @@ import socket
 import ipaddress
 import logging
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 import threading
 
 # New import: vlc control helper (optional - keep existing integration compatibility)
@@ -41,6 +42,8 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
+_ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -172,6 +175,15 @@ def init_tuners_db():
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+        # Remove the test banner feature entirely: delete the global overlay.test_text key
+        # and the per-channel test_text keys for all virtual channels.  This clears any
+        # stale "This is test Text!" values that were stored during early development.
+        c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status'):
+            c.execute("DELETE FROM settings WHERE key=?",
+                      (f"overlay.{_ch_id}.test_text",))
+        conn.commit()
 
         # bootstrap if empty
         c.execute("SELECT COUNT(*) FROM tuners")
@@ -757,6 +769,303 @@ def save_news_feed_url(url):
     except Exception:
         logging.exception("save_news_feed_url failed")
         raise
+
+_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+
+def get_weather_config():
+    """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
+    result = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F'}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _WEATHER_CONFIG_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"weather.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_weather_config failed, using defaults")
+    return result
+
+def save_weather_config(config_dict):
+    """Persist weather configuration. Validates lat/lon as floats when non-empty."""
+    cleaned = {}
+    for key in _WEATHER_CONFIG_KEYS:
+        val = str(config_dict.get(key, '')).strip()
+        if key in ('lat', 'lon') and val:
+            try:
+                float(val)
+            except ValueError:
+                raise ValueError(f"Invalid value for {key}: {val!r}. Must be a number.")
+        if key == 'units' and val not in ('F', 'C', ''):
+            raise ValueError(f"Invalid units: {val!r}. Must be 'F' or 'C'.")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"weather.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_weather_config failed")
+        raise
+
+# ─── Per-channel music file ───────────────────────────────────────────────────
+
+def get_channel_music_file(tvg_id):
+    """Return the selected audio filename (basename only) for a virtual channel, or ''."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?",
+                      (f"overlay.{tvg_id}.music_file",))
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_channel_music_file failed")
+        return ''
+
+def save_channel_music_file(tvg_id, filename):
+    """Persist the selected audio filename for a virtual channel.
+    Pass '' to clear. Validates that the filename exists in AUDIO_UPLOAD_DIR."""
+    filename = str(filename).strip()
+    if filename:
+        safe = secure_filename(filename)
+        if safe != filename or not safe:
+            raise ValueError(f"Invalid audio filename: {filename!r}")
+        ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+        if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(f"Unsupported audio type: {ext!r}")
+        target = os.path.join(AUDIO_UPLOAD_DIR, safe)
+        if not os.path.isfile(target):
+            raise ValueError(f"Audio file not found: {safe!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      (f"overlay.{tvg_id}.music_file", filename))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_music_file failed")
+        raise
+
+def list_audio_files():
+    """Return a sorted list of uploaded audio filenames in AUDIO_UPLOAD_DIR."""
+    try:
+        os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+        return sorted(
+            f for f in os.listdir(AUDIO_UPLOAD_DIR)
+            if os.path.isfile(os.path.join(AUDIO_UPLOAD_DIR, f))
+            and '.' in f
+            and f.rsplit('.', 1)[-1].lower() in _ALLOWED_AUDIO_EXTENSIONS
+        )
+    except Exception:
+        logging.exception("list_audio_files failed")
+        return []
+
+# WMO weather code → (label, icon_key)
+# icon_key maps to SVG/emoji used in the weather template
+_WMO_MAP = {
+    0:  ('Sunny',           'sunny'),
+    1:  ('Mostly Clear',    'sunny'),
+    2:  ('Partly Cloudy',   'partly_cloudy'),
+    3:  ('Overcast',        'cloudy'),
+    45: ('Foggy',           'foggy'),
+    48: ('Icy Fog',         'foggy'),
+    51: ('Light Drizzle',   'drizzle'),
+    53: ('Drizzle',         'drizzle'),
+    55: ('Heavy Drizzle',   'drizzle'),
+    61: ('Light Rain',      'rain'),
+    63: ('Rain',            'rain'),
+    65: ('Heavy Rain',      'rain'),
+    71: ('Light Snow',      'snow'),
+    73: ('Snow',            'snow'),
+    75: ('Heavy Snow',      'snow'),
+    77: ('Snow Grains',     'snow'),
+    80: ('Showers',         'showers'),
+    81: ('Showers',         'showers'),
+    82: ('Heavy Showers',   'showers'),
+    85: ('Snow Showers',    'snow'),
+    86: ('Heavy Snow Shwr', 'snow'),
+    95: ('T-Storms',        'thunderstorm'),
+    96: ('T-Storms',        'thunderstorm'),
+    99: ('T-Storms',        'thunderstorm'),
+}
+
+def _wmo_label(code):
+    return _WMO_MAP.get(code, ('Unknown', 'cloudy'))[0]
+
+def _wmo_icon(code):
+    return _WMO_MAP.get(code, ('Unknown', 'cloudy'))[1]
+
+# Daytime icon keys that have a distinct night variant in the weather template
+_NIGHT_ICON_MAP = {
+    'sunny':         'partly_cloudy_night',
+    'partly_cloudy': 'partly_cloudy_night',
+    'cloudy':        'cloudy_night',
+}
+
+def _to_night_icon(day_icon):
+    """Return the night variant of a day icon key, or the original if no variant exists."""
+    return _NIGHT_ICON_MAP.get(day_icon, day_icon)
+
+_WIND_DIRS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
+
+def _wind_dir(degrees):
+    try:
+        return _WIND_DIRS[round(float(degrees) / 22.5) % 16]
+    except Exception:
+        return ''
+
+def _fetch_open_meteo(lat, lon, units):
+    """Fetch current + hourly + daily weather from open-meteo. Returns dict or None on failure."""
+    temp_unit = 'fahrenheit' if units != 'C' else 'celsius'
+    wind_unit = 'mph' if units != 'C' else 'kmh'
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,"
+        "weather_code,wind_speed_10m,wind_direction_10m"
+        "&hourly=temperature_2m,weather_code"
+        "&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset"
+        f"&temperature_unit={temp_unit}&wind_speed_unit={wind_unit}"
+        "&forecast_days=5&timezone=auto"
+    )
+    try:
+        resp = requests.get(url, timeout=10, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.exception("_fetch_open_meteo failed for lat=%s lon=%s", lat, lon)
+        return None
+
+def _build_weather_payload(cfg):
+    """Build the full weather API payload from open-meteo data or a stub when unconfigured."""
+    now_utc = datetime.now(timezone.utc)
+    updated_str = now_utc.isoformat()  # ISO 8601 UTC; browsers convert to local time
+    lat = cfg.get('lat', '')
+    lon = cfg.get('lon', '')
+    location_name = cfg.get('location_name') or 'Local Weather'
+    units = cfg.get('units') or 'F'
+    deg = '°F' if units != 'C' else '°C'
+
+    raw = None
+    if lat and lon:
+        raw = _fetch_open_meteo(lat, lon, units)
+
+    if raw:
+        cur = raw.get('current', {})
+        cur_vars = raw.get('current_units', {})
+        hourly = raw.get('hourly', {})
+        daily = raw.get('daily', {})
+
+        temp = cur.get('temperature_2m')
+        feels = cur.get('apparent_temperature')
+        humidity = cur.get('relative_humidity_2m')
+        wcode = cur.get('weather_code', 0)
+        wind_spd = cur.get('wind_speed_10m')
+        wind_deg = cur.get('wind_direction_10m', 0)
+        wind_str = f"{_wind_dir(wind_deg)} {round(wind_spd)} {cur_vars.get('wind_speed_10m','mph')}" if wind_spd is not None else ''
+
+        now_info = {
+            'temp': round(temp) if temp is not None else None,
+            'condition': _wmo_label(wcode),
+            'humidity': round(humidity) if humidity is not None else None,
+            'wind': wind_str,
+            'feels_like': round(feels) if feels is not None else None,
+            'icon': _wmo_icon(wcode),
+        }
+
+        # Today's forecast: morning=6-11, afternoon=12-17, evening=18-22
+        h_times = hourly.get('time', [])
+        h_temps = hourly.get('temperature_2m', [])
+        h_wcodes = hourly.get('weather_code', [])
+        today_str = now_utc.strftime('%Y-%m-%d')
+
+        def _period_avg(start_h, end_h):
+            temps, codes = [], []
+            for i, t in enumerate(h_times):
+                if t.startswith(today_str):
+                    try:
+                        h = int(t[11:13])
+                    except Exception:
+                        continue
+                    if start_h <= h < end_h:
+                        if i < len(h_temps) and h_temps[i] is not None:
+                            temps.append(h_temps[i])
+                        if i < len(h_wcodes) and h_wcodes[i] is not None:
+                            codes.append(h_wcodes[i])
+            avg_t = round(sum(temps) / len(temps)) if temps else None
+            dominant = max(set(codes), key=codes.count) if codes else 0
+            return avg_t, dominant
+
+        m_temp, m_code = _period_avg(6, 12)
+        a_temp, a_code = _period_avg(12, 18)
+        e_temp, e_code = _period_avg(18, 23)
+
+        today_forecast = [
+            {'label': 'MORNING',   'temp': m_temp, 'condition': _wmo_label(m_code), 'icon': _wmo_icon(m_code)},
+            {'label': 'AFTERNOON', 'temp': a_temp, 'condition': _wmo_label(a_code), 'icon': _wmo_icon(a_code)},
+            {'label': 'EVENING',   'temp': e_temp, 'condition': _wmo_label(e_code), 'icon': _to_night_icon(_wmo_icon(e_code))},
+        ]
+
+        # Extended: days 1–4 (skip today = index 0)
+        d_times  = daily.get('time', [])
+        d_maxes  = daily.get('temperature_2m_max', [])
+        d_mins   = daily.get('temperature_2m_min', [])
+        d_wcodes = daily.get('weather_code', [])
+        extended = []
+        for i in range(1, min(5, len(d_times))):
+            try:
+                dow = date.fromisoformat(d_times[i]).strftime('%a').upper()
+            except Exception:
+                dow = d_times[i][-5:]
+            hi  = round(d_maxes[i])  if i < len(d_maxes)  and d_maxes[i]  is not None else None
+            lo  = round(d_mins[i])   if i < len(d_mins)   and d_mins[i]   is not None else None
+            wc  = d_wcodes[i]        if i < len(d_wcodes)                              else 0
+            extended.append({'dow': dow, 'hi': hi, 'lo': lo,
+                              'condition': _wmo_label(wc), 'icon': _wmo_icon(wc)})
+
+        ticker = []
+        if wcode in (95, 96, 99):
+            ticker.append('Severe Thunderstorms Possible')
+        if wcode in (71, 73, 75, 77, 85, 86):
+            ticker.append('Winter Weather Advisory in Effect')
+
+        # backward-compat forecast list
+        compat_forecast = [{'label': d['dow'], 'hi': d['hi'], 'lo': d['lo'],
+                            'condition': d['condition']} for d in extended]
+
+        return {
+            'updated': updated_str,
+            'location': location_name,
+            'now': now_info,
+            'today': today_forecast,
+            'extended': extended,
+            'ticker': ticker,
+            'forecast': compat_forecast,
+        }
+
+    # Stub / demo data when no coordinates configured
+    return {
+        'updated': updated_str,
+        'location': location_name,
+        'now': {'temp': None, 'condition': 'Not Configured', 'humidity': None,
+                'wind': '', 'feels_like': None, 'icon': 'cloudy'},
+        'today': [
+            {'label': 'MORNING',   'temp': None, 'condition': '--', 'icon': 'cloudy'},
+            {'label': 'AFTERNOON', 'temp': None, 'condition': '--', 'icon': 'cloudy'},
+            {'label': 'EVENING',   'temp': None, 'condition': '--', 'icon': 'cloudy_night'},
+        ],
+        'extended': [],
+        'ticker': [],
+        'forecast': [],
+    }
 
 _RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
 
@@ -1376,11 +1685,26 @@ def change_tuner():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
+                if tvg_id == 'virtual.weather':
+                    # Text color, background color, and test banner are not used by the
+                    # weather channel; always clear them so stale values don't linger.
+                    appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
                     if tvg_id == 'virtual.news':
                         rss_url = request.form.get('ch_news_rss_url', '').strip()
                         save_news_feed_url(rss_url)
+                    if tvg_id == 'virtual.weather':
+                        weather_cfg = {
+                            'lat':           request.form.get('ch_weather_lat', '').strip(),
+                            'lon':           request.form.get('ch_weather_lon', '').strip(),
+                            'location_name': request.form.get('ch_weather_location', '').strip(),
+                            'units':         request.form.get('ch_weather_units', 'F').strip(),
+                        }
+                        save_weather_config(weather_cfg)
+                    # Save background music selection for all virtual channels
+                    music_file = request.form.get('ch_music_file', '').strip()
+                    save_channel_music_file(tvg_id, music_file)
                     log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
                     flash("Channel overlay settings saved.", "success")
                 except ValueError as exc:
@@ -1411,6 +1735,9 @@ def change_tuner():
     vc_settings = get_virtual_channel_settings()
     overlay_appearance = get_overlay_appearance()
     channel_appearances = get_all_channel_appearances()
+    audio_files = list_audio_files()
+    channel_music_files = {ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
+                           for ch in VIRTUAL_CHANNELS}
 
     return render_template(
         "change_tuner.html",
@@ -1426,6 +1753,9 @@ def change_tuner():
         overlay_appearance=overlay_appearance,
         channel_appearances=channel_appearances,
         news_feed_url=get_news_feed_url(),
+        weather_config=get_weather_config(),
+        audio_files=audio_files,
+        channel_music_files=channel_music_files,
     )
 
 @app.route('/guide')
@@ -1483,6 +1813,10 @@ def guide():
         user_default_theme=user_default_theme,
         overlay_appearance=get_overlay_appearance(),
         channel_appearances=get_all_channel_appearances(),
+        channel_music_files={
+                ch['tvg_id']: (f'/static/audio/{f}' if (f := get_channel_music_file(ch['tvg_id'])) else '')
+                for ch in virtual_ch
+            },
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1753,16 +2087,23 @@ def api_news():
         "headlines": headlines,
     })
 
+@app.route('/weather')
+@login_required
+def weather_page():
+    """Retro TV weather overlay page."""
+    log_event(current_user.username, "Loaded weather page")
+    return render_template('weather.html')
+
 @app.route('/api/weather', methods=['GET'])
 @login_required
 def api_weather():
-    """Stub endpoint for virtual weather channel overlay data."""
-    return jsonify({
-        "updated": datetime.now(timezone.utc).isoformat(),
-        "location": "Not configured",
-        "now": {"temp": None, "condition": ""},
-        "forecast": [],
-    })
+    """Weather overlay data endpoint. Returns current conditions, today's forecast,
+    extended outlook, and breaking news ticker. Calls open-meteo when configured."""
+    cfg = get_weather_config()
+    payload = _build_weather_payload(cfg)
+    music_filename = get_channel_music_file('virtual.weather')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    return jsonify(payload)
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
@@ -1778,6 +2119,56 @@ def api_virtual_status():
             {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
         ],
     })
+
+# ─── Audio upload / management routes ────────────────────────────────────────
+
+@app.route('/api/audio/files', methods=['GET'])
+@login_required
+def api_audio_files():
+    """Return a JSON list of uploaded audio filenames."""
+    return jsonify({'files': list_audio_files()})
+
+@app.route('/api/audio/upload', methods=['POST'])
+@login_required
+def api_audio_upload():
+    """Upload an audio file to the audio directory."""
+    if 'audio_file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    f = request.files['audio_file']
+    if not f or not f.filename:
+        return jsonify({'error': 'No file selected.'}), 400
+    original_name = f.filename
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}'}), 400
+    os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+    dest = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    f.save(dest)
+    log_event(current_user.username, f"Uploaded audio file: {safe_name}")
+    return jsonify({'ok': True, 'filename': safe_name}), 201
+
+@app.route('/api/audio/delete/<filename>', methods=['POST'])
+@login_required
+def api_audio_delete(filename):
+    """Delete an uploaded audio file."""
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    target = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    # Verify it stays inside AUDIO_UPLOAD_DIR (prevent path traversal)
+    if os.path.abspath(target) != os.path.join(os.path.abspath(AUDIO_UPLOAD_DIR), safe_name):
+        return jsonify({'error': 'Invalid filename.'}), 400
+    if not os.path.isfile(target):
+        return jsonify({'error': 'File not found.'}), 404
+    os.remove(target)
+    log_event(current_user.username, f"Deleted audio file: {safe_name}")
+    return jsonify({'ok': True})
 
 @app.route('/api/overlay/settings', methods=['GET'])
 @login_required

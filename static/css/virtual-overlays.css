@@ -101,23 +101,3 @@
   top: 6%;
   right: 4%;
 }
-
-/* Test banner — shown when window.OVERLAY_TEST_TEXT is set */
-.vc-test-banner {
-  position: absolute;
-  top: 6%;
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: nowrap;
-  max-width: 80%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  padding: 0.4rem 1.2rem;
-  border-radius: 999px;
-  background: var(--vc-bg-color, rgba(180,0,0,0.75));
-  color: var(--vc-text-color, #fff);
-  font-size: clamp(13px, 1.8vw, 20px);
-  font-weight: bold;
-  letter-spacing: 0.05em;
-  z-index: 30;
-}
