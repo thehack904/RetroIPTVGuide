@@ -164,9 +164,11 @@
         font-size: 18px;
         line-height: 1;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
     }
     #vcFsOverlayClose:hover { background: rgba(0, 0, 0, 0.95); }
+    #vcFsOverlayClose.vc-fs-overlay-close-fade { opacity: 0; pointer-events: none; }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -295,6 +297,8 @@ let currentChannelId = null;
 let _vcCurrentOverlayType = '';
 let _vcFsHideTimer = null;
 let _vcFsLastMove = 0;
+let _vcFsOverlayCloseTimer = null;
+let _vcFsOverlayLastMove = 0;
 
 // ── Background music (virtual channel looped audio) ─────────────────────────
 let _bgAudio = null;
@@ -357,6 +361,27 @@ function _scheduleVcFsHide(delay) {
     }, delay);
 }
 
+function _scheduleOverlayCloseFade(delay) {
+    if (_vcFsOverlayCloseTimer) clearTimeout(_vcFsOverlayCloseTimer);
+    _vcFsOverlayCloseTimer = setTimeout(function () {
+        const cb = document.getElementById('vcFsOverlayClose');
+        if (cb) cb.classList.add('vc-fs-overlay-close-fade');
+    }, delay);
+}
+
+function _showOverlayClose() {
+    const cb = document.getElementById('vcFsOverlayClose');
+    if (!cb) return;
+    cb.classList.remove('vc-fs-overlay-close-fade');
+    _scheduleOverlayCloseFade(1500);
+}
+
+function _cancelOverlayCloseFade() {
+    if (_vcFsOverlayCloseTimer) { clearTimeout(_vcFsOverlayCloseTimer); _vcFsOverlayCloseTimer = null; }
+    const cb = document.getElementById('vcFsOverlayClose');
+    if (cb) cb.classList.remove('vc-fs-overlay-close-fade');
+}
+
 function showVcFsBtn() {
     const btn = document.getElementById('vcFsBtn');
     if (!btn) return;
@@ -409,6 +434,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.textContent = '✕';
         btn.title = 'Exit fullscreen';
         btn.setAttribute('aria-label', 'Exit fullscreen');
+        _showOverlayClose();
         // Request true fullscreen on the overlay div so the browser chrome hides
         const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen || overlay.mozRequestFullscreen;
         if (req) {
@@ -418,6 +444,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function closeVcFsOverlay() {
+        _cancelOverlayCloseFade();
         const overlay = document.getElementById('vcFsOverlay');
         const iframe  = document.getElementById('vcFsIframe');
         if (overlay) overlay.classList.add('hidden');
@@ -465,6 +492,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const fsEl = fsElement();
         // ESC pressed while the iframe overlay was in fullscreen → close overlay cleanly
         if (!fsEl && isOverlayFsActive()) {
+            _cancelOverlayCloseFade();
             const overlay = document.getElementById('vcFsOverlay');
             const iframe  = document.getElementById('vcFsIframe');
             if (overlay) overlay.classList.add('hidden');
@@ -497,6 +525,22 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         wrap.addEventListener('mouseleave', function () {
             if (!btn.hidden) _scheduleVcFsHide(1500);
+        });
+    }
+
+    // Auto-hide: show overlay close (✕) button on mouse activity inside the fullscreen overlay
+    const fsOverlay = document.getElementById('vcFsOverlay');
+    if (fsOverlay) {
+        fsOverlay.addEventListener('mousemove', function () {
+            if (isOverlayFsActive()) {
+                const now = Date.now();
+                if (now - _vcFsOverlayLastMove < 250) return;
+                _vcFsOverlayLastMove = now;
+                _showOverlayClose();
+            }
+        });
+        fsOverlay.addEventListener('mouseleave', function () {
+            if (isOverlayFsActive()) _scheduleOverlayCloseFade(1500);
         });
     }
 });
