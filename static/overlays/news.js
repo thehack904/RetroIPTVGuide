@@ -10,7 +10,7 @@
   const TYPE    = 'news';
   const STYLE_ID = 'vc-news-overlay-styles-v2';
 
-  const TICKER_PX_PER_SEC  = 90;   // constant scroll speed in px/s
+  const TICKER_PX_PER_SEC  = 40;   // constant scroll speed in px/s (~50 wpm, TV-ticker pace)
   const TICKER_REPEAT_COUNT = 3;   // how many times to repeat ticker text
   const SUMMARY_MAX        = 220;  // max chars for top-story summary
 
@@ -202,8 +202,8 @@
       font-size: 0.7em;
       font-weight: 700;
       color: #ffd700;
-      /* duration overridden in JS for constant px/s speed */
-      animation: vc-news-scroll 30s linear infinite;
+      /* duration overridden in JS for constant px/s speed; 300s fallback keeps it readable if JS fails */
+      animation: vc-news-scroll 300s linear infinite;
       padding-left: 100%;
     }
     @keyframes vc-news-scroll {
@@ -211,6 +211,7 @@
       to   { transform: translateX(-100%); }
     }
     .vc-news-item-placeholder { opacity: 0.25; }
+    .vc-news-no-data {
       display: flex;
       align-items: center;
       justify-content: center;
@@ -250,16 +251,15 @@
 
   function applyTickerSpeed(frame) {
     const track = frame.querySelector('.vc-news-ticker-track');
-    const scroll = frame.querySelector('.vc-news-ticker-scroll');
-    if (!track || !scroll) return;
-    // Measure after paint; offsetWidth = padding + text = total scroll distance
-    requestAnimationFrame(function () {
+    if (!track) return;
+    // Use setTimeout so the browser has fully computed layout for the new innerHTML
+    setTimeout(function () {
       const w = track.offsetWidth;
       if (w > 0) {
         const dur = (w / TICKER_PX_PER_SEC).toFixed(1);
         track.style.animationDuration = dur + 's';
       }
-    });
+    }, 0);
   }
 
   function render(data, root) {

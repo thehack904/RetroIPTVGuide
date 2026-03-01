@@ -252,8 +252,8 @@
       font-size: clamp(10px, 1.35vw, 17px);
       font-weight: 700;
       color: #ffd700;
-      /* duration overridden in JS for constant px/s speed */
-      animation: nw-scroll 30s linear infinite;
+      /* duration overridden in JS for constant px/s speed; 300s fallback keeps it readable if JS fails */
+      animation: nw-scroll 300s linear infinite;
       padding-left: 100%;
     }
 
@@ -286,7 +286,7 @@
   const FALLBACK_IMG = 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 160 90%22%3E%3Crect width%3D%22160%22 height%3D%2290%22 fill%3D%22%230a1a70%22%2F%3E%3Ctext x%3D%2280%22 y%3D%2250%22 text-anchor%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2212%22 fill%3D%22%234060cc%22%3ENo Image%3C%2Ftext%3E%3C%2Fsvg%3E';
   const REFRESH_MS        = 5 * 60 * 1000;  // 5 minutes
   const SUMMARY_MAX       = 220;             // max characters for top-story summary
-  const TICKER_PX_PER_SEC = 90;             // constant scroll speed in px/s
+  const TICKER_PX_PER_SEC = 40;             // constant scroll speed in px/s (~50 wpm, TV-ticker pace)
 
   function esc(str) {
     return String(str || '')
@@ -377,14 +377,15 @@
 
     frame.innerHTML = html;
 
-    // Constant-speed ticker: measure actual track width and derive duration
-    requestAnimationFrame(function () {
+    // Constant-speed ticker: measure actual track width and derive duration.
+    // setTimeout(fn,0) ensures the browser has fully computed layout for the new innerHTML.
+    setTimeout(function () {
       const track = frame.querySelector('.nw-ticker-track');
       if (track && track.offsetWidth > 0) {
         const dur = (track.offsetWidth / TICKER_PX_PER_SEC).toFixed(1);
         track.style.animationDuration = dur + 's';
       }
-    });
+    }, 0);
   }
 
   async function load() {
