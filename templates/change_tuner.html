@@ -260,7 +260,6 @@
                 <th>Type</th>
                 <th>Status</th>
                 <th>Last Sync</th>
-                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -287,18 +286,6 @@
                   {% endif %}
                 </td>
                 <td class="muted small">{{ tsync.last_sync or '&#8212;' }}</td>
-                <td class="tuner-actions">
-                  <button type="button" class="icon-btn tuner-edit-btn" title="Edit" data-tuner="{{ tname }}">&#9998;</button>
-                  {% if tname != current_tuner %}
-                  <form method="POST" style="display:inline;" onsubmit="return confirm('Delete tuner {{ tname }}?');">
-                    <input type="hidden" name="action" value="delete_tuner">
-                    <input type="hidden" name="tuner" value="{{ tname }}">
-                    <button type="submit" class="icon-btn danger-icon" title="Delete">&#9632;</button>
-                  </form>
-                  {% else %}
-                  <span class="icon-btn active-icon" title="Active tuner">&#9646;&#9646;</span>
-                  {% endif %}
-                </td>
               </tr>
               {% endfor %}
             </tbody>
@@ -742,24 +729,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     });
   } catch(e) { console.error('Mode card init failed:', e); }
-
-  // Tuner edit buttons: switch to Edit tab and populate
-  document.querySelectorAll('.tuner-edit-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const tname = btn.dataset.tuner;
-      document.querySelectorAll('.tab-btn').forEach(b => { b.classList.remove('tab-btn-active'); b.setAttribute('aria-selected','false'); });
-      document.querySelectorAll('.tab-panel').forEach(p => { p.hidden = true; });
-      const editBtn = document.querySelector('[data-tab="tab-edit"]');
-      const editPanel = document.getElementById('tab-edit');
-      if (editBtn) { editBtn.classList.add('tab-btn-active'); editBtn.setAttribute('aria-selected','true'); }
-      if (editPanel) editPanel.hidden = false;
-      const selEl = document.getElementById('tuner_update');
-      if (selEl) { selEl.value = tname; populateUrls(tname); }
-      const renSel = document.getElementById('tuner_rename');
-      if (renSel) renSel.value = tname;
-      if (editPanel) editPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    });
-  });
 
   // Configured Tuners collapse
   const colBtn = document.getElementById('btn-tuners-collapse');

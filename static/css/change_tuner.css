@@ -401,9 +401,6 @@ button.danger:disabled { opacity: 0.4; cursor: not-allowed; }
   transition: color 0.12s ease;
 }
 .icon-btn:hover { color: var(--panel-text); }
-.danger-icon { color: #ff4d4f !important; }
-.danger-icon:hover { color: #ff7777 !important; }
-.active-icon { color: var(--primary-color) !important; cursor: default; }
 
 /* ====================================================================== */
 /* Configured Tuners Table                                                 */
@@ -455,8 +452,6 @@ button.danger:disabled { opacity: 0.4; cursor: not-allowed; }
 .status-ok   { color: #2ad42a; }
 .status-warn { color: #f0a500; }
 .status-none { color: var(--muted-color); }
-
-.tuner-actions { display: flex; gap: 4px; align-items: center; }
 
 /* ====================================================================== */
 /* Virtual Channels Panel                                                  */
