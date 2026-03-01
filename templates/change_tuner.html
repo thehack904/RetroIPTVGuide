@@ -315,6 +315,18 @@
                   <span class="muted small" style="margin-left:8px;">Opens in a new tab — save settings first.</span>
                 </div>
                 {% endif %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>🎵 Background Music</label>
+                  <select name="ch_music_file">
+                    <option value="">— None —</option>
+                    {% for af in audio_files %}
+                    <option value="{{ af }}" {% if channel_music_files.get(ch.tvg_id) == af %}selected{% endif %}>{{ af }}</option>
+                    {% endfor %}
+                  </select>
+                  {% if not audio_files %}
+                  <span class="muted small">No audio files uploaded yet. Use the upload section below.</span>
+                  {% endif %}
+                </div>
               </div>
               <div class="form-row form-row-inline" style="margin-top:10px;">
                 <button type="submit" class="primary small">Save</button>
@@ -325,6 +337,32 @@
         </div>
         <div class="form-row form-row-inline" style="margin-top:14px;">
           <button type="submit" form="form-virtual-channels" class="primary">Save Channel List</button>
+        </div>
+
+        <!-- Audio file upload section -->
+        <div class="audio-upload-section" id="audio-upload-section">
+          <div class="audio-upload-head">
+            <span class="audio-upload-title">🎵 Audio Files</span>
+            <span class="muted small">Upload music files to use as background audio on virtual channel pages. Allowed: mp3, ogg, wav, aac, m4a, flac.</span>
+          </div>
+          <div class="audio-upload-row">
+            <input type="file" id="audio-file-input" accept=".mp3,.ogg,.wav,.aac,.m4a,.flac" style="flex:1;">
+            <button type="button" id="audio-upload-btn" class="primary small">Upload</button>
+            <span id="audio-upload-status" class="audio-upload-status" aria-live="polite"></span>
+          </div>
+          <ul class="audio-file-list" id="audio-file-list">
+            {% for af in audio_files %}
+            <li class="audio-file-item" data-filename="{{ af }}">
+              <span class="audio-file-name">{{ af }}</span>
+              <audio controls preload="none" class="audio-preview">
+                <source src="{{ url_for('static', filename='audio/' + af) }}">
+              </audio>
+              <button type="button" class="secondary small audio-delete-btn" data-filename="{{ af }}">Delete</button>
+            </li>
+            {% else %}
+            <li class="audio-file-empty muted small" id="audio-file-empty">No audio files uploaded yet.</li>
+            {% endfor %}
+          </ul>
         </div>
       </div>
     </section>
@@ -602,6 +640,121 @@ document.querySelectorAll('.vc-prefs-reset').forEach(function (btn) {
   zipEl.addEventListener('keydown', function (e) {
     if (e.key === 'Enter') { e.preventDefault(); doLookup(); }
   });
+})();
+
+// Audio file upload and delete
+(function () {
+  var uploadBtn  = document.getElementById('audio-upload-btn');
+  var fileInput  = document.getElementById('audio-file-input');
+  var statusEl   = document.getElementById('audio-upload-status');
+  var fileList   = document.getElementById('audio-file-list');
+
+  function setStatus(msg, isError) {
+    statusEl.textContent = msg;
+    statusEl.className = 'audio-upload-status ' + (isError ? 'audio-upload-status-error' : 'audio-upload-status-ok');
+  }
+
+  function addFileToList(filename) {
+    // Remove empty placeholder if present
+    var empty = document.getElementById('audio-file-empty');
+    if (empty) empty.remove();
+
+    // Avoid duplicates
+    if (fileList.querySelector('[data-filename="' + CSS.escape(filename) + '"]')) return;
+
+    var li = document.createElement('li');
+    li.className = 'audio-file-item';
+    li.dataset.filename = filename;
+
+    var nameSpan = document.createElement('span');
+    nameSpan.className = 'audio-file-name';
+    nameSpan.textContent = filename;
+
+    var audioEl = document.createElement('audio');
+    audioEl.controls = true;
+    audioEl.preload = 'none';
+    audioEl.className = 'audio-preview';
+    var sourceEl = document.createElement('source');
+    sourceEl.src = '/static/audio/' + encodeURIComponent(filename);
+    audioEl.appendChild(sourceEl);
+
+    var delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'secondary small audio-delete-btn';
+    delBtn.dataset.filename = filename;
+    delBtn.textContent = 'Delete';
+    delBtn.addEventListener('click', handleDelete);
+
+    li.appendChild(nameSpan);
+    li.appendChild(audioEl);
+    li.appendChild(delBtn);
+    fileList.appendChild(li);
+
+    // Also add to all music dropdowns
+    document.querySelectorAll('select[name="ch_music_file"]').forEach(function (sel) {
+      var opt = document.createElement('option');
+      opt.value = filename;
+      opt.textContent = filename;
+      sel.appendChild(opt);
+    });
+  }
+
+  function handleDelete(e) {
+    var filename = e.currentTarget.dataset.filename;
+    if (!confirm('Delete "' + filename + '"? This cannot be undone.')) return;
+    fetch('/api/audio/delete/' + encodeURIComponent(filename), { method: 'POST', credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.ok) {
+          var li = fileList.querySelector('[data-filename="' + CSS.escape(filename) + '"]');
+          if (li) li.remove();
+          if (!fileList.querySelector('.audio-file-item')) {
+            var empty = document.createElement('li');
+            empty.id = 'audio-file-empty';
+            empty.className = 'audio-file-empty muted small';
+            empty.textContent = 'No audio files uploaded yet.';
+            fileList.appendChild(empty);
+          }
+          // Remove from all music dropdowns
+          document.querySelectorAll('select[name="ch_music_file"] option[value="' + CSS.escape(filename) + '"]').forEach(function (opt) { opt.remove(); });
+          setStatus('Deleted: ' + filename, false);
+        } else {
+          setStatus(data.error || 'Delete failed.', true);
+        }
+      })
+      .catch(function () { setStatus('Delete request failed.', true); });
+  }
+
+  // Attach delete handlers for server-rendered items
+  document.querySelectorAll('.audio-delete-btn').forEach(function (btn) {
+    btn.addEventListener('click', handleDelete);
+  });
+
+  if (uploadBtn && fileInput) {
+    uploadBtn.addEventListener('click', function () {
+      if (!fileInput.files || !fileInput.files[0]) {
+        setStatus('Please select a file first.', true);
+        return;
+      }
+      var formData = new FormData();
+      formData.append('audio_file', fileInput.files[0]);
+      uploadBtn.disabled = true;
+      setStatus('Uploading…', false);
+      fetch('/api/audio/upload', { method: 'POST', body: formData, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            addFileToList(data.filename);
+            setStatus('Uploaded: ' + data.filename, false);
+            fileInput.value = '';
+          } else {
+            setStatus(data.error || 'Upload failed.', true);
+          }
+        })
+        .catch(function () { setStatus('Upload request failed.', true); })
+        .finally(function () { uploadBtn.disabled = false; });
+    });
+  }
 })();
 </script>
 {% endblock %}

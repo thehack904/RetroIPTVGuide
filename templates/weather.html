@@ -574,12 +574,42 @@
     frame.innerHTML = html;
   }
 
+  // ── Background music ────────────────────────────────────────────
+  let _musicEl = null;
+  let _currentMusicSrc = '';
+
+  function applyMusic(musicFile) {
+    if (!musicFile) {
+      if (_musicEl) { _musicEl.pause(); _musicEl.src = ''; }
+      _currentMusicSrc = '';
+      return;
+    }
+    if (musicFile === _currentMusicSrc) return;  // already playing this track
+    _currentMusicSrc = musicFile;
+    if (!_musicEl) {
+      _musicEl = document.createElement('audio');
+      _musicEl.loop = true;
+      _musicEl.volume = 0.5;
+      document.body.appendChild(_musicEl);
+    }
+    _musicEl.src = musicFile;
+    _musicEl.play().catch(function () {
+      // Autoplay blocked; resume on first user interaction
+      function resumeOnInteraction() {
+        _musicEl.play().catch(function () {});
+      }
+      document.addEventListener('click',   resumeOnInteraction, { once: true });
+      document.addEventListener('keydown', resumeOnInteraction, { once: true });
+    });
+  }
+
   async function load() {
     try {
       const resp = await fetch('/api/weather');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       build(data);
+      applyMusic(data.music_file || '');
     } catch (e) {
       const frame = document.getElementById('wxFrame');
       frame.innerHTML = `<div class="wx-loading">Unable to load weather data.</div>`;

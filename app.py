@@ -5,6 +5,7 @@ APP_RELEASE_DATE = "2026-02-28"
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import sqlite3
 import re
 import sys
@@ -41,6 +42,8 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
+_ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -809,6 +812,61 @@ def save_weather_config(config_dict):
     except Exception:
         logging.exception("save_weather_config failed")
         raise
+
+# ─── Per-channel music file ───────────────────────────────────────────────────
+
+def get_channel_music_file(tvg_id):
+    """Return the selected audio filename (basename only) for a virtual channel, or ''."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?",
+                      (f"overlay.{tvg_id}.music_file",))
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_channel_music_file failed")
+        return ''
+
+def save_channel_music_file(tvg_id, filename):
+    """Persist the selected audio filename for a virtual channel.
+    Pass '' to clear. Validates that the filename exists in AUDIO_UPLOAD_DIR."""
+    filename = str(filename).strip()
+    if filename:
+        safe = secure_filename(filename)
+        if safe != filename or not safe:
+            raise ValueError(f"Invalid audio filename: {filename!r}")
+        ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+        if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(f"Unsupported audio type: {ext!r}")
+        target = os.path.join(AUDIO_UPLOAD_DIR, safe)
+        if not os.path.isfile(target):
+            raise ValueError(f"Audio file not found: {safe!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      (f"overlay.{tvg_id}.music_file", filename))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_music_file failed")
+        raise
+
+def list_audio_files():
+    """Return a sorted list of uploaded audio filenames in AUDIO_UPLOAD_DIR."""
+    try:
+        os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+        return sorted(
+            f for f in os.listdir(AUDIO_UPLOAD_DIR)
+            if os.path.isfile(os.path.join(AUDIO_UPLOAD_DIR, f))
+            and '.' in f
+            and f.rsplit('.', 1)[-1].lower() in _ALLOWED_AUDIO_EXTENSIONS
+        )
+    except Exception:
+        logging.exception("list_audio_files failed")
+        return []
 
 # WMO weather code → (label, icon_key)
 # icon_key maps to SVG/emoji used in the weather template
@@ -1644,6 +1702,9 @@ def change_tuner():
                             'units':         request.form.get('ch_weather_units', 'F').strip(),
                         }
                         save_weather_config(weather_cfg)
+                    # Save background music selection for all virtual channels
+                    music_file = request.form.get('ch_music_file', '').strip()
+                    save_channel_music_file(tvg_id, music_file)
                     log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
                     flash("Channel overlay settings saved.", "success")
                 except ValueError as exc:
@@ -1674,6 +1735,9 @@ def change_tuner():
     vc_settings = get_virtual_channel_settings()
     overlay_appearance = get_overlay_appearance()
     channel_appearances = get_all_channel_appearances()
+    audio_files = list_audio_files()
+    channel_music_files = {ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
+                           for ch in VIRTUAL_CHANNELS}
 
     return render_template(
         "change_tuner.html",
@@ -1690,6 +1754,8 @@ def change_tuner():
         channel_appearances=channel_appearances,
         news_feed_url=get_news_feed_url(),
         weather_config=get_weather_config(),
+        audio_files=audio_files,
+        channel_music_files=channel_music_files,
     )
 
 @app.route('/guide')
@@ -2030,7 +2096,10 @@ def api_weather():
     """Weather overlay data endpoint. Returns current conditions, today's forecast,
     extended outlook, and breaking news ticker. Calls open-meteo when configured."""
     cfg = get_weather_config()
-    return jsonify(_build_weather_payload(cfg))
+    payload = _build_weather_payload(cfg)
+    music_filename = get_channel_music_file('virtual.weather')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    return jsonify(payload)
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
@@ -2046,6 +2115,56 @@ def api_virtual_status():
             {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
         ],
     })
+
+# ─── Audio upload / management routes ────────────────────────────────────────
+
+@app.route('/api/audio/files', methods=['GET'])
+@login_required
+def api_audio_files():
+    """Return a JSON list of uploaded audio filenames."""
+    return jsonify({'files': list_audio_files()})
+
+@app.route('/api/audio/upload', methods=['POST'])
+@login_required
+def api_audio_upload():
+    """Upload an audio file to the audio directory."""
+    if 'audio_file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    f = request.files['audio_file']
+    if not f or not f.filename:
+        return jsonify({'error': 'No file selected.'}), 400
+    original_name = f.filename
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}'}), 400
+    os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+    dest = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    f.save(dest)
+    log_event(current_user.username, f"Uploaded audio file: {safe_name}")
+    return jsonify({'ok': True, 'filename': safe_name}), 201
+
+@app.route('/api/audio/delete/<filename>', methods=['POST'])
+@login_required
+def api_audio_delete(filename):
+    """Delete an uploaded audio file."""
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    target = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    # Verify it stays inside AUDIO_UPLOAD_DIR (prevent path traversal)
+    if os.path.abspath(target) != os.path.join(os.path.abspath(AUDIO_UPLOAD_DIR), safe_name):
+        return jsonify({'error': 'Invalid filename.'}), 400
+    if not os.path.isfile(target):
+        return jsonify({'error': 'File not found.'}), 404
+    os.remove(target)
+    log_event(current_user.username, f"Deleted audio file: {safe_name}")
+    return jsonify({'ok': True})
 
 @app.route('/api/overlay/settings', methods=['GET'])
 @login_required
