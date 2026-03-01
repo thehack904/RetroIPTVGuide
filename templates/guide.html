@@ -127,23 +127,8 @@
     }
     .vc-fs-btn:hover { background: rgba(0, 0, 0, 0.9); }
     .vc-fs-btn.vc-fs-btn-fade { opacity: 0; pointer-events: none; }
-    #vcMuteBtn {
-        position: absolute;
-        top: 8px;
-        right: 48px;
-        z-index: 25;
-        background: rgba(0, 0, 0, 0.7);
-        color: #fff;
-        border: none;
-        border-radius: 4px;
-        padding: 6px 10px;
-        font-size: 16px;
-        line-height: 1;
-        cursor: pointer;
-        transition: background 0.15s, opacity 0.4s;
-        opacity: 1;
-    }
-    #vcMuteBtn:hover { background: rgba(0, 0, 0, 0.9); }
+    /* Mute button sits to the left of the FS button */
+    #vcMuteBtn { right: 48px; }
     /* Fill wrapper + overlay when in fullscreen (fallback for overlay types without a standalone page) */
     #videoPlayerWrap:fullscreen,
     #videoPlayerWrap:-webkit-full-screen {
