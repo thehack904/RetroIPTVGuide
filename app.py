@@ -580,6 +580,67 @@ def apply_epg_fallback(channels, epg):
     return epg
 
 
+# ------------------- Virtual Channels -------------------
+VIRTUAL_CHANNELS = [
+    {
+        'name': 'News Now',
+        'logo': '/static/logos/virtual/news.svg',
+        'url': '',
+        'tvg_id': 'virtual.news',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/news.mp4',
+        'overlay_type': 'news',
+        'overlay_refresh_seconds': 60,
+    },
+    {
+        'name': 'Weather Now',
+        'logo': '/static/logos/virtual/weather.svg',
+        'url': '',
+        'tvg_id': 'virtual.weather',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/weather.mp4',
+        'overlay_type': 'weather',
+        'overlay_refresh_seconds': 300,
+    },
+    {
+        'name': 'System Status',
+        'logo': '/static/logos/virtual/status.svg',
+        'url': '',
+        'tvg_id': 'virtual.status',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/status.mp4',
+        'overlay_type': 'status',
+        'overlay_refresh_seconds': 30,
+    },
+]
+
+def get_virtual_channels():
+    """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
+    import copy
+    return copy.deepcopy(VIRTUAL_CHANNELS)
+
+def get_virtual_epg(grid_start, hours_span=6):
+    """Generate synthetic EPG entries for virtual channels spanning the grid window."""
+    epg = {}
+    grid_end = grid_start + timedelta(hours=hours_span)
+    programs_by_tvg_id = {
+        'virtual.news': 'News Now',
+        'virtual.weather': 'Local Weather',
+        'virtual.status': 'System Status',
+    }
+    for tvg_id, title in programs_by_tvg_id.items():
+        slots = []
+        slot_start = grid_start
+        while slot_start < grid_end:
+            slot_stop = slot_start + timedelta(hours=1)
+            slots.append({'title': title, 'desc': '', 'start': slot_start, 'stop': slot_stop})
+            slot_start = slot_stop
+        epg[tvg_id] = slots
+    return epg
+
 # ------------------- Safe redirect helper -------------------
 def is_safe_url(target):
     """
@@ -1143,10 +1204,15 @@ def guide():
     user_prefs = get_user_prefs(current_user.username)
     user_default_theme = user_prefs.get("default_theme") or None
 
+    virtual_ch = get_virtual_channels()
+    virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
+    all_channels = virtual_ch + cached_channels
+    all_epg = {**virtual_epg, **cached_epg}
+
     return render_template(
         'guide.html',
-        channels=cached_channels,
-        epg=cached_epg,
+        channels=all_channels,
+        epg=all_epg,
         now=now,
         grid_start=grid_start,
         hours_header=hours_header,
@@ -1414,6 +1480,41 @@ def api_channels():
             'source': ch.get('source')
         })
     return jsonify({'channels': out, 'timestamp': datetime.now(timezone.utc).isoformat()})
+
+@app.route('/api/news', methods=['GET'])
+@login_required
+def api_news():
+    """Stub endpoint for virtual news channel overlay data."""
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "headlines": [],
+    })
+
+@app.route('/api/weather', methods=['GET'])
+@login_required
+def api_weather():
+    """Stub endpoint for virtual weather channel overlay data."""
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "location": "Not configured",
+        "now": {"temp": None, "condition": ""},
+        "forecast": [],
+    })
+
+@app.route('/api/virtual/status', methods=['GET'])
+@login_required
+def api_virtual_status():
+    """Stub endpoint for virtual system status channel overlay data."""
+    uptime_seconds = int((datetime.now() - APP_START_TIME).total_seconds())
+    hours, rem = divmod(uptime_seconds, 3600)
+    minutes = rem // 60
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "items": [
+            {"label": "RetroIPTVGuide", "value": "Running", "state": "good"},
+            {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
+        ],
+    })
 
 @app.route('/api/play', methods=['POST'])
 @login_required

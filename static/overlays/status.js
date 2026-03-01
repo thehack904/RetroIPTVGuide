@@ -52,7 +52,7 @@
   }
 
   async function fetchData() {
-    return await window.OverlayEngine.fetchJson("/api/status");
+    return await window.OverlayEngine.fetchJson("/api/virtual/status");
   }
 
   window.OverlayEngine.register(TYPE, { fetch: fetchData, render });

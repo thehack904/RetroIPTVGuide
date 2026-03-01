@@ -72,6 +72,7 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-submenu.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-scroll-fix.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/virtual-overlays.css') }}">
 
     <!-- Theme script (deferred) provides setTheme/applyTheme and will wire theme controls -->
     <script src="{{ url_for('static', filename='js/theme.js') }}" defer></script>
@@ -122,6 +123,7 @@
     <div class="video-player-wrap" id="videoPlayerWrap">
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+        <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
 
@@ -158,7 +160,13 @@
                  data-url="{{ ch.url }}"
                  data-cid="{{ ch.tvg_id }}"
                  data-name="{{ ch.name|e }}"
-                 data-logo="{{ ch.logo }}">
+                 data-logo="{{ ch.logo }}"
+                 {% if ch.is_virtual %}
+                 data-is-virtual="true"
+                 data-loop-asset="{{ ch.loop_asset }}"
+                 data-overlay-type="{{ ch.overlay_type }}"
+                 data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
+                 {% endif %}>
                 {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}
                 <span>{{ ch.name }}</span>
             </div>
@@ -247,6 +255,28 @@ function playChannel(url, cid, name) {
 
     const unmuteBtn = document.getElementById('unmuteBtn');
     if (unmuteBtn) unmuteBtn.hidden = true;
+
+    // Stop any active virtual overlay before switching channels
+    if (typeof OverlayEngine !== 'undefined') OverlayEngine.stop();
+
+    // Check if this is a virtual channel by looking up its element
+    const escapedCid = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(cid) : cid.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
+    const chanEl = document.querySelector(`.chan-name[data-cid="${escapedCid}"]`);
+    if (chanEl && chanEl.dataset.isVirtual === 'true') {
+        if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
+        const loopAsset = chanEl.dataset.loopAsset || '';
+        video.loop = true;
+        video.muted = true;
+        video.src = loopAsset;
+        video.play().catch(() => {});
+        if (typeof OverlayEngine !== 'undefined') {
+            OverlayEngine.start({
+                type: chanEl.dataset.overlayType,
+                refreshSeconds: Number(chanEl.dataset.overlayRefreshSeconds) || 60,
+            });
+        }
+        return;
+    }
 
     // Try normal play; if blocked by browser autoplay policy, retry muted
     // and show the unmute button so the user can restore audio with one click.
@@ -839,6 +869,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })();
 </script>
+
+<script src="{{ url_for('static', filename='overlays/overlay-engine.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/news.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/weather.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/status.js') }}"></script>
 
 </div><!-- #appZoomRoot -->
 </body>
