@@ -361,8 +361,8 @@ class TestChangeTunerOverlayAppearance:
     def test_section_present_in_page(self, client):
         login(client, 'admin', 'adminpass')
         resp = client.get('/change_tuner')
-        # Each channel now has an "Overlay" prefs button; "Overlay" text appears in page
-        assert b'Overlay' in resp.data
+        # Each channel has a per-channel settings button; overlay action present in page
+        assert b'update_channel_overlay_appearance' in resp.data
 
     def test_admin_can_save_per_channel_appearance(self, client):
         login(client, 'admin', 'adminpass')

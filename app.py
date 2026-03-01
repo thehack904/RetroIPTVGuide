@@ -1796,6 +1796,19 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    # Build per-tuner sync info for the Configured Tuners table
+    tuner_sync_info = {}
+    for tname in tuners:
+        raw = _get_setting_inline(f"last_auto_refresh:{tname}", None)
+        if raw:
+            parts = raw.split('|', 2)  # format: "status|datetime[|detail]"
+            sync_status = parts[0] if parts else ''
+            sync_dt = parts[1] if len(parts) > 1 else ''
+        else:
+            sync_status = ''
+            sync_dt = ''
+        tuner_sync_info[tname] = {'status': sync_status, 'last_sync': sync_dt}
+
     vc_settings = get_virtual_channel_settings()
     overlay_appearance = get_overlay_appearance()
     channel_appearances = get_all_channel_appearances()
@@ -1812,6 +1825,7 @@ def change_tuner():
         auto_refresh_enabled=auto_refresh_enabled,
         auto_refresh_interval_hours=auto_refresh_interval_hours,
         last_auto_refresh=last_auto_refresh,
+        tuner_sync_info=tuner_sync_info,
         VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
         vc_settings=vc_settings,
         overlay_appearance=overlay_appearance,
