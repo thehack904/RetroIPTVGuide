@@ -174,9 +174,11 @@
                  data-loop-asset="{{ ch.loop_asset }}"
                  data-overlay-type="{{ ch.overlay_type }}"
                  data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
+                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
                  {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': ''}) %}
                  data-overlay-text-color="{{ ch_app.text_color }}"
                  data-overlay-bg-color="{{ ch_app.bg_color }}"
+                 {% endif %}
                  data-music-file="{{ channel_music_files.get(ch.tvg_id, '') }}"
                  {% endif %}>
                 {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}

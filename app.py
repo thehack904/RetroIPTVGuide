@@ -1749,9 +1749,9 @@ def change_tuner():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
-                if tvg_id == 'virtual.weather':
-                    # Text color, background color, and test banner are not used by the
-                    # weather channel; always clear them so stale values don't linger.
+                if tvg_id in ('virtual.weather', 'virtual.news'):
+                    # Text color, background color, and test banner are not used by
+                    # these full-page overlay channels; always clear them.
                     appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
@@ -2150,6 +2150,12 @@ def api_news():
         "updated": datetime.now(timezone.utc).isoformat(),
         "headlines": headlines,
     })
+
+@app.route('/news.html')
+@login_required
+def news_page_compat():
+    """Redirect legacy .html URL to canonical /news route."""
+    return redirect(url_for('news_page'), 301)
 
 @app.route('/news')
 @login_required
