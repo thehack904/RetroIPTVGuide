@@ -180,10 +180,9 @@ class TestChangeTunerVirtualChannels:
 
     def test_admin_can_disable_virtual_channel(self, client):
         login(client, "admin", "adminpass")
-        # Disable news, enable weather and status
+        # Omit news (unchecked) — only submit checked channels, matching real browser behaviour
         resp = client.post("/change_tuner", data={
             "action": "update_virtual_channels",
-            "vc_virtual.news": "0",
             "vc_virtual.weather": "1",
             "vc_virtual.status": "1",
         }, follow_redirects=True)
