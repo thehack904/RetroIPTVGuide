@@ -580,6 +580,264 @@ def apply_epg_fallback(channels, epg):
     return epg
 
 
+# ------------------- Virtual Channels -------------------
+VIRTUAL_CHANNELS = [
+    {
+        'name': 'News Now',
+        'logo': '/static/logos/virtual/news.svg',
+        'url': '',
+        'tvg_id': 'virtual.news',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/news.mp4',
+        'overlay_type': 'news',
+        'overlay_refresh_seconds': 60,
+    },
+    {
+        'name': 'Weather Now',
+        'logo': '/static/logos/virtual/weather.svg',
+        'url': '',
+        'tvg_id': 'virtual.weather',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/weather.mp4',
+        'overlay_type': 'weather',
+        'overlay_refresh_seconds': 300,
+    },
+    {
+        'name': 'System Status',
+        'logo': '/static/logos/virtual/status.svg',
+        'url': '',
+        'tvg_id': 'virtual.status',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/status.mp4',
+        'overlay_type': 'status',
+        'overlay_refresh_seconds': 30,
+    },
+]
+
+def get_virtual_channel_settings():
+    """Return a dict mapping each virtual channel tvg_id to its enabled state (bool).
+    Defaults to True (enabled) when no setting has been persisted yet."""
+    defaults = {ch['tvg_id']: True for ch in VIRTUAL_CHANNELS}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id in defaults:
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("SELECT value FROM settings WHERE key=?", (key,))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[tvg_id] = row[0] == "1"
+    except Exception:
+        logging.exception("get_virtual_channel_settings failed, using defaults")
+    return defaults
+
+def save_virtual_channel_settings(settings_dict):
+    """Persist virtual channel enabled states.  settings_dict maps tvg_id -> bool."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id, enabled in settings_dict.items():
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (key, "1" if enabled else "0"))
+            conn.commit()
+    except Exception:
+        logging.exception("save_virtual_channel_settings failed")
+        raise
+
+_OVERLAY_APPEARANCE_KEYS = ('text_color', 'bg_color', 'test_text')
+_HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+def get_overlay_appearance():
+    """Return overlay appearance settings: text_color, bg_color (hex or ''), test_text (str)."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_overlay_appearance failed, using defaults")
+    return result
+
+def save_overlay_appearance(appearance_dict):
+    """Persist overlay appearance settings.  Validates hex colors; strips test_text."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_overlay_appearance failed")
+        raise
+
+def get_channel_overlay_appearance(tvg_id):
+    """Return overlay appearance settings for a specific virtual channel.
+    Keys stored as overlay.{tvg_id}.text_color etc. in the settings table."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{tvg_id}.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_channel_overlay_appearance failed, using defaults")
+    return result
+
+def save_channel_overlay_appearance(tvg_id, appearance_dict):
+    """Persist per-channel overlay appearance settings."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{tvg_id}.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_overlay_appearance failed")
+        raise
+
+def get_all_channel_appearances():
+    """Return dict of tvg_id -> appearance for all virtual channels."""
+    return {ch['tvg_id']: get_channel_overlay_appearance(ch['tvg_id']) for ch in VIRTUAL_CHANNELS}
+
+def get_news_feed_url():
+    """Return the configured RSS/Atom news feed URL, or empty string if not set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='news.rss_url'")
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_news_feed_url failed")
+        return ''
+
+def save_news_feed_url(url):
+    """Persist the RSS/Atom news feed URL. Validates scheme is http/https."""
+    url = str(url).strip()
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.rss_url', ?)", (url,))
+            conn.commit()
+    except Exception:
+        logging.exception("save_news_feed_url failed")
+        raise
+
+_RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
+
+def fetch_rss_headlines(feed_url, max_items=20):
+    """Fetch a RSS 2.0 or Atom feed and return a list of headline dicts.
+
+    Each item: {'title': str, 'source': str, 'url': str, 'ts': ISO8601 str}
+    Returns empty list on any error (non-throwing).
+    """
+    try:
+        resp = requests.get(feed_url, timeout=8, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+    except Exception:
+        logging.exception("fetch_rss_headlines: failed to fetch or parse %r", feed_url)
+        return []
+
+    items = []
+    tag = root.tag.lower()
+
+    # Strip namespace for tag detection
+    local = root.tag.split('}')[-1].lower() if '}' in root.tag else tag
+
+    if local == 'feed':
+        # Atom feed
+        channel_title = ''
+        t = root.find('{http://www.w3.org/2005/Atom}title')
+        if t is not None:
+            channel_title = (t.text or '').strip()
+        for entry in root.findall('{http://www.w3.org/2005/Atom}entry')[:max_items]:
+            title_el = entry.find('{http://www.w3.org/2005/Atom}title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = entry.find('{http://www.w3.org/2005/Atom}link')
+            link = (link_el.get('href', '') if link_el is not None else '').strip()
+            ts_el = entry.find('{http://www.w3.org/2005/Atom}updated') or entry.find('{http://www.w3.org/2005/Atom}published')
+            ts = (ts_el.text or '').strip() if ts_el is not None else ''
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+    else:
+        # RSS 2.0 / RSS 1.0
+        channel = root.find('channel') or root
+        channel_title = ''
+        ct = channel.find('title')
+        if ct is not None:
+            channel_title = (ct.text or '').strip()
+        for item in channel.findall('item')[:max_items]:
+            title_el = item.find('title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = item.find('link')
+            link = (link_el.text or '').strip() if link_el is not None else ''
+            pub_el = item.find('pubDate')
+            ts = (pub_el.text or '').strip() if pub_el is not None else ''
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+
+    return items
+
+def get_virtual_channels():
+    """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
+    import copy
+    return copy.deepcopy(VIRTUAL_CHANNELS)
+
+def get_virtual_epg(grid_start, hours_span=6):
+    """Generate synthetic EPG entries for virtual channels spanning the grid window."""
+    epg = {}
+    grid_end = grid_start + timedelta(hours=hours_span)
+    programs_by_tvg_id = {
+        'virtual.news': 'News Now',
+        'virtual.weather': 'Local Weather',
+        'virtual.status': 'System Status',
+    }
+    for tvg_id, title in programs_by_tvg_id.items():
+        slots = []
+        slot_start = grid_start
+        while slot_start < grid_end:
+            slot_stop = slot_start + timedelta(hours=1)
+            slots.append({'title': title, 'desc': '', 'start': slot_start, 'stop': slot_stop})
+            slot_start = slot_stop
+        epg[tvg_id] = slots
+    return epg
+
 # ------------------- Safe redirect helper -------------------
 def is_safe_url(target):
     """
@@ -1079,6 +1337,57 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
+        elif action == "update_virtual_channels":
+            new_settings = {}
+            for ch in VIRTUAL_CHANNELS:
+                tvg_id = ch['tvg_id']
+                # A hidden input always submits "0"; the checkbox overrides it with "1" when checked
+                new_settings[tvg_id] = request.form.get(f"vc_{tvg_id}", "0") == "1"
+            try:
+                save_virtual_channel_settings(new_settings)
+                log_event(current_user.username, "Updated virtual channel settings")
+                flash("Virtual channel settings saved.", "success")
+            except Exception:
+                flash("Failed to save virtual channel settings.", "warning")
+
+        elif action == "update_overlay_appearance":
+            appearance = {
+                'text_color': request.form.get('overlay_text_color', '').strip(),
+                'bg_color': request.form.get('overlay_bg_color', '').strip(),
+                'test_text': request.form.get('overlay_test_text', '').strip(),
+            }
+            try:
+                save_overlay_appearance(appearance)
+                log_event(current_user.username, "Updated overlay appearance settings")
+                flash("Overlay appearance settings saved.", "success")
+            except ValueError as exc:
+                flash(f"Invalid color value: {exc}", "warning")
+            except Exception:
+                flash("Failed to save overlay appearance settings.", "warning")
+
+        elif action == "update_channel_overlay_appearance":
+            tvg_id = request.form.get('tvg_id', '').strip()
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            if tvg_id not in valid_ids:
+                flash("Unknown virtual channel.", "warning")
+            else:
+                appearance = {
+                    'text_color': request.form.get('ch_text_color', '').strip(),
+                    'bg_color': request.form.get('ch_bg_color', '').strip(),
+                    'test_text': request.form.get('ch_test_text', '').strip(),
+                }
+                try:
+                    save_channel_overlay_appearance(tvg_id, appearance)
+                    if tvg_id == 'virtual.news':
+                        rss_url = request.form.get('ch_news_rss_url', '').strip()
+                        save_news_feed_url(rss_url)
+                    log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
+                    flash("Channel overlay settings saved.", "success")
+                except ValueError as exc:
+                    flash(str(exc), "warning")
+                except Exception:
+                    flash("Failed to save channel overlay settings.", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -1099,6 +1408,10 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    vc_settings = get_virtual_channel_settings()
+    overlay_appearance = get_overlay_appearance()
+    channel_appearances = get_all_channel_appearances()
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
@@ -1107,7 +1420,12 @@ def change_tuner():
         TUNERS=tuners,
         auto_refresh_enabled=auto_refresh_enabled,
         auto_refresh_interval_hours=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh
+        last_auto_refresh=last_auto_refresh,
+        VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
+        vc_settings=vc_settings,
+        overlay_appearance=overlay_appearance,
+        channel_appearances=channel_appearances,
+        news_feed_url=get_news_feed_url(),
     )
 
 @app.route('/guide')
@@ -1143,10 +1461,17 @@ def guide():
     user_prefs = get_user_prefs(current_user.username)
     user_default_theme = user_prefs.get("default_theme") or None
 
+    virtual_ch = get_virtual_channels()
+    vc_settings = get_virtual_channel_settings()
+    virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch['tvg_id'], True)]
+    virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
+    all_channels = virtual_ch + cached_channels
+    all_epg = {**virtual_epg, **cached_epg}
+
     return render_template(
         'guide.html',
-        channels=cached_channels,
-        epg=cached_epg,
+        channels=all_channels,
+        epg=all_epg,
         now=now,
         grid_start=grid_start,
         hours_header=hours_header,
@@ -1156,6 +1481,8 @@ def guide():
         current_tuner=get_current_tuner(),
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
+        overlay_appearance=get_overlay_appearance(),
+        channel_appearances=get_all_channel_appearances(),
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1414,6 +1741,53 @@ def api_channels():
             'source': ch.get('source')
         })
     return jsonify({'channels': out, 'timestamp': datetime.now(timezone.utc).isoformat()})
+
+@app.route('/api/news', methods=['GET'])
+@login_required
+def api_news():
+    """Return headlines from the configured RSS/Atom feed, or empty list if none set."""
+    feed_url = get_news_feed_url()
+    headlines = fetch_rss_headlines(feed_url) if feed_url else []
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "headlines": headlines,
+    })
+
+@app.route('/api/weather', methods=['GET'])
+@login_required
+def api_weather():
+    """Stub endpoint for virtual weather channel overlay data."""
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "location": "Not configured",
+        "now": {"temp": None, "condition": ""},
+        "forecast": [],
+    })
+
+@app.route('/api/virtual/status', methods=['GET'])
+@login_required
+def api_virtual_status():
+    """Stub endpoint for virtual system status channel overlay data."""
+    uptime_seconds = int((datetime.now() - APP_START_TIME).total_seconds())
+    hours, rem = divmod(uptime_seconds, 3600)
+    minutes = rem // 60
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "items": [
+            {"label": "RetroIPTVGuide", "value": "Running", "state": "good"},
+            {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
+        ],
+    })
+
+@app.route('/api/overlay/settings', methods=['GET'])
+@login_required
+def api_overlay_settings():
+    """Return overlay appearance settings. Use ?channel=tvg_id for per-channel settings."""
+    channel = request.args.get('channel', '').strip()
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if channel and channel in valid_ids:
+        return jsonify(get_channel_overlay_appearance(channel))
+    return jsonify(get_overlay_appearance())
 
 @app.route('/api/play', methods=['POST'])
 @login_required

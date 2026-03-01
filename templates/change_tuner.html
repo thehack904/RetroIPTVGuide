@@ -202,6 +202,92 @@
       </div>
     </section>
 
+    <!-- Virtual Channels: admin control for built-in virtual channels -->
+    <section class="card" aria-labelledby="lbl-virtual-channels">
+      <div class="card-head">
+        <h2 id="lbl-virtual-channels">Virtual Channels</h2>
+      </div>
+      <div class="card-body">
+        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Use <strong>⚙ Overlay</strong> to customize each channel's overlay colors and test banner.</p>
+        <!-- form element is empty here so prefs sub-forms can live outside it.
+             Checkboxes and the Save button reference it via form="form-virtual-channels". -->
+        <form method="POST" id="form-virtual-channels">
+          <input type="hidden" name="action" value="update_virtual_channels">
+        </form>
+        <div class="vc-channel-list">
+          {% for ch in VIRTUAL_CHANNELS %}
+          {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
+          <div class="vc-channel-item">
+            <label class="vc-toggle-label">
+              <input type="checkbox"
+                     form="form-virtual-channels"
+                     name="vc_{{ ch.tvg_id }}"
+                     value="1"
+                     {% if vc_settings.get(ch.tvg_id, true) %}checked{% endif %}>
+              <span class="vc-toggle-name">
+                {% if ch.logo %}
+                <img src="{{ ch.logo }}" alt="" class="vc-logo">
+                {% endif %}
+                {{ ch.name }}
+              </span>
+              <span class="muted small vc-type">{{ ch.overlay_type }}</span>
+            </label>
+            <button type="button" class="secondary small vc-prefs-btn"
+                    aria-expanded="false"
+                    aria-controls="vc-prefs-{{ loop.index }}"
+                    data-panel="vc-prefs-{{ loop.index }}">⚙ Overlay</button>
+          </div>
+          <div class="vc-prefs-panel" id="vc-prefs-{{ loop.index }}" hidden>
+            <form method="POST" class="compact-form vc-prefs-form">
+              <input type="hidden" name="action" value="update_channel_overlay_appearance">
+              <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
+              <div class="vc-prefs-fields">
+                <div class="vc-prefs-field">
+                  <label>Text Color</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="color" name="ch_text_color"
+                           value="{{ ch_app.text_color or '#ffffff' }}">
+                    <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
+                  </div>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Background Color</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="color" name="ch_bg_color"
+                           value="{{ ch_app.bg_color or '#000000' }}">
+                    <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>Test Banner Text</label>
+                  <input type="text" name="ch_test_text"
+                         value="{{ ch_app.test_text }}"
+                         placeholder="Text shown as a banner on this overlay (blank to hide)…"
+                         maxlength="120">
+                </div>
+                {% if ch.tvg_id == 'virtual.news' %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>News Feed URL (RSS/Atom)</label>
+                  <input type="url" name="ch_news_rss_url"
+                         value="{{ news_feed_url }}"
+                         placeholder="https://feeds.example.com/rss.xml"
+                         maxlength="500">
+                </div>
+                {% endif %}
+              </div>
+              <div class="form-row form-row-inline" style="margin-top:10px;">
+                <button type="submit" class="primary small">Save</button>
+              </div>
+            </form>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="form-row form-row-inline" style="margin-top:14px;">
+          <button type="submit" form="form-virtual-channels" class="primary">Save Channel List</button>
+        </div>
+      </div>
+    </section>
+
     <!-- Danger Zone: Delete tuner separated to avoid mistakes -->
     <section class="card card-danger" aria-labelledby="lbl-danger-zone">
       <div class="card-head">
@@ -401,6 +487,27 @@ document.addEventListener("DOMContentLoaded", () => {
     // Log error if mode switching setup fails - form will still submit with default standard mode
     console.error('Mode switching initialization failed:', e);
   }
+});
+
+// Per-channel overlay prefs: toggle panels and handle reset buttons
+document.querySelectorAll('.vc-prefs-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var panelId = btn.dataset.panel;
+    var panel = document.getElementById(panelId);
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
+    panel.hidden = expanded;
+    btn.setAttribute('aria-expanded', String(!expanded));
+    btn.textContent = expanded ? '⚙ Overlay' : '⚙ Overlay ▲';
+  });
+});
+
+document.querySelectorAll('.vc-prefs-reset').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var colorInput = btn.previousElementSibling;
+    if (colorInput && colorInput.type === 'color') {
+      colorInput.value = btn.dataset.default || '#ffffff';
+    }
+  });
 });
 </script>
 {% endblock %}

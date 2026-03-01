@@ -110,7 +110,7 @@ body.light .container-change-tuner {
 /* ====================================================================== */
 .card-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 18px;
 }
 .card-danger { grid-column: 1 / -1; }
@@ -259,8 +259,129 @@ button:focus, select:focus, input:focus, textarea:focus {
 }
 
 /* ====================================================================== */
+/* Virtual Channels column                                                 */
+/* ====================================================================== */
+.vc-channel-list {
+  display: grid;
+  gap: 10px;
+}
+
+.vc-toggle-label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+
+.vc-toggle-label:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent 60%);
+  background: color-mix(in srgb, var(--input-bg) 85%, var(--primary-color) 8%);
+}
+
+.vc-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.vc-toggle-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--label-color);
+}
+
+.vc-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.vc-type {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+/* Per-channel item wrapper (toggle row + prefs btn on the same line) */
+.vc-channel-item {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.vc-channel-item .vc-toggle-label {
+  flex: 1;
+  margin: 0;
+}
+
+.vc-prefs-btn {
+  white-space: nowrap;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+/* Per-channel overlay prefs panel */
+.vc-prefs-panel {
+  padding: 12px 14px;
+  margin-top: 2px;
+  border-radius: 8px;
+  border: 1px dashed var(--panel-border);
+  background: color-mix(in srgb, var(--input-bg) 80%, var(--primary-color) 5%);
+}
+
+.vc-prefs-form {
+  margin: 0;
+}
+
+.vc-prefs-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  align-items: flex-end;
+}
+
+.vc-prefs-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 130px;
+}
+
+.vc-prefs-field label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
+.vc-prefs-field-wide {
+  flex: 1;
+  min-width: 220px;
+}
+
+.vc-prefs-field-wide input[type="text"] {
+  width: 100%;
+}
+
+
 /* Responsive                                                              */
 /* ====================================================================== */
+@media (max-width: 1100px) {
+  .card-grid { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 920px) {
   .card-grid { grid-template-columns: 1fr; }
   .subgrid { grid-template-columns: 1fr; }

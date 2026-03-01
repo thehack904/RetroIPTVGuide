@@ -17,6 +17,7 @@
     refreshSeconds: 60,
     renderers: {},
     lastData: null,
+    appearance: { textColor: '', bgColor: '', testText: '' },
   };
 
   function rootEl() {
@@ -25,16 +26,34 @@
     return el;
   }
 
+  function applyAppearance(el) {
+    // Apply per-channel CSS custom properties to the overlay root
+    const { textColor, bgColor } = state.appearance;
+    el.style.setProperty('--vc-text-color', textColor || '');
+    el.style.setProperty('--vc-bg-color', bgColor || '');
+  }
+
   function clearRoot() {
     const el = rootEl();
     el.innerHTML = "";
     el.classList.remove("hidden");
+    applyAppearance(el);
+    // Show persistent test banner when configured (per-channel or global fallback)
+    const testText = state.appearance.testText || window.OVERLAY_TEST_TEXT || '';
+    if (testText) {
+      const banner = document.createElement("div");
+      banner.className = "vc-test-banner";
+      banner.textContent = testText;
+      el.appendChild(banner);
+    }
   }
 
   function hideRoot() {
     const el = rootEl();
     el.innerHTML = "";
     el.classList.add("hidden");
+    el.style.removeProperty('--vc-text-color');
+    el.style.removeProperty('--vc-bg-color');
   }
 
   function setError(msg) {
@@ -69,10 +88,11 @@
       state.renderers[type] = renderer;
     },
 
-    start({ type, refreshSeconds }) {
+    start({ type, refreshSeconds, textColor = '', bgColor = '', testText = '' }) {
       this.stop();
       state.activeType = type;
       state.refreshSeconds = Math.max(10, Number(refreshSeconds) || 60);
+      state.appearance = { textColor, bgColor, testText };
 
       const r = state.renderers[type];
       if (!r) {
@@ -96,6 +116,7 @@
       }
       state.activeType = null;
       state.lastData = null;
+      state.appearance = { textColor: '', bgColor: '', testText: '' };
       hideRoot();
     },
 

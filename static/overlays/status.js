@@ -19,7 +19,7 @@
   }
 
   function buildSkeleton(root) {
-    root.innerHTML = "";
+    root.querySelectorAll(".vc-overlay").forEach(e => e.remove());
     root.classList.remove("hidden");
 
     const overlay = el("div", "vc-overlay");
@@ -52,7 +52,7 @@
   }
 
   async function fetchData() {
-    return await window.OverlayEngine.fetchJson("/api/status");
+    return await window.OverlayEngine.fetchJson("/api/virtual/status");
   }
 
   window.OverlayEngine.register(TYPE, { fetch: fetchData, render });
