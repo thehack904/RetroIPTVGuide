@@ -208,7 +208,7 @@
         <h2 id="lbl-virtual-channels">Virtual Channels</h2>
       </div>
       <div class="card-body">
-        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Use <strong>⚙ Overlay</strong> to customize each channel's overlay colors and test banner.</p>
+        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Use <strong>⚙ Overlay</strong> to configure each channel's settings.</p>
         <!-- form element is empty here so prefs sub-forms can live outside it.
              Checkboxes and the Save button reference it via form="form-virtual-channels". -->
         <form method="POST" id="form-virtual-channels">
@@ -242,7 +242,7 @@
               <input type="hidden" name="action" value="update_channel_overlay_appearance">
               <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
               <div class="vc-prefs-fields">
-                {% if ch.tvg_id != 'virtual.weather' %}
+                {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
                 <div class="vc-prefs-field">
                   <label>Text Color</label>
                   <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
@@ -267,6 +267,10 @@
                          value="{{ news_feed_url }}"
                          placeholder="https://feeds.example.com/rss.xml"
                          maxlength="500">
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                  <a href="/news" target="_blank" class="btn-link small">📰 Preview News Page ↗</a>
+                  <span class="muted small" style="margin-left:8px;">Opens in a new tab — save settings first.</span>
                 </div>
                 {% endif %}
                 {% if ch.tvg_id == 'virtual.weather' %}

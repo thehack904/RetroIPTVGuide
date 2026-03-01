@@ -108,6 +108,63 @@
         transition: background 0.15s;
     }
     .unmute-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    /* Virtual channel fullscreen button */
+    .vc-fs-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 25;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .vc-fs-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    /* Fill wrapper + overlay when in fullscreen (fallback for overlay types without a standalone page) */
+    #videoPlayerWrap:fullscreen,
+    #videoPlayerWrap:-webkit-full-screen {
+        width: 100vw !important;
+        height: 100vh !important;
+        background: #000;
+    }
+    #videoPlayerWrap:fullscreen #video,
+    #videoPlayerWrap:-webkit-full-screen #video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover;
+    }
+    /* VC fullscreen overlay – shows the actual /news or /weather page in an iframe */
+    #vcFsOverlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9100;
+        background: #000;
+        display: flex;
+        align-items: stretch;
+    }
+    #vcFsOverlay.hidden { display: none; }
+    #vcFsOverlay iframe { flex: 1; border: none; width: 100%; height: 100%; }
+    #vcFsOverlayClose {
+        position: absolute;
+        top: 12px;
+        right: 12px;
+        z-index: 9110;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 14px;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    #vcFsOverlayClose:hover { background: rgba(0, 0, 0, 0.95); }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -131,6 +188,7 @@
     <div class="video-player-wrap" id="videoPlayerWrap">
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+        <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
@@ -174,9 +232,11 @@
                  data-loop-asset="{{ ch.loop_asset }}"
                  data-overlay-type="{{ ch.overlay_type }}"
                  data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
+                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
                  {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': ''}) %}
                  data-overlay-text-color="{{ ch_app.text_color }}"
                  data-overlay-bg-color="{{ ch_app.bg_color }}"
+                 {% endif %}
                  data-music-file="{{ channel_music_files.get(ch.tvg_id, '') }}"
                  {% endif %}>
                 {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}
@@ -230,6 +290,7 @@
 
 let hlsInstance = null;
 let currentChannelId = null;
+let _vcCurrentOverlayType = '';
 
 // ── Background music (virtual channel looped audio) ─────────────────────────
 let _bgAudio = null;
@@ -276,6 +337,134 @@ function stopBgMusic() {
     }
     _bgAudioSrc = '';
 }
+
+// ── Virtual channel fullscreen ────────────────────────────────────────────────
+function _exitVcFs() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+}
+
+function showVcFsBtn() {
+    const btn = document.getElementById('vcFsBtn');
+    if (btn) btn.hidden = false;
+}
+
+function hideVcFsBtn() {
+    const btn = document.getElementById('vcFsBtn');
+    if (btn) btn.hidden = true;
+    // Close iframe overlay if active when switching away from a virtual channel.
+    const overlay = document.getElementById('vcFsOverlay');
+    const iframe  = document.getElementById('vcFsIframe');
+    if (overlay && !overlay.classList.contains('hidden')) {
+        overlay.classList.add('hidden');
+        if (iframe) iframe.src = '';
+    }
+    // Exit fullscreen if the user switches to a normal channel while fullscreen.
+    _exitVcFs();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('vcFsBtn');
+    if (!btn) return;
+    const wrap = document.getElementById('videoPlayerWrap');
+
+    // Overlay types that have a dedicated standalone page we can iframe in.
+    const VC_PAGE_URL = { news: '/news', weather: '/weather' };
+
+    function fsElement() {
+        return document.fullscreenElement || document.webkitFullscreenElement || null;
+    }
+
+    function isOverlayFsActive() {
+        const ov = document.getElementById('vcFsOverlay');
+        return ov && !ov.classList.contains('hidden');
+    }
+
+    function openVcFsOverlay(pageUrl) {
+        const overlay = document.getElementById('vcFsOverlay');
+        const iframe  = document.getElementById('vcFsIframe');
+        if (!overlay || !iframe) return;
+        iframe.src = pageUrl;
+        overlay.classList.remove('hidden');
+        btn.textContent = '✕';
+        btn.title = 'Exit fullscreen';
+        btn.setAttribute('aria-label', 'Exit fullscreen');
+        // Request true fullscreen on the overlay div so the browser chrome hides
+        const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen || overlay.mozRequestFullscreen;
+        if (req) {
+            const p = req.call(overlay);
+            if (p && p.catch) p.catch(function (e) { console.warn('[VC FS overlay]', e); });
+        }
+    }
+
+    function closeVcFsOverlay() {
+        const overlay = document.getElementById('vcFsOverlay');
+        const iframe  = document.getElementById('vcFsIframe');
+        if (overlay) overlay.classList.add('hidden');
+        if (iframe) iframe.src = '';  // stop network activity in iframe
+        btn.textContent = '⛶';
+        btn.title = 'Fullscreen';
+        btn.setAttribute('aria-label', 'Toggle virtual channel fullscreen');
+        if (fsElement()) {
+            (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+        }
+    }
+
+    btn.addEventListener('click', function () {
+        if (isOverlayFsActive()) {
+            closeVcFsOverlay();
+        } else if (fsElement()) {
+            _exitVcFs();
+        } else {
+            const pageUrl = VC_PAGE_URL[_vcCurrentOverlayType];
+            if (pageUrl) {
+                // news/weather: iframe the dedicated standalone page (looks identical to /news, /weather)
+                openVcFsOverlay(pageUrl);
+            } else {
+                // Fallback for overlay types without a standalone page (e.g. 'status')
+                const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
+                if (req) {
+                    const p = req.call(wrap);
+                    if (p && p.catch) p.catch(function (e) { console.warn('[VC FS]', e); });
+                }
+            }
+        }
+    });
+
+    const closeBtn = document.getElementById('vcFsOverlayClose');
+    if (closeBtn) closeBtn.addEventListener('click', closeVcFsOverlay);
+
+    // Close on ESC when overlay is shown but browser fullscreen was not granted
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && isOverlayFsActive() && !fsElement()) {
+            closeVcFsOverlay();
+        }
+    });
+
+    function onFsChange() {
+        const fsEl = fsElement();
+        // ESC pressed while the iframe overlay was in fullscreen → close overlay cleanly
+        if (!fsEl && isOverlayFsActive()) {
+            const overlay = document.getElementById('vcFsOverlay');
+            const iframe  = document.getElementById('vcFsIframe');
+            if (overlay) overlay.classList.add('hidden');
+            if (iframe) iframe.src = '';
+            btn.textContent = '⛶';
+            btn.title = 'Fullscreen';
+            btn.setAttribute('aria-label', 'Toggle virtual channel fullscreen');
+            return;
+        }
+        // Wrapper-based fullscreen (fallback for 'status' and future overlay types)
+        const isFs = fsEl === wrap;
+        btn.textContent = isFs ? '✕' : '⛶';
+        btn.title = isFs ? 'Exit fullscreen' : 'Fullscreen';
+        btn.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Toggle virtual channel fullscreen');
+    }
+
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+});
 
 /**
  * Returns the CSS zoom factor currently applied to the root <html> element via
@@ -337,10 +526,14 @@ function playChannel(url, cid, name) {
             });
         }
         startBgMusic(chanEl.dataset.musicFile || '');
+        _vcCurrentOverlayType = chanEl.dataset.overlayType || '';
+        showVcFsBtn();
         return;
     }
 
     // Ensure any mute applied by a previous virtual channel is cleared.
+    _vcCurrentOverlayType = '';
+    hideVcFsBtn();
     video.muted = false;
 
     // Try normal play; if blocked by browser autoplay policy, retry muted
@@ -941,5 +1134,13 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="{{ url_for('static', filename='overlays/status.js') }}"></script>
 
 </div><!-- #appZoomRoot -->
+
+<!-- Virtual channel fullscreen overlay – iframes the dedicated /news or /weather page so
+     fullscreen appearance is identical to those standalone pages. Background music keeps
+     playing in the parent page (outside this iframe). -->
+<div id="vcFsOverlay" class="hidden" role="dialog" aria-modal="true" aria-label="Virtual channel fullscreen">
+    <button id="vcFsOverlayClose" aria-label="Close fullscreen">✕</button>
+    <iframe id="vcFsIframe" src="" title="Virtual channel" allow="autoplay"></iframe>
+</div>
 </body>
 </html>

@@ -368,13 +368,13 @@ class TestChangeTunerOverlayAppearance:
         login(client, 'admin', 'adminpass')
         resp = client.post('/change_tuner', data={
             'action': 'update_channel_overlay_appearance',
-            'tvg_id': 'virtual.news',
+            'tvg_id': 'virtual.status',
             'ch_text_color': '#ffffff',
             'ch_bg_color': '#000000',
             'ch_test_text': 'TESTING 123',
         }, follow_redirects=True)
         assert resp.status_code == 200
-        s = get_channel_overlay_appearance('virtual.news')
+        s = get_channel_overlay_appearance('virtual.status')
         assert s['text_color'] == '#ffffff'
         assert s['bg_color'] == '#000000'
         assert s['test_text'] == 'TESTING 123'
@@ -383,7 +383,7 @@ class TestChangeTunerOverlayAppearance:
         login(client, 'admin', 'adminpass')
         resp = client.post('/change_tuner', data={
             'action': 'update_channel_overlay_appearance',
-            'tvg_id': 'virtual.news',
+            'tvg_id': 'virtual.status',
             'ch_text_color': 'notacolor',
             'ch_bg_color': '',
             'ch_test_text': '',
@@ -419,10 +419,10 @@ class TestChangeTunerOverlayAppearance:
         login(client, 'admin', 'adminpass')
         client.post('/change_tuner', data={
             'action': 'update_channel_overlay_appearance',
-            'tvg_id': 'virtual.news',
+            'tvg_id': 'virtual.status',
             'ch_text_color': '#ff0000',
             'ch_bg_color': '',
-            'ch_test_text': 'news test',
+            'ch_test_text': 'status test',
         }, follow_redirects=True)
         # Weather channel: appearance fields are always cleared via HTTP route
         client.post('/change_tuner', data={
@@ -432,10 +432,10 @@ class TestChangeTunerOverlayAppearance:
             'ch_bg_color': '',
             'ch_test_text': 'weather test',
         }, follow_redirects=True)
-        news = get_channel_overlay_appearance('virtual.news')
+        status = get_channel_overlay_appearance('virtual.status')
         weather = get_channel_overlay_appearance('virtual.weather')
-        assert news['text_color'] == '#ff0000'
-        assert news['test_text'] == 'news test'
+        assert status['text_color'] == '#ff0000'
+        assert status['test_text'] == 'status test'
         # Weather appearance fields are always cleared — they are not used by that channel
         assert weather['text_color'] == ''
         assert weather['test_text'] == ''
@@ -460,6 +460,27 @@ class TestChangeTunerOverlayAppearance:
             'ch_weather_units': 'F',
         }, follow_redirects=True)
         s = get_channel_overlay_appearance('virtual.weather')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_news_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the news channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.news',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'Breaking!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'Breaking!',
+            'ch_news_rss_url': '',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.news')
         assert s['text_color'] == ''
         assert s['bg_color'] == ''
         assert s['test_text'] == ''
