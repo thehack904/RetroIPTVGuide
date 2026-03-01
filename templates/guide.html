@@ -337,6 +337,9 @@ function playChannel(url, cid, name) {
         return;
     }
 
+    // Ensure any mute applied by a previous virtual channel is cleared.
+    video.muted = false;
+
     // Try normal play; if blocked by browser autoplay policy, retry muted
     // and show the unmute button so the user can restore audio with one click.
     function tryPlay() {
