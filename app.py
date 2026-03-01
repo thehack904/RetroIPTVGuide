@@ -173,6 +173,14 @@ def init_tuners_db():
         except sqlite3.OperationalError:
             pass
 
+        # Clear appearance fields that are not applicable to the weather channel.
+        # This removes any stale test_text / color values (e.g. "This is test Text!")
+        # from existing databases so they are never shown on the overlay.
+        for _wkey in ('text_color', 'bg_color', 'test_text'):
+            c.execute("DELETE FROM settings WHERE key=?",
+                      (f"overlay.virtual.weather.{_wkey}",))
+        conn.commit()
+
         # bootstrap if empty
         c.execute("SELECT COUNT(*) FROM tuners")
         if c.fetchone()[0] == 0:
@@ -1618,6 +1626,10 @@ def change_tuner():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
+                if tvg_id == 'virtual.weather':
+                    # Text color, background color, and test banner are not used by the
+                    # weather channel; always clear them so stale values don't linger.
+                    appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
                     if tvg_id == 'virtual.news':

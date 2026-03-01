@@ -424,6 +424,7 @@ class TestChangeTunerOverlayAppearance:
             'ch_bg_color': '',
             'ch_test_text': 'news test',
         }, follow_redirects=True)
+        # Weather channel: appearance fields are always cleared via HTTP route
         client.post('/change_tuner', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
@@ -435,8 +436,33 @@ class TestChangeTunerOverlayAppearance:
         weather = get_channel_overlay_appearance('virtual.weather')
         assert news['text_color'] == '#ff0000'
         assert news['test_text'] == 'news test'
-        assert weather['text_color'] == '#00ff00'
-        assert weather['test_text'] == 'weather test'
+        # Weather appearance fields are always cleared — they are not used by that channel
+        assert weather['text_color'] == ''
+        assert weather['test_text'] == ''
+
+    def test_weather_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the weather channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.weather',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'This is test Text!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'This is test Text!',
+            'ch_weather_location': 'Miami, FL',
+            'ch_weather_lat': '25.77',
+            'ch_weather_lon': '-80.19',
+            'ch_weather_units': 'F',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.weather')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
 
 
 class TestApiOverlaySettings:

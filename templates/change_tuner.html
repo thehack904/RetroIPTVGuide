@@ -242,6 +242,7 @@
               <input type="hidden" name="action" value="update_channel_overlay_appearance">
               <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
               <div class="vc-prefs-fields">
+                {% if ch.tvg_id != 'virtual.weather' %}
                 <div class="vc-prefs-field">
                   <label>Text Color</label>
                   <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
@@ -265,6 +266,7 @@
                          placeholder="Text shown as a banner on this overlay (blank to hide)…"
                          maxlength="120">
                 </div>
+                {% endif %}
                 {% if ch.tvg_id == 'virtual.news' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
                   <label>News Feed URL (RSS/Atom)</label>
