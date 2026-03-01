@@ -17,7 +17,7 @@
     refreshSeconds: 60,
     renderers: {},
     lastData: null,
-    appearance: { textColor: '', bgColor: '', testText: '' },
+    appearance: { textColor: '', bgColor: '' },
   };
 
   function rootEl() {
@@ -38,14 +38,6 @@
     el.innerHTML = "";
     el.classList.remove("hidden");
     applyAppearance(el);
-    // Show persistent test banner when configured (per-channel or global fallback)
-    const testText = state.appearance.testText || window.OVERLAY_TEST_TEXT || '';
-    if (testText) {
-      const banner = document.createElement("div");
-      banner.className = "vc-test-banner";
-      banner.textContent = testText;
-      el.appendChild(banner);
-    }
   }
 
   function hideRoot() {
@@ -88,11 +80,11 @@
       state.renderers[type] = renderer;
     },
 
-    start({ type, refreshSeconds, textColor = '', bgColor = '', testText = '' }) {
+    start({ type, refreshSeconds, textColor = '', bgColor = '' }) {
       this.stop();
       state.activeType = type;
       state.refreshSeconds = Math.max(10, Number(refreshSeconds) || 60);
-      state.appearance = { textColor, bgColor, testText };
+      state.appearance = { textColor, bgColor };
 
       const r = state.renderers[type];
       if (!r) {
@@ -116,7 +108,7 @@
       }
       state.activeType = null;
       state.lastData = null;
-      state.appearance = { textColor: '', bgColor: '', testText: '' };
+      state.appearance = { textColor: '', bgColor: '' };
       hideRoot();
     },
 

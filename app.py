@@ -173,12 +173,13 @@ def init_tuners_db():
         except sqlite3.OperationalError:
             pass
 
-        # Clear appearance fields that are not applicable to the weather channel.
-        # This removes any stale test_text / color values (e.g. "This is test Text!")
-        # from existing databases so they are never shown on the overlay.
-        for _wkey in ('text_color', 'bg_color', 'test_text'):
+        # Remove the test banner feature entirely: delete the global overlay.test_text key
+        # and the per-channel test_text keys for all virtual channels.  This clears any
+        # stale "This is test Text!" values that were stored during early development.
+        c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status'):
             c.execute("DELETE FROM settings WHERE key=?",
-                      (f"overlay.virtual.weather.{_wkey}",))
+                      (f"overlay.{_ch_id}.test_text",))
         conn.commit()
 
         # bootstrap if empty
