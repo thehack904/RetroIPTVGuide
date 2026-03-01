@@ -92,32 +92,12 @@
         </div>
       </section>
 
-      <!-- Tabs: Tuners | Add Tuner | Edit Tuner | Combined Tuners -->
+      <!-- Tabs: Add Tuner | Edit Tuner | Combined Tuners -->
       <section class="card" aria-label="Tuner configuration tabs">
         <div class="tab-nav" role="tablist">
-          <button class="tab-btn" role="tab" aria-selected="false" data-tab="tab-tuners">Tuners</button>
           <button class="tab-btn tab-btn-active" role="tab" aria-selected="true" data-tab="tab-add">Add Tuner</button>
           <button class="tab-btn" role="tab" aria-selected="false" data-tab="tab-edit">Edit Tuner</button>
           <button class="tab-btn" role="tab" aria-selected="false" data-tab="tab-combined">Combined Tuners</button>
-        </div>
-
-        <!-- Tab: Tuners (list) -->
-        <div class="tab-panel" id="tab-tuners" hidden>
-          <div class="card-body">
-            <p class="muted small" style="margin:0 0 10px;">Select and manage your configured tuners below.</p>
-            <form method="POST" class="compact-form" id="form-switch-tab">
-              <input type="hidden" name="action" value="switch_tuner">
-              <label for="tuner-tab-select">Active Tuner</label>
-              <select name="tuner" id="tuner-tab-select" required>
-                {% for tuner in tuners %}
-                <option value="{{ tuner }}" {% if tuner == current_tuner %}selected{% endif %}>{{ tuner }}</option>
-                {% endfor %}
-              </select>
-              <div class="form-row form-row-inline">
-                <button type="submit" class="primary">Set Active Tuner</button>
-              </div>
-            </form>
-          </div>
         </div>
 
         <!-- Tab: Add Tuner -->
