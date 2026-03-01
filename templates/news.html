@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV News</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #07124a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ────────────────────────────────────────────── */
+    .nw-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1535cc 0%, #0c22a0 35%, #081870 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .nw-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.05) 3px,
+        rgba(0,0,0,0.05) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .nw-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 1.2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(48px, 8.5vw, 100px);
+    }
+
+    .nw-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+    }
+
+    .nw-globe {
+      font-size: clamp(24px, 4vw, 52px);
+      line-height: 1;
+    }
+
+    .nw-brand {
+      font-size: clamp(18px, 3vw, 40px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .nw-brand strong {
+      font-weight: 900;
+    }
+
+    .nw-header-right {
+      font-size: clamp(18px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    /* ── Body area ──────────────────────────────────────────────── */
+    .nw-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 0.46fr;
+      gap: 0.5em;
+      padding: 0.55em 0.7em 0.35em;
+      min-height: 0;
+    }
+
+    /* ── Left (top story) panel ─────────────────────────────────── */
+    .nw-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.6);
+    }
+
+    .nw-top-story-label {
+      background: transparent;
+      padding: 0.28em 0.65em 0.12em;
+      font-size: clamp(11px, 1.6vw, 20px);
+      font-style: italic;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .nw-headline-bar {
+      background: linear-gradient(90deg, #8b0000 0%, #b20000 55%, #800000 100%);
+      padding: 0.3em 0.65em;
+    }
+
+    .nw-headline-text {
+      font-size: clamp(13px, 2.1vw, 28px);
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #fff;
+      line-height: 1.15;
+    }
+
+    .nw-main-image {
+      flex: 1;
+      background: #0a1a5a;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .nw-main-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .nw-summary-box {
+      background: rgba(6, 20, 90, 0.85);
+      border-top: 2px solid #3a5ccc;
+      padding: 0.5em 0.75em;
+    }
+
+    .nw-summary-text {
+      font-size: clamp(9px, 1.25vw, 16px);
+      font-weight: 400;
+      line-height: 1.5;
+      color: #e8eeff;
+    }
+
+    /* ── Right (headlines) panel ────────────────────────────────── */
+    .nw-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
+    }
+
+    .nw-item {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      min-height: 0;
+    }
+
+    .nw-item-img {
+      width: clamp(80px, 9.5vw, 130px);
+      flex-shrink: 0;
+      background: #071460;
+      overflow: hidden;
+    }
+
+    .nw-item-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .nw-item-text {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 0.3em 0.55em;
+    }
+
+    .nw-item-title {
+      font-size: clamp(9px, 1.3vw, 17px);
+      font-weight: 700;
+      line-height: 1.3;
+      color: #fff;
+    }
+
+    /* ── Breaking news ticker ───────────────────────────────────── */
+    .nw-ticker-bar {
+      background: #04091f;
+      border-top: 2px solid #3a5ccc;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4.2vw, 50px);
+    }
+
+    .nw-ticker-label {
+      background: #0a0e2a;
+      color: #ffd700;
+      font-size: clamp(10px, 1.5vw, 18px);
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.75em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #3a5ccc;
+    }
+
+    .nw-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .nw-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: nw-scroll 32s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes nw-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error state ─────────────────────────────────── */
+    .nw-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="nw-frame" id="nwFrame">
+  <div class="nw-loading" id="nwLoading">Loading news&#8230;</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const FALLBACK_IMG = 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 160 90%22%3E%3Crect width%3D%22160%22 height%3D%2290%22 fill%3D%22%230a1a70%22%2F%3E%3Ctext x%3D%2280%22 y%3D%2250%22 text-anchor%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2212%22 fill%3D%22%234060cc%22%3ENo Image%3C%2Ftext%3E%3C%2Fsvg%3E';
+  const REFRESH_MS   = 5 * 60 * 1000;  // 5 minutes
+  const SUMMARY_MAX  = 220;             // max characters for top-story summary
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function imgTag(url, alt) {
+    const src = url && url.trim() ? esc(url) : FALLBACK_IMG;
+    return `<img src="${src}" alt="${esc(alt)}" onerror="this.src='${FALLBACK_IMG}'">`;
+  }
+
+  function build(data) {
+    const frame     = document.getElementById('nwFrame');
+    const headlines = Array.isArray(data.headlines) ? data.headlines : [];
+
+    const top       = headlines[0] || null;
+    const sideItems = headlines.slice(1, 6);   // up to 5 sidebar items
+    const tickItems = headlines.slice(0, 10);  // up to 10 for ticker
+
+    // Ticker text
+    const tickText = tickItems.length
+      ? tickItems.map(h => h.title).join(' \u2022 ') + ' \u2022 '
+      : 'No headlines available \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    // Sidebar items — pad to 5 if fewer available
+    const sideRows = [];
+    for (let i = 0; i < 5; i++) {
+      const h = sideItems[i];
+      if (h) {
+        sideRows.push(`
+          <div class="nw-item">
+            <div class="nw-item-img">${imgTag(h.image, h.title)}</div>
+            <div class="nw-item-text">
+              <div class="nw-item-title">${esc(h.title)}</div>
+            </div>
+          </div>`);
+      } else {
+        sideRows.push(`<div class="nw-item" style="opacity:.3"></div>`);
+      }
+    }
+
+    // Top story
+    let topStoryHtml = '';
+    if (top) {
+      const rawSummary = top.summary || '';
+      const truncated = rawSummary.length > SUMMARY_MAX
+        ? rawSummary.substring(0, SUMMARY_MAX) + '\u2026'
+        : rawSummary;
+      const summary = esc(truncated);
+      topStoryHtml = `
+        <div class="nw-top-story-label">Top Story</div>
+        <div class="nw-headline-bar">
+          <div class="nw-headline-text">${esc(top.title)}</div>
+        </div>
+        <div class="nw-main-image">${imgTag(top.image, top.title)}</div>
+        ${summary ? `<div class="nw-summary-box"><div class="nw-summary-text">${summary}</div></div>` : ''}`;
+    } else {
+      topStoryHtml = `<div class="nw-loading" style="flex:1">No stories available.</div>`;
+    }
+
+    const html = `
+      <!-- Header -->
+      <div class="nw-header">
+        <div class="nw-header-left">
+          <span class="nw-globe">🌐</span>
+          <span class="nw-brand">RetroIPTV <strong>News</strong></span>
+        </div>
+        <div class="nw-header-right">Latest Headlines</div>
+      </div>
+      <!-- Body -->
+      <div class="nw-body">
+        <!-- Top story -->
+        <div class="nw-main">${topStoryHtml}</div>
+        <!-- Sidebar headlines -->
+        <div class="nw-sidebar">${sideRows.join('')}</div>
+      </div>
+      <!-- Ticker -->
+      <div class="nw-ticker-bar">
+        <div class="nw-ticker-label">Breaking News:</div>
+        <div class="nw-ticker-scroll">
+          <span class="nw-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    frame.innerHTML = html;
+  }
+
+  async function load() {
+    try {
+      const resp = await fetch('/api/news');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      build(data);
+    } catch (e) {
+      const frame = document.getElementById('nwFrame');
+      frame.innerHTML = `<div class="nw-loading">Unable to load news data.</div>`;
+    }
+  }
+
+  load();
+  setInterval(load, REFRESH_MS);
+})();
+</script>
+</body>
+</html>

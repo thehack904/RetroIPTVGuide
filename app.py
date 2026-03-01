@@ -1069,10 +1069,68 @@ def _build_weather_payload(cfg):
 
 _RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
 
+def _strip_html_tags(text):
+    """Remove HTML tags from a string, returning plain text."""
+    return re.sub(r'<[^>]+>', '', text or '').strip()
+
+def _extract_rss_image(element):
+    """Extract the best image URL from an RSS <item> or Atom <entry> element.
+
+    Checks (in priority order):
+      1. <media:content medium="image"> or type starting with "image/"
+      2. <media:thumbnail>
+      3. <enclosure type="image/...">
+      4. First <img src="..."> found inside <description> or <content>
+    Returns empty string when no image is found.
+    """
+    _MEDIA_NS = 'http://search.yahoo.com/mrss/'
+
+    # 1. media:content
+    for mc in element.findall(f'{{{_MEDIA_NS}}}content'):
+        medium = mc.get('medium', '')
+        ctype  = mc.get('type', '')
+        url    = mc.get('url', '').strip()
+        if url and (medium == 'image' or ctype.startswith('image/')):
+            return url
+    # also accept any media:content with an image url if medium/type not set
+    for mc in element.findall(f'{{{_MEDIA_NS}}}content'):
+        url = mc.get('url', '').strip()
+        if url and re.search(r'\.(jpe?g|png|gif|webp)(\?|$)', url, re.IGNORECASE):
+            return url
+
+    # 2. media:thumbnail
+    mt = element.find(f'{{{_MEDIA_NS}}}thumbnail')
+    if mt is not None:
+        url = mt.get('url', '').strip()
+        if url:
+            return url
+
+    # 3. enclosure
+    enc = element.find('enclosure')
+    if enc is not None:
+        ctype = enc.get('type', '')
+        url   = enc.get('url', '').strip()
+        if url and ctype.startswith('image/'):
+            return url
+
+    # 4. First <img src> in description / content / summary
+    for tag_name in ('description', 'content', 'summary',
+                     '{http://www.w3.org/2005/Atom}summary',
+                     '{http://www.w3.org/2005/Atom}content'):
+        el = element.find(tag_name)
+        if el is not None:
+            text = el.text or ''
+            m = re.search(r'<img\s[^>]*src=["\']([^"\']+)["\']', text, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+
+    return ''
+
+
 def fetch_rss_headlines(feed_url, max_items=20):
     """Fetch a RSS 2.0 or Atom feed and return a list of headline dicts.
 
-    Each item: {'title': str, 'source': str, 'url': str, 'ts': ISO8601 str}
+    Each item: {'title': str, 'source': str, 'url': str, 'ts': ISO8601 str, 'image': str, 'summary': str}
     Returns empty list on any error (non-throwing).
     """
     try:
@@ -1102,8 +1160,11 @@ def fetch_rss_headlines(feed_url, max_items=20):
             link = (link_el.get('href', '') if link_el is not None else '').strip()
             ts_el = entry.find('{http://www.w3.org/2005/Atom}updated') or entry.find('{http://www.w3.org/2005/Atom}published')
             ts = (ts_el.text or '').strip() if ts_el is not None else ''
+            summary_el = entry.find('{http://www.w3.org/2005/Atom}summary') or entry.find('{http://www.w3.org/2005/Atom}content')
+            summary = _strip_html_tags((summary_el.text or '') if summary_el is not None else '')
+            image = _extract_rss_image(entry)
             if title:
-                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts, 'image': image, 'summary': summary})
     else:
         # RSS 2.0 / RSS 1.0
         channel = root.find('channel') or root
@@ -1118,8 +1179,11 @@ def fetch_rss_headlines(feed_url, max_items=20):
             link = (link_el.text or '').strip() if link_el is not None else ''
             pub_el = item.find('pubDate')
             ts = (pub_el.text or '').strip() if pub_el is not None else ''
+            desc_el = item.find('description')
+            summary = _strip_html_tags((desc_el.text or '') if desc_el is not None else '')
+            image = _extract_rss_image(item)
             if title:
-                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts})
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts, 'image': image, 'summary': summary})
 
     return items
 
@@ -2086,6 +2150,13 @@ def api_news():
         "updated": datetime.now(timezone.utc).isoformat(),
         "headlines": headlines,
     })
+
+@app.route('/news')
+@login_required
+def news_page():
+    """Retro TV news overlay page."""
+    log_event(current_user.username, "Loaded news page")
+    return render_template('news.html')
 
 @app.route('/weather')
 @login_required
