@@ -313,6 +313,15 @@ class TestChangeTunerWeatherSettings:
         assert b'ch_weather_lon'      in resp.data
         assert b'ch_weather_units'    in resp.data
 
+    def test_zip_lookup_field_in_change_tuner_page(self, client):
+        """Zip code lookup field and button should be present in the weather panel."""
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/change_tuner')
+        assert resp.status_code == 200
+        assert b'vc-zip-input'      in resp.data
+        assert b'vc-zip-lookup-btn' in resp.data
+        assert b'zippopotam.us'     in resp.data
+
     def test_preview_weather_link_present(self, client):
         login(client, 'admin', 'adminpass')
         resp = client.get('/change_tuner')

@@ -375,6 +375,13 @@ button:focus, select:focus, input:focus, textarea:focus {
   width: 100%;
 }
 
+.zip-status {
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+.zip-status-ok    { color: #2a9d2a; }
+.zip-status-error { color: #c0392b; }
+
 
 /* Responsive                                                              */
 /* ====================================================================== */
