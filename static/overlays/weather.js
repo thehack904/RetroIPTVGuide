@@ -1,19 +1,24 @@
-/* Weather overlay renderer (v3)
+/* Weather overlay renderer (v4)
  * Renders the full retro TV weather broadcast layout into the virtual channel
  * overlay, matching the /weather standalone page design.
+ * Compact: base font-size is set proportional to the container width in JS so
+ * every em-based value scales together, making the overlay legible even in a
+ * small player without needing to expand it.
  * Endpoint: GET /api/weather
  */
 (function () {
   'use strict';
   const TYPE      = 'weather';
-  const STYLE_ID  = 'vc-weather-overlay-styles';
+  const STYLE_ID  = 'vc-weather-overlay-styles-v4';
   const SVG_ID    = 'vc-weather-overlay-svgs';
 
-  // ── CSS: adapted from weather.html — .wx-frame fills the overlay container ─
+  // ── CSS: all sizes in em so they scale with the container-width-driven
+  //         font-size injected by render() onto .vc-wx-frame ─────────────────
   const CSS = `
     .vc-wx-frame {
       position: absolute;
       inset: 0;
+      /* font-size set dynamically in JS proportional to container width */
       background: linear-gradient(160deg, #1030c8 0%, #0a1a80 40%, #081060 100%);
       display: flex;
       flex-direction: column;
@@ -32,25 +37,25 @@
     }
     .vc-wx-header {
       background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
-      border-bottom: 3px solid #4a70ff;
-      padding: 0.6em 1.2em;
+      border-bottom: 2px solid #4a70ff;
+      padding: 0.28em 0.8em;
       display: flex;
       align-items: center;
-      gap: 1em;
+      gap: 0.6em;
       flex-shrink: 0;
     }
     .vc-wx-header-title {
-      font-size: clamp(14px, 2.8vw, 36px);
+      font-size: 1.35em;
       font-weight: 900;
       letter-spacing: 0.04em;
       text-transform: uppercase;
       color: #fff;
       display: flex;
       align-items: center;
-      gap: 0.3em;
+      gap: 0.25em;
     }
     .vc-wx-header-subtitle {
-      font-size: clamp(12px, 2.2vw, 30px);
+      font-size: 1.1em;
       font-weight: 900;
       letter-spacing: 0.06em;
       text-transform: uppercase;
@@ -58,11 +63,11 @@
       margin-left: auto;
     }
     .vc-wx-updated {
-      font-size: clamp(9px, 1.2vw, 15px);
+      font-size: 0.75em;
       font-weight: 700;
       color: #ffd700;
       text-align: right;
-      padding: 0.2em 1.2em 0;
+      padding: 0.15em 0.8em 0;
       flex-shrink: 0;
     }
     .vc-wx-body {
@@ -70,52 +75,52 @@
       display: grid;
       grid-template-columns: 1fr 2.2fr;
       grid-template-rows: 1fr auto;
-      gap: 0.5em;
-      padding: 0.5em 0.7em 0.3em;
+      gap: 0.3em;
+      padding: 0.3em 0.45em 0.2em;
       min-height: 0;
     }
     .vc-wx-box {
       background: rgba(10,40,170,0.75);
-      border: 2px solid #3058d8;
-      border-radius: 4px;
-      padding: 0.5em 0.7em;
-      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.5);
+      border: 1px solid #3058d8;
+      border-radius: 3px;
+      padding: 0.28em 0.45em;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 6px rgba(0,0,0,0.4);
       display: flex;
       flex-direction: column;
     }
     .vc-wx-box-title {
-      font-size: clamp(9px, 1.1vw, 14px);
+      font-size: 0.76em;
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #c8d8ff;
       border-bottom: 1px solid #3058d8;
-      padding-bottom: 0.3em;
-      margin-bottom: 0.4em;
+      padding-bottom: 0.2em;
+      margin-bottom: 0.25em;
+      white-space: nowrap;
     }
     .vc-wx-current { grid-column: 1; grid-row: 1; }
     .vc-wx-current-icon {
-      font-size: clamp(32px, 5.5vw, 72px);
       line-height: 1;
       text-align: center;
-      margin: 0.1em 0;
+      margin: 0.05em 0;
     }
     .vc-wx-current-temp {
-      font-size: clamp(26px, 4.5vw, 60px);
+      font-size: 2.5em;
       font-weight: 900;
       text-align: center;
       line-height: 1;
-      margin: 0.1em 0;
+      margin: 0.05em 0;
     }
     .vc-wx-current-cond {
-      font-size: clamp(10px, 1.3vw, 18px);
+      font-size: 0.85em;
       font-weight: 700;
       text-align: center;
-      margin-bottom: 0.4em;
+      margin-bottom: 0.2em;
     }
     .vc-wx-current-details {
-      font-size: clamp(8px, 1vw, 13px);
-      line-height: 1.7;
+      font-size: 0.72em;
+      line-height: 1.5;
       color: #d0e0ff;
       margin-top: auto;
     }
@@ -131,32 +136,31 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 0.2em 0.4em;
+      padding: 0.1em 0.25em;
     }
     .vc-wx-period + .vc-wx-period { border-left: 1px solid #3058d8; }
     .vc-wx-period-label {
-      font-size: clamp(8px, 1.1vw, 14px);
+      font-size: 0.72em;
       font-weight: 700;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #c8d8ff;
-      margin-bottom: 0.2em;
+      margin-bottom: 0.1em;
     }
     .vc-wx-period-icon {
-      font-size: clamp(22px, 3.5vw, 50px);
       line-height: 1;
-      margin: 0.15em 0;
+      margin: 0.08em 0;
     }
     .vc-wx-period-temp {
-      font-size: clamp(18px, 3vw, 42px);
+      font-size: 1.9em;
       font-weight: 900;
       line-height: 1;
     }
     .vc-wx-period-cond {
-      font-size: clamp(8px, 1vw, 12px);
+      font-size: 0.68em;
       font-weight: 700;
       text-align: center;
-      margin-top: 0.2em;
+      margin-top: 0.1em;
       color: #d0e0ff;
     }
     .vc-wx-extended { grid-column: 1 / -1; grid-row: 2; }
@@ -170,48 +174,47 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 0.2em 0.4em;
+      padding: 0.1em 0.25em;
     }
     .vc-wx-ext-day + .vc-wx-ext-day { border-left: 1px solid #3058d8; }
     .vc-wx-ext-dow {
-      font-size: clamp(9px, 1.2vw, 15px);
+      font-size: 0.76em;
       font-weight: 700;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       color: #c8d8ff;
     }
     .vc-wx-ext-icon {
-      font-size: clamp(18px, 2.6vw, 36px);
       line-height: 1;
-      margin: 0.1em 0;
+      margin: 0.06em 0;
     }
     .vc-wx-ext-temps {
-      font-size: clamp(10px, 1.3vw, 17px);
+      font-size: 0.9em;
       font-weight: 900;
     }
     .vc-wx-ext-cond {
-      font-size: clamp(7px, 0.9vw, 11px);
+      font-size: 0.65em;
       font-weight: 700;
       color: #d0e0ff;
       text-align: center;
     }
     .vc-wx-ticker-bar {
       background: #0a0e2a;
-      border-top: 2px solid #4a70ff;
+      border-top: 1px solid #4a70ff;
       display: flex;
       align-items: center;
       overflow: hidden;
       flex-shrink: 0;
-      height: clamp(22px, 3.2vw, 38px);
+      height: 1.7em;
     }
     .vc-wx-ticker-label {
       background: #ffd700;
       color: #0a0e2a;
-      font-size: clamp(8px, 1.1vw, 14px);
+      font-size: 0.75em;
       font-weight: 900;
       letter-spacing: 0.05em;
       text-transform: uppercase;
-      padding: 0 0.7em;
+      padding: 0 0.55em;
       white-space: nowrap;
       height: 100%;
       display: flex;
@@ -228,7 +231,7 @@
     .vc-wx-ticker-track {
       display: inline-block;
       white-space: nowrap;
-      font-size: clamp(8px, 1.1vw, 13px);
+      font-size: 0.72em;
       font-weight: 700;
       color: #ffd700;
       animation: vc-wx-scroll 28s linear infinite;
@@ -237,15 +240,6 @@
     @keyframes vc-wx-scroll {
       from { transform: translateX(0); }
       to   { transform: translateX(-100%); }
-    }
-    .vc-wx-loading {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex: 1;
-      font-size: clamp(12px, 1.6vw, 20px);
-      color: #90a8f0;
-      letter-spacing: 0.1em;
     }
     .vc-wx-svg { display: inline-block; vertical-align: middle; }
     .vc-wx-ext-lo { opacity: 0.7; }
@@ -383,6 +377,18 @@
     }
   }
 
+  // Font-size scaling: base px = container_width / FONT_SCALE_DIVISOR, clamped
+  // to [FONT_MIN_PX, FONT_MAX_PX].  All em values in CSS scale together.
+  const FONT_SCALE_DIVISOR = 48;
+  const FONT_MIN_PX        = 9;
+  const FONT_MAX_PX        = 13;
+
+  // Icon sizes as multiples of the base font (px)
+  const ICON_RATIO_LG  = 3.2;   // current conditions
+  const ICON_RATIO_MD  = 2.4;   // today periods
+  const ICON_RATIO_SM  = 1.9;   // extended days
+  const ICON_RATIO_HDR = 1.4;   // header icon
+
   function iconSvg(key, size) {
     const sym = ICON_MAP[key] || 'vc-icon-cloudy';
     return `<svg class="vc-wx-svg" width="${size}" height="${size}"><use href="#${sym}"/></svg>`;
@@ -409,11 +415,17 @@
     const ext   = Array.isArray(data?.extended) ? data.extended : [];
     const ticks = Array.isArray(data?.ticker)   ? data.ticker   : [];
 
-    // Icon sizes relative to the container width
-    const fw     = root.offsetWidth || 960;
-    const iconLg = Math.round(fw * 0.09);
-    const iconMd = Math.round(fw * 0.07);
-    const iconSm = Math.round(fw * 0.055);
+    // Base font-size drives all em values — scales with container width so the
+    // overlay is legible at small player sizes without needing to expand it.
+    const fw          = root.offsetWidth || 960;
+    const baseFontPx  = Math.max(FONT_MIN_PX, Math.min(fw / FONT_SCALE_DIVISOR, FONT_MAX_PX));
+    frame.style.fontSize = baseFontPx + 'px';
+
+    // Icon sizes in px, proportional to base font
+    const iconLg  = Math.round(baseFontPx * ICON_RATIO_LG);   // current conditions
+    const iconMd  = Math.round(baseFontPx * ICON_RATIO_MD);   // today periods
+    const iconSm  = Math.round(baseFontPx * ICON_RATIO_SM);   // extended days
+    const iconHdr = Math.round(baseFontPx * ICON_RATIO_HDR);  // header icon
 
     // Today periods
     const periodCols = today.map(p => `
@@ -448,7 +460,7 @@
       <div class="vc-wx-header">
         <div class="vc-wx-header-title">
           <span>RetroIPTV</span>
-          ${iconSvg('partly_cloudy', Math.round(fw * 0.045))}
+          ${iconSvg('partly_cloudy', iconHdr)}
           <span>Weather</span>
         </div>
         <div class="vc-wx-header-subtitle">Local Forecast</div>
