@@ -110,7 +110,7 @@ body.light .container-change-tuner {
 /* ====================================================================== */
 .card-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 18px;
 }
 .card-danger { grid-column: 1 / -1; }
@@ -259,8 +259,68 @@ button:focus, select:focus, input:focus, textarea:focus {
 }
 
 /* ====================================================================== */
+/* Virtual Channels column                                                 */
+/* ====================================================================== */
+.vc-channel-list {
+  display: grid;
+  gap: 10px;
+}
+
+.vc-toggle-label {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--panel-border);
+  background: var(--input-bg);
+  cursor: pointer;
+  transition: background .12s ease, border-color .12s ease;
+}
+
+.vc-toggle-label:hover {
+  border-color: color-mix(in srgb, var(--primary-color) 40%, transparent 60%);
+  background: color-mix(in srgb, var(--input-bg) 85%, var(--primary-color) 8%);
+}
+
+.vc-toggle-label input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.vc-toggle-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--label-color);
+}
+
+.vc-logo {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.vc-type {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+}
+
+/* ====================================================================== */
 /* Responsive                                                              */
 /* ====================================================================== */
+@media (max-width: 1100px) {
+  .card-grid { grid-template-columns: 1fr 1fr; }
+}
+
 @media (max-width: 920px) {
   .card-grid { grid-template-columns: 1fr; }
   .subgrid { grid-template-columns: 1fr; }

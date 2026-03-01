@@ -9,7 +9,9 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module
-from app import app, init_db, init_tuners_db, get_virtual_channels, get_virtual_epg, VIRTUAL_CHANNELS
+from app import (app, init_db, init_tuners_db, get_virtual_channels, get_virtual_epg,
+                 get_virtual_channel_settings, save_virtual_channel_settings,
+                 VIRTUAL_CHANNELS)
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -24,6 +26,7 @@ def isolated_db(tmp_path, monkeypatch):
     init_tuners_db()
     from app import add_user
     add_user("testuser", "testpass")
+    add_user("admin", "adminpass")
     yield users_db
 
 
@@ -34,8 +37,8 @@ def client(isolated_db):
         yield c
 
 
-def login(client):
-    return client.post("/login", data={"username": "testuser", "password": "testpass"},
+def login(client, username="testuser", password="testpass"):
+    return client.post("/login", data={"username": username, "password": password},
                        follow_redirects=True)
 
 
@@ -119,6 +122,123 @@ class TestGetVirtualEpg:
                 assert duration == 3600, f"{tvg_id} slot duration is not 1 hour"
 
 
+# ─── get/save_virtual_channel_settings ───────────────────────────────────────
+
+class TestVirtualChannelSettings:
+    def test_defaults_all_enabled(self):
+        settings = get_virtual_channel_settings()
+        for ch in VIRTUAL_CHANNELS:
+            assert settings.get(ch["tvg_id"]) is True
+
+    def test_save_and_reload(self):
+        save_virtual_channel_settings({
+            "virtual.news": False,
+            "virtual.weather": True,
+            "virtual.status": False,
+        })
+        settings = get_virtual_channel_settings()
+        assert settings["virtual.news"] is False
+        assert settings["virtual.weather"] is True
+        assert settings["virtual.status"] is False
+
+    def test_partial_save_keeps_others_at_default(self):
+        save_virtual_channel_settings({"virtual.news": False})
+        settings = get_virtual_channel_settings()
+        assert settings["virtual.news"] is False
+        # others not saved, so still default True
+        assert settings["virtual.weather"] is True
+        assert settings["virtual.status"] is True
+
+    def test_re_enable_after_disable(self):
+        save_virtual_channel_settings({"virtual.news": False})
+        save_virtual_channel_settings({"virtual.news": True})
+        settings = get_virtual_channel_settings()
+        assert settings["virtual.news"] is True
+
+
+# ─── /change_tuner update_virtual_channels action ───────────────────────────
+
+class TestChangeTunerVirtualChannels:
+    def test_non_admin_cannot_access_change_tuner(self, client):
+        login(client, "testuser", "testpass")
+        resp = client.get("/change_tuner")
+        # non-admin should be redirected to guide
+        assert resp.status_code in (302, 200)
+        # If it redirected, it went to /guide, not the tuner page
+        if resp.status_code == 302:
+            assert "guide" in resp.headers.get("Location", "")
+
+    def test_admin_can_access_change_tuner(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get("/change_tuner")
+        assert resp.status_code == 200
+
+    def test_virtual_channels_section_in_page(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get("/change_tuner")
+        assert b"Virtual Channels" in resp.data
+
+    def test_admin_can_disable_virtual_channel(self, client):
+        login(client, "admin", "adminpass")
+        # Disable news, enable weather and status
+        resp = client.post("/change_tuner", data={
+            "action": "update_virtual_channels",
+            "vc_virtual.news": "0",
+            "vc_virtual.weather": "1",
+            "vc_virtual.status": "1",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        settings = get_virtual_channel_settings()
+        assert settings["virtual.news"] is False
+        assert settings["virtual.weather"] is True
+        assert settings["virtual.status"] is True
+
+    def test_admin_can_enable_all_virtual_channels(self, client):
+        # First disable all
+        save_virtual_channel_settings({
+            "virtual.news": False,
+            "virtual.weather": False,
+            "virtual.status": False,
+        })
+        login(client, "admin", "adminpass")
+        resp = client.post("/change_tuner", data={
+            "action": "update_virtual_channels",
+            "vc_virtual.news": "1",
+            "vc_virtual.weather": "1",
+            "vc_virtual.status": "1",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        settings = get_virtual_channel_settings()
+        assert all(settings[ch["tvg_id"]] for ch in VIRTUAL_CHANNELS)
+
+    def test_disabled_channel_not_shown_in_guide(self, client):
+        """When a virtual channel is disabled it should not appear in the guide."""
+        save_virtual_channel_settings({
+            "virtual.news": False,
+            "virtual.weather": False,
+            "virtual.status": False,
+        })
+        login(client, "admin", "adminpass")
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b"News Now" not in resp.data
+        assert b"Weather Now" not in resp.data
+        assert b"System Status" not in resp.data
+
+    def test_enabled_channel_shown_in_guide(self, client):
+        """When a virtual channel is enabled it should appear in the guide."""
+        save_virtual_channel_settings({
+            "virtual.news": True,
+            "virtual.weather": False,
+            "virtual.status": False,
+        })
+        login(client, "admin", "adminpass")
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b"News Now" in resp.data
+        assert b"Weather Now" not in resp.data
+
+
 # ─── /api/news ───────────────────────────────────────────────────────────────
 
 class TestApiNews:
@@ -199,3 +319,5 @@ class TestApiVirtualStatus:
         login(client)
         data = client.get("/api/virtual/status").get_json()
         assert "updated" in data
+
+

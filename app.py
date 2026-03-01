@@ -617,6 +617,37 @@ VIRTUAL_CHANNELS = [
     },
 ]
 
+def get_virtual_channel_settings():
+    """Return a dict mapping each virtual channel tvg_id to its enabled state (bool).
+    Defaults to True (enabled) when no setting has been persisted yet."""
+    defaults = {ch['tvg_id']: True for ch in VIRTUAL_CHANNELS}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id in defaults:
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("SELECT value FROM settings WHERE key=?", (key,))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[tvg_id] = row[0] == "1"
+    except Exception:
+        logging.exception("get_virtual_channel_settings failed, using defaults")
+    return defaults
+
+def save_virtual_channel_settings(settings_dict):
+    """Persist virtual channel enabled states.  settings_dict maps tvg_id -> bool."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id, enabled in settings_dict.items():
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (key, "1" if enabled else "0"))
+            conn.commit()
+    except Exception:
+        logging.exception("save_virtual_channel_settings failed")
+        raise
+
 def get_virtual_channels():
     """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
     import copy
@@ -1140,6 +1171,19 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
+        elif action == "update_virtual_channels":
+            new_settings = {}
+            for ch in VIRTUAL_CHANNELS:
+                tvg_id = ch['tvg_id']
+                # A hidden input always submits "0"; the checkbox overrides it with "1" when checked
+                new_settings[tvg_id] = request.form.get(f"vc_{tvg_id}", "0") == "1"
+            try:
+                save_virtual_channel_settings(new_settings)
+                log_event(current_user.username, "Updated virtual channel settings")
+                flash("Virtual channel settings saved.", "success")
+            except Exception:
+                flash("Failed to save virtual channel settings.", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -1160,6 +1204,8 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    vc_settings = get_virtual_channel_settings()
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
@@ -1168,7 +1214,9 @@ def change_tuner():
         TUNERS=tuners,
         auto_refresh_enabled=auto_refresh_enabled,
         auto_refresh_interval_hours=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh
+        last_auto_refresh=last_auto_refresh,
+        VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
+        vc_settings=vc_settings,
     )
 
 @app.route('/guide')
@@ -1205,6 +1253,8 @@ def guide():
     user_default_theme = user_prefs.get("default_theme") or None
 
     virtual_ch = get_virtual_channels()
+    vc_settings = get_virtual_channel_settings()
+    virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch['tvg_id'], True)]
     virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
     all_channels = virtual_ch + cached_channels
     all_epg = {**virtual_epg, **cached_epg}
