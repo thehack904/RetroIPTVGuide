@@ -609,7 +609,7 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       build(data);
-      applyMusic(data.music_file || '');
+      applyMusic(new URLSearchParams(window.location.search).get('embedded') ? '' : (data.music_file || ''));
     } catch (e) {
       const frame = document.getElementById('wxFrame');
       frame.innerHTML = `<div class="wx-loading">Unable to load weather data.</div>`;

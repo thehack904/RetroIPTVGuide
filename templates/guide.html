@@ -122,9 +122,13 @@
         font-size: 16px;
         line-height: 1;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
     }
     .vc-fs-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    .vc-fs-btn.vc-fs-btn-fade { opacity: 0; pointer-events: none; }
+    /* Mute button sits to the left of the FS button */
+    #vcMuteBtn { right: 48px; }
     /* Fill wrapper + overlay when in fullscreen (fallback for overlay types without a standalone page) */
     #videoPlayerWrap:fullscreen,
     #videoPlayerWrap:-webkit-full-screen {
@@ -162,9 +166,38 @@
         font-size: 18px;
         line-height: 1;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
     }
     #vcFsOverlayClose:hover { background: rgba(0, 0, 0, 0.95); }
+    #vcFsOverlayClose.vc-fs-overlay-close-fade { opacity: 0; pointer-events: none; }
+    #vcFsOverlayMute {
+        position: absolute;
+        top: 12px;
+        right: 70px;
+        z-index: 9110;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 14px;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
+    }
+    #vcFsOverlayMute:hover { background: rgba(0, 0, 0, 0.95); }
+    #vcFsOverlayMute.vc-fs-overlay-close-fade { opacity: 0; pointer-events: none; }
+    /* Transparent layer that captures mouse events when the iframe would swallow them */
+    #vcFsMouseTrap {
+        position: absolute;
+        inset: 0;
+        z-index: 9108;
+        pointer-events: none;
+        cursor: default;
+    }
+    #vcFsMouseTrap.active { pointer-events: auto; }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -188,6 +221,7 @@
     <div class="video-player-wrap" id="videoPlayerWrap">
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+        <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
         <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
@@ -291,6 +325,11 @@
 let hlsInstance = null;
 let currentChannelId = null;
 let _vcCurrentOverlayType = '';
+let _vcBgMuted = false;
+let _vcFsHideTimer = null;
+let _vcFsLastMove = 0;
+let _vcFsOverlayCloseTimer = null;
+let _vcFsOverlayLastMove = 0;
 
 // ── Background music (virtual channel looped audio) ─────────────────────────
 let _bgAudio = null;
@@ -311,6 +350,7 @@ function startBgMusic(src) {
     _bgAudio = document.createElement('audio');
     _bgAudio.loop = true;
     _bgAudio.volume = 0.5;
+    _bgAudio.muted = _vcBgMuted;
     _bgAudio.src = src;
     const capturedAudio = _bgAudio;
     const unmuteBtn = document.getElementById('unmuteBtn');
@@ -345,14 +385,87 @@ function _exitVcFs() {
     }
 }
 
+function _scheduleVcFsHide(delay) {
+    if (_vcFsHideTimer) clearTimeout(_vcFsHideTimer);
+    _vcFsHideTimer = setTimeout(function () {
+        const btn = document.getElementById('vcFsBtn');
+        if (btn && !btn.hidden) btn.classList.add('vc-fs-btn-fade');
+        const mb = document.getElementById('vcMuteBtn');
+        if (mb && !mb.hidden) mb.classList.add('vc-fs-btn-fade');
+    }, delay);
+}
+
+function _scheduleOverlayCloseFade(delay) {
+    if (_vcFsOverlayCloseTimer) clearTimeout(_vcFsOverlayCloseTimer);
+    _vcFsOverlayCloseTimer = setTimeout(function () {
+        const cb = document.getElementById('vcFsOverlayClose');
+        if (cb) cb.classList.add('vc-fs-overlay-close-fade');
+        const mb = document.getElementById('vcFsOverlayMute');
+        if (mb) mb.classList.add('vc-fs-overlay-close-fade');
+        const trap = document.getElementById('vcFsMouseTrap');
+        if (trap) trap.classList.add('active');
+    }, delay);
+}
+
+function _showOverlayClose() {
+    const trap = document.getElementById('vcFsMouseTrap');
+    if (trap) trap.classList.remove('active');
+    const cb = document.getElementById('vcFsOverlayClose');
+    if (cb) cb.classList.remove('vc-fs-overlay-close-fade');
+    const mb = document.getElementById('vcFsOverlayMute');
+    if (mb) mb.classList.remove('vc-fs-overlay-close-fade');
+    _scheduleOverlayCloseFade(1500);
+}
+
+function _cancelOverlayCloseFade() {
+    if (_vcFsOverlayCloseTimer) { clearTimeout(_vcFsOverlayCloseTimer); _vcFsOverlayCloseTimer = null; }
+    const cb = document.getElementById('vcFsOverlayClose');
+    if (cb) cb.classList.remove('vc-fs-overlay-close-fade');
+    const mb = document.getElementById('vcFsOverlayMute');
+    if (mb) mb.classList.remove('vc-fs-overlay-close-fade');
+    const trap = document.getElementById('vcFsMouseTrap');
+    if (trap) trap.classList.remove('active');
+}
+
+function _updateVcMuteBtn() {
+    const icon = _vcBgMuted ? '🔊' : '🔇';
+    const label = _vcBgMuted ? 'Unmute virtual channel' : 'Mute virtual channel';
+    const title = _vcBgMuted ? 'Unmute' : 'Mute';
+    ['vcMuteBtn', 'vcFsOverlayMute'].forEach(function (id) {
+        const b = document.getElementById(id);
+        if (!b) return;
+        b.textContent = icon;
+        b.setAttribute('aria-label', label);
+        b.title = title;
+    });
+}
+
+function _toggleVcMute() {
+    _vcBgMuted = !_vcBgMuted;
+    if (_bgAudio) _bgAudio.muted = _vcBgMuted;
+    _updateVcMuteBtn();
+}
+
 function showVcFsBtn() {
     const btn = document.getElementById('vcFsBtn');
-    if (btn) btn.hidden = false;
+    if (!btn) return;
+    btn.hidden = false;
+    btn.classList.remove('vc-fs-btn-fade');
+    const mb = document.getElementById('vcMuteBtn');
+    if (mb) { mb.hidden = false; mb.classList.remove('vc-fs-btn-fade'); }
+    _updateVcMuteBtn();
+    _scheduleVcFsHide(3500);
 }
 
 function hideVcFsBtn() {
+    if (_vcFsHideTimer) { clearTimeout(_vcFsHideTimer); _vcFsHideTimer = null; }
     const btn = document.getElementById('vcFsBtn');
-    if (btn) btn.hidden = true;
+    if (btn) {
+        btn.hidden = true;
+        btn.classList.remove('vc-fs-btn-fade');
+    }
+    const mb = document.getElementById('vcMuteBtn');
+    if (mb) { mb.hidden = true; mb.classList.remove('vc-fs-btn-fade'); }
     // Close iframe overlay if active when switching away from a virtual channel.
     const overlay = document.getElementById('vcFsOverlay');
     const iframe  = document.getElementById('vcFsIframe');
@@ -370,7 +483,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const wrap = document.getElementById('videoPlayerWrap');
 
     // Overlay types that have a dedicated standalone page we can iframe in.
-    const VC_PAGE_URL = { news: '/news', weather: '/weather' };
+    // ?embedded=1 tells those pages to suppress their own audio (parent already plays it).
+    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1' };
 
     function fsElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -390,6 +504,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.textContent = '✕';
         btn.title = 'Exit fullscreen';
         btn.setAttribute('aria-label', 'Exit fullscreen');
+        _showOverlayClose();
         // Request true fullscreen on the overlay div so the browser chrome hides
         const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen || overlay.mozRequestFullscreen;
         if (req) {
@@ -399,6 +514,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function closeVcFsOverlay() {
+        _cancelOverlayCloseFade();
         const overlay = document.getElementById('vcFsOverlay');
         const iframe  = document.getElementById('vcFsIframe');
         if (overlay) overlay.classList.add('hidden');
@@ -435,6 +551,24 @@ document.addEventListener('DOMContentLoaded', function () {
     const closeBtn = document.getElementById('vcFsOverlayClose');
     if (closeBtn) closeBtn.addEventListener('click', closeVcFsOverlay);
 
+    const overlayMuteBtn = document.getElementById('vcFsOverlayMute');
+    if (overlayMuteBtn) overlayMuteBtn.addEventListener('click', _toggleVcMute);
+
+    const wrapMuteBtn = document.getElementById('vcMuteBtn');
+    if (wrapMuteBtn) wrapMuteBtn.addEventListener('click', _toggleVcMute);
+
+    _updateVcMuteBtn();  // sync aria-label / title with initial _vcBgMuted state
+
+    // Mouse trap: when the iframe is fullscreen it swallows pointer events.
+    // Activate the transparent trap div after buttons fade so any mouse movement
+    // deactivates it (restoring iframe interaction) and reveals the buttons again.
+    const mouseTrap = document.getElementById('vcFsMouseTrap');
+    if (mouseTrap) {
+        mouseTrap.addEventListener('mousemove', function () {
+            if (isOverlayFsActive()) _showOverlayClose();
+        });
+    }
+
     // Close on ESC when overlay is shown but browser fullscreen was not granted
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape' && isOverlayFsActive() && !fsElement()) {
@@ -446,6 +580,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const fsEl = fsElement();
         // ESC pressed while the iframe overlay was in fullscreen → close overlay cleanly
         if (!fsEl && isOverlayFsActive()) {
+            _cancelOverlayCloseFade();
             const overlay = document.getElementById('vcFsOverlay');
             const iframe  = document.getElementById('vcFsIframe');
             if (overlay) overlay.classList.add('hidden');
@@ -464,6 +599,40 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
+
+    // Auto-hide: show button on mouse activity over the player wrap, hide after idle
+    if (wrap) {
+        wrap.addEventListener('mousemove', function () {
+            if (!btn.hidden) {
+                const now = Date.now();
+                if (now - _vcFsLastMove < 250) return;
+                _vcFsLastMove = now;
+                btn.classList.remove('vc-fs-btn-fade');
+                const mb = document.getElementById('vcMuteBtn');
+                if (mb && !mb.hidden) mb.classList.remove('vc-fs-btn-fade');
+                _scheduleVcFsHide(1500);
+            }
+        });
+        wrap.addEventListener('mouseleave', function () {
+            if (!btn.hidden) _scheduleVcFsHide(1500);
+        });
+    }
+
+    // Auto-hide: show overlay close (✕) button on mouse activity inside the fullscreen overlay
+    const fsOverlay = document.getElementById('vcFsOverlay');
+    if (fsOverlay) {
+        fsOverlay.addEventListener('mousemove', function () {
+            if (isOverlayFsActive()) {
+                const now = Date.now();
+                if (now - _vcFsOverlayLastMove < 250) return;
+                _vcFsOverlayLastMove = now;
+                _showOverlayClose();
+            }
+        });
+        fsOverlay.addEventListener('mouseleave', function () {
+            if (isOverlayFsActive()) _scheduleOverlayCloseFade(1500);
+        });
+    }
 });
 
 /**
@@ -1139,7 +1308,9 @@ document.addEventListener('DOMContentLoaded', () => {
      fullscreen appearance is identical to those standalone pages. Background music keeps
      playing in the parent page (outside this iframe). -->
 <div id="vcFsOverlay" class="hidden" role="dialog" aria-modal="true" aria-label="Virtual channel fullscreen">
+    <button id="vcFsOverlayMute" aria-label="Mute virtual channel" title="Mute">🔇</button>
     <button id="vcFsOverlayClose" aria-label="Close fullscreen">✕</button>
+    <div id="vcFsMouseTrap"></div>
     <iframe id="vcFsIframe" src="" title="Virtual channel" allow="autoplay"></iframe>
 </div>
 </body>
