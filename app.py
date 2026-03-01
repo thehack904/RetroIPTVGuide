@@ -1187,10 +1187,44 @@ def fetch_rss_headlines(feed_url, max_items=20):
 
     return items
 
+def get_virtual_channel_order():
+    """Return the saved tvg_id order list, or None if not set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='virtual_channel.order'")
+            row = c.fetchone()
+            if row:
+                return _json.loads(row[0])
+    except Exception:
+        logging.exception("get_virtual_channel_order failed")
+    return None
+
+def save_virtual_channel_order(order):
+    """Persist virtual channel order.  order is a list of tvg_id strings."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.order', ?)",
+                      (_json.dumps(order),))
+            conn.commit()
+    except Exception:
+        logging.exception("save_virtual_channel_order failed")
+        raise
+
 def get_virtual_channels():
-    """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
+    """Return the list of virtual channel definitions in the user-defined order."""
     import copy
-    return copy.deepcopy(VIRTUAL_CHANNELS)
+    channels = copy.deepcopy(VIRTUAL_CHANNELS)
+    order = get_virtual_channel_order()
+    if order:
+        id_to_ch = {ch['tvg_id']: ch for ch in channels}
+        ordered = [id_to_ch[tvg_id] for tvg_id in order if tvg_id in id_to_ch]
+        # append any channels not present in the saved order (e.g. newly added)
+        seen = set(order)
+        ordered += [ch for ch in channels if ch['tvg_id'] not in seen]
+        return ordered
+    return channels
 
 def get_virtual_epg(grid_start, hours_span=6):
     """Generate synthetic EPG entries for virtual channels spanning the grid window."""
@@ -1722,6 +1756,18 @@ def change_tuner():
                 flash("Virtual channel settings saved.", "success")
             except Exception:
                 flash("Failed to save virtual channel settings.", "warning")
+
+        elif action == "update_virtual_channel_order":
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            raw_order = request.form.getlist('channel_order[]')
+            order = [tid for tid in raw_order if tid in valid_ids]
+            if set(order) == valid_ids:
+                try:
+                    save_virtual_channel_order(order)
+                    return ('', 204)
+                except Exception:
+                    return ('Failed to save channel order', 500)
+            return ('Invalid channel order', 400)
 
         elif action == "update_overlay_appearance":
             appearance = {

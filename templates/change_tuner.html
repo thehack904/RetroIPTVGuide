@@ -759,7 +759,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (selUpdate && selRename) selRename.value = selUpdate.value;
   } catch(e) {}
 
-  // Drag-and-drop channel order (visual only)
+  // Drag-and-drop channel order
   const orderList = document.getElementById('channel-order-list');
   if (orderList) {
     let dragging = null;
@@ -774,6 +774,15 @@ document.addEventListener('DOMContentLoaded', () => {
         const num = item.querySelector('.order-num');
         if (num) num.textContent = i + 1;
       });
+      // Persist the new order to the backend
+      const ids = Array.from(orderList.querySelectorAll('.channel-order-item'))
+                       .map(item => item.dataset.tvgId);
+      const body = new URLSearchParams();
+      body.append('action', 'update_virtual_channel_order');
+      ids.forEach(id => body.append('channel_order[]', id));
+      fetch(window.location.pathname, { method: 'POST', body })
+        .then(r => { if (!r.ok) alert('Failed to save channel order. Please try again.'); })
+        .catch(() => { alert('Failed to save channel order. Please try again.'); });
     });
     orderList.addEventListener('dragover', e => {
       e.preventDefault();
