@@ -108,6 +108,36 @@
         transition: background 0.15s;
     }
     .unmute-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    /* Virtual channel fullscreen button */
+    .vc-fs-btn {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        z-index: 25;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 6px 10px;
+        font-size: 16px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .vc-fs-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    /* Fill wrapper + overlay when in fullscreen */
+    #videoPlayerWrap:fullscreen,
+    #videoPlayerWrap:-webkit-full-screen {
+        width: 100vw !important;
+        height: 100vh !important;
+        background: #000;
+    }
+    #videoPlayerWrap:fullscreen #video,
+    #videoPlayerWrap:-webkit-full-screen #video {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover;
+    }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -131,6 +161,7 @@
     <div class="video-player-wrap" id="videoPlayerWrap">
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
+        <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
@@ -279,6 +310,53 @@ function stopBgMusic() {
     _bgAudioSrc = '';
 }
 
+// ── Virtual channel fullscreen ────────────────────────────────────────────────
+function _exitVcFs() {
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
+    }
+}
+
+function showVcFsBtn() {
+    const btn = document.getElementById('vcFsBtn');
+    if (btn) btn.hidden = false;
+}
+
+function hideVcFsBtn() {
+    const btn = document.getElementById('vcFsBtn');
+    if (btn) btn.hidden = true;
+    // Exit fullscreen if the user switches to a normal channel while fullscreen.
+    _exitVcFs();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const btn = document.getElementById('vcFsBtn');
+    if (!btn) return;
+    const wrap = document.getElementById('videoPlayerWrap');
+
+    btn.addEventListener('click', function () {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            _exitVcFs();
+        } else {
+            const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
+            if (req) {
+                const p = req.call(wrap);
+                if (p && p.catch) p.catch(function (e) { console.warn('[VC FS]', e); });
+            }
+        }
+    });
+
+    function onFsChange() {
+        const isFs = document.fullscreenElement === wrap || document.webkitFullscreenElement === wrap;
+        btn.textContent = isFs ? '✕' : '⛶';
+        btn.title = isFs ? 'Exit fullscreen' : 'Fullscreen';
+        btn.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Toggle virtual channel fullscreen');
+    }
+
+    document.addEventListener('fullscreenchange', onFsChange);
+    document.addEventListener('webkitfullscreenchange', onFsChange);
+});
+
 /**
  * Returns the CSS zoom factor currently applied to the root <html> element via
  * data-display-size.  CSS zoom does NOT update window.innerWidth / 100vh, so any
@@ -339,10 +417,12 @@ function playChannel(url, cid, name) {
             });
         }
         startBgMusic(chanEl.dataset.musicFile || '');
+        showVcFsBtn();
         return;
     }
 
     // Ensure any mute applied by a previous virtual channel is cleared.
+    hideVcFsBtn();
     video.muted = false;
 
     // Try normal play; if blocked by browser autoplay policy, retry muted
