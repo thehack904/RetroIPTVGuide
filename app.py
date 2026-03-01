@@ -1813,8 +1813,10 @@ def guide():
         user_default_theme=user_default_theme,
         overlay_appearance=get_overlay_appearance(),
         channel_appearances=get_all_channel_appearances(),
-        channel_music_files={ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
-                             for ch in virtual_ch},
+        channel_music_files={
+                ch['tvg_id']: (f'/static/audio/{f}' if (f := get_channel_music_file(ch['tvg_id'])) else '')
+                for ch in virtual_ch
+            },
     )
 
 @app.route('/play_channel', methods=['POST'])
