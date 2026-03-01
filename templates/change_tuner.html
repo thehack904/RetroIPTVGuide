@@ -274,6 +274,42 @@
                          maxlength="500">
                 </div>
                 {% endif %}
+                {% if ch.tvg_id == 'virtual.weather' %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>Location Name</label>
+                  <input type="text" name="ch_weather_location"
+                         value="{{ weather_config.location_name }}"
+                         placeholder="e.g. Miami, FL"
+                         maxlength="120">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Latitude</label>
+                  <input type="text" name="ch_weather_lat"
+                         value="{{ weather_config.lat }}"
+                         placeholder="e.g. 25.77"
+                         maxlength="20"
+                         inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Longitude</label>
+                  <input type="text" name="ch_weather_lon"
+                         value="{{ weather_config.lon }}"
+                         placeholder="e.g. -80.19"
+                         maxlength="20"
+                         inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Units</label>
+                  <select name="ch_weather_units">
+                    <option value="F" {% if weather_config.units != 'C' %}selected{% endif %}>°F — Fahrenheit</option>
+                    <option value="C" {% if weather_config.units == 'C' %}selected{% endif %}>°C — Celsius</option>
+                  </select>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                  <a href="/weather" target="_blank" class="btn-link small">🌤 Preview Weather Page ↗</a>
+                  <span class="muted small" style="margin-left:8px;">Opens in a new tab — save settings first.</span>
+                </div>
+                {% endif %}
               </div>
               <div class="form-row form-row-inline" style="margin-top:10px;">
                 <button type="submit" class="primary small">Save</button>

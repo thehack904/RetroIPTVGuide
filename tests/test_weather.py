@@ -287,3 +287,103 @@ class TestApiWeatherEnriched:
         login(client)
         data = client.get('/api/weather').get_json()
         assert data['location'] == 'Springfield, IL'
+
+
+# ─── Weather settings in change_tuner UI ─────────────────────────────────────
+
+class TestChangeTunerWeatherSettings:
+    """Weather config fields are surfaced in the Virtual Channel overlay panel."""
+
+    def test_weather_fields_in_change_tuner_page(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/change_tuner')
+        assert resp.status_code == 200
+        assert b'ch_weather_location' in resp.data
+        assert b'ch_weather_lat'      in resp.data
+        assert b'ch_weather_lon'      in resp.data
+        assert b'ch_weather_units'    in resp.data
+
+    def test_preview_weather_link_present(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/change_tuner')
+        assert b'/weather' in resp.data
+
+    def test_saved_location_prefills_in_page(self, client):
+        save_weather_config({'lat': '25.77', 'lon': '-80.19',
+                             'location_name': 'Miami, FL', 'units': 'F'})
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/change_tuner')
+        assert b'Miami, FL' in resp.data
+        assert b'25.77' in resp.data
+        assert b'-80.19' in resp.data
+
+    def test_save_weather_via_change_tuner_post(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '#ffffff',
+            'ch_bg_color': '#000000',
+            'ch_test_text': '',
+            'ch_weather_location': 'Denver, CO',
+            'ch_weather_lat': '39.73',
+            'ch_weather_lon': '-104.99',
+            'ch_weather_units': 'F',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        cfg = get_weather_config()
+        assert cfg['location_name'] == 'Denver, CO'
+        assert cfg['lat'] == '39.73'
+        assert cfg['lon'] == '-104.99'
+        assert cfg['units'] == 'F'
+
+    def test_save_celsius_units_via_change_tuner(self, client):
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '',
+            'ch_bg_color': '',
+            'ch_test_text': '',
+            'ch_weather_location': 'London, UK',
+            'ch_weather_lat': '51.5',
+            'ch_weather_lon': '-0.12',
+            'ch_weather_units': 'C',
+        }, follow_redirects=True)
+        cfg = get_weather_config()
+        assert cfg['units'] == 'C'
+        assert cfg['location_name'] == 'London, UK'
+
+    def test_invalid_lat_shows_warning(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '',
+            'ch_bg_color': '',
+            'ch_test_text': '',
+            'ch_weather_location': 'Test',
+            'ch_weather_lat': 'not-a-number',
+            'ch_weather_lon': '-80.0',
+            'ch_weather_units': 'F',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        # Server should flash a warning for invalid lat
+        assert b'Invalid' in resp.data or b'invalid' in resp.data
+
+    def test_api_weather_reflects_saved_location_name(self, client):
+        """Full round-trip: save via change_tuner → /api/weather returns it."""
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '',
+            'ch_bg_color': '',
+            'ch_test_text': '',
+            'ch_weather_location': 'Austin, TX',
+            'ch_weather_lat': '',
+            'ch_weather_lon': '',
+            'ch_weather_units': 'F',
+        }, follow_redirects=True)
+        data = client.get('/api/weather').get_json()
+        assert data['location'] == 'Austin, TX'
