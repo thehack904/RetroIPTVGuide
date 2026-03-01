@@ -880,7 +880,7 @@ def _fetch_open_meteo(lat, lon, units):
 def _build_weather_payload(cfg):
     """Build the full weather API payload from open-meteo data or a stub when unconfigured."""
     now_utc = datetime.now(timezone.utc)
-    updated_str = now_utc.strftime('%I:%M %p').lstrip('0')
+    updated_str = now_utc.isoformat()  # ISO 8601 UTC; browsers convert to local time
     lat = cfg.get('lat', '')
     lon = cfg.get('lon', '')
     location_name = cfg.get('location_name') or 'Local Weather'

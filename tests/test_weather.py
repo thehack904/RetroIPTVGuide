@@ -162,6 +162,16 @@ class TestBuildWeatherPayloadStub:
         p = _build_weather_payload(self.cfg)
         assert 'updated' in p and p['updated']
 
+    def test_updated_is_iso_utc_string(self):
+        """updated field must be an ISO 8601 UTC timestamp parseable by datetime.fromisoformat."""
+        from datetime import datetime as _dt, timezone as _tz
+        p = _build_weather_payload(self.cfg)
+        dt = _dt.fromisoformat(p['updated'])
+        assert dt.tzinfo is not None  # must carry timezone info
+        # Normalise to UTC and verify it is not far from now
+        dt_utc = dt.astimezone(_tz.utc)
+        assert abs((_dt.now(_tz.utc) - dt_utc).total_seconds()) < 10
+
     def test_has_location(self):
         p = _build_weather_payload(self.cfg)
         assert p['location'] == 'Test City'

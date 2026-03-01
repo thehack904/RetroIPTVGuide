@@ -86,7 +86,9 @@
       font-size: clamp(11px, 1.5vw, 18px);
       font-weight: 700;
       color: #ffd700;
-      text-align: right;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 0.2em 1.2em 0;
       flex-shrink: 0;
     }
@@ -476,6 +478,12 @@
     return (t != null) ? `${t}°` : '--°';
   }
 
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
   function build(data) {
     const frame = document.getElementById('wxFrame');
     const now   = data.now   || {};
@@ -529,8 +537,11 @@
         </div>
         <div class="wx-header-subtitle">Local Forecast</div>
       </div>
-      <!-- Updated timestamp -->
-      <div class="wx-updated">UPDATED: ${data.updated || ''}</div>
+      <!-- Updated timestamp / location row -->
+      <div class="wx-updated">
+        <span>${data.location || ''}</span>
+        <span>UPDATED: ${data.updated ? formatLocalTime(data.updated) : ''}</span>
+      </div>
       <!-- Body grid -->
       <div class="wx-body">
         <!-- Current Conditions -->

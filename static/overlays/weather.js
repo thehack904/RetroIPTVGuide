@@ -66,7 +66,9 @@
       font-size: 0.75em;
       font-weight: 700;
       color: #ffd700;
-      text-align: right;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
       padding: 0.15em 0.8em 0;
       flex-shrink: 0;
     }
@@ -398,6 +400,12 @@
     return (t != null) ? `${t}°` : '--°';
   }
 
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
   function render(data, root) {
     ensureAssets();
     root.querySelectorAll('.vc-overlay').forEach(e => e.remove());
@@ -465,7 +473,7 @@
         </div>
         <div class="vc-wx-header-subtitle">Local Forecast</div>
       </div>
-      <div class="vc-wx-updated">UPDATED: ${data?.updated || ''}</div>
+      <div class="vc-wx-updated"><span>${data?.location || ''}</span><span>UPDATED: ${data?.updated ? formatLocalTime(data.updated) : ''}</span></div>
       <div class="vc-wx-body">
         <div class="vc-wx-box vc-wx-current">
           <div class="vc-wx-box-title">Current Conditions</div>
