@@ -1,13 +1,21 @@
-/* Weather overlay renderer (v1)
+/* Weather overlay renderer (v2)
  * Endpoint: GET /api/weather
- * Expected minimal response shape:
+ * Full response shape (v2):
  * {
- *   "updated": "ISO8601",
+ *   "updated": "HH:MM AM/PM",
  *   "location": "City, ST",
- *   "now": { "temp": 72, "condition": "Cloudy" },
- *   "forecast": [
- *     { "label": "Today", "hi": 75, "lo": 61, "condition": "Rain" }
- *   ]
+ *   "now": { "temp": 72, "condition": "Partly Cloudy",
+ *             "humidity": 65, "wind": "SSW 10 mph", "feels_like": 74, "icon": "partly_cloudy" },
+ *   "today": [
+ *     { "label": "MORNING",   "temp": 76, "condition": "Sunny",        "icon": "sunny" },
+ *     { "label": "AFTERNOON", "temp": 85, "condition": "Hot & Humid",  "icon": "partly_cloudy" },
+ *     { "label": "EVENING",   "temp": 68, "condition": "Partly Cloudy","icon": "partly_cloudy_night" }
+ *   ],
+ *   "extended": [
+ *     { "dow": "TUE", "hi": 89, "lo": 70, "condition": "T-Storms", "icon": "thunderstorm" }
+ *   ],
+ *   "ticker": ["Severe Thunderstorms Possible Tomorrow"],
+ *   "forecast": [ { "label": "Today", "hi": 75, "lo": 61, "condition": "Rain" } ]
  * }
  */
 (function () {
@@ -51,12 +59,20 @@
 
     const stack = root.querySelector("#vc-weather-stack");
     stack.innerHTML = "";
-    const fc = Array.isArray(data?.forecast) ? data.forecast : [];
+
+    // Prefer extended outlook; fall back to legacy forecast list
+    const fc = Array.isArray(data?.extended) && data.extended.length
+      ? data.extended
+      : (Array.isArray(data?.forecast) ? data.forecast : []);
+
     fc.slice(0, 5).forEach((d) => {
       const row = el("div", "vc-headline");
-      const label = el("div", "vc-source", d.label || "");
+      const label = el("div", "vc-source", d.dow || d.label || "");
       const text = el("div", null);
-      const title = el("div", null, `${d.hi ?? "--"}° / ${d.lo ?? "--"}°  ${d.condition ?? ""}`.trim());
+      const hi = d.hi ?? "--";
+      const lo = d.lo ?? "--";
+      const cond = d.condition ?? "";
+      const title = el("div", null, `${hi}° / ${lo}°  ${cond}`.trim());
       text.appendChild(title);
       row.appendChild(label);
       row.appendChild(text);
@@ -70,3 +86,4 @@
 
   window.OverlayEngine.register(TYPE, { fetch: fetchData, render });
 })();
+
