@@ -174,6 +174,10 @@
                  data-loop-asset="{{ ch.loop_asset }}"
                  data-overlay-type="{{ ch.overlay_type }}"
                  data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
+                 {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
+                 data-overlay-text-color="{{ ch_app.text_color }}"
+                 data-overlay-bg-color="{{ ch_app.bg_color }}"
+                 data-overlay-test-text="{{ ch_app.test_text | e }}"
                  {% endif %}>
                 {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}
                 <span>{{ ch.name }}</span>
@@ -281,6 +285,9 @@ function playChannel(url, cid, name) {
             OverlayEngine.start({
                 type: chanEl.dataset.overlayType,
                 refreshSeconds: Number(chanEl.dataset.overlayRefreshSeconds) || 60,
+                textColor: chanEl.dataset.overlayTextColor || '',
+                bgColor: chanEl.dataset.overlayBgColor || '',
+                testText: chanEl.dataset.overlayTestText || '',
             });
         }
         return;

@@ -12,6 +12,8 @@ import app as app_module
 from app import (app, init_db, init_tuners_db, get_virtual_channels, get_virtual_epg,
                  get_virtual_channel_settings, save_virtual_channel_settings,
                  get_overlay_appearance, save_overlay_appearance,
+                 get_channel_overlay_appearance, save_channel_overlay_appearance,
+                 get_all_channel_appearances,
                  VIRTUAL_CHANNELS)
 
 
@@ -359,18 +361,20 @@ class TestChangeTunerOverlayAppearance:
     def test_section_present_in_page(self, client):
         login(client, 'admin', 'adminpass')
         resp = client.get('/change_tuner')
-        assert b'Overlay Appearance' in resp.data
+        # Each channel now has an "Overlay" prefs button; "Overlay" text appears in page
+        assert b'Overlay' in resp.data
 
-    def test_admin_can_save_appearance(self, client):
+    def test_admin_can_save_per_channel_appearance(self, client):
         login(client, 'admin', 'adminpass')
         resp = client.post('/change_tuner', data={
-            'action': 'update_overlay_appearance',
-            'overlay_text_color': '#ffffff',
-            'overlay_bg_color': '#000000',
-            'overlay_test_text': 'TESTING 123',
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_text_color': '#ffffff',
+            'ch_bg_color': '#000000',
+            'ch_test_text': 'TESTING 123',
         }, follow_redirects=True)
         assert resp.status_code == 200
-        s = get_overlay_appearance()
+        s = get_channel_overlay_appearance('virtual.news')
         assert s['text_color'] == '#ffffff'
         assert s['bg_color'] == '#000000'
         assert s['test_text'] == 'TESTING 123'
@@ -378,24 +382,61 @@ class TestChangeTunerOverlayAppearance:
     def test_invalid_color_shows_warning(self, client):
         login(client, 'admin', 'adminpass')
         resp = client.post('/change_tuner', data={
-            'action': 'update_overlay_appearance',
-            'overlay_text_color': 'notacolor',
-            'overlay_bg_color': '',
-            'overlay_test_text': '',
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_text_color': 'notacolor',
+            'ch_bg_color': '',
+            'ch_test_text': '',
         }, follow_redirects=True)
         assert resp.status_code == 200
         assert b'Invalid color' in resp.data
 
+    def test_unknown_tvg_id_shows_warning(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.nonexistent',
+            'ch_text_color': '#ffffff',
+            'ch_bg_color': '',
+            'ch_test_text': '',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert b'Unknown virtual channel' in resp.data
+
     def test_clear_test_text_saves_empty(self, client):
-        save_overlay_appearance({'text_color': '', 'bg_color': '', 'test_text': 'old'})
+        save_channel_overlay_appearance('virtual.weather', {'text_color': '', 'bg_color': '', 'test_text': 'old'})
         login(client, 'admin', 'adminpass')
         client.post('/change_tuner', data={
-            'action': 'update_overlay_appearance',
-            'overlay_text_color': '',
-            'overlay_bg_color': '',
-            'overlay_test_text': '',
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '',
+            'ch_bg_color': '',
+            'ch_test_text': '',
         }, follow_redirects=True)
-        assert get_overlay_appearance()['test_text'] == ''
+        assert get_channel_overlay_appearance('virtual.weather')['test_text'] == ''
+
+    def test_channels_can_have_independent_settings(self, client):
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_text_color': '#ff0000',
+            'ch_bg_color': '',
+            'ch_test_text': 'news test',
+        }, follow_redirects=True)
+        client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.weather',
+            'ch_text_color': '#00ff00',
+            'ch_bg_color': '',
+            'ch_test_text': 'weather test',
+        }, follow_redirects=True)
+        news = get_channel_overlay_appearance('virtual.news')
+        weather = get_channel_overlay_appearance('virtual.weather')
+        assert news['text_color'] == '#ff0000'
+        assert news['test_text'] == 'news test'
+        assert weather['text_color'] == '#00ff00'
+        assert weather['test_text'] == 'weather test'
 
 
 class TestApiOverlaySettings:
@@ -421,3 +462,62 @@ class TestApiOverlaySettings:
         data = client.get('/api/overlay/settings').get_json()
         assert data['text_color'] == '#123456'
         assert data['test_text'] == 'hi'
+
+    def test_per_channel_query_returns_channel_settings(self, client):
+        save_channel_overlay_appearance('virtual.status', {'text_color': '#aabbcc', 'bg_color': '', 'test_text': 'status test'})
+        login(client)
+        data = client.get('/api/overlay/settings?channel=virtual.status').get_json()
+        assert data['text_color'] == '#aabbcc'
+        assert data['test_text'] == 'status test'
+
+    def test_invalid_channel_falls_back_to_global(self, client):
+        login(client)
+        # unknown channel param → returns global settings shape
+        data = client.get('/api/overlay/settings?channel=virtual.nope').get_json()
+        assert 'text_color' in data
+
+
+# ─── Per-channel overlay appearance helpers ───────────────────────────────────
+
+class TestChannelOverlayAppearance:
+    def test_defaults_are_empty_strings(self):
+        s = get_channel_overlay_appearance('virtual.news')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_save_and_reload_colors(self):
+        save_channel_overlay_appearance('virtual.news', {'text_color': '#ff0000', 'bg_color': '#001122', 'test_text': ''})
+        s = get_channel_overlay_appearance('virtual.news')
+        assert s['text_color'] == '#ff0000'
+        assert s['bg_color'] == '#001122'
+
+    def test_save_and_reload_test_text(self):
+        save_channel_overlay_appearance('virtual.weather', {'text_color': '', 'bg_color': '', 'test_text': 'WEATHER TEST'})
+        assert get_channel_overlay_appearance('virtual.weather')['test_text'] == 'WEATHER TEST'
+
+    def test_invalid_color_raises_value_error(self):
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            save_channel_overlay_appearance('virtual.news', {'text_color': 'red', 'bg_color': '', 'test_text': ''})
+
+    def test_channels_are_isolated(self):
+        save_channel_overlay_appearance('virtual.news', {'text_color': '#ff0000', 'bg_color': '', 'test_text': 'news'})
+        save_channel_overlay_appearance('virtual.weather', {'text_color': '#00ff00', 'bg_color': '', 'test_text': 'weather'})
+        assert get_channel_overlay_appearance('virtual.news')['text_color'] == '#ff0000'
+        assert get_channel_overlay_appearance('virtual.weather')['text_color'] == '#00ff00'
+        assert get_channel_overlay_appearance('virtual.status')['text_color'] == ''
+
+    def test_get_all_channel_appearances_returns_all_channels(self):
+        all_apps = get_all_channel_appearances()
+        for ch in ['virtual.news', 'virtual.weather', 'virtual.status']:
+            assert ch in all_apps
+            assert 'text_color' in all_apps[ch]
+            assert 'bg_color' in all_apps[ch]
+            assert 'test_text' in all_apps[ch]
+
+    def test_get_all_reflects_saved_values(self):
+        save_channel_overlay_appearance('virtual.status', {'text_color': '#aabbcc', 'bg_color': '', 'test_text': 'hello'})
+        all_apps = get_all_channel_appearances()
+        assert all_apps['virtual.status']['text_color'] == '#aabbcc'
+        assert all_apps['virtual.status']['test_text'] == 'hello'

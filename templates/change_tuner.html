@@ -208,68 +208,69 @@
         <h2 id="lbl-virtual-channels">Virtual Channels</h2>
       </div>
       <div class="card-body">
-        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Only the admin can change these settings.</p>
+        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Enable or disable the built-in virtual channels that appear in the guide. Use <strong>⚙ Overlay</strong> to customize each channel's overlay colors and test banner.</p>
         <form method="POST" class="compact-form" id="form-virtual-channels">
           <input type="hidden" name="action" value="update_virtual_channels">
           <div class="vc-channel-list">
             {% for ch in VIRTUAL_CHANNELS %}
-            <label class="vc-toggle-label">
-              <input type="checkbox"
-                     name="vc_{{ ch.tvg_id }}"
-                     value="1"
-                     {% if vc_settings.get(ch.tvg_id, true) %}checked{% endif %}>
-              <span class="vc-toggle-name">
-                {% if ch.logo %}
-                <img src="{{ ch.logo }}" alt="" class="vc-logo">
-                {% endif %}
-                {{ ch.name }}
-              </span>
-              <span class="muted small vc-type">{{ ch.overlay_type }}</span>
-            </label>
+            {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
+            <div class="vc-channel-item">
+              <label class="vc-toggle-label">
+                <input type="checkbox"
+                       name="vc_{{ ch.tvg_id }}"
+                       value="1"
+                       {% if vc_settings.get(ch.tvg_id, true) %}checked{% endif %}>
+                <span class="vc-toggle-name">
+                  {% if ch.logo %}
+                  <img src="{{ ch.logo }}" alt="" class="vc-logo">
+                  {% endif %}
+                  {{ ch.name }}
+                </span>
+                <span class="muted small vc-type">{{ ch.overlay_type }}</span>
+              </label>
+              <button type="button" class="secondary small vc-prefs-btn"
+                      aria-expanded="false"
+                      aria-controls="vc-prefs-{{ loop.index }}"
+                      data-panel="vc-prefs-{{ loop.index }}">⚙ Overlay</button>
+            </div>
+            <div class="vc-prefs-panel" id="vc-prefs-{{ loop.index }}" hidden>
+              <form method="POST" class="compact-form vc-prefs-form">
+                <input type="hidden" name="action" value="update_channel_overlay_appearance">
+                <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
+                <div class="vc-prefs-fields">
+                  <div class="vc-prefs-field">
+                    <label>Text Color</label>
+                    <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                      <input type="color" name="ch_text_color"
+                             value="{{ ch_app.text_color or '#ffffff' }}">
+                      <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
+                    </div>
+                  </div>
+                  <div class="vc-prefs-field">
+                    <label>Background Color</label>
+                    <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                      <input type="color" name="ch_bg_color"
+                             value="{{ ch_app.bg_color or '#000000' }}">
+                      <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
+                    </div>
+                  </div>
+                  <div class="vc-prefs-field vc-prefs-field-wide">
+                    <label>Test Banner Text</label>
+                    <input type="text" name="ch_test_text"
+                           value="{{ ch_app.test_text }}"
+                           placeholder="Text shown as a banner on this overlay (blank to hide)…"
+                           maxlength="120">
+                  </div>
+                </div>
+                <div class="form-row form-row-inline" style="margin-top:10px;">
+                  <button type="submit" class="primary small">Save</button>
+                </div>
+              </form>
+            </div>
             {% endfor %}
           </div>
           <div class="form-row form-row-inline" style="margin-top:14px;">
-            <button type="submit" class="primary">Save</button>
-          </div>
-        </form>
-      </div>
-    </section>
-
-    <!-- Overlay Appearance: customize overlay colors and test text -->
-    <section class="card" aria-labelledby="lbl-overlay-appearance">
-      <div class="card-head">
-        <h2 id="lbl-overlay-appearance">Overlay Appearance</h2>
-      </div>
-      <div class="card-body">
-        <p class="muted small" style="margin-top:0; margin-bottom:12px;">Customize the text and background colors used by virtual channel overlays, and set a persistent test banner to verify the overlay system is working.</p>
-        <form method="POST" class="compact-form" id="form-overlay-appearance">
-          <input type="hidden" name="action" value="update_overlay_appearance">
-          <div class="form-row">
-            <label for="overlay_text_color">Text Color</label>
-            <div class="form-row form-row-inline" style="gap:8px; align-items:center;">
-              <input type="color" id="overlay_text_color" name="overlay_text_color"
-                     value="{{ overlay_appearance.text_color or '#ffffff' }}">
-              <button type="button" class="secondary small" id="btn-reset-text-color">Reset</button>
-            </div>
-          </div>
-          <div class="form-row">
-            <label for="overlay_bg_color">Background Color</label>
-            <div class="form-row form-row-inline" style="gap:8px; align-items:center;">
-              <input type="color" id="overlay_bg_color" name="overlay_bg_color"
-                     value="{{ overlay_appearance.bg_color or '#000000' }}">
-              <button type="button" class="secondary small" id="btn-reset-bg-color">Reset</button>
-            </div>
-          </div>
-          <div class="form-row">
-            <label for="overlay_test_text">Test Banner Text</label>
-            <input type="text" id="overlay_test_text" name="overlay_test_text"
-                   value="{{ overlay_appearance.test_text }}"
-                   placeholder="Enter text to show as a persistent test banner on overlays…"
-                   maxlength="120">
-            <p class="muted small" style="margin:4px 0 0;">Leave blank to hide the test banner.</p>
-          </div>
-          <div class="form-row form-row-inline" style="margin-top:14px;">
-            <button type="submit" class="primary">Save</button>
+            <button type="submit" class="primary">Save Channel List</button>
           </div>
         </form>
       </div>
@@ -476,12 +477,25 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// Overlay appearance — Reset color buttons restore the default values (#ffffff text, #000000 background)
-document.getElementById('btn-reset-text-color').addEventListener('click', function () {
-  document.getElementById('overlay_text_color').value = '#ffffff';
+// Per-channel overlay prefs: toggle panels and handle reset buttons
+document.querySelectorAll('.vc-prefs-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var panelId = btn.dataset.panel;
+    var panel = document.getElementById(panelId);
+    var expanded = btn.getAttribute('aria-expanded') === 'true';
+    panel.hidden = expanded;
+    btn.setAttribute('aria-expanded', String(!expanded));
+    btn.textContent = expanded ? '⚙ Overlay' : '⚙ Overlay ▲';
+  });
 });
-document.getElementById('btn-reset-bg-color').addEventListener('click', function () {
-  document.getElementById('overlay_bg_color').value = '#000000';
+
+document.querySelectorAll('.vc-prefs-reset').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    var colorInput = btn.previousElementSibling;
+    if (colorInput && colorInput.type === 'color') {
+      colorInput.value = btn.dataset.default || '#ffffff';
+    }
+  });
 });
 </script>
 {% endblock %}

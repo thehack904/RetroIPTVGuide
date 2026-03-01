@@ -688,6 +688,48 @@ def save_overlay_appearance(appearance_dict):
         logging.exception("save_overlay_appearance failed")
         raise
 
+def get_channel_overlay_appearance(tvg_id):
+    """Return overlay appearance settings for a specific virtual channel.
+    Keys stored as overlay.{tvg_id}.text_color etc. in the settings table."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{tvg_id}.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_channel_overlay_appearance failed, using defaults")
+    return result
+
+def save_channel_overlay_appearance(tvg_id, appearance_dict):
+    """Persist per-channel overlay appearance settings."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{tvg_id}.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_overlay_appearance failed")
+        raise
+
+def get_all_channel_appearances():
+    """Return dict of tvg_id -> appearance for all virtual channels."""
+    return {ch['tvg_id']: get_channel_overlay_appearance(ch['tvg_id']) for ch in VIRTUAL_CHANNELS}
+
 def get_virtual_channels():
     """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
     import copy
@@ -1239,6 +1281,26 @@ def change_tuner():
             except Exception:
                 flash("Failed to save overlay appearance settings.", "warning")
 
+        elif action == "update_channel_overlay_appearance":
+            tvg_id = request.form.get('tvg_id', '').strip()
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            if tvg_id not in valid_ids:
+                flash("Unknown virtual channel.", "warning")
+            else:
+                appearance = {
+                    'text_color': request.form.get('ch_text_color', '').strip(),
+                    'bg_color': request.form.get('ch_bg_color', '').strip(),
+                    'test_text': request.form.get('ch_test_text', '').strip(),
+                }
+                try:
+                    save_channel_overlay_appearance(tvg_id, appearance)
+                    log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
+                    flash("Channel overlay settings saved.", "success")
+                except ValueError as exc:
+                    flash(f"Invalid color value: {exc}", "warning")
+                except Exception:
+                    flash("Failed to save channel overlay settings.", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -1261,6 +1323,7 @@ def change_tuner():
 
     vc_settings = get_virtual_channel_settings()
     overlay_appearance = get_overlay_appearance()
+    channel_appearances = get_all_channel_appearances()
 
     return render_template(
         "change_tuner.html",
@@ -1274,6 +1337,7 @@ def change_tuner():
         VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
         vc_settings=vc_settings,
         overlay_appearance=overlay_appearance,
+        channel_appearances=channel_appearances,
     )
 
 @app.route('/guide')
@@ -1330,6 +1394,7 @@ def guide():
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
         overlay_appearance=get_overlay_appearance(),
+        channel_appearances=get_all_channel_appearances(),
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1627,7 +1692,11 @@ def api_virtual_status():
 @app.route('/api/overlay/settings', methods=['GET'])
 @login_required
 def api_overlay_settings():
-    """Return overlay appearance settings for use by the overlay engine."""
+    """Return overlay appearance settings. Use ?channel=tvg_id for per-channel settings."""
+    channel = request.args.get('channel', '').strip()
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if channel and channel in valid_ids:
+        return jsonify(get_channel_overlay_appearance(channel))
     return jsonify(get_overlay_appearance())
 
 @app.route('/api/play', methods=['POST'])
