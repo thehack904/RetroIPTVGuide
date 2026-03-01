@@ -518,6 +518,10 @@
             </li>
             {% endfor %}
           </ol>
+          <div class="channel-order-save-row">
+            <button type="button" id="channel-order-save-btn" class="btn btn-primary btn-sm">Save Order</button>
+            <span id="channel-order-save-status" class="channel-order-save-status"></span>
+          </div>
         </div>
       </section>
 
@@ -774,15 +778,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const num = item.querySelector('.order-num');
         if (num) num.textContent = i + 1;
       });
-      // Persist the new order to the backend
-      const ids = Array.from(orderList.querySelectorAll('.channel-order-item'))
-                       .map(item => item.dataset.tvgId);
-      const body = new URLSearchParams();
-      body.append('action', 'update_virtual_channel_order');
-      ids.forEach(id => body.append('channel_order[]', id));
-      fetch(window.location.pathname, { method: 'POST', body })
-        .then(r => { if (!r.ok) alert('Failed to save channel order. Please try again.'); })
-        .catch(() => { alert('Failed to save channel order. Please try again.'); });
     });
     orderList.addEventListener('dragover', e => {
       e.preventDefault();
@@ -794,6 +789,34 @@ document.addEventListener('DOMContentLoaded', () => {
         else orderList.insertBefore(dragging, over.nextSibling);
       }
     });
+
+    const saveBtn = document.getElementById('channel-order-save-btn');
+    const saveStatus = document.getElementById('channel-order-save-status');
+    if (saveBtn) {
+      saveBtn.addEventListener('click', () => {
+        const ids = Array.from(orderList.querySelectorAll('.channel-order-item'))
+                         .map(item => item.dataset.tvgId);
+        const body = new URLSearchParams();
+        body.append('action', 'update_virtual_channel_order');
+        ids.forEach(id => body.append('channel_order[]', id));
+        saveBtn.disabled = true;
+        fetch(window.location.pathname, { method: 'POST', body })
+          .then(r => {
+            if (r.ok) {
+              saveStatus.textContent = '\u2713 Saved';
+              saveStatus.className = 'channel-order-save-status save-ok';
+            } else {
+              saveStatus.textContent = 'Save failed.';
+              saveStatus.className = 'channel-order-save-status save-error';
+            }
+          })
+          .catch(() => {
+            saveStatus.textContent = 'Save failed.';
+            saveStatus.className = 'channel-order-save-status save-error';
+          })
+          .finally(() => { saveBtn.disabled = false; });
+      });
+    }
   }
 });
 

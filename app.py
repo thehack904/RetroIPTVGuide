@@ -1872,7 +1872,7 @@ def change_tuner():
         auto_refresh_interval_hours=auto_refresh_interval_hours,
         last_auto_refresh=last_auto_refresh,
         tuner_sync_info=tuner_sync_info,
-        VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
+        VIRTUAL_CHANNELS=get_virtual_channels(),
         vc_settings=vc_settings,
         overlay_appearance=overlay_appearance,
         channel_appearances=channel_appearances,

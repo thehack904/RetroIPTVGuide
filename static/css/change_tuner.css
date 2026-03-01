@@ -642,6 +642,17 @@ body.light .toggle-slider { background: rgba(0,0,0,0.18); }
   color: var(--muted-color);
   cursor: grab;
 }
+.channel-order-save-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+.channel-order-save-status {
+  font-size: 0.82rem;
+}
+.channel-order-save-status.save-ok { color: var(--success-color, #4caf50); }
+.channel-order-save-status.save-error { color: var(--danger-color, #e53935); }
 
 /* ====================================================================== */
 /* Per-channel prefs panel                                                 */
