@@ -1378,10 +1378,13 @@ def change_tuner():
                 }
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
+                    if tvg_id == 'virtual.news':
+                        rss_url = request.form.get('ch_news_rss_url', '').strip()
+                        save_news_feed_url(rss_url)
                     log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
                     flash("Channel overlay settings saved.", "success")
                 except ValueError as exc:
-                    flash(f"Invalid color value: {exc}", "warning")
+                    flash(str(exc), "warning")
                 except Exception:
                     flash("Failed to save channel overlay settings.", "warning")
 
@@ -1422,6 +1425,7 @@ def change_tuner():
         vc_settings=vc_settings,
         overlay_appearance=overlay_appearance,
         channel_appearances=channel_appearances,
+        news_feed_url=get_news_feed_url(),
     )
 
 @app.route('/guide')
@@ -1741,10 +1745,12 @@ def api_channels():
 @app.route('/api/news', methods=['GET'])
 @login_required
 def api_news():
-    """Stub endpoint for virtual news channel overlay data."""
+    """Return headlines from the configured RSS/Atom feed, or empty list if none set."""
+    feed_url = get_news_feed_url()
+    headlines = fetch_rss_headlines(feed_url) if feed_url else []
     return jsonify({
         "updated": datetime.now(timezone.utc).isoformat(),
-        "headlines": [],
+        "headlines": headlines,
     })
 
 @app.route('/api/weather', methods=['GET'])

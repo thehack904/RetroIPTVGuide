@@ -265,6 +265,15 @@
                          placeholder="Text shown as a banner on this overlay (blank to hide)…"
                          maxlength="120">
                 </div>
+                {% if ch.tvg_id == 'virtual.news' %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>News Feed URL (RSS/Atom)</label>
+                  <input type="url" name="ch_news_rss_url"
+                         value="{{ news_feed_url }}"
+                         placeholder="https://feeds.example.com/rss.xml"
+                         maxlength="500">
+                </div>
+                {% endif %}
               </div>
               <div class="form-row form-row-inline" style="margin-top:10px;">
                 <button type="submit" class="primary small">Save</button>

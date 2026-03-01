@@ -21,7 +21,7 @@
   }
 
   function buildSkeleton(root) {
-    root.innerHTML = "";
+    root.querySelectorAll(".vc-overlay").forEach(e => e.remove());
     root.classList.remove("hidden");
 
     const overlay = el("div", "vc-overlay");

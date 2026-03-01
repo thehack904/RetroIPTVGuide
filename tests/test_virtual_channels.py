@@ -521,3 +521,58 @@ class TestChannelOverlayAppearance:
         all_apps = get_all_channel_appearances()
         assert all_apps['virtual.status']['text_color'] == '#aabbcc'
         assert all_apps['virtual.status']['test_text'] == 'hello'
+
+
+# ─── News Feed URL ────────────────────────────────────────────────────────────
+
+class TestNewsFeedUrl:
+    """Tests for get/save news feed URL and the /api/news endpoint."""
+
+    def test_default_feed_url_is_empty(self):
+        from app import get_news_feed_url
+        assert get_news_feed_url() == ''
+
+    def test_save_and_retrieve_feed_url(self):
+        from app import get_news_feed_url, save_news_feed_url
+        save_news_feed_url('https://feeds.example.com/rss.xml')
+        assert get_news_feed_url() == 'https://feeds.example.com/rss.xml'
+
+    def test_save_empty_url_clears_it(self):
+        from app import get_news_feed_url, save_news_feed_url
+        save_news_feed_url('https://feeds.example.com/rss.xml')
+        save_news_feed_url('')
+        assert get_news_feed_url() == ''
+
+    def test_invalid_scheme_raises(self):
+        from app import save_news_feed_url
+        with pytest.raises(ValueError):
+            save_news_feed_url('ftp://feeds.example.com/rss.xml')
+
+    def test_api_news_returns_empty_when_no_url(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get('/api/news')
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data['headlines'] == []
+        assert 'updated' in data
+
+    def test_api_news_overlay_prefs_saves_feed_url(self, client):
+        from app import get_news_feed_url
+        login(client, "admin", "adminpass")
+        resp = client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_text_color': '#ffffff',
+            'ch_bg_color': '#000000',
+            'ch_test_text': '',
+            'ch_news_rss_url': 'https://rss.example.com/feed.xml',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert get_news_feed_url() == 'https://rss.example.com/feed.xml'
+
+    def test_change_tuner_page_includes_news_feed_url(self, client):
+        from app import save_news_feed_url
+        save_news_feed_url('https://feeds.bbc.co.uk/news/rss.xml')
+        login(client, "admin", "adminpass")
+        resp = client.get('/change_tuner')
+        assert b'https://feeds.bbc.co.uk/news/rss.xml' in resp.data
