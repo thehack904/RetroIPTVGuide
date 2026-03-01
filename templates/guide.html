@@ -177,6 +177,7 @@
                  {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': ''}) %}
                  data-overlay-text-color="{{ ch_app.text_color }}"
                  data-overlay-bg-color="{{ ch_app.bg_color }}"
+                 data-music-file="{{ channel_music_files.get(ch.tvg_id, '') }}"
                  {% endif %}>
                 {% if ch.logo %}<img src="{{ ch.logo }}" alt="">{% endif %}
                 <span>{{ ch.name }}</span>
@@ -230,6 +231,49 @@
 let hlsInstance = null;
 let currentChannelId = null;
 
+// ── Background music (virtual channel looped audio) ─────────────────────────
+let _bgAudio = null;
+let _bgAudioSrc = '';
+let _bgResumeClick   = null;
+let _bgResumeKeydown = null;
+
+function _clearBgResumeListeners() {
+    if (_bgResumeClick)   { document.removeEventListener('click',   _bgResumeClick,   { once: true }); _bgResumeClick   = null; }
+    if (_bgResumeKeydown) { document.removeEventListener('keydown', _bgResumeKeydown, { once: true }); _bgResumeKeydown = null; }
+}
+
+function startBgMusic(src) {
+    if (!src) { stopBgMusic(); return; }
+    if (src === _bgAudioSrc && _bgAudio && !_bgAudio.paused) return;  // already playing
+    stopBgMusic();
+    _bgAudioSrc = src;
+    _bgAudio = document.createElement('audio');
+    _bgAudio.loop = true;
+    _bgAudio.volume = 0.5;
+    _bgAudio.src = src;
+    const capturedAudio = _bgAudio;
+    _bgAudio.play().catch(function () {
+        // Autoplay blocked; resume on first interaction
+        _bgResumeClick = function () {
+            _clearBgResumeListeners();
+            capturedAudio.play().catch(function (err) { console.warn('[BgMusic] Playback failed:', err); });
+        };
+        _bgResumeKeydown = _bgResumeClick;
+        document.addEventListener('click',   _bgResumeClick,   { once: true });
+        document.addEventListener('keydown', _bgResumeKeydown, { once: true });
+    });
+}
+
+function stopBgMusic() {
+    _clearBgResumeListeners();
+    if (_bgAudio) {
+        _bgAudio.pause();
+        _bgAudio.src = '';
+        _bgAudio = null;
+    }
+    _bgAudioSrc = '';
+}
+
 /**
  * Returns the CSS zoom factor currently applied to the root <html> element via
  * data-display-size.  CSS zoom does NOT update window.innerWidth / 100vh, so any
@@ -269,6 +313,7 @@ function playChannel(url, cid, name) {
 
     // Stop any active virtual overlay before switching channels
     if (typeof OverlayEngine !== 'undefined') OverlayEngine.stop();
+    stopBgMusic();
 
     // Check if this is a virtual channel by looking up its element
     const escapedCid = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(cid) : cid.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
@@ -288,6 +333,7 @@ function playChannel(url, cid, name) {
                 bgColor: chanEl.dataset.overlayBgColor || '',
             });
         }
+        startBgMusic(chanEl.dataset.musicFile || '');
         return;
     }
 

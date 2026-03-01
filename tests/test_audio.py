@@ -304,3 +304,31 @@ class TestChangeTunerAudioUI:
             'ch_music_file': '',
         }, follow_redirects=True)
         assert get_channel_music_file('virtual.weather') == ''
+
+
+# ─── Guide page includes data-music-file ─────────────────────────────────────
+
+class TestGuideMusicFile:
+    def test_guide_has_data_music_file_attribute(self, client):
+        """Guide page HTML includes the data-music-file attribute on virtual channels."""
+        login(client)
+        resp = client.get('/guide')
+        assert resp.status_code == 200
+        assert b'data-music-file' in resp.data
+
+    def test_guide_includes_music_src_when_set(self, client, tmp_path, monkeypatch):
+        """When a music file is saved for a channel, the guide page embeds its path."""
+        d = tmp_path / "audio"
+        d.mkdir()
+        monkeypatch.setattr(app_module, "AUDIO_UPLOAD_DIR", str(d))
+        (d / "chill.mp3").write_bytes(b'x')
+        save_channel_music_file('virtual.weather', 'chill.mp3')
+        login(client)
+        resp = client.get('/guide')
+        assert b'chill.mp3' in resp.data
+
+    def test_guide_music_file_empty_when_not_set(self, client):
+        """With no music file configured, the data-music-file attribute is empty."""
+        login(client)
+        resp = client.get('/guide')
+        assert b'data-music-file=""' in resp.data
