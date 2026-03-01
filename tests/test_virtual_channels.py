@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app as app_module
 from app import (app, init_db, init_tuners_db, get_virtual_channels, get_virtual_epg,
                  get_virtual_channel_settings, save_virtual_channel_settings,
+                 get_overlay_appearance, save_overlay_appearance,
                  VIRTUAL_CHANNELS)
 
 
@@ -320,3 +321,103 @@ class TestApiVirtualStatus:
         assert "updated" in data
 
 
+
+
+# ─── Overlay Appearance Settings ─────────────────────────────────────────────
+
+class TestOverlayAppearance:
+    def test_defaults_are_empty_strings(self):
+        settings = get_overlay_appearance()
+        assert settings['text_color'] == ''
+        assert settings['bg_color'] == ''
+        assert settings['test_text'] == ''
+
+    def test_save_and_reload_colors(self):
+        save_overlay_appearance({'text_color': '#ff0000', 'bg_color': '#001122', 'test_text': ''})
+        s = get_overlay_appearance()
+        assert s['text_color'] == '#ff0000'
+        assert s['bg_color'] == '#001122'
+        assert s['test_text'] == ''
+
+    def test_save_and_reload_test_text(self):
+        save_overlay_appearance({'text_color': '', 'bg_color': '', 'test_text': 'TEST MODE'})
+        assert get_overlay_appearance()['test_text'] == 'TEST MODE'
+
+    def test_invalid_color_raises_value_error(self):
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            save_overlay_appearance({'text_color': 'red', 'bg_color': '', 'test_text': ''})
+
+    def test_save_partial_keys_fills_defaults(self):
+        save_overlay_appearance({'text_color': '#aabbcc', 'bg_color': '', 'test_text': ''})
+        s = get_overlay_appearance()
+        assert s['text_color'] == '#aabbcc'
+        assert s['bg_color'] == ''
+
+
+class TestChangeTunerOverlayAppearance:
+    def test_section_present_in_page(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/change_tuner')
+        assert b'Overlay Appearance' in resp.data
+
+    def test_admin_can_save_appearance(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/change_tuner', data={
+            'action': 'update_overlay_appearance',
+            'overlay_text_color': '#ffffff',
+            'overlay_bg_color': '#000000',
+            'overlay_test_text': 'TESTING 123',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        s = get_overlay_appearance()
+        assert s['text_color'] == '#ffffff'
+        assert s['bg_color'] == '#000000'
+        assert s['test_text'] == 'TESTING 123'
+
+    def test_invalid_color_shows_warning(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/change_tuner', data={
+            'action': 'update_overlay_appearance',
+            'overlay_text_color': 'notacolor',
+            'overlay_bg_color': '',
+            'overlay_test_text': '',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert b'Invalid color' in resp.data
+
+    def test_clear_test_text_saves_empty(self, client):
+        save_overlay_appearance({'text_color': '', 'bg_color': '', 'test_text': 'old'})
+        login(client, 'admin', 'adminpass')
+        client.post('/change_tuner', data={
+            'action': 'update_overlay_appearance',
+            'overlay_text_color': '',
+            'overlay_bg_color': '',
+            'overlay_test_text': '',
+        }, follow_redirects=True)
+        assert get_overlay_appearance()['test_text'] == ''
+
+
+class TestApiOverlaySettings:
+    def test_requires_login(self, client):
+        resp = client.get('/api/overlay/settings')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/api/overlay/settings')
+        assert resp.status_code == 200
+
+    def test_response_has_expected_keys(self, client):
+        login(client)
+        data = client.get('/api/overlay/settings').get_json()
+        assert 'text_color' in data
+        assert 'bg_color' in data
+        assert 'test_text' in data
+
+    def test_saved_values_reflected_in_api(self, client):
+        save_overlay_appearance({'text_color': '#123456', 'bg_color': '#abcdef', 'test_text': 'hi'})
+        login(client)
+        data = client.get('/api/overlay/settings').get_json()
+        assert data['text_color'] == '#123456'
+        assert data['test_text'] == 'hi'

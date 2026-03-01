@@ -109,6 +109,14 @@
     }
     .unmute-btn:hover { background: rgba(0, 0, 0, 0.9); }
     </style>
+    {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
+    <style>
+    #virtual-overlay-root {
+      {% if overlay_appearance.text_color %}--vc-text-color: {{ overlay_appearance.text_color }};{% endif %}
+      {% if overlay_appearance.bg_color %}--vc-bg-color: {{ overlay_appearance.bg_color }};{% endif %}
+    }
+    </style>
+    {% endif %}
 </head>
 <body class="guide-page">
 <div id="appZoomRoot">
@@ -870,6 +878,7 @@ document.addEventListener('DOMContentLoaded', () => {
 })();
 </script>
 
+<script>window.OVERLAY_TEST_TEXT = {{ overlay_appearance.test_text | tojson }};</script>
 <script src="{{ url_for('static', filename='overlays/overlay-engine.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/news.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/weather.js') }}"></script>

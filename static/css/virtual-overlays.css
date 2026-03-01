@@ -17,6 +17,7 @@
   inset: 0;
   display: block;
   font-family: inherit;
+  color: var(--vc-text-color, inherit);
 }
 
 .vc-safe {
@@ -36,6 +37,7 @@
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-size: clamp(12px, 1.6vw, 18px);
+  background: var(--vc-bg-color, rgba(0,0,0,0.70));
 }
 
 .vc-ticker__track {
@@ -68,6 +70,7 @@
   border-radius: 999px;
   font-size: clamp(11px, 1.35vw, 14px);
   opacity: 0.92;
+  background: var(--vc-bg-color, rgba(0,0,0,0.55));
 }
 
 .vc-stack {
@@ -84,6 +87,7 @@
   border-radius: 12px;
   font-size: clamp(12px, 1.55vw, 16px);
   line-height: 1.2;
+  background: var(--vc-bg-color, rgba(0,0,0,0.45));
 }
 
 .vc-source {
@@ -96,4 +100,24 @@
   position: absolute;
   top: 6%;
   right: 4%;
+}
+
+/* Test banner — shown when window.OVERLAY_TEST_TEXT is set */
+.vc-test-banner {
+  position: absolute;
+  top: 6%;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  max-width: 80%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.4rem 1.2rem;
+  border-radius: 999px;
+  background: var(--vc-bg-color, rgba(180,0,0,0.75));
+  color: var(--vc-text-color, #fff);
+  font-size: clamp(13px, 1.8vw, 20px);
+  font-weight: bold;
+  letter-spacing: 0.05em;
+  z-index: 30;
 }

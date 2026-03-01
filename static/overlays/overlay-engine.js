@@ -29,6 +29,13 @@
     const el = rootEl();
     el.innerHTML = "";
     el.classList.remove("hidden");
+    // Show persistent test banner when configured (for overlay development/testing)
+    if (window.OVERLAY_TEST_TEXT) {
+      const banner = document.createElement("div");
+      banner.className = "vc-test-banner";
+      banner.textContent = window.OVERLAY_TEST_TEXT;
+      el.appendChild(banner);
+    }
   }
 
   function hideRoot() {

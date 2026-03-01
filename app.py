@@ -648,6 +648,46 @@ def save_virtual_channel_settings(settings_dict):
         logging.exception("save_virtual_channel_settings failed")
         raise
 
+_OVERLAY_APPEARANCE_KEYS = ('text_color', 'bg_color', 'test_text')
+_HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+def get_overlay_appearance():
+    """Return overlay appearance settings: text_color, bg_color (hex or ''), test_text (str)."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_overlay_appearance failed, using defaults")
+    return result
+
+def save_overlay_appearance(appearance_dict):
+    """Persist overlay appearance settings.  Validates hex colors; strips test_text."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_overlay_appearance failed")
+        raise
+
 def get_virtual_channels():
     """Return the list of virtual channel definitions (deep copy to prevent mutation)."""
     import copy
@@ -1184,6 +1224,21 @@ def change_tuner():
             except Exception:
                 flash("Failed to save virtual channel settings.", "warning")
 
+        elif action == "update_overlay_appearance":
+            appearance = {
+                'text_color': request.form.get('overlay_text_color', '').strip(),
+                'bg_color': request.form.get('overlay_bg_color', '').strip(),
+                'test_text': request.form.get('overlay_test_text', '').strip(),
+            }
+            try:
+                save_overlay_appearance(appearance)
+                log_event(current_user.username, "Updated overlay appearance settings")
+                flash("Overlay appearance settings saved.", "success")
+            except ValueError as exc:
+                flash(f"Invalid color value: {exc}", "warning")
+            except Exception:
+                flash("Failed to save overlay appearance settings.", "warning")
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -1205,6 +1260,7 @@ def change_tuner():
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
     vc_settings = get_virtual_channel_settings()
+    overlay_appearance = get_overlay_appearance()
 
     return render_template(
         "change_tuner.html",
@@ -1217,6 +1273,7 @@ def change_tuner():
         last_auto_refresh=last_auto_refresh,
         VIRTUAL_CHANNELS=VIRTUAL_CHANNELS,
         vc_settings=vc_settings,
+        overlay_appearance=overlay_appearance,
     )
 
 @app.route('/guide')
@@ -1272,6 +1329,7 @@ def guide():
         current_tuner=get_current_tuner(),
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
+        overlay_appearance=get_overlay_appearance(),
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1565,6 +1623,12 @@ def api_virtual_status():
             {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
         ],
     })
+
+@app.route('/api/overlay/settings', methods=['GET'])
+@login_required
+def api_overlay_settings():
+    """Return overlay appearance settings for use by the overlay engine."""
+    return jsonify(get_overlay_appearance())
 
 @app.route('/api/play', methods=['POST'])
 @login_required
