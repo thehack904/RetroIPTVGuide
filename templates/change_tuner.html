@@ -273,6 +273,32 @@
         </div>
       </section>
 
+      <!-- Danger Zone -->
+      <section class="card card-danger" aria-labelledby="lbl-danger-zone">
+        <div class="card-head">
+          <h2 id="lbl-danger-zone">Danger Zone &mdash; Delete Tuner</h2>
+        </div>
+        <div class="card-body">
+          <form method="POST" class="compact-form" id="form-delete">
+            <input type="hidden" name="action" value="delete_tuner">
+            <label for="tuner_remove">Delete tuner (cannot undo)</label>
+            <select name="tuner" id="tuner_remove" required>
+              {% for tuner in tuners %}
+              {% if tuner != current_tuner %}
+              <option value="{{ tuner }}">{{ tuner }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+            <label for="confirm_delete" class="confirm-label">Type the tuner name to confirm</label>
+            <input type="text" id="confirm_delete" placeholder="Type tuner name exactly to enable Delete">
+            <div class="form-row form-row-inline" style="margin-top:10px;">
+              <button type="submit" class="danger" id="btn-delete" disabled>Delete Tuner</button>
+              <div class="muted small" style="margin-left:8px;">This action cannot be undone.</div>
+            </div>
+          </form>
+        </div>
+      </section>
+
     </div><!-- /.tm-left -->
 
     <!-- ===== RIGHT PANEL: Virtual Channels ===== -->
@@ -285,7 +311,7 @@
       </header>
 
       <!-- form element for channel list save (checkboxes reference it via form= attribute) -->
-      <form method="POST" id="form-virtual-channels">
+      <form method="POST" id="form-virtual-channels" style="display:none">
         <input type="hidden" name="action" value="update_virtual_channels">
       </form>
 
@@ -458,7 +484,7 @@
                        class="toggle-input">
                 <span class="toggle-slider"></span>
               </label>
-              <button type="submit" form="form-virtual-channels" class="secondary small">Enable</button>
+
             </div>
           </div>
           {% endif %}
@@ -522,32 +548,6 @@
             {% endfor %}
           </ul>
           </div><!-- /.audio-upload-section -->
-        </div>
-      </section>
-
-      <!-- Danger Zone -->
-      <section class="card card-danger vc-card" aria-labelledby="lbl-danger-zone">
-        <div class="card-head">
-          <h2 id="lbl-danger-zone">Danger Zone &mdash; Delete Tuner</h2>
-        </div>
-        <div class="card-body">
-          <form method="POST" class="compact-form" id="form-delete">
-            <input type="hidden" name="action" value="delete_tuner">
-            <label for="tuner_remove">Delete tuner (cannot undo)</label>
-            <select name="tuner" id="tuner_remove" required>
-              {% for tuner in tuners %}
-              {% if tuner != current_tuner %}
-              <option value="{{ tuner }}">{{ tuner }}</option>
-              {% endif %}
-              {% endfor %}
-            </select>
-            <label for="confirm_delete" class="confirm-label">Type the tuner name to confirm</label>
-            <input type="text" id="confirm_delete" placeholder="Type tuner name exactly to enable Delete">
-            <div class="form-row form-row-inline" style="margin-top:10px;">
-              <button type="submit" class="danger" id="btn-delete" disabled>Delete Tuner</button>
-              <div class="muted small" style="margin-left:8px;">This action cannot be undone.</div>
-            </div>
-          </form>
         </div>
       </section>
 
