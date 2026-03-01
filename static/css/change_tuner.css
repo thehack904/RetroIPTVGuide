@@ -259,6 +259,7 @@ body.light .container-change-tuner {
   border-bottom-color: var(--primary-color);
 }
 .tab-panel { display: block; }
+.tab-panel[hidden] { display: none; }
 
 /* ====================================================================== */
 /* Mode Cards (Add Tuner)                                                  */
