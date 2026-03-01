@@ -122,9 +122,11 @@
         font-size: 16px;
         line-height: 1;
         cursor: pointer;
-        transition: background 0.15s;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
     }
     .vc-fs-btn:hover { background: rgba(0, 0, 0, 0.9); }
+    .vc-fs-btn.vc-fs-btn-fade { opacity: 0; pointer-events: none; }
     /* Fill wrapper + overlay when in fullscreen (fallback for overlay types without a standalone page) */
     #videoPlayerWrap:fullscreen,
     #videoPlayerWrap:-webkit-full-screen {
@@ -291,6 +293,8 @@
 let hlsInstance = null;
 let currentChannelId = null;
 let _vcCurrentOverlayType = '';
+let _vcFsHideTimer = null;
+let _vcFsLastMove = 0;
 
 // ── Background music (virtual channel looped audio) ─────────────────────────
 let _bgAudio = null;
@@ -345,14 +349,29 @@ function _exitVcFs() {
     }
 }
 
+function _scheduleVcFsHide(delay) {
+    if (_vcFsHideTimer) clearTimeout(_vcFsHideTimer);
+    _vcFsHideTimer = setTimeout(function () {
+        const btn = document.getElementById('vcFsBtn');
+        if (btn && !btn.hidden) btn.classList.add('vc-fs-btn-fade');
+    }, delay);
+}
+
 function showVcFsBtn() {
     const btn = document.getElementById('vcFsBtn');
-    if (btn) btn.hidden = false;
+    if (!btn) return;
+    btn.hidden = false;
+    btn.classList.remove('vc-fs-btn-fade');
+    _scheduleVcFsHide(3500);
 }
 
 function hideVcFsBtn() {
+    if (_vcFsHideTimer) { clearTimeout(_vcFsHideTimer); _vcFsHideTimer = null; }
     const btn = document.getElementById('vcFsBtn');
-    if (btn) btn.hidden = true;
+    if (btn) {
+        btn.hidden = true;
+        btn.classList.remove('vc-fs-btn-fade');
+    }
     // Close iframe overlay if active when switching away from a virtual channel.
     const overlay = document.getElementById('vcFsOverlay');
     const iframe  = document.getElementById('vcFsIframe');
@@ -464,6 +483,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
+
+    // Auto-hide: show button on mouse activity over the player wrap, hide after idle
+    if (wrap) {
+        wrap.addEventListener('mousemove', function () {
+            if (!btn.hidden) {
+                const now = Date.now();
+                if (now - _vcFsLastMove < 250) return;
+                _vcFsLastMove = now;
+                btn.classList.remove('vc-fs-btn-fade');
+                _scheduleVcFsHide(1500);
+            }
+        });
+        wrap.addEventListener('mouseleave', function () {
+            if (!btn.hidden) _scheduleVcFsHide(1500);
+        });
+    }
 });
 
 /**
