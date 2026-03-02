@@ -287,12 +287,7 @@
   const SUMMARY_MAX        = 220;   // max characters for top-story summary
   const TICKER_PX_PER_SEC  = 40;   // constant scroll speed in px/s
   const FADE_MS            = 600;  // cross-fade duration between feeds
-  const STATUS_POLL_MS     = 3000; // how often to poll /api/news/status for forced advances
-
-  // Seq tracking for forced-advance detection
-  let _seq          = -1;   // last known advance sequence number (-1 = uninitialized)
   let _refreshTimer = null;
-  let _statusTimer  = null;
 
   function esc(str) {
     return String(str || '')
@@ -395,7 +390,7 @@
   }
 
   async function load() {
-    // Cancel any pending refresh timer; status poll keeps running independently
+    // Cancel any pending refresh timer before scheduling the next one
     if (_refreshTimer !== null) {
       clearTimeout(_refreshTimer);
       _refreshTimer = null;
@@ -405,8 +400,6 @@
       const resp = await fetch('/api/news');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
-
-      if (data.seq !== undefined) { _seq = data.seq; }
 
       build(data);
 
@@ -420,26 +413,7 @@
     }
   }
 
-  // Lightweight poll: detect forced advances from the admin API
-  async function pollStatus() {
-    try {
-      const resp = await fetch('/api/news/status');
-      if (resp.ok) {
-        const data = await resp.json();
-        // If the server bumped its sequence number a forced advance happened — reload immediately
-        if (_seq !== -1 && data.seq !== undefined && data.seq !== _seq) {
-          _seq = data.seq;
-          load();
-          _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
-          return;
-        }
-      }
-    } catch (_) { /* ignore network errors in status poll */ }
-    _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
-  }
-
   load();
-  _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
 })();
 </script>
 </body>
