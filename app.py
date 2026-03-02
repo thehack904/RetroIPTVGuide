@@ -1365,6 +1365,24 @@ def get_traffic_demo_roads(city_id: int) -> dict:
     return geojson
 
 
+def _prewarm_roads_cache() -> None:
+    """Background thread: fetch road geometry for every enabled city so the
+    Overpass data is cached before any user rotates to that city.
+    Requests are staggered by 5 s to stay within Overpass fair-use limits."""
+    try:
+        cities = [c for c in get_traffic_demo_cities() if c.get("enabled")]
+    except Exception:
+        logging.exception("_prewarm_roads_cache: could not load city list")
+        return
+    for city in cities:
+        try:
+            get_traffic_demo_roads(city["id"])
+            logging.info("_prewarm_roads_cache: cached roads for %s", city["name"])
+        except Exception:
+            logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
+        time.sleep(5)
+
+
 
 def get_channel_music_file(tvg_id):
     """Return the selected audio filename (basename only) for a virtual channel, or ''."""
@@ -3788,6 +3806,10 @@ if __name__ == '__main__':
         current_tuner = list(tuners.keys())[0]
     # Use load_tuner_data so combined tuners are handled correctly at startup.
     cached_channels, cached_epg = load_tuner_data(current_tuner)
+
+    # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
+    # so the overlay is ready before any city rotation happens.
+    threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
