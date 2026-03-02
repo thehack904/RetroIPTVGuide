@@ -1282,6 +1282,7 @@ def _build_traffic_demo_payload():
 _ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
 _ROADS_CACHE_TTL = 86400  # 24 hours in seconds
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
+_OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
 
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
@@ -1380,7 +1381,7 @@ def _prewarm_roads_cache() -> None:
             logging.info("_prewarm_roads_cache: cached roads for %s", city["name"])
         except Exception:
             logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
-        time.sleep(5)
+        time.sleep(_OVERPASS_PREWARM_STAGGER_S)
 
 
 

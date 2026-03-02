@@ -352,8 +352,8 @@
   }
 
   // ── Road geometry cache ───────────────────────────────────────────────────
-  // Keyed by city.id → GeoJSON features array fetched from /api/traffic/demo/roads/<id>.
-  // undefined = not yet fetched; [] = API returned nothing (fallback in use).
+  // Keyed by city.id → GeoJSON features array.
+  // undefined = not yet fetched; any array = live OSM features or fallback.
   var _roadsCache = {};
 
   // ── Static fallback road geometry ─────────────────────────────────────────
@@ -435,7 +435,9 @@
   };
 
   function fallbackFeatures(city) {
-    var roads = CITY_ROADS_FALLBACK[city.name] || [];
+    // Trim city name for a forgiving lookup — server names should always match
+    // CITY_ROADS_FALLBACK keys, but guard against accidental whitespace.
+    var roads = CITY_ROADS_FALLBACK[(city.name || '').trim()] || [];
     return roads.map(function (r) {
       return {
         type: 'Feature',
