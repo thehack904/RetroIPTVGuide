@@ -15,6 +15,7 @@ from app import (
     set_all_traffic_demo_cities_enabled, pick_random_traffic_demo_pack,
     _get_congestion_distribution, _build_traffic_demo_payload,
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
+    get_traffic_demo_roads, _overpass_to_geojson,
 )
 
 
@@ -26,8 +27,10 @@ def isolated_db(tmp_path, monkeypatch):
     tuners_db = str(tmp_path / "tuners_test.db")
     monkeypatch.setattr(app_module, "DATABASE",  users_db)
     monkeypatch.setattr(app_module, "TUNER_DB",  tuners_db)
-    # Also clear the module-level demo cache between tests
+    # Also clear the module-level caches between tests
     monkeypatch.setattr(app_module, "_TRAFFIC_DEMO_CACHE", {})
+    monkeypatch.setattr(app_module, "_ROADS_CACHE", {})
+    monkeypatch.setattr(app_module, "_ROADS_CACHE_TIME", {})
     init_db()
     init_tuners_db()
     from app import add_user
@@ -211,7 +214,7 @@ class TestCongestionDistribution:
 class TestBuildTrafficDemoPayload:
     def test_has_required_keys(self):
         p = _build_traffic_demo_payload()
-        for k in ('updated', 'city', 'summary', 'segments', 'demo_mode'):
+        for k in ('updated', 'city', 'summary', 'segments', 'demo_mode', 'time_slot'):
             assert k in p, f"Missing key: {k}"
 
     def test_demo_mode_is_true(self):
@@ -220,8 +223,15 @@ class TestBuildTrafficDemoPayload:
 
     def test_city_has_required_keys(self):
         city = _build_traffic_demo_payload()['city']
-        for k in ('name', 'state', 'lat', 'lon'):
+        for k in ('id', 'name', 'state', 'lat', 'lon'):
             assert k in city
+
+    def test_city_id_is_int(self):
+        city = _build_traffic_demo_payload()['city']
+        assert isinstance(city['id'], int)
+
+    def test_time_slot_is_int(self):
+        assert isinstance(_build_traffic_demo_payload()['time_slot'], int)
 
     def test_summary_has_required_keys(self):
         summary = _build_traffic_demo_payload()['summary']
@@ -279,8 +289,15 @@ class TestApiTrafficEndpoint:
     def test_response_has_required_keys(self, client):
         login(client)
         data = client.get('/api/traffic').get_json()
-        for k in ('updated', 'city', 'summary', 'segments', 'demo_mode', 'ms_until_next'):
+        for k in ('updated', 'city', 'summary', 'segments', 'demo_mode',
+                  'ms_until_next', 'time_slot'):
             assert k in data, f"Missing key: {k}"
+
+    def test_city_includes_id(self, client):
+        login(client)
+        data = client.get('/api/traffic').get_json()
+        assert 'id' in data['city']
+        assert isinstance(data['city']['id'], int)
 
     def test_demo_mode_flag_is_true(self, client):
         login(client)
@@ -466,7 +483,203 @@ class TestTrafficPage:
         resp = client.get('/traffic')
         assert b'/api/traffic' in resp.data
 
-    def test_page_contains_svg_map_code(self, client):
+    def test_page_uses_leaflet(self, client):
+        """traffic.html must load Leaflet.js — no more SVG grid."""
         login(client)
         resp = client.get('/traffic')
-        assert b'SEG_LINES' in resp.data or b'buildSvg' in resp.data
+        assert b'leaflet' in resp.data.lower()
+        assert b'cartocdn' in resp.data.lower()
+
+    def test_page_fetches_roads_endpoint(self, client):
+        """traffic.html must reference the /api/traffic/demo/roads endpoint."""
+        login(client)
+        resp = client.get('/traffic')
+        assert b'api/traffic/demo/roads' in resp.data
+
+
+# ─── _overpass_to_geojson helper ─────────────────────────────────────────────
+
+class TestOverpassToGeojson:
+    """Unit tests for the Overpass JSON → GeoJSON converter."""
+
+    def _make_overpass(self, nodes, ways):
+        elements = []
+        for nid, lat, lon in nodes:
+            elements.append({'type': 'node', 'id': nid, 'lat': lat, 'lon': lon})
+        for wid, node_ids, tags in ways:
+            elements.append({'type': 'way', 'id': wid, 'nodes': node_ids, 'tags': tags})
+        return {'elements': elements}
+
+    def test_empty_input_returns_empty_feature_collection(self):
+        result = _overpass_to_geojson({'elements': []})
+        assert result['type'] == 'FeatureCollection'
+        assert result['features'] == []
+
+    def test_single_way_produces_one_feature(self):
+        raw = self._make_overpass(
+            nodes=[(1, 41.88, -87.63), (2, 41.89, -87.64)],
+            ways=[(100, [1, 2], {'highway': 'primary', 'name': 'N Michigan Ave'})],
+        )
+        result = _overpass_to_geojson(raw)
+        assert len(result['features']) == 1
+        f = result['features'][0]
+        assert f['type'] == 'Feature'
+        assert f['geometry']['type'] == 'LineString'
+        assert len(f['geometry']['coordinates']) == 2
+        assert f['properties']['highway'] == 'primary'
+        assert f['properties']['name'] == 'N Michigan Ave'
+        assert f['properties']['way_id'] == 100
+
+    def test_coordinates_are_lon_lat_order(self):
+        """GeoJSON uses [longitude, latitude] order."""
+        raw = self._make_overpass(
+            nodes=[(1, 41.88, -87.63), (2, 41.89, -87.64)],
+            ways=[(10, [1, 2], {'highway': 'motorway'})],
+        )
+        result = _overpass_to_geojson(raw)
+        coord0 = result['features'][0]['geometry']['coordinates'][0]
+        assert coord0 == (-87.63, 41.88)  # [lon, lat]
+
+    def test_way_with_single_node_is_skipped(self):
+        """A way with only one node cannot form a LineString — should be omitted."""
+        raw = self._make_overpass(
+            nodes=[(1, 41.88, -87.63)],
+            ways=[(10, [1], {'highway': 'primary'})],
+        )
+        result = _overpass_to_geojson(raw)
+        assert len(result['features']) == 0
+
+    def test_way_with_missing_node_coords_is_skipped(self):
+        """If a node referenced by a way is missing, the way is dropped."""
+        raw = self._make_overpass(
+            nodes=[],
+            ways=[(10, [1, 2], {'highway': 'primary'})],
+        )
+        result = _overpass_to_geojson(raw)
+        assert len(result['features']) == 0
+
+    def test_multiple_ways(self):
+        raw = self._make_overpass(
+            nodes=[(1, 41.88, -87.63), (2, 41.89, -87.64), (3, 41.90, -87.65)],
+            ways=[
+                (10, [1, 2], {'highway': 'motorway'}),
+                (11, [2, 3], {'highway': 'trunk'}),
+            ],
+        )
+        result = _overpass_to_geojson(raw)
+        assert len(result['features']) == 2
+
+
+# ─── get_traffic_demo_roads (with mocked Overpass) ───────────────────────────
+
+class TestGetTrafficDemoRoads:
+    """Test the caching road-fetch helper using a monkeypatched _fetch_overpass_roads."""
+
+    def _minimal_overpass(self):
+        return {
+            'elements': [
+                {'type': 'node', 'id': 1, 'lat': 41.88, 'lon': -87.63},
+                {'type': 'node', 'id': 2, 'lat': 41.89, 'lon': -87.64},
+                {'type': 'way',  'id': 10, 'nodes': [1, 2],
+                 'tags': {'highway': 'primary', 'name': 'Test St'}},
+            ]
+        }
+
+    def test_returns_feature_collection(self, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        cities = get_traffic_demo_cities()
+        result = get_traffic_demo_roads(cities[0]['id'])
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) >= 1
+
+    def test_result_is_cached(self, monkeypatch):
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=6000):
+            call_count['n'] += 1
+            return self._minimal_overpass()
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        get_traffic_demo_roads(cid)
+        # Should only call Overpass once — second call hits cache
+        assert call_count['n'] == 1
+
+    def test_overpass_failure_returns_empty_geojson(self, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: {'elements': []})
+        cities = get_traffic_demo_cities()
+        result = get_traffic_demo_roads(cities[0]['id'])
+        assert result['type'] == 'FeatureCollection'
+        assert result['features'] == []
+
+    def test_unknown_city_id_returns_empty(self, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        result = get_traffic_demo_roads(99999)
+        assert result['type'] == 'FeatureCollection'
+        assert result['features'] == []
+
+
+# ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────
+
+class TestApiTrafficDemoRoads:
+    def _minimal_overpass(self):
+        return {
+            'elements': [
+                {'type': 'node', 'id': 1, 'lat': 41.88, 'lon': -87.63},
+                {'type': 'node', 'id': 2, 'lat': 41.89, 'lon': -87.64},
+                {'type': 'way',  'id': 10, 'nodes': [1, 2],
+                 'tags': {'highway': 'primary', 'name': 'Main St'}},
+            ]
+        }
+
+    def test_requires_login(self, client):
+        resp = client.get('/api/traffic/demo/roads/1')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_for_valid_city(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        login(client)
+        cities = get_traffic_demo_cities()
+        resp = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}')
+        assert resp.status_code == 200
+
+    def test_response_is_geojson_feature_collection(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        login(client)
+        cities = get_traffic_demo_cities()
+        data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
+        assert data['type'] == 'FeatureCollection'
+        assert 'features' in data
+
+    def test_features_have_geometry_and_properties(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        login(client)
+        cities = get_traffic_demo_cities()
+        data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
+        assert len(data['features']) == 1
+        f = data['features'][0]
+        assert f['geometry']['type'] == 'LineString'
+        assert 'highway' in f['properties']
+
+    def test_unknown_city_returns_empty_collection(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+        login(client)
+        data = client.get('/api/traffic/demo/roads/99999').get_json()
+        assert data['type'] == 'FeatureCollection'
+        assert data['features'] == []
+
+    def test_overpass_failure_returns_empty_collection(self, client, monkeypatch):
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=6000: {'elements': []})
+        login(client)
+        cities = get_traffic_demo_cities()
+        data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
+        assert data['type'] == 'FeatureCollection'
+        assert data['features'] == []

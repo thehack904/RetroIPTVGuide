@@ -1194,11 +1194,13 @@ def _build_traffic_demo_payload():
     payload = {
         'updated': now_dt.isoformat(),
         'city': {
+            'id':    city['id'],
             'name':  city['name'],
             'state': city['state'],
             'lat':   city['lat'],
             'lon':   city['lon'],
         },
+        'time_slot': time_slot,
         'summary': {
             'congestion_level': congestion_level,
             'green_percent':    round(actual_green  * 100 / total),
@@ -1210,6 +1212,92 @@ def _build_traffic_demo_payload():
     }
     _TRAFFIC_DEMO_CACHE[cache_key] = payload
     return payload
+
+
+# ─── Road geometry (Overpass API) ────────────────────────────────────────────
+
+# Roads are cached per city (long TTL — road geometry rarely changes).
+_ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
+_ROADS_CACHE_TTL = 86400  # 24 hours in seconds
+_ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
+
+
+def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 6000) -> dict:
+    """Fetch major road geometry from the Overpass API (free, no API key).
+    Returns a GeoJSON FeatureCollection with LineString features for each road way.
+    On network failure returns an empty FeatureCollection."""
+    query = (
+        f"[out:json][timeout:30];"
+        f"(way[\"highway\"~\"^(motorway|trunk|primary|secondary)$\"]"
+        f"(around:{radius_m},{lat},{lon}););"
+        f"out body;>;out skel qt;"
+    )
+    try:
+        resp = requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            timeout=35,
+            headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+        return {"elements": []}
+
+
+def _overpass_to_geojson(raw: dict) -> dict:
+    """Convert Overpass JSON response to a GeoJSON FeatureCollection.
+    Only LineString features are produced (one per road way)."""
+    nodes: dict = {}
+    ways: list  = []
+    for el in raw.get("elements", []):
+        t = el.get("type")
+        if t == "node":
+            nodes[el["id"]] = (el["lon"], el["lat"])
+        elif t == "way":
+            ways.append(el)
+
+    features = []
+    for way in ways:
+        coords = [nodes[nid] for nid in way.get("nodes", []) if nid in nodes]
+        if len(coords) < 2:
+            continue
+        tags = way.get("tags", {})
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coords},
+            "properties": {
+                "way_id":  way["id"],
+                "name":    tags.get("name", ""),
+                "highway": tags.get("highway", ""),
+            },
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def get_traffic_demo_roads(city_id: int) -> dict:
+    """Return cached road GeoJSON for a city, fetching from Overpass if not cached or stale."""
+    now_ts = time.time()
+    cached_at = _ROADS_CACHE_TIME.get(city_id, 0)
+    if city_id in _ROADS_CACHE and (now_ts - cached_at) < _ROADS_CACHE_TTL:
+        return _ROADS_CACHE[city_id]
+
+    # Look up city coordinates from DB
+    try:
+        cities = get_traffic_demo_cities()
+        city = next((c for c in cities if c["id"] == city_id), None)
+        if city is None:
+            return {"type": "FeatureCollection", "features": []}
+    except Exception:
+        logging.exception("get_traffic_demo_roads: city lookup failed for id=%s", city_id)
+        return {"type": "FeatureCollection", "features": []}
+
+    raw = _fetch_overpass_roads(city["lat"], city["lon"])
+    geojson = _overpass_to_geojson(raw)
+    _ROADS_CACHE[city_id] = geojson
+    _ROADS_CACHE_TIME[city_id] = now_ts
+    return geojson
 
 
 
@@ -2753,6 +2841,16 @@ def api_traffic_demo_pick_random():
     n = int(data.get('pack_size', demo_cfg.get('pack_size', 10)))
     chosen = pick_random_traffic_demo_pack(n)
     return jsonify({'ok': True, 'cities': chosen})
+
+
+@app.route('/api/traffic/demo/roads/<int:city_id>', methods=['GET'])
+@login_required
+def api_traffic_demo_roads(city_id):
+    """Return GeoJSON road geometry for a city fetched from the free Overpass API.
+    Results are cached server-side per city (24h TTL).
+    No API key required — Overpass is a free public service."""
+    geojson = get_traffic_demo_roads(city_id)
+    return jsonify(geojson)
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
