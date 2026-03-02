@@ -351,85 +351,16 @@
     return h;
   }
 
-  // ── Per-city road geometry — real GPS waypoints for major highways ─────────
-  // Each road: {label, w (line width px), pts: [[lat,lon], ...]}
-  // Waypoints trace the actual highway corridor so the overlay aligns with
-  // OpenStreetMap base tiles at zoom 12.
-  var CITY_ROADS = {
-    'New York City': [
-      {label:'I-95',   w:5, pts:[[40.808,-73.926],[40.825,-73.905],[40.840,-73.882],[40.855,-73.862],[40.865,-73.843]]},
-      {label:'I-278',  w:5, pts:[[40.723,-73.998],[40.708,-73.963],[40.692,-73.928],[40.677,-73.892]]},
-      {label:'I-495',  w:5, pts:[[40.744,-73.998],[40.745,-73.944],[40.746,-73.892],[40.748,-73.843]]},
-      {label:'I-87',   w:5, pts:[[40.693,-73.993],[40.730,-73.992],[40.773,-73.980],[40.820,-73.950],[40.860,-73.930]]},
-      {label:'FDR Dr', w:4, pts:[[40.699,-73.974],[40.720,-73.967],[40.752,-73.960],[40.779,-73.948],[40.796,-73.942]]},
-    ],
-    'Los Angeles': [
-      {label:'I-5',    w:5, pts:[[33.978,-118.287],[34.020,-118.260],[34.068,-118.222],[34.128,-118.174],[34.193,-118.128]]},
-      {label:'I-10',   w:5, pts:[[34.026,-118.458],[34.025,-118.375],[34.025,-118.285],[34.022,-118.200],[34.018,-118.132]]},
-      {label:'I-405',  w:5, pts:[[33.963,-118.395],[33.998,-118.425],[34.052,-118.443],[34.112,-118.452],[34.168,-118.448]]},
-      {label:'US-101', w:4, pts:[[34.040,-118.263],[34.063,-118.296],[34.092,-118.338],[34.140,-118.388],[34.172,-118.432]]},
-      {label:'SR-110', w:4, pts:[[33.993,-118.258],[34.028,-118.252],[34.060,-118.248],[34.082,-118.246]]},
-    ],
-    'Chicago': [
-      {label:'I-90/94',w:5, pts:[[41.882,-87.632],[41.847,-87.630],[41.807,-87.628],[41.762,-87.626]]},
-      {label:'I-94',   w:5, pts:[[41.882,-87.632],[41.918,-87.672],[41.956,-87.723],[41.988,-87.778]]},
-      {label:'I-290',  w:5, pts:[[41.878,-87.636],[41.867,-87.683],[41.853,-87.733],[41.840,-87.798]]},
-      {label:'I-55',   w:4, pts:[[41.848,-87.634],[41.822,-87.665],[41.792,-87.720],[41.762,-87.790]]},
-      {label:'Lk Shore',w:4,pts:[[41.796,-87.584],[41.830,-87.590],[41.862,-87.610],[41.896,-87.625],[41.930,-87.638]]},
-    ],
-    'Houston': [
-      {label:'I-10',   w:5, pts:[[29.760,-95.572],[29.760,-95.480],[29.762,-95.385],[29.763,-95.295],[29.762,-95.196]]},
-      {label:'I-45',   w:5, pts:[[29.855,-95.414],[29.820,-95.405],[29.783,-95.386],[29.750,-95.370],[29.700,-95.350],[29.650,-95.325]]},
-      {label:'I-610',  w:5, pts:[[29.808,-95.520],[29.812,-95.385],[29.808,-95.262],[29.755,-95.260],[29.690,-95.285],[29.686,-95.385],[29.690,-95.520],[29.755,-95.530],[29.808,-95.520]]},
-      {label:'US-59',  w:4, pts:[[29.760,-95.380],[29.730,-95.432],[29.700,-95.490],[29.660,-95.550]]},
-      {label:'Bltwy 8',w:4, pts:[[29.920,-95.582],[29.924,-95.385],[29.916,-95.170],[29.820,-95.107],[29.680,-95.147],[29.610,-95.370],[29.630,-95.590],[29.740,-95.640],[29.920,-95.582]]},
-    ],
-    'Phoenix': [
-      {label:'I-10',   w:5, pts:[[33.448,-112.278],[33.449,-112.190],[33.449,-112.090],[33.450,-111.990],[33.450,-111.882]]},
-      {label:'I-17',   w:5, pts:[[33.332,-112.073],[33.390,-112.075],[33.450,-112.076],[33.510,-112.078],[33.570,-112.082]]},
-      {label:'SR-51',  w:4, pts:[[33.488,-112.046],[33.530,-112.040],[33.572,-112.034],[33.610,-112.030]]},
-      {label:'SR-101', w:4, pts:[[33.320,-111.857],[33.420,-111.847],[33.490,-111.922],[33.575,-112.022],[33.618,-112.178],[33.598,-112.260]]},
-      {label:'US-60',  w:4, pts:[[33.380,-112.120],[33.378,-112.040],[33.375,-111.958],[33.373,-111.872]]},
-    ],
-    'Philadelphia': [
-      {label:'I-95',   w:5, pts:[[39.876,-75.138],[39.916,-75.145],[39.960,-75.148],[40.000,-75.147],[40.050,-75.130]]},
-      {label:'I-76',   w:5, pts:[[39.895,-75.210],[39.933,-75.200],[39.963,-75.188],[40.000,-75.170],[40.030,-75.150]]},
-      {label:'I-676',  w:4, pts:[[39.960,-75.228],[39.960,-75.186],[39.960,-75.152],[39.958,-75.118]]},
-      {label:'US-1',   w:4, pts:[[39.958,-75.173],[39.990,-75.148],[40.030,-75.115],[40.073,-75.078]]},
-      {label:'PA-309', w:3, pts:[[40.013,-75.168],[40.055,-75.163],[40.095,-75.158],[40.140,-75.155]]},
-    ],
-    'San Antonio': [
-      {label:'I-10',    w:5, pts:[[29.424,-98.698],[29.425,-98.600],[29.425,-98.490],[29.427,-98.380],[29.428,-98.270]]},
-      {label:'I-35',    w:5, pts:[[29.320,-98.492],[29.380,-98.494],[29.425,-98.496],[29.490,-98.498],[29.540,-98.495]]},
-      {label:'I-37',    w:4, pts:[[29.424,-98.495],[29.400,-98.468],[29.375,-98.440],[29.345,-98.405],[29.310,-98.370]]},
-      {label:'US-281',  w:4, pts:[[29.280,-98.495],[29.360,-98.492],[29.425,-98.490],[29.490,-98.488],[29.555,-98.488]]},
-      {label:'Loop 410',w:4, pts:[[29.545,-98.492],[29.510,-98.362],[29.420,-98.300],[29.340,-98.353],[29.320,-98.490],[29.348,-98.610],[29.428,-98.638],[29.510,-98.603],[29.545,-98.492]]},
-    ],
-    'San Diego': [
-      {label:'I-5',    w:5, pts:[[32.590,-117.108],[32.640,-117.122],[32.715,-117.163],[32.780,-117.193],[32.840,-117.218]]},
-      {label:'I-8',    w:5, pts:[[32.762,-117.243],[32.762,-117.165],[32.762,-117.090],[32.762,-117.010],[32.763,-116.930]]},
-      {label:'I-15',   w:4, pts:[[32.600,-117.063],[32.660,-117.075],[32.722,-117.088],[32.785,-117.102],[32.850,-117.117]]},
-      {label:'SR-94',  w:4, pts:[[32.720,-117.165],[32.715,-117.110],[32.711,-117.060],[32.707,-116.992],[32.704,-116.922]]},
-      {label:'SR-163', w:3, pts:[[32.718,-117.163],[32.738,-117.150],[32.760,-117.143],[32.792,-117.139]]},
-    ],
-    'Dallas': [
-      {label:'I-30',   w:5, pts:[[32.777,-97.025],[32.778,-96.940],[32.778,-96.848],[32.777,-96.755],[32.777,-96.670]]},
-      {label:'I-35E',  w:5, pts:[[32.698,-96.920],[32.740,-96.880],[32.778,-96.817],[32.832,-96.790],[32.883,-96.778]]},
-      {label:'I-635',  w:5, pts:[[32.920,-97.060],[32.922,-96.965],[32.927,-96.865],[32.923,-96.760],[32.912,-96.658]]},
-      {label:'US-75',  w:4, pts:[[32.778,-96.800],[32.820,-96.788],[32.862,-96.778],[32.905,-96.768],[32.948,-96.758]]},
-      {label:'SR-114', w:3, pts:[[32.878,-97.068],[32.860,-97.000],[32.843,-96.922],[32.825,-96.843]]},
-    ],
-    'San Jose': [
-      {label:'I-280',  w:5, pts:[[37.232,-122.012],[37.275,-121.972],[37.322,-121.932],[37.370,-121.900],[37.420,-121.880]]},
-      {label:'I-880',  w:5, pts:[[37.260,-121.967],[37.300,-121.960],[37.340,-121.925],[37.380,-121.900],[37.425,-121.880]]},
-      {label:'SR-87',  w:4, pts:[[37.272,-121.890],[37.310,-121.892],[37.352,-121.890],[37.392,-121.882]]},
-      {label:'US-101', w:4, pts:[[37.240,-121.838],[37.285,-121.852],[37.340,-121.868],[37.395,-121.880],[37.445,-121.898]]},
-      {label:'SR-85',  w:3, pts:[[37.258,-121.938],[37.292,-121.970],[37.330,-122.010],[37.355,-122.042]]},
-    ],
-  };
+  // ── Road geometry cache ───────────────────────────────────────────────────
+  // Keyed by city.id → GeoJSON features array fetched from /api/traffic/demo/roads/<id>.
+  // null means "fetch in progress or failed"; [] means "no roads returned by API".
+  var _roadsCache = {};
 
-  function getRoads(city) {
-    return CITY_ROADS[city.name] || [];
+  // Map OSM highway tag → overlay line width (px)
+  function hwWidth(hw) {
+    if (hw === 'motorway' || hw === 'trunk') return 5;
+    if (hw === 'primary') return 4;
+    return 3;
   }
 
   // ── Web Mercator projection ───────────────────────────────────────────────
@@ -460,60 +391,46 @@
   }
 
   // ── Canvas overlay (used over the static PNG) ─────────────────────────────
-  function drawOverlay(canvas, city, greenPct, yellowPct, redPct, seed) {
+  // features: GeoJSON Feature array from /api/traffic/demo/roads/<id>
+  // Each feature has geometry.type='LineString', geometry.coordinates=[[lon,lat],...],
+  // properties.highway (OSM tag).
+  function drawOverlay(canvas, city, greenPct, yellowPct, redPct, seed, features) {
     var W = canvas.width, H = canvas.height;
     if (W < 4 || H < 4) return;
     var clat = city.lat, clon = city.lon;
     var ctx  = canvas.getContext('2d');
     ctx.clearRect(0, 0, W, H);
+    if (!features || features.length === 0) return;
 
-    var pool  = buildPool(greenPct, yellowPct, redPct);
-    var rng   = mulberry32(seed);
-    var roads = getRoads(city);
+    var pool = buildPool(greenPct, yellowPct, redPct);
+    var rng  = mulberry32(seed);
     ctx.lineCap = 'round';
 
-    roads.forEach(function (rd) {
-      // Convert all waypoints to canvas pixels
-      var px = rd.pts.map(function(p) { return llToPx(p[0], p[1], clat, clon, W, H); });
+    features.forEach(function (feat) {
+      if (!feat.geometry || feat.geometry.type !== 'LineString') return;
+      // GeoJSON coords are [lon, lat]; llToPx expects (lat, lon, ...)
+      var px = feat.geometry.coordinates.map(function (c) {
+        return llToPx(c[1], c[0], clat, clon, W, H);
+      });
+      if (px.length < 2) return;
+      var w = hwWidth(feat.properties && feat.properties.highway);
       var j;
 
-      // White halo along full road path for contrast over the OSM basemap
+      // White halo for contrast over the OSM basemap
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-      ctx.lineWidth   = (rd.w || 5) + 3;
+      ctx.lineWidth   = w + 3;
       ctx.beginPath();
       ctx.moveTo(px[0][0], px[0][1]);
       for (j = 1; j < px.length; j++) ctx.lineTo(px[j][0], px[j][1]);
       ctx.stroke();
 
-      // Colour each span between consecutive waypoints
-      ctx.lineWidth = rd.w || 5;
-      for (j = 0; j < px.length - 1; j++) {
-        ctx.strokeStyle = pool[Math.floor(rng() * pool.length)];
-        ctx.beginPath();
-        ctx.moveTo(px[j][0], px[j][1]);
-        ctx.lineTo(px[j+1][0], px[j+1][1]);
-        ctx.stroke();
-      }
-
-      // Road name badge at the middle waypoint
-      if (rd.label) {
-        var mi = Math.floor(px.length / 2);
-        var mx = px[mi][0], my = px[mi][1];
-        var fs = Math.max(9, Math.round(W * 0.014));
-        ctx.font = 'bold ' + fs + 'px Arial';
-        var tw = ctx.measureText(rd.label).width;
-        ctx.fillStyle = 'rgba(8,18,50,0.85)';
-        ctx.beginPath();
-        if (ctx.roundRect) {
-          ctx.roundRect(mx - tw/2 - 4, my - fs, tw + 8, fs + 5, 3);
-        } else {
-          ctx.rect(mx - tw/2 - 4, my - fs, tw + 8, fs + 5);
-        }
-        ctx.fill();
-        ctx.fillStyle   = '#fff';
-        ctx.textAlign   = 'center';
-        ctx.fillText(rd.label, mx, my + 2);
-      }
+      // Single traffic colour per OSM way
+      ctx.strokeStyle = pool[Math.floor(rng() * pool.length)];
+      ctx.lineWidth   = w;
+      ctx.beginPath();
+      ctx.moveTo(px[0][0], px[0][1]);
+      for (j = 1; j < px.length; j++) ctx.lineTo(px[j][0], px[j][1]);
+      ctx.stroke();
     });
   }
 
@@ -542,68 +459,28 @@
     }).addTo(_map);
   }
 
-  function applyLeafletOverlay(city, greenPct, yellowPct, redPct, seed) {
+  function applyLeafletOverlay(city, greenPct, yellowPct, redPct, seed, features) {
     if (!_map) return;
     _map.setView([city.lat || 40.7128, city.lon || -74.006], 12);
     if (_overlayLayer) { _map.removeLayer(_overlayLayer); _overlayLayer = null; }
-    var pool  = buildPool(greenPct, yellowPct, redPct);
-    var rng   = mulberry32(seed);
-    var roads = getRoads(city);
+    if (!features || features.length === 0) return;
+    var pool   = buildPool(greenPct, yellowPct, redPct);
+    var rng    = mulberry32(seed);
     var layers = [];
-    roads.forEach(function (rd) {
-      var j;
-      // White halo along full road path
-      layers.push(L.polyline(rd.pts, {color:'#fff', weight:(rd.w||5)+3, opacity:0.35}));
-      // Colour each span between consecutive waypoints
-      for (j = 0; j < rd.pts.length - 1; j++) {
-        layers.push(L.polyline(
-          [rd.pts[j], rd.pts[j+1]],
-          {color: pool[Math.floor(rng()*pool.length)], weight: rd.w||5, opacity: 0.9}
-        ));
-      }
-      // Road name label at middle waypoint
-      if (rd.label) {
-        var mi = Math.floor(rd.pts.length / 2);
-        layers.push(L.marker(rd.pts[mi], {icon: L.divIcon({className:'',
-          html: '<div style="background:rgba(8,18,50,.82);color:#fff;font:bold 11px Arial;'+
-                'padding:1px 5px;border-radius:3px;white-space:nowrap;'+
-                'box-shadow:0 1px 3px rgba(0,0,0,.5)">'+rd.label+'</div>',
-          iconAnchor:[0,8]}), interactive:false}));
-      }
+    features.forEach(function (feat) {
+      if (!feat.geometry || feat.geometry.type !== 'LineString') return;
+      // GeoJSON coords are [lon, lat]; Leaflet polyline needs [lat, lon]
+      var latlngs = feat.geometry.coordinates.map(function (c) { return [c[1], c[0]]; });
+      if (latlngs.length < 2) return;
+      var w     = hwWidth(feat.properties && feat.properties.highway);
+      var color = pool[Math.floor(rng() * pool.length)];
+      layers.push(L.polyline(latlngs, {color: '#fff',  weight: w + 3, opacity: 0.35}));
+      layers.push(L.polyline(latlngs, {color: color,   weight: w,     opacity: 0.85}));
     });
     _overlayLayer = L.layerGroup(layers).addTo(_map);
   }
 
-  // ── PNG probe cache (per slug) ────────────────────────────────────────────
-  var _pngAvail = {};
-
-  function updateMap(city, greenPct, yellowPct, redPct, seed) {
-    var slug = citySlug(city.name);
-    var url  = '/static/maps/traffic_demo/' + slug + '.png';
-
-    if (_pngAvail[slug] === true) {
-      applyStaticMode(url, city, greenPct, yellowPct, redPct, seed);
-      return;
-    }
-    if (_pngAvail[slug] === false) {
-      applyLiveMode(city, greenPct, yellowPct, redPct, seed);
-      return;
-    }
-
-    // Unknown — show Leaflet immediately, probe for PNG in parallel
-    applyLiveMode(city, greenPct, yellowPct, redPct, seed);
-    var probe = new Image();
-    probe.onload = function () {
-      _pngAvail[slug] = true;
-      if (_lastCityId === city.id) {
-        applyStaticMode(url, city, greenPct, yellowPct, redPct, seed);
-      }
-    };
-    probe.onerror = function () { _pngAvail[slug] = false; };
-    probe.src = url;
-  }
-
-  function applyStaticMode(url, city, greenPct, yellowPct, redPct, seed) {
+  function applyStaticMode(url, city, greenPct, yellowPct, redPct, seed, features) {
     var imgEl = document.getElementById('tf-static-map');
     var cvEl  = document.getElementById('tf-overlay');
     var mapEl = document.getElementById('tf-map');
@@ -615,10 +492,10 @@
     var cont = cvEl.parentElement;
     cvEl.width  = cont ? cont.clientWidth  : BASEMAP_W;
     cvEl.height = cont ? cont.clientHeight : BASEMAP_H;
-    drawOverlay(cvEl, city, greenPct, yellowPct, redPct, seed);
+    drawOverlay(cvEl, city, greenPct, yellowPct, redPct, seed, features);
   }
 
-  function applyLiveMode(city, greenPct, yellowPct, redPct, seed) {
+  function applyLiveMode(city, greenPct, yellowPct, redPct, seed, features) {
     var imgEl = document.getElementById('tf-static-map');
     var cvEl  = document.getElementById('tf-overlay');
     var mapEl = document.getElementById('tf-map');
@@ -626,7 +503,52 @@
     if (cvEl)  cvEl.style.display  = 'none';
     if (mapEl) mapEl.style.visibility = 'visible';
     initLeaflet();
-    applyLeafletOverlay(city, greenPct, yellowPct, redPct, seed);
+    applyLeafletOverlay(city, greenPct, yellowPct, redPct, seed, features);
+  }
+
+  // ── PNG probe cache (per slug) ────────────────────────────────────────────
+  var _pngAvail = {};
+
+  function updateMap(city, greenPct, yellowPct, redPct, seed) {
+    var slug = citySlug(city.name);
+    var url  = '/static/maps/traffic_demo/' + slug + '.png';
+
+    function render(features) {
+      if (_pngAvail[slug] === true) {
+        applyStaticMode(url, city, greenPct, yellowPct, redPct, seed, features);
+        return;
+      }
+      if (_pngAvail[slug] === false) {
+        applyLiveMode(city, greenPct, yellowPct, redPct, seed, features);
+        return;
+      }
+      // PNG availability unknown — show Leaflet immediately, probe PNG in parallel
+      applyLiveMode(city, greenPct, yellowPct, redPct, seed, features);
+      var probe = new Image();
+      probe.onload = function () {
+        _pngAvail[slug] = true;
+        if (_lastCityId === city.id) {
+          applyStaticMode(url, city, greenPct, yellowPct, redPct, seed, features);
+        }
+      };
+      probe.onerror = function () { _pngAvail[slug] = false; };
+      probe.src = url;
+    }
+
+    if (_roadsCache[city.id] !== undefined) {
+      render(_roadsCache[city.id]);
+    } else {
+      // Show the map immediately with no overlay, fetch real road geometry in background
+      applyLiveMode(city, greenPct, yellowPct, redPct, seed, []);
+      fetch('/api/traffic/demo/roads/' + city.id)
+        .then(function (r) { return r.json(); })
+        .then(function (geojson) {
+          var features = (geojson && Array.isArray(geojson.features)) ? geojson.features : [];
+          _roadsCache[city.id] = features;
+          if (_lastCityId === city.id) { render(features); }
+        })
+        .catch(function () { _roadsCache[city.id] = []; });
+    }
   }
 
   // ── DOM helpers ───────────────────────────────────────────────────────────
