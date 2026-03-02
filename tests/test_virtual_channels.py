@@ -50,7 +50,7 @@ def login(client, username="testuser", password="testpass"):
 class TestGetVirtualChannels:
     def test_returns_three_channels(self):
         channels = get_virtual_channels()
-        assert len(channels) == 3
+        assert len(channels) == 4
 
     def test_all_have_is_virtual_true(self):
         for ch in get_virtual_channels():
@@ -201,6 +201,7 @@ class TestChangeTunerVirtualChannels:
             "virtual.news": False,
             "virtual.weather": False,
             "virtual.status": False,
+            "virtual.traffic": False,
         })
         login(client, "admin", "adminpass")
         resp = client.post("/change_tuner", data={
@@ -208,6 +209,7 @@ class TestChangeTunerVirtualChannels:
             "vc_virtual.news": "1",
             "vc_virtual.weather": "1",
             "vc_virtual.status": "1",
+            "vc_virtual.traffic": "1",
         }, follow_redirects=True)
         assert resp.status_code == 200
         settings = get_virtual_channel_settings()

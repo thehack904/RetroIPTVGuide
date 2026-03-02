@@ -339,6 +339,8 @@
                     Source: {{ 'News Feed (Auto)' if not news_feed_urls else news_feed_urls|length ~ ' RSS Feed' ~ ('' if news_feed_urls|length == 1 else 's') }}
                   {% elif ch.tvg_id == 'virtual.status' %}
                     Uptime, CPU, Memory
+                  {% elif ch.tvg_id == 'virtual.traffic' %}
+                    Location: {{ traffic_config.location_name or 'Not set' }}&nbsp;&nbsp;Radius: {{ traffic_config.radius_miles or '25' }} mi
                   {% else %}
                     {{ ch.overlay_type | title }}
                   {% endif %}
@@ -431,6 +433,40 @@
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                   <a href="/weather" target="_blank" class="btn-link small">&#127780; Preview Weather Page &#8599;</a>
+                  <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+                </div>
+                {% endif %}
+                {% if ch.tvg_id == 'virtual.traffic' %}
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>US Zip Code Lookup</label>
+                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
+                    <input type="text" id="vc-traffic-zip-input" placeholder="e.g. 33101" maxlength="5" inputmode="numeric" pattern="\d{5}" class="zip-input">
+                    <button type="button" id="vc-traffic-zip-lookup-btn" class="secondary small">Look Up</button>
+                    <span id="vc-traffic-zip-status" class="zip-status" aria-live="polite"></span>
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>Location Name</label>
+                  <input type="text" id="vc-traffic-location" name="ch_traffic_location" value="{{ traffic_config.location_name }}" placeholder="e.g. Miami, FL" maxlength="120">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Latitude</label>
+                  <input type="text" id="vc-traffic-lat" name="ch_traffic_lat" value="{{ traffic_config.lat }}" placeholder="e.g. 25.77" maxlength="20" inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Longitude</label>
+                  <input type="text" id="vc-traffic-lon" name="ch_traffic_lon" value="{{ traffic_config.lon }}" placeholder="e.g. -80.19" maxlength="20" inputmode="decimal">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Radius (miles)</label>
+                  <input type="number" name="ch_traffic_radius" value="{{ traffic_config.radius_miles or '25' }}" min="1" max="100" step="1" style="width:5em;">
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide">
+                  <label>TomTom API Key <span class="muted small">(<a href="https://developer.tomtom.com/" target="_blank" rel="noopener">get a free key</a>)</span></label>
+                  <input type="text" name="ch_traffic_api_key" value="{{ traffic_config.api_key }}" placeholder="Enter TomTom API key" maxlength="200" autocomplete="off">
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                  <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
                   <span class="muted small" style="margin-left:8px;">Save settings first.</span>
                 </div>
                 {% endif %}
@@ -836,6 +872,39 @@ document.addEventListener('DOMContentLoaded', () => {
   var lonEl  = document.getElementById('vc-weather-lon');
   var locEl  = document.getElementById('vc-weather-location');
   var status = document.getElementById('vc-zip-status');
+  if (!btn || !zipEl) return;
+  function doLookup() {
+    var zip = zipEl.value.trim();
+    if (!/^\d{5}$/.test(zip)) { status.textContent = 'Enter a 5-digit US zip code.'; status.className = 'zip-status zip-status-error'; return; }
+    btn.disabled = true; status.textContent = 'Looking up\u2026'; status.className = 'zip-status';
+    fetch('https://api.zippopotam.us/us/' + zip)
+      .then(r => { if (!r.ok) throw new Error('not found'); return r.json(); })
+      .then(data => {
+        var place = data.places && data.places[0];
+        if (!place) throw new Error('no places');
+        var lat = parseFloat(place.latitude), lon = parseFloat(place.longitude);
+        if (isNaN(lat) || isNaN(lon)) throw new Error('invalid coords');
+        var loc = place['place name'] + ', ' + place['state abbreviation'];
+        if (latEl) latEl.value = lat.toFixed(4);
+        if (lonEl) lonEl.value = lon.toFixed(4);
+        if (locEl) locEl.value = loc;
+        status.textContent = '\u2713 Found: ' + loc; status.className = 'zip-status zip-status-ok';
+      })
+      .catch(() => { status.textContent = 'Zip code not found.'; status.className = 'zip-status zip-status-error'; })
+      .finally(() => { btn.disabled = false; });
+  }
+  btn.addEventListener('click', doLookup);
+  zipEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } });
+})();
+
+// US Zip Code -> lat/lon/location (traffic channel)
+(function() {
+  var btn    = document.getElementById('vc-traffic-zip-lookup-btn');
+  var zipEl  = document.getElementById('vc-traffic-zip-input');
+  var latEl  = document.getElementById('vc-traffic-lat');
+  var lonEl  = document.getElementById('vc-traffic-lon');
+  var locEl  = document.getElementById('vc-traffic-location');
+  var status = document.getElementById('vc-traffic-zip-status');
   if (!btn || !zipEl) return;
   function doLookup() {
     var zip = zipEl.value.trim();

@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV Traffic</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #0a1a6e;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ─────────────────────────────────────────────── */
+    .tf-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #0f2ab0 0%, #0a1a80 40%, #081060 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .tf-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(
+          0deg,
+          transparent,
+          transparent 3px,
+          rgba(0,0,0,0.06) 3px,
+          rgba(0,0,0,0.06) 4px
+        );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .tf-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0.6em 1.2em;
+      display: flex;
+      align-items: center;
+      gap: 0.6em;
+      flex-shrink: 0;
+    }
+
+    .tf-header-title {
+      font-size: clamp(22px, 3.5vw, 46px);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.3em;
+    }
+
+    .tf-header-title .tf-icon-header { font-size: 1.1em; }
+
+    .tf-header-subtitle {
+      font-size: clamp(18px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+      margin-left: auto;
+    }
+
+    .tf-updated {
+      font-size: clamp(11px, 1.5vw, 18px);
+      font-weight: 700;
+      color: #ffd700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.2em 1.2em 0;
+      flex-shrink: 0;
+    }
+
+    /* ── Main content area ──────────────────────────────────────── */
+    .tf-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 2.2fr;
+      gap: 0.5em;
+      padding: 0.5em 0.7em 0.3em;
+      min-height: 0;
+    }
+
+    /* ── Section box ─────────────────────────────────────────────── */
+    .tf-box {
+      background: rgba(10, 40, 170, 0.75);
+      border: 2px solid #3058d8;
+      border-radius: 4px;
+      padding: 0.5em 0.7em;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .tf-box-title {
+      font-size: clamp(11px, 1.4vw, 17px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd700;
+      border-bottom: 1px solid #3058d8;
+      padding-bottom: 0.3em;
+      margin-bottom: 0.4em;
+    }
+
+    /* ── Summary panel (left) ───────────────────────────────────── */
+    .tf-summary-count {
+      font-size: clamp(42px, 6vw, 80px);
+      font-weight: 900;
+      text-align: center;
+      line-height: 1;
+      color: #ffd700;
+      margin: 0.15em 0 0.1em;
+    }
+
+    .tf-summary-label {
+      font-size: clamp(11px, 1.4vw, 16px);
+      font-weight: 700;
+      text-align: center;
+      color: #c8d8ff;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin-bottom: 0.6em;
+    }
+
+    .tf-congestion-label {
+      font-size: clamp(10px, 1.3vw, 15px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+      margin-bottom: 0.2em;
+    }
+
+    .tf-congestion-bar-track {
+      background: rgba(0,0,20,0.5);
+      border: 1px solid #3058d8;
+      border-radius: 3px;
+      height: clamp(10px, 1.6vw, 20px);
+      overflow: hidden;
+      margin-bottom: 0.25em;
+    }
+
+    .tf-congestion-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    .tf-congestion-bar-fill[data-level="Low"]      { width: 28%; background: #22cc44; }
+    .tf-congestion-bar-fill[data-level="Moderate"] { width: 62%; background: #ffaa00; }
+    .tf-congestion-bar-fill[data-level="Heavy"]    { width: 95%; background: #ee2222; }
+
+    .tf-congestion-value {
+      font-size: clamp(14px, 2vw, 26px);
+      font-weight: 900;
+      text-align: center;
+      margin: 0.2em 0;
+    }
+
+    .tf-congestion-value[data-level="Low"]      { color: #22cc44; }
+    .tf-congestion-value[data-level="Moderate"] { color: #ffaa00; }
+    .tf-congestion-value[data-level="Heavy"]    { color: #ee2222; }
+
+    /* ── Legend ─────────────────────────────────────────────────── */
+    .tf-legend {
+      margin-top: auto;
+      font-size: clamp(9px, 1.1vw, 13px);
+      line-height: 1.7;
+      color: #d0e0ff;
+    }
+
+    .tf-legend-item { display: flex; align-items: center; gap: 0.4em; }
+    .tf-legend-dot  { width: 0.7em; height: 0.7em; border-radius: 50%; flex-shrink: 0; }
+
+    /* ── Incident list (right) ──────────────────────────────────── */
+    .tf-incidents { overflow: hidden; }
+
+    .tf-incident-row {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5em;
+      padding: 0.3em 0;
+      border-bottom: 1px solid rgba(48, 88, 216, 0.5);
+    }
+
+    .tf-incident-row:last-child { border-bottom: none; }
+
+    .tf-incident-dot {
+      width: 0.55em;
+      height: 0.55em;
+      border-radius: 50%;
+      flex-shrink: 0;
+      margin-top: 0.2em;
+    }
+
+    .tf-incident-dot[data-severity="Major"]    { background: #ee2222; }
+    .tf-incident-dot[data-severity="Moderate"] { background: #ffaa00; }
+    .tf-incident-dot[data-severity="Minor"]    { background: #22cc44; }
+    .tf-incident-dot[data-severity="Unknown"]  { background: #8898c0; }
+
+    .tf-incident-info { flex: 1; min-width: 0; }
+
+    .tf-incident-title {
+      font-size: clamp(11px, 1.4vw, 17px);
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tf-incident-detail {
+      font-size: clamp(9px, 1.1vw, 13px);
+      color: #c8d8ff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tf-incident-dist {
+      font-size: clamp(9px, 1.1vw, 13px);
+      font-weight: 700;
+      color: #ffd700;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .tf-no-incidents {
+      color: #90a8f0;
+      font-size: clamp(11px, 1.4vw, 16px);
+      padding: 0.6em 0;
+    }
+
+    /* ── Breaking News Ticker ───────────────────────────────────── */
+    .tf-ticker-bar {
+      background: #0a0e2a;
+      border-top: 2px solid #4a70ff;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4vw, 46px);
+    }
+
+    .tf-ticker-label {
+      background: #ffd700;
+      color: #0a0e2a;
+      font-size: clamp(10px, 1.4vw, 17px);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.7em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+    }
+
+    .tf-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .tf-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 16px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: tf-scroll 36s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes tf-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error state ──────────────────────────────────── */
+    .tf-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="tf-frame" id="tfFrame">
+  <div class="tf-loading" id="tfLoading">Loading traffic data…</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  // Must match _TRAFFIC_CACHE_TTL in app.py
+  const REFRESH_INTERVAL_MS = 2 * 60 * 1000;
+  // Fallback retry delay on error
+  const ERROR_RETRY_MS      = 60 * 1000;
+
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
+  function esc(s) {
+    return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function build(data) {
+    const frame    = document.getElementById('tfFrame');
+    const summary  = data.summary  || {};
+    const incidents = Array.isArray(data.incidents) ? data.incidents : [];
+    const level    = summary.congestion_level || 'Low';
+    const count    = summary.incident_count   || 0;
+
+    // Ticker text from incidents
+    const tickParts = incidents.length
+      ? incidents.map(i => [esc(i.title), esc(i.road)].filter(Boolean).join(' — '))
+      : ['No incidents reported in your area'];
+    const tickText = tickParts.join(' \u2022 ') + ' \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    // Incident rows
+    const incidentRows = incidents.length
+      ? incidents.map(inc => {
+          const dist = inc.distance_miles != null ? `${inc.distance_miles} mi` : '';
+          const detail = [esc(inc.road), esc(inc.direction)].filter(Boolean).join(' · ');
+          return `
+            <div class="tf-incident-row">
+              <div class="tf-incident-dot" data-severity="${esc(inc.severity)}"></div>
+              <div class="tf-incident-info">
+                <div class="tf-incident-title">${esc(inc.title)}</div>
+                ${detail ? `<div class="tf-incident-detail">${detail}</div>` : ''}
+              </div>
+              ${dist ? `<div class="tf-incident-dist">${dist}</div>` : ''}
+            </div>`;
+        }).join('')
+      : '<div class="tf-no-incidents">No incidents reported nearby.</div>';
+
+    frame.innerHTML = `
+      <div class="tf-header">
+        <div class="tf-header-title">
+          <span>RetroIPTV</span>
+          <span class="tf-icon-header">🚗</span>
+          <span>Traffic</span>
+        </div>
+        <div class="tf-header-subtitle">Local Conditions</div>
+      </div>
+      <div class="tf-updated">
+        <span>${esc(data.location || '')}</span>
+        <span>UPDATED: ${data.updated ? formatLocalTime(data.updated) : ''}</span>
+      </div>
+      <div class="tf-body">
+        <div class="tf-box">
+          <div class="tf-box-title">Congestion</div>
+          <div class="tf-summary-count">${count}</div>
+          <div class="tf-summary-label">Incident${count !== 1 ? 's' : ''} Reported</div>
+          <div class="tf-congestion-label">Traffic Level</div>
+          <div class="tf-congestion-bar-track">
+            <div class="tf-congestion-bar-fill" data-level="${esc(level)}"></div>
+          </div>
+          <div class="tf-congestion-value" data-level="${esc(level)}">${esc(level)}</div>
+          <div class="tf-legend" style="margin-top:auto">
+            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#22cc44"></div>Low</div>
+            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#ffaa00"></div>Moderate</div>
+            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#ee2222"></div>Heavy</div>
+          </div>
+        </div>
+        <div class="tf-box tf-incidents">
+          <div class="tf-box-title">Live Traffic Incidents</div>
+          ${incidentRows}
+        </div>
+      </div>
+      <div class="tf-ticker-bar">
+        <div class="tf-ticker-label">Traffic Alert:</div>
+        <div class="tf-ticker-scroll">
+          <span class="tf-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Wall clock aligned refresh ───────────────────────────────────────────
+  // Refresh is scheduled at the next 2-minute boundary so all viewers share
+  // the same snapshot regardless of when they tuned in.
+  let _refreshTimer = null;
+
+  async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    try {
+      const resp = await fetch('/api/traffic');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      build(data);
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : REFRESH_INTERVAL_MS;
+      _refreshTimer = setTimeout(load, msUntilNext);
+    } catch (e) {
+      const frame = document.getElementById('tfFrame');
+      frame.innerHTML = `<div class="tf-loading">Unable to load traffic data.</div>`;
+      _refreshTimer = setTimeout(load, ERROR_RETRY_MS);
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

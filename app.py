@@ -180,7 +180,7 @@ def init_tuners_db():
         # and the per-channel test_text keys for all virtual channels.  This clears any
         # stale "This is test Text!" values that were stored during early development.
         c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
-        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status'):
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status', 'virtual.traffic'):
             c.execute("DELETE FROM settings WHERE key=?",
                       (f"overlay.{_ch_id}.test_text",))
         conn.commit()
@@ -627,6 +627,17 @@ VIRTUAL_CHANNELS = [
         'overlay_type': 'status',
         'overlay_refresh_seconds': 30,
     },
+    {
+        'name': 'Traffic Now',
+        'logo': '/static/logos/virtual/traffic.svg',
+        'url': '',
+        'tvg_id': 'virtual.traffic',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/traffic.mp4',
+        'overlay_type': 'traffic',
+        'overlay_refresh_seconds': 120,
+    },
 ]
 
 def get_virtual_channel_settings():
@@ -842,6 +853,8 @@ def get_current_feed_state(feed_count):
 
 
 
+_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+
 def get_weather_config():
     """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
     result = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F'}
@@ -883,7 +896,209 @@ def save_weather_config(config_dict):
         logging.exception("save_weather_config failed")
         raise
 
-# ─── Per-channel music file ───────────────────────────────────────────────────
+# ─── Traffic config & cache ───────────────────────────────────────────────────
+
+_TRAFFIC_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'radius_miles', 'api_key')
+_TRAFFIC_CACHE_TTL   = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
+_traffic_cache: dict = {}    # cache_key -> {'data': {...}, 'slot': int}
+
+def get_traffic_config():
+    """Return traffic configuration: lat, lon, location_name, radius_miles, api_key."""
+    result = {'lat': '', 'lon': '', 'location_name': '', 'radius_miles': '25', 'api_key': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _TRAFFIC_CONFIG_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"traffic.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_traffic_config failed, using defaults")
+    return result
+
+def save_traffic_config(config_dict):
+    """Persist traffic configuration. Validates lat/lon as floats when non-empty."""
+    cleaned = {}
+    for key in _TRAFFIC_CONFIG_KEYS:
+        val = str(config_dict.get(key, '')).strip()
+        if key in ('lat', 'lon') and val:
+            try:
+                float(val)
+            except ValueError:
+                raise ValueError(f"Invalid value for {key}: {val!r}. Must be a number.")
+        if key == 'radius_miles' and val:
+            try:
+                r = float(val)
+                if not (1 <= r <= 100):
+                    raise ValueError("radius_miles must be between 1 and 100")
+            except ValueError as exc:
+                raise ValueError(f"Invalid radius_miles: {val!r}. {exc}") from exc
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"traffic.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_traffic_config failed")
+        raise
+
+_TOMTOM_ICON_NAMES = {
+    0: 'Unknown', 1: 'Accident', 2: 'Fog', 3: 'Dangerous Conditions',
+    4: 'Rain', 5: 'Ice', 6: 'Traffic Jam', 7: 'Lane Closed',
+    8: 'Road Closed', 9: 'Road Works', 10: 'Wind', 11: 'Flooding',
+    12: 'Detour', 13: 'Cluster',
+}
+_TOMTOM_SEVERITY = {0: 'Unknown', 1: 'Minor', 2: 'Moderate', 3: 'Major', 4: 'Unknown'}
+
+def _fetch_tomtom_incidents(lat, lon, radius_miles, api_key):
+    """Fetch traffic incidents from TomTom Traffic Incidents API v5."""
+    import math
+    lat_f = float(lat)
+    lon_f = float(lon)
+    r     = max(1.0, min(100.0, float(radius_miles)))
+    delta_lat = r / 69.0
+    delta_lon = r / max(0.001, 69.0 * math.cos(math.radians(lat_f)))
+    bbox = (f"{lon_f - delta_lon:.6f},{lat_f - delta_lat:.6f},"
+            f"{lon_f + delta_lon:.6f},{lat_f + delta_lat:.6f}")
+    url = (
+        "https://api.tomtom.com/traffic/services/5/incidentDetails"
+        f"?key={api_key}"
+        f"&bbox={bbox}"
+        "&zoom=12&language=en-GB&projection=EPSG4326&geometries=original&expandCluster=true"
+    )
+    try:
+        resp = requests.get(url, timeout=10, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.exception("_fetch_tomtom_incidents failed for lat=%s lon=%s", lat, lon)
+        return None
+
+def _normalize_tomtom(raw, lat, lon):
+    """Normalize TomTom Traffic Incidents response to internal format."""
+    import math
+    lat_f = float(lat)
+    lon_f = float(lon)
+
+    incidents = []
+    for inc in raw.get('incidents', []):
+        props   = inc.get('properties', {})
+        icon_cat = props.get('iconCategory', 0)
+        magnitude = props.get('magnitudeOfDelay', 0)
+        events   = props.get('events', [])
+        title    = (events[0].get('description', '') if events
+                    else _TOMTOM_ICON_NAMES.get(icon_cat, 'Incident'))
+        roads    = props.get('roadNumbers', [])
+        road     = roads[0] if roads else ''
+        from_loc = props.get('from', '')
+        to_loc   = props.get('to', '')
+        direction = (f"{from_loc} → {to_loc}" if from_loc and to_loc
+                     else from_loc or to_loc or '')
+        severity  = _TOMTOM_SEVERITY.get(magnitude, 'Unknown')
+
+        # Distance from center via first geometry coordinate
+        dist_miles = None
+        geom   = inc.get('geometry', {})
+        coords = geom.get('coordinates')
+        if coords:
+            gtype = geom.get('type', '')
+            if gtype == 'Point':
+                ic_lon, ic_lat = coords[0], coords[1]
+            elif gtype in ('LineString', 'MultiLineString') and coords:
+                first = coords[0] if gtype == 'LineString' else (coords[0][0] if coords[0] else None)
+                if first and len(first) >= 2:
+                    ic_lon, ic_lat = first[0], first[1]
+                else:
+                    ic_lon, ic_lat = None, None
+            else:
+                ic_lon, ic_lat = None, None
+            if ic_lon is not None:
+                dlat = math.radians(ic_lat - lat_f)
+                dlon = math.radians(ic_lon - lon_f)
+                a    = (math.sin(dlat / 2) ** 2
+                        + math.cos(math.radians(lat_f))
+                        * math.cos(math.radians(ic_lat))
+                        * math.sin(dlon / 2) ** 2)
+                dist_miles = round(6371 * 2 * math.asin(math.sqrt(a)) * 0.621371, 1)
+
+        if title or road:
+            incidents.append({
+                'title':         title,
+                'severity':      severity,
+                'road':          road,
+                'direction':     direction,
+                'distance_miles': dist_miles,
+            })
+
+    incidents.sort(key=lambda x: x['distance_miles'] if x['distance_miles'] is not None else 999)
+
+    major_count    = sum(1 for i in incidents if i['severity'] == 'Major')
+    moderate_count = sum(1 for i in incidents if i['severity'] == 'Moderate')
+    if major_count >= 2 or (major_count >= 1 and moderate_count >= 2):
+        congestion_level = 'Heavy'
+    elif major_count >= 1 or moderate_count >= 2:
+        congestion_level = 'Moderate'
+    else:
+        congestion_level = 'Low'
+
+    return {
+        'incident_count':   len(incidents),
+        'congestion_level': congestion_level,
+        'incidents':        incidents[:8],
+    }
+
+def _build_traffic_payload(cfg):
+    """Build the normalized traffic payload.  Results are cached per wall-clock
+    time slot so all viewers see the same snapshot regardless of tune-in time."""
+    lat           = cfg.get('lat', '')
+    lon           = cfg.get('lon', '')
+    location_name = cfg.get('location_name') or 'Local Traffic'
+    radius_miles  = cfg.get('radius_miles') or '25'
+    api_key       = cfg.get('api_key', '')
+
+    now_ts   = time.time()
+    slot     = int(now_ts // _TRAFFIC_CACHE_TTL)
+    cache_key = f"{lat}:{lon}:{radius_miles}:{slot}"
+
+    cached = _traffic_cache.get(cache_key)
+    if cached:
+        return cached['data']
+
+    normalized = None
+    if lat and lon and api_key:
+        raw = _fetch_tomtom_incidents(lat, lon, radius_miles, api_key)
+        if raw:
+            normalized = _normalize_tomtom(raw, lat, lon)
+
+    if not normalized:
+        normalized = {'incident_count': 0, 'congestion_level': 'Low', 'incidents': []}
+
+    # Evict stale entries (keep cache small)
+    stale = [k for k in list(_traffic_cache) if k != cache_key]
+    for k in stale:
+        _traffic_cache.pop(k, None)
+
+    payload = {
+        'updated':  datetime.now(timezone.utc).isoformat(),
+        'center':   {'lat': float(lat) if lat else 0.0,
+                     'lon': float(lon) if lon else 0.0},
+        'location': location_name,
+        'summary':  {
+            'incident_count':   normalized['incident_count'],
+            'congestion_level': normalized['congestion_level'],
+        },
+        'incidents': normalized['incidents'],
+    }
+    _traffic_cache[cache_key] = {'data': payload}
+    return payload
+
+
 
 def get_channel_music_file(tvg_id):
     """Return the selected audio filename (basename only) for a virtual channel, or ''."""
@@ -1301,9 +1516,10 @@ def get_virtual_epg(grid_start, hours_span=6):
     epg = {}
     grid_end = grid_start + timedelta(hours=hours_span)
     programs_by_tvg_id = {
-        'virtual.news': 'News Now',
+        'virtual.news':    'News Now',
         'virtual.weather': 'Local Weather',
-        'virtual.status': 'System Status',
+        'virtual.status':  'System Status',
+        'virtual.traffic': 'Traffic Now',
     }
     for tvg_id, title in programs_by_tvg_id.items():
         slots = []
@@ -1865,7 +2081,7 @@ def change_tuner():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
-                if tvg_id in ('virtual.weather', 'virtual.news'):
+                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
                     # Text color, background color, and test banner are not used by
                     # these full-page overlay channels; always clear them.
                     appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
@@ -1883,6 +2099,15 @@ def change_tuner():
                             'units':         request.form.get('ch_weather_units', 'F').strip(),
                         }
                         save_weather_config(weather_cfg)
+                    if tvg_id == 'virtual.traffic':
+                        traffic_cfg = {
+                            'lat':           request.form.get('ch_traffic_lat', '').strip(),
+                            'lon':           request.form.get('ch_traffic_lon', '').strip(),
+                            'location_name': request.form.get('ch_traffic_location', '').strip(),
+                            'radius_miles':  request.form.get('ch_traffic_radius', '25').strip(),
+                            'api_key':       request.form.get('ch_traffic_api_key', '').strip(),
+                        }
+                        save_traffic_config(traffic_cfg)
                     # Save background music selection for all virtual channels
                     music_file = request.form.get('ch_music_file', '').strip()
                     save_channel_music_file(tvg_id, music_file)
@@ -1949,6 +2174,7 @@ def change_tuner():
         channel_appearances=channel_appearances,
         news_feed_urls=get_news_feed_urls(),
         weather_config=get_weather_config(),
+        traffic_config=get_traffic_config(),
         audio_files=audio_files,
         channel_music_files=channel_music_files,
     )
@@ -2322,6 +2548,13 @@ def weather_page():
     log_event(current_user.username, "Loaded weather page")
     return render_template('weather.html')
 
+@app.route('/traffic')
+@login_required
+def traffic_page():
+    """Retro TV traffic overlay page."""
+    log_event(current_user.username, "Loaded traffic page")
+    return render_template('traffic.html')
+
 @app.route('/api/weather', methods=['GET'])
 @login_required
 def api_weather():
@@ -2331,6 +2564,29 @@ def api_weather():
     payload = _build_weather_payload(cfg)
     music_filename = get_channel_music_file('virtual.weather')
     payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    # Wall clock aligned refresh: tell the client exactly how long until the
+    # next 5-minute boundary so all viewers refresh in sync.
+    _weather_interval = 300  # seconds
+    _now_ts = datetime.now(timezone.utc).timestamp()
+    payload['ms_until_next'] = int((_weather_interval - (_now_ts % _weather_interval)) * 1000)
+    return jsonify(payload)
+
+@app.route('/api/traffic', methods=['GET'])
+@login_required
+def api_traffic():
+    """Traffic overlay data endpoint. Returns normalized, cached traffic incidents
+    for the configured location. Results are cached per wall-clock time slot
+    (TTL = overlay_refresh_seconds = 120 s) so all viewers share the same snapshot."""
+    cfg = get_traffic_config()
+    payload = dict(_build_traffic_payload(cfg))
+    music_filename = get_channel_music_file('virtual.traffic')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    # Wall clock aligned refresh: tell the client exactly how long until the
+    # next 2-minute boundary so all viewers refresh in sync.
+    _now_ts = time.time()
+    payload['ms_until_next'] = int(
+        (_TRAFFIC_CACHE_TTL - (_now_ts % _TRAFFIC_CACHE_TTL)) * 1000
+    )
     return jsonify(payload)
 
 @app.route('/api/virtual/status', methods=['GET'])

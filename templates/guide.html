@@ -266,7 +266,7 @@
                  data-loop-asset="{{ ch.loop_asset }}"
                  data-overlay-type="{{ ch.overlay_type }}"
                  data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
-                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
+                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news', 'virtual.traffic') %}
                  {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': ''}) %}
                  data-overlay-text-color="{{ ch_app.text_color }}"
                  data-overlay-bg-color="{{ ch_app.bg_color }}"
@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Overlay types that have a dedicated standalone page we can iframe in.
     // ?embedded=1 tells those pages to suppress their own audio (parent already plays it).
-    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1' };
+    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1', traffic: '/traffic?embedded=1' };
 
     function fsElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -1301,6 +1301,7 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="{{ url_for('static', filename='overlays/news.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/weather.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/status.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/traffic.js') }}"></script>
 
 </div><!-- #appZoomRoot -->
 
