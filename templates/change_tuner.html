@@ -326,7 +326,6 @@
         <div class="card-body vc-card-body">
           {% for ch in VIRTUAL_CHANNELS %}
           {% if vc_settings.get(ch.tvg_id, true) %}
-          {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
           <div class="vc-enabled-item">
             <div class="vc-item-left">
               {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
@@ -369,22 +368,7 @@
               <input type="hidden" name="action" value="update_channel_overlay_appearance">
               <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
               <div class="vc-prefs-fields">
-                {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
-                <div class="vc-prefs-field">
-                  <label>Text Color</label>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="color" name="ch_text_color" value="{{ ch_app.text_color or '#ffffff' }}">
-                    <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
-                  </div>
-                </div>
-                <div class="vc-prefs-field">
-                  <label>Background Color</label>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="color" name="ch_bg_color" value="{{ ch_app.bg_color or '#000000' }}">
-                    <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
-                  </div>
-                </div>
-                {% endif %}
+
                 {% if ch.tvg_id == 'virtual.news' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
                   <label>News RSS/Atom Feeds <span class="muted small">(up to 6 &mdash; cycles every {{ (1800 // [(news_feed_urls|default([])|length), 1]|max) }} s)</span></label>
@@ -438,7 +422,22 @@
                 {% endif %}
                 {% if ch.tvg_id == 'virtual.traffic' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>&#128161; No API key required &mdash; fully self-contained demo mode.</label>
+                  <div style="display:flex; align-items:flex-start; gap:8px; padding:8px 10px;
+                              background:rgba(0,10,60,0.45); border:1px solid #3058d8;
+                              border-radius:4px; flex-wrap:wrap;">
+                    <span style="background:#ffd700; color:#0a0e2a; font-weight:700;
+                                 font-size:0.8em; letter-spacing:0.07em; text-transform:uppercase;
+                                 padding:0.2em 0.55em; border-radius:3px; flex-shrink:0;
+                                 align-self:flex-start; margin-top:1px;">Simulated</span>
+                    <span style="color:#c8d8ff; font-size:0.88em; line-height:1.5;">
+                      &#128663; All traffic data displayed on this channel is <strong style="color:#fff;">simulated</strong>
+                      and is <strong style="color:#fff;">not</strong> real-time or live traffic information.
+                      This channel is intended for <em>virtual TV broadcast purposes only</em> and should
+                      <strong style="color:#ff9999;">not</strong> be used for navigation, travel planning, or
+                      any real-world decisions. No external API key required &mdash; all data is generated
+                      locally.
+                    </span>
+                  </div>
                 </div>
                 <div class="vc-prefs-field">
                   <label>Rotation Mode</label>

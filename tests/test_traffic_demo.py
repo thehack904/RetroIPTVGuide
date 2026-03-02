@@ -483,18 +483,20 @@ class TestTrafficPage:
         resp = client.get('/traffic')
         assert b'/api/traffic' in resp.data
 
-    def test_page_uses_leaflet(self, client):
-        """traffic.html must load Leaflet.js — no more SVG grid."""
+    def test_page_uses_canvas_map(self, client):
+        """traffic.html uses a self-contained Canvas map (no external tile CDN)."""
         login(client)
         resp = client.get('/traffic')
-        assert b'leaflet' in resp.data.lower()
-        assert b'cartocdn' in resp.data.lower()
+        assert b'canvas' in resp.data.lower()
+        # Must NOT depend on external Leaflet CDN or CartoDB tiles
+        assert b'cartocdn' not in resp.data.lower()
 
-    def test_page_fetches_roads_endpoint(self, client):
-        """traffic.html must reference the /api/traffic/demo/roads endpoint."""
+    def test_page_has_retroiptv_traffic_title(self, client):
+        """traffic.html header must read 'RetroIPTV Traffic' to match channel naming."""
         login(client)
         resp = client.get('/traffic')
-        assert b'api/traffic/demo/roads' in resp.data
+        assert b'RetroIPTV Traffic' in resp.data
+        assert b'(Simulated)' in resp.data
 
 
 # ─── _overpass_to_geojson helper ─────────────────────────────────────────────
