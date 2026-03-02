@@ -351,80 +351,85 @@
     return h;
   }
 
-  // ── City road layouts ─────────────────────────────────────────────────────
-  var LAT_SPAN = 0.11;
-  var LON_SPAN = 0.145;
-
-  function nll(xf, yf, clat, clon) {
-    return [clat + (0.5 - yf) * LAT_SPAN, clon + (xf - 0.5) * LON_SPAN];
-  }
-
-  var CITY_HWY = {
-    'New York City': ['I-95','I-278','I-495','I-87','FDR Dr'],
-    'Los Angeles':   ['I-5','I-10','I-405','US-101','SR-110'],
-    'Chicago':       ['I-90','I-94','I-290','I-55','Lake Shore'],
-    'Houston':       ['I-10','I-45','I-610','US-59','Beltway 8'],
-    'Phoenix':       ['I-10','I-17','SR-51','SR-101','US-60'],
-    'Philadelphia':  ['I-95','I-76','I-676','US-1','PA-309'],
-    'San Antonio':   ['I-10','I-35','I-37','US-281','Loop 410'],
-    'San Diego':     ['I-5','I-8','I-15','SR-94','SR-163'],
-    'Dallas':        ['I-30','I-35E','I-635','US-75','SR-114'],
-    'San Jose':      ['I-280','I-880','SR-87','SR-101','US-101'],
-  };
-  var CITY_LAYOUT = {
-    'New York City':'grid',  'Los Angeles':'sprawl',
-    'Chicago':'hub',         'Houston':'ring',
-    'Phoenix':'sprawl',      'Philadelphia':'diagonal',
-    'San Antonio':'ring',    'San Diego':'coastal',
-    'Dallas':'grid',         'San Jose':'coastal',
+  // ── Per-city road geometry — real GPS waypoints for major highways ─────────
+  // Each road: {label, w (line width px), pts: [[lat,lon], ...]}
+  // Waypoints trace the actual highway corridor so the overlay aligns with
+  // OpenStreetMap base tiles at zoom 12.
+  var CITY_ROADS = {
+    'New York City': [
+      {label:'I-95',   w:5, pts:[[40.808,-73.926],[40.825,-73.905],[40.840,-73.882],[40.855,-73.862],[40.865,-73.843]]},
+      {label:'I-278',  w:5, pts:[[40.723,-73.998],[40.708,-73.963],[40.692,-73.928],[40.677,-73.892]]},
+      {label:'I-495',  w:5, pts:[[40.744,-73.998],[40.745,-73.944],[40.746,-73.892],[40.748,-73.843]]},
+      {label:'I-87',   w:5, pts:[[40.693,-73.993],[40.730,-73.992],[40.773,-73.980],[40.820,-73.950],[40.860,-73.930]]},
+      {label:'FDR Dr', w:4, pts:[[40.699,-73.974],[40.720,-73.967],[40.752,-73.960],[40.779,-73.948],[40.796,-73.942]]},
+    ],
+    'Los Angeles': [
+      {label:'I-5',    w:5, pts:[[33.978,-118.287],[34.020,-118.260],[34.068,-118.222],[34.128,-118.174],[34.193,-118.128]]},
+      {label:'I-10',   w:5, pts:[[34.026,-118.458],[34.025,-118.375],[34.025,-118.285],[34.022,-118.200],[34.018,-118.132]]},
+      {label:'I-405',  w:5, pts:[[33.963,-118.395],[33.998,-118.425],[34.052,-118.443],[34.112,-118.452],[34.168,-118.448]]},
+      {label:'US-101', w:4, pts:[[34.040,-118.263],[34.063,-118.296],[34.092,-118.338],[34.140,-118.388],[34.172,-118.432]]},
+      {label:'SR-110', w:4, pts:[[33.993,-118.258],[34.028,-118.252],[34.060,-118.248],[34.082,-118.246]]},
+    ],
+    'Chicago': [
+      {label:'I-90/94',w:5, pts:[[41.882,-87.632],[41.847,-87.630],[41.807,-87.628],[41.762,-87.626]]},
+      {label:'I-94',   w:5, pts:[[41.882,-87.632],[41.918,-87.672],[41.956,-87.723],[41.988,-87.778]]},
+      {label:'I-290',  w:5, pts:[[41.878,-87.636],[41.867,-87.683],[41.853,-87.733],[41.840,-87.798]]},
+      {label:'I-55',   w:4, pts:[[41.848,-87.634],[41.822,-87.665],[41.792,-87.720],[41.762,-87.790]]},
+      {label:'Lk Shore',w:4,pts:[[41.796,-87.584],[41.830,-87.590],[41.862,-87.610],[41.896,-87.625],[41.930,-87.638]]},
+    ],
+    'Houston': [
+      {label:'I-10',   w:5, pts:[[29.760,-95.572],[29.760,-95.480],[29.762,-95.385],[29.763,-95.295],[29.762,-95.196]]},
+      {label:'I-45',   w:5, pts:[[29.855,-95.414],[29.820,-95.405],[29.783,-95.386],[29.750,-95.370],[29.700,-95.350],[29.650,-95.325]]},
+      {label:'I-610',  w:5, pts:[[29.808,-95.520],[29.812,-95.385],[29.808,-95.262],[29.755,-95.260],[29.690,-95.285],[29.686,-95.385],[29.690,-95.520],[29.755,-95.530],[29.808,-95.520]]},
+      {label:'US-59',  w:4, pts:[[29.760,-95.380],[29.730,-95.432],[29.700,-95.490],[29.660,-95.550]]},
+      {label:'Bltwy 8',w:4, pts:[[29.920,-95.582],[29.924,-95.385],[29.916,-95.170],[29.820,-95.107],[29.680,-95.147],[29.610,-95.370],[29.630,-95.590],[29.740,-95.640],[29.920,-95.582]]},
+    ],
+    'Phoenix': [
+      {label:'I-10',   w:5, pts:[[33.448,-112.278],[33.449,-112.190],[33.449,-112.090],[33.450,-111.990],[33.450,-111.882]]},
+      {label:'I-17',   w:5, pts:[[33.332,-112.073],[33.390,-112.075],[33.450,-112.076],[33.510,-112.078],[33.570,-112.082]]},
+      {label:'SR-51',  w:4, pts:[[33.488,-112.046],[33.530,-112.040],[33.572,-112.034],[33.610,-112.030]]},
+      {label:'SR-101', w:4, pts:[[33.320,-111.857],[33.420,-111.847],[33.490,-111.922],[33.575,-112.022],[33.618,-112.178],[33.598,-112.260]]},
+      {label:'US-60',  w:4, pts:[[33.380,-112.120],[33.378,-112.040],[33.375,-111.958],[33.373,-111.872]]},
+    ],
+    'Philadelphia': [
+      {label:'I-95',   w:5, pts:[[39.876,-75.138],[39.916,-75.145],[39.960,-75.148],[40.000,-75.147],[40.050,-75.130]]},
+      {label:'I-76',   w:5, pts:[[39.895,-75.210],[39.933,-75.200],[39.963,-75.188],[40.000,-75.170],[40.030,-75.150]]},
+      {label:'I-676',  w:4, pts:[[39.960,-75.228],[39.960,-75.186],[39.960,-75.152],[39.958,-75.118]]},
+      {label:'US-1',   w:4, pts:[[39.958,-75.173],[39.990,-75.148],[40.030,-75.115],[40.073,-75.078]]},
+      {label:'PA-309', w:3, pts:[[40.013,-75.168],[40.055,-75.163],[40.095,-75.158],[40.140,-75.155]]},
+    ],
+    'San Antonio': [
+      {label:'I-10',    w:5, pts:[[29.424,-98.698],[29.425,-98.600],[29.425,-98.490],[29.427,-98.380],[29.428,-98.270]]},
+      {label:'I-35',    w:5, pts:[[29.320,-98.492],[29.380,-98.494],[29.425,-98.496],[29.490,-98.498],[29.540,-98.495]]},
+      {label:'I-37',    w:4, pts:[[29.424,-98.495],[29.400,-98.468],[29.375,-98.440],[29.345,-98.405],[29.310,-98.370]]},
+      {label:'US-281',  w:4, pts:[[29.280,-98.495],[29.360,-98.492],[29.425,-98.490],[29.490,-98.488],[29.555,-98.488]]},
+      {label:'Loop 410',w:4, pts:[[29.545,-98.492],[29.510,-98.362],[29.420,-98.300],[29.340,-98.353],[29.320,-98.490],[29.348,-98.610],[29.428,-98.638],[29.510,-98.603],[29.545,-98.492]]},
+    ],
+    'San Diego': [
+      {label:'I-5',    w:5, pts:[[32.590,-117.108],[32.640,-117.122],[32.715,-117.163],[32.780,-117.193],[32.840,-117.218]]},
+      {label:'I-8',    w:5, pts:[[32.762,-117.243],[32.762,-117.165],[32.762,-117.090],[32.762,-117.010],[32.763,-116.930]]},
+      {label:'I-15',   w:4, pts:[[32.600,-117.063],[32.660,-117.075],[32.722,-117.088],[32.785,-117.102],[32.850,-117.117]]},
+      {label:'SR-94',  w:4, pts:[[32.720,-117.165],[32.715,-117.110],[32.711,-117.060],[32.707,-116.992],[32.704,-116.922]]},
+      {label:'SR-163', w:3, pts:[[32.718,-117.163],[32.738,-117.150],[32.760,-117.143],[32.792,-117.139]]},
+    ],
+    'Dallas': [
+      {label:'I-30',   w:5, pts:[[32.777,-97.025],[32.778,-96.940],[32.778,-96.848],[32.777,-96.755],[32.777,-96.670]]},
+      {label:'I-35E',  w:5, pts:[[32.698,-96.920],[32.740,-96.880],[32.778,-96.817],[32.832,-96.790],[32.883,-96.778]]},
+      {label:'I-635',  w:5, pts:[[32.920,-97.060],[32.922,-96.965],[32.927,-96.865],[32.923,-96.760],[32.912,-96.658]]},
+      {label:'US-75',  w:4, pts:[[32.778,-96.800],[32.820,-96.788],[32.862,-96.778],[32.905,-96.768],[32.948,-96.758]]},
+      {label:'SR-114', w:3, pts:[[32.878,-97.068],[32.860,-97.000],[32.843,-96.922],[32.825,-96.843]]},
+    ],
+    'San Jose': [
+      {label:'I-280',  w:5, pts:[[37.232,-122.012],[37.275,-121.972],[37.322,-121.932],[37.370,-121.900],[37.420,-121.880]]},
+      {label:'I-880',  w:5, pts:[[37.260,-121.967],[37.300,-121.960],[37.340,-121.925],[37.380,-121.900],[37.425,-121.880]]},
+      {label:'SR-87',  w:4, pts:[[37.272,-121.890],[37.310,-121.892],[37.352,-121.890],[37.392,-121.882]]},
+      {label:'US-101', w:4, pts:[[37.240,-121.838],[37.285,-121.852],[37.340,-121.868],[37.395,-121.880],[37.445,-121.898]]},
+      {label:'SR-85',  w:3, pts:[[37.258,-121.938],[37.292,-121.970],[37.330,-122.010],[37.355,-122.042]]},
+    ],
   };
 
   function getRoads(city) {
-    var c = city.lat, d = city.lon;
-    var n = CITY_HWY[city.name] || ['I-10','I-20','I-40','US-1','State Hwy'];
-    var t = CITY_LAYOUT[city.name] || 'grid';
-    if (t === 'grid') return [
-      {pts:[nll(0,0.38,c,d),nll(1,0.40,c,d)],w:5,label:n[0]},
-      {pts:[nll(0,0.65,c,d),nll(1,0.62,c,d)],w:5,label:n[1]},
-      {pts:[nll(0.30,0,c,d),nll(0.28,1,c,d)],w:5,label:n[2]},
-      {pts:[nll(0.72,0,c,d),nll(0.70,1,c,d)],w:5,label:n[3]},
-      {pts:[nll(0,1,c,d),nll(0.48,0,c,d)],   w:4,label:n[4]},
-    ];
-    if (t === 'sprawl') return [
-      {pts:[nll(0.18,0,c,d),nll(0.20,1,c,d)],   w:5,label:n[0]},
-      {pts:[nll(0,0.50,c,d),nll(1,0.52,c,d)],   w:5,label:n[1]},
-      {pts:[nll(0.55,0,c,d),nll(0.45,1,c,d)],   w:5,label:n[2]},
-      {pts:[nll(0,0.26,c,d),nll(0.62,0.56,c,d)],w:4,label:n[3]},
-      {pts:[nll(0.38,1,c,d),nll(0.54,0,c,d)],   w:4,label:n[4]},
-    ];
-    if (t === 'hub') return [
-      {pts:[nll(0,0.32,c,d),nll(0.42,0.60,c,d)],w:5,label:n[0]},
-      {pts:[nll(0.38,0,c,d),nll(0.40,1,c,d)],   w:5,label:n[1]},
-      {pts:[nll(0,0.56,c,d),nll(1,0.54,c,d)],   w:5,label:n[2]},
-      {pts:[nll(0.60,0,c,d),nll(0.62,1,c,d)],   w:4,label:n[3]},
-      {pts:[nll(0.82,0,c,d),nll(0.84,1,c,d)],   w:3,label:n[4]},
-    ];
-    if (t === 'ring') return [
-      {pts:[nll(0,0.52,c,d),nll(1,0.49,c,d)],       w:5,label:n[0]},
-      {pts:[nll(0.38,0,c,d),nll(0.40,1,c,d)],        w:5,label:n[1]},
-      {pts:[nll(0,0.28,c,d),nll(0.38,0.72,c,d)],     w:4,label:n[2]},
-      {pts:[nll(0.62,0.72,c,d),nll(1,0.28,c,d)],     w:4,label:n[3]},
-      {pts:[nll(0,0.72,c,d),nll(0.40,1,c,d)],        w:3,label:n[4]},
-    ];
-    if (t === 'diagonal') return [
-      {pts:[nll(0,0.22,c,d),nll(1,0.58,c,d)],       w:5,label:n[0]},
-      {pts:[nll(0,0.62,c,d),nll(1,0.60,c,d)],       w:5,label:n[1]},
-      {pts:[nll(0.22,0.70,c,d),nll(1,0.70,c,d)],    w:4,label:n[2]},
-      {pts:[nll(0.42,0,c,d),nll(0.44,1,c,d)],       w:4,label:n[3]},
-      {pts:[nll(0,1,c,d),nll(0.32,0.18,c,d)],       w:3,label:n[4]},
-    ];
-    return [  // coastal
-      {pts:[nll(0.22,0,c,d),nll(0.20,1,c,d)],       w:5,label:n[0]},
-      {pts:[nll(0,0.50,c,d),nll(1,0.52,c,d)],       w:5,label:n[1]},
-      {pts:[nll(0.66,0,c,d),nll(0.68,1,c,d)],       w:5,label:n[2]},
-      {pts:[nll(0,0.28,c,d),nll(0.72,0.66,c,d)],    w:4,label:n[3]},
-      {pts:[nll(0.10,0,c,d),nll(0.10,1,c,d)],       w:3,label:n[4]},
-    ];
+    return CITY_ROADS[city.name] || [];
   }
 
   // ── Web Mercator projection ───────────────────────────────────────────────
@@ -468,30 +473,32 @@
     ctx.lineCap = 'round';
 
     roads.forEach(function (rd) {
-      var p0   = llToPx(rd.pts[0][0], rd.pts[0][1], clat, clon, W, H);
-      var p1   = llToPx(rd.pts[1][0], rd.pts[1][1], clat, clon, W, H);
-      var dx   = p1[0] - p0[0], dy = p1[1] - p0[1];
-      var SEGS = 3 + Math.floor(rng() * 4);
+      // Convert all waypoints to canvas pixels
+      var px = rd.pts.map(function(p) { return llToPx(p[0], p[1], clat, clon, W, H); });
+      var j;
 
-      // White halo for contrast over the OSM basemap
+      // White halo along full road path for contrast over the OSM basemap
       ctx.strokeStyle = 'rgba(255,255,255,0.45)';
       ctx.lineWidth   = (rd.w || 5) + 3;
-      ctx.beginPath(); ctx.moveTo(p0[0], p0[1]); ctx.lineTo(p1[0], p1[1]); ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(px[0][0], px[0][1]);
+      for (j = 1; j < px.length; j++) ctx.lineTo(px[j][0], px[j][1]);
+      ctx.stroke();
 
-      // Traffic-coloured segments
+      // Colour each span between consecutive waypoints
       ctx.lineWidth = rd.w || 5;
-      for (var s = 0; s < SEGS; s++) {
-        var t0 = s / SEGS, t1 = (s + 1) / SEGS;
+      for (j = 0; j < px.length - 1; j++) {
         ctx.strokeStyle = pool[Math.floor(rng() * pool.length)];
         ctx.beginPath();
-        ctx.moveTo(p0[0] + dx * t0, p0[1] + dy * t0);
-        ctx.lineTo(p0[0] + dx * t1, p0[1] + dy * t1);
+        ctx.moveTo(px[j][0], px[j][1]);
+        ctx.lineTo(px[j+1][0], px[j+1][1]);
         ctx.stroke();
       }
 
-      // Road name badge
+      // Road name badge at the middle waypoint
       if (rd.label) {
-        var mx = (p0[0] + p1[0]) / 2, my = (p0[1] + p1[1]) / 2;
+        var mi = Math.floor(px.length / 2);
+        var mx = px[mi][0], my = px[mi][1];
         var fs = Math.max(9, Math.round(W * 0.014));
         ctx.font = 'bold ' + fs + 'px Arial';
         var tw = ctx.measureText(rd.label).width;
@@ -544,24 +551,24 @@
     var roads = getRoads(city);
     var layers = [];
     roads.forEach(function (rd) {
-      var p0 = rd.pts[0], p1 = rd.pts[1];
-      var dlat = p1[0]-p0[0], dlon = p1[1]-p0[1];
-      var SEGS = 3 + Math.floor(rng() * 4);
-      layers.push(L.polyline([p0,p1], {color:'#fff',weight:(rd.w||5)+3,opacity:0.35}));
-      for (var s = 0; s < SEGS; s++) {
-        var t0=s/SEGS, t1=(s+1)/SEGS;
+      var j;
+      // White halo along full road path
+      layers.push(L.polyline(rd.pts, {color:'#fff', weight:(rd.w||5)+3, opacity:0.35}));
+      // Colour each span between consecutive waypoints
+      for (j = 0; j < rd.pts.length - 1; j++) {
         layers.push(L.polyline(
-          [[p0[0]+dlat*t0,p0[1]+dlon*t0],[p0[0]+dlat*t1,p0[1]+dlon*t1]],
-          {color:pool[Math.floor(rng()*pool.length)],weight:rd.w||5,opacity:0.9}
+          [rd.pts[j], rd.pts[j+1]],
+          {color: pool[Math.floor(rng()*pool.length)], weight: rd.w||5, opacity: 0.9}
         ));
       }
+      // Road name label at middle waypoint
       if (rd.label) {
-        var mid = [(p0[0]+p1[0])/2,(p0[1]+p1[1])/2];
-        layers.push(L.marker(mid,{icon:L.divIcon({className:'',
-          html:'<div style="background:rgba(8,18,50,.82);color:#fff;font:bold 11px Arial;'+
-               'padding:1px 5px;border-radius:3px;white-space:nowrap;'+
-               'box-shadow:0 1px 3px rgba(0,0,0,.5)">'+rd.label+'</div>',
-          iconAnchor:[0,8]}),interactive:false}));
+        var mi = Math.floor(rd.pts.length / 2);
+        layers.push(L.marker(rd.pts[mi], {icon: L.divIcon({className:'',
+          html: '<div style="background:rgba(8,18,50,.82);color:#fff;font:bold 11px Arial;'+
+                'padding:1px 5px;border-radius:3px;white-space:nowrap;'+
+                'box-shadow:0 1px 3px rgba(0,0,0,.5)">'+rd.label+'</div>',
+          iconAnchor:[0,8]}), interactive:false}));
       }
     });
     _overlayLayer = L.layerGroup(layers).addTo(_map);
