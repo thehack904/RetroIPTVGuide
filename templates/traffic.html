@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RetroIPTV Traffic</title>
   <style>
-    /* ── Reset & Base ─────────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     body {
@@ -19,7 +18,7 @@
       overflow: hidden;
     }
 
-    /* ── Outer frame ─────────────────────────────────────────────── */
+    /* ── Outer frame ──────────────────────────────────────────────── */
     .tf-frame {
       width: min(1280px, 100vw);
       aspect-ratio: 16 / 9;
@@ -47,11 +46,11 @@
       z-index: 10;
     }
 
-    /* ── Header bar ─────────────────────────────────────────────── */
+    /* ── Header bar ───────────────────────────────────────────────── */
     .tf-header {
       background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
       border-bottom: 3px solid #4a70ff;
-      padding: 0.6em 1.2em;
+      padding: 0.45em 1.2em;
       display: flex;
       align-items: center;
       gap: 0.6em;
@@ -59,7 +58,7 @@
     }
 
     .tf-header-title {
-      font-size: clamp(22px, 3.5vw, 46px);
+      font-size: clamp(20px, 3.2vw, 42px);
       font-weight: 900;
       letter-spacing: 0.04em;
       text-transform: uppercase;
@@ -69,21 +68,31 @@
       gap: 0.3em;
     }
 
-    .tf-header-title .tf-icon-header { font-size: 1.1em; }
-
-    .tf-header-subtitle {
-      font-size: clamp(18px, 2.8vw, 38px);
-      font-weight: 900;
-      letter-spacing: 0.06em;
+    .tf-demo-badge {
+      font-size: clamp(9px, 1.2vw, 14px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #fff;
+      background: #ffd700;
+      color: #0a0e2a;
+      padding: 0.15em 0.5em;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .tf-city-label {
+      font-size: clamp(16px, 2.4vw, 32px);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      color: #ffd700;
       margin-left: auto;
+      text-align: right;
     }
 
     .tf-updated {
-      font-size: clamp(11px, 1.5vw, 18px);
+      font-size: clamp(10px, 1.3vw, 16px);
       font-weight: 700;
-      color: #ffd700;
+      color: #c8d8ff;
       display: flex;
       justify-content: space-between;
       align-items: center;
@@ -91,17 +100,17 @@
       flex-shrink: 0;
     }
 
-    /* ── Main content area ──────────────────────────────────────── */
+    /* ── Main content area ────────────────────────────────────────── */
     .tf-body {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 2.2fr;
+      grid-template-columns: 1fr 2.4fr;
       gap: 0.5em;
       padding: 0.5em 0.7em 0.3em;
       min-height: 0;
     }
 
-    /* ── Section box ─────────────────────────────────────────────── */
+    /* ── Section box ──────────────────────────────────────────────── */
     .tf-box {
       background: rgba(10, 40, 170, 0.75);
       border: 2px solid #3058d8;
@@ -113,7 +122,7 @@
     }
 
     .tf-box-title {
-      font-size: clamp(11px, 1.4vw, 17px);
+      font-size: clamp(10px, 1.3vw, 16px);
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
@@ -123,135 +132,63 @@
       margin-bottom: 0.4em;
     }
 
-    /* ── Summary panel (left) ───────────────────────────────────── */
-    .tf-summary-count {
-      font-size: clamp(42px, 6vw, 80px);
+    /* ── Congestion summary (left panel) ──────────────────────────── */
+    .tf-congestion-level {
+      font-size: clamp(20px, 3vw, 40px);
       font-weight: 900;
       text-align: center;
-      line-height: 1;
-      color: #ffd700;
-      margin: 0.15em 0 0.1em;
+      margin: 0.3em 0 0.1em;
     }
+    .tf-congestion-level[data-level="Light"]    { color: #22cc44; }
+    .tf-congestion-level[data-level="Moderate"] { color: #ffaa00; }
+    .tf-congestion-level[data-level="Heavy"]    { color: #ee2222; }
 
-    .tf-summary-label {
-      font-size: clamp(11px, 1.4vw, 16px);
-      font-weight: 700;
-      text-align: center;
+    .tf-congestion-sub {
+      font-size: clamp(9px, 1.1vw, 13px);
       color: #c8d8ff;
+      text-align: center;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin-bottom: 0.6em;
+      margin-bottom: 0.5em;
     }
 
-    .tf-congestion-label {
-      font-size: clamp(10px, 1.3vw, 15px);
-      font-weight: 700;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #c8d8ff;
+    /* percent bars */
+    .tf-pct-row {
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
       margin-bottom: 0.2em;
     }
-
-    .tf-congestion-bar-track {
+    .tf-pct-dot {
+      width: 0.6em; height: 0.6em; border-radius: 50%; flex-shrink: 0;
+    }
+    .tf-pct-label {
+      font-size: clamp(9px, 1.1vw, 13px);
+      color: #c8d8ff;
+      width: 4.5em;
+    }
+    .tf-pct-track {
+      flex: 1;
       background: rgba(0,0,20,0.5);
       border: 1px solid #3058d8;
       border-radius: 3px;
-      height: clamp(10px, 1.6vw, 20px);
+      height: clamp(8px, 1.2vw, 14px);
       overflow: hidden;
-      margin-bottom: 0.25em;
     }
-
-    .tf-congestion-bar-fill {
-      height: 100%;
-      border-radius: 3px;
-      transition: width 0.6s ease;
-    }
-
-    .tf-congestion-bar-fill[data-level="Low"]      { width: 28%; background: #22cc44; }
-    .tf-congestion-bar-fill[data-level="Moderate"] { width: 62%; background: #ffaa00; }
-    .tf-congestion-bar-fill[data-level="Heavy"]    { width: 95%; background: #ee2222; }
-
-    .tf-congestion-value {
-      font-size: clamp(14px, 2vw, 26px);
-      font-weight: 900;
-      text-align: center;
-      margin: 0.2em 0;
-    }
-
-    .tf-congestion-value[data-level="Low"]      { color: #22cc44; }
-    .tf-congestion-value[data-level="Moderate"] { color: #ffaa00; }
-    .tf-congestion-value[data-level="Heavy"]    { color: #ee2222; }
-
-    /* ── Legend ─────────────────────────────────────────────────── */
-    .tf-legend {
-      margin-top: auto;
-      font-size: clamp(9px, 1.1vw, 13px);
-      line-height: 1.7;
-      color: #d0e0ff;
-    }
-
-    .tf-legend-item { display: flex; align-items: center; gap: 0.4em; }
-    .tf-legend-dot  { width: 0.7em; height: 0.7em; border-radius: 50%; flex-shrink: 0; }
-
-    /* ── Incident list (right) ──────────────────────────────────── */
-    .tf-incidents { overflow: hidden; }
-
-    .tf-incident-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5em;
-      padding: 0.3em 0;
-      border-bottom: 1px solid rgba(48, 88, 216, 0.5);
-    }
-
-    .tf-incident-row:last-child { border-bottom: none; }
-
-    .tf-incident-dot {
-      width: 0.55em;
-      height: 0.55em;
-      border-radius: 50%;
-      flex-shrink: 0;
-      margin-top: 0.2em;
-    }
-
-    .tf-incident-dot[data-severity="Major"]    { background: #ee2222; }
-    .tf-incident-dot[data-severity="Moderate"] { background: #ffaa00; }
-    .tf-incident-dot[data-severity="Minor"]    { background: #22cc44; }
-    .tf-incident-dot[data-severity="Unknown"]  { background: #8898c0; }
-
-    .tf-incident-info { flex: 1; min-width: 0; }
-
-    .tf-incident-title {
-      font-size: clamp(11px, 1.4vw, 17px);
-      font-weight: 700;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .tf-incident-detail {
-      font-size: clamp(9px, 1.1vw, 13px);
-      color: #c8d8ff;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .tf-incident-dist {
+    .tf-pct-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
+    .tf-pct-num {
       font-size: clamp(9px, 1.1vw, 13px);
       font-weight: 700;
       color: #ffd700;
-      white-space: nowrap;
-      flex-shrink: 0;
+      width: 2.5em;
+      text-align: right;
     }
 
-    .tf-no-incidents {
-      color: #90a8f0;
-      font-size: clamp(11px, 1.4vw, 16px);
-      padding: 0.6em 0;
-    }
+    /* ── Road grid (right panel) ──────────────────────────────────── */
+    .tf-map-box { position: relative; overflow: hidden; }
+    .tf-map-svg { width: 100%; height: 100%; display: block; }
 
-    /* ── Breaking News Ticker ───────────────────────────────────── */
+    /* ── Ticker bar ───────────────────────────────────────────────── */
     .tf-ticker-bar {
       background: #0a0e2a;
       border-top: 2px solid #4a70ff;
@@ -259,13 +196,13 @@
       align-items: center;
       overflow: hidden;
       flex-shrink: 0;
-      height: clamp(28px, 4vw, 46px);
+      height: clamp(26px, 3.8vw, 44px);
     }
 
     .tf-ticker-label {
       background: #ffd700;
       color: #0a0e2a;
-      font-size: clamp(10px, 1.4vw, 17px);
+      font-size: clamp(9px, 1.3vw, 16px);
       font-weight: 900;
       letter-spacing: 0.05em;
       text-transform: uppercase;
@@ -288,7 +225,7 @@
     .tf-ticker-track {
       display: inline-block;
       white-space: nowrap;
-      font-size: clamp(10px, 1.35vw, 16px);
+      font-size: clamp(9px, 1.25vw, 15px);
       font-weight: 700;
       color: #ffd700;
       animation: tf-scroll 36s linear infinite;
@@ -300,7 +237,7 @@
       to   { transform: translateX(-100%); }
     }
 
-    /* ── Loading / error state ──────────────────────────────────── */
+    /* ── Loading / error ──────────────────────────────────────────── */
     .tf-loading {
       display: flex;
       align-items: center;
@@ -321,111 +258,127 @@
 (function () {
   'use strict';
 
-  // Must match _TRAFFIC_CACHE_TTL in app.py
-  const REFRESH_INTERVAL_MS = 2 * 60 * 1000;
-  // Fallback retry delay on error
+  const FALLBACK_REFRESH_MS = 2 * 60 * 1000;
   const ERROR_RETRY_MS      = 60 * 1000;
 
-  function formatLocalTime(isoStr) {
-    try {
-      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-    } catch (e) { return isoStr; }
-  }
+  // Road segment layout: each entry is [x1,y1,x2,y2] as percentage of viewBox (0-100)
+  // 4 horizontal arteries + 4 vertical arteries + 16 connectors/cross-streets = 24 total
+  const SEG_LINES = [
+    [5,22, 95,22], [5,38, 95,38], [5,55, 95,55], [5,72, 95,72],
+    [18,5, 18,92], [34,5, 34,92], [52,5, 52,92], [70,5, 70,92],
+    [5,22, 18,38],  [34,22, 52,38],  [70,22, 95,38],
+    [18,38, 34,55], [52,38, 70,55],  [18,55, 34,72],
+    [52,55, 70,72], [34,72, 52,92],
+    [5,46, 18,55],  [34,46, 52,46],  [70,46, 95,46],
+    [18,62, 34,72], [52,62, 70,62],  [5,80, 18,92],
+    [70,80, 95,80], [34,5,  52,22],
+  ];
+
+  const COLOR_MAP = {
+    green:  '#22cc44',
+    yellow: '#ffaa00',
+    red:    '#ee2222',
+  };
 
   function esc(s) {
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  function buildSvg(segments) {
+    const beds = SEG_LINES.map(([x1,y1,x2,y2]) =>
+      `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+             stroke="rgba(255,255,255,0.08)" stroke-width="4" stroke-linecap="round"/>`
+    ).join('');
+    const lines = SEG_LINES.map((coords, idx) => {
+      const seg = segments[idx] || {color: 'green'};
+      const col = COLOR_MAP[seg.color] || '#22cc44';
+      const [x1, y1, x2, y2] = coords;
+      return `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+                stroke="${col}" stroke-width="2.5" stroke-linecap="round" opacity="0.92"/>`;
+    }).join('');
+    return `<svg class="tf-map-svg" viewBox="0 0 100 100" preserveAspectRatio="none"
+              xmlns="http://www.w3.org/2000/svg">${beds}${lines}</svg>`;
+  }
+
+  function buildPctRow(color, label, pct) {
+    const col = COLOR_MAP[color];
+    return `<div class="tf-pct-row">
+      <div class="tf-pct-dot" style="background:${col}"></div>
+      <div class="tf-pct-label">${label}</div>
+      <div class="tf-pct-track">
+        <div class="tf-pct-fill" style="width:${pct}%;background:${col}"></div>
+      </div>
+      <div class="tf-pct-num">${pct}%</div>
+    </div>`;
+  }
+
   function build(data) {
-    const frame    = document.getElementById('tfFrame');
-    const summary  = data.summary  || {};
-    const incidents = Array.isArray(data.incidents) ? data.incidents : [];
-    const level    = summary.congestion_level || 'Low';
-    const count    = summary.incident_count   || 0;
+    const frame   = document.getElementById('tfFrame');
+    const city    = data.city    || {};
+    const summary = data.summary || {};
+    const segs    = Array.isArray(data.segments) ? data.segments : [];
+    const level   = summary.congestion_level || 'Light';
+    const cityName = city.name ? `${esc(city.name)}, ${esc(city.state)}` : 'Traffic (Demo)';
 
-    // Ticker text from incidents
-    const tickParts = incidents.length
-      ? incidents.map(i => [esc(i.title), esc(i.road)].filter(Boolean).join(' — '))
-      : ['No incidents reported in your area'];
-    const tickText = tickParts.join(' \u2022 ') + ' \u2022 ';
-    const tickRepeat = tickText.repeat(3);
+    const updatedTime = data.updated
+      ? new Date(data.updated).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'})
+      : '';
 
-    // Incident rows
-    const incidentRows = incidents.length
-      ? incidents.map(inc => {
-          const dist = inc.distance_miles != null ? `${inc.distance_miles} mi` : '';
-          const detail = [esc(inc.road), esc(inc.direction)].filter(Boolean).join(' · ');
-          return `
-            <div class="tf-incident-row">
-              <div class="tf-incident-dot" data-severity="${esc(inc.severity)}"></div>
-              <div class="tf-incident-info">
-                <div class="tf-incident-title">${esc(inc.title)}</div>
-                ${detail ? `<div class="tf-incident-detail">${detail}</div>` : ''}
-              </div>
-              ${dist ? `<div class="tf-incident-dist">${dist}</div>` : ''}
-            </div>`;
-        }).join('')
-      : '<div class="tf-no-incidents">No incidents reported nearby.</div>';
+    const pctBars =
+      buildPctRow('green',  'Free Flow',  summary.green_percent  || 0) +
+      buildPctRow('yellow', 'Slow',       summary.yellow_percent || 0) +
+      buildPctRow('red',    'Heavy',      summary.red_percent    || 0);
+
+    const tickText = [
+      `${cityName} \u2014 ${esc(level)} congestion`,
+      `${summary.green_percent || 0}% free flow \u00b7 ${summary.yellow_percent || 0}% slow \u00b7 ${summary.red_percent || 0}% heavy`,
+      'Traffic (Demo Mode) \u2014 Simulated data for broadcast display only',
+    ].join(' \u2022 ') + ' \u2022 ';
 
     frame.innerHTML = `
       <div class="tf-header">
-        <div class="tf-header-title">
-          <span>RetroIPTV</span>
-          <span class="tf-icon-header">🚗</span>
-          <span>Traffic</span>
-        </div>
-        <div class="tf-header-subtitle">Local Conditions</div>
+        <div class="tf-header-title">&#128663; Traffic</div>
+        <div class="tf-demo-badge">Demo Mode</div>
+        <div class="tf-city-label">${cityName}</div>
       </div>
       <div class="tf-updated">
-        <span>${esc(data.location || '')}</span>
-        <span>UPDATED: ${data.updated ? formatLocalTime(data.updated) : ''}</span>
+        <span>Rotating city broadcast</span>
+        <span>UPDATED: ${updatedTime}</span>
       </div>
       <div class="tf-body">
         <div class="tf-box">
           <div class="tf-box-title">Congestion</div>
-          <div class="tf-summary-count">${count}</div>
-          <div class="tf-summary-label">Incident${count !== 1 ? 's' : ''} Reported</div>
-          <div class="tf-congestion-label">Traffic Level</div>
-          <div class="tf-congestion-bar-track">
-            <div class="tf-congestion-bar-fill" data-level="${esc(level)}"></div>
-          </div>
-          <div class="tf-congestion-value" data-level="${esc(level)}">${esc(level)}</div>
-          <div class="tf-legend" style="margin-top:auto">
-            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#22cc44"></div>Low</div>
-            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#ffaa00"></div>Moderate</div>
-            <div class="tf-legend-item"><div class="tf-legend-dot" style="background:#ee2222"></div>Heavy</div>
-          </div>
+          <div class="tf-congestion-level" data-level="${esc(level)}">${esc(level)}</div>
+          <div class="tf-congestion-sub">Traffic Level</div>
+          ${pctBars}
         </div>
-        <div class="tf-box tf-incidents">
-          <div class="tf-box-title">Live Traffic Incidents</div>
-          ${incidentRows}
+        <div class="tf-box tf-map-box">
+          <div class="tf-box-title">Road Conditions &mdash; ${cityName}</div>
+          ${buildSvg(segs)}
         </div>
       </div>
       <div class="tf-ticker-bar">
-        <div class="tf-ticker-label">Traffic Alert:</div>
+        <div class="tf-ticker-label">Traffic:</div>
         <div class="tf-ticker-scroll">
-          <span class="tf-ticker-track">${tickRepeat}</span>
+          <span class="tf-ticker-track">${esc(tickText).repeat(3)}</span>
         </div>
       </div>`;
   }
 
-  // ── Wall clock aligned refresh ───────────────────────────────────────────
-  // Refresh is scheduled at the next 2-minute boundary so all viewers share
-  // the same snapshot regardless of when they tuned in.
   let _refreshTimer = null;
 
   async function load() {
     if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
     try {
       const resp = await fetch('/api/traffic');
-      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
       const data = await resp.json();
       build(data);
-      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : REFRESH_INTERVAL_MS;
-      _refreshTimer = setTimeout(load, msUntilNext);
+      const ms = (data.ms_until_next > 0) ? data.ms_until_next : FALLBACK_REFRESH_MS;
+      _refreshTimer = setTimeout(load, ms);
     } catch (e) {
-      const frame = document.getElementById('tfFrame');
-      frame.innerHTML = `<div class="tf-loading">Unable to load traffic data.</div>`;
+      document.getElementById('tfFrame').innerHTML =
+        '<div class="tf-loading">Unable to load traffic data.</div>';
       _refreshTimer = setTimeout(load, ERROR_RETRY_MS);
     }
   }

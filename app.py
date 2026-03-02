@@ -213,6 +213,9 @@ def init_tuners_db():
             c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('current_tuner', 'Tuner 1')")
         conn.commit()
 
+        # Ensure traffic demo cities table exists and is seeded
+        _init_traffic_demo_db(conn)
+
 def get_tuners():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
         c = conn.cursor()
@@ -896,206 +899,316 @@ def save_weather_config(config_dict):
         logging.exception("save_weather_config failed")
         raise
 
-# ─── Traffic config & cache ───────────────────────────────────────────────────
+# ─── Traffic Demo Mode ────────────────────────────────────────────────────────
 
-_TRAFFIC_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'radius_miles', 'api_key')
-_TRAFFIC_CACHE_TTL   = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
-_traffic_cache: dict = {}    # cache_key -> {'data': {...}, 'slot': int}
+# US cities with population > 1,000,000 (2024 Census estimates, city proper)
+_TRAFFIC_DEMO_CITIES_SEED = [
+    {'name': 'New York City', 'state': 'NY', 'lat': 40.7128, 'lon': -74.0060,  'population': 8258035},
+    {'name': 'Los Angeles',   'state': 'CA', 'lat': 34.0522, 'lon': -118.2437, 'population': 3898747},
+    {'name': 'Chicago',       'state': 'IL', 'lat': 41.8781, 'lon': -87.6298,  'population': 2696555},
+    {'name': 'Houston',       'state': 'TX', 'lat': 29.7604, 'lon': -95.3698,  'population': 2304580},
+    {'name': 'Phoenix',       'state': 'AZ', 'lat': 33.4484, 'lon': -112.0740, 'population': 1608139},
+    {'name': 'Philadelphia',  'state': 'PA', 'lat': 39.9526, 'lon': -75.1652,  'population': 1550542},
+    {'name': 'San Antonio',   'state': 'TX', 'lat': 29.4241, 'lon': -98.4936,  'population': 1434625},
+    {'name': 'San Diego',     'state': 'CA', 'lat': 32.7157, 'lon': -117.1611, 'population': 1386932},
+    {'name': 'Dallas',        'state': 'TX', 'lat': 32.7767, 'lon': -96.7970,  'population': 1304379},
+    {'name': 'San Jose',      'state': 'CA', 'lat': 37.3382, 'lon': -121.8863, 'population': 1013240},
+]
 
-def get_traffic_config():
-    """Return traffic configuration: lat, lon, location_name, radius_miles, api_key."""
-    result = {'lat': '', 'lon': '', 'location_name': '', 'radius_miles': '25', 'api_key': ''}
+_TRAFFIC_DEMO_CACHE_TTL = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
+_TRAFFIC_DEMO_CACHE: dict = {}  # cache_key -> payload dict
+
+
+def _init_traffic_demo_db(conn):
+    """Create and seed the traffic_demo_cities table (called from init_tuners_db)."""
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS traffic_demo_cities
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  state TEXT NOT NULL,
+                  lat REAL NOT NULL,
+                  lon REAL NOT NULL,
+                  population INTEGER DEFAULT 0,
+                  enabled INTEGER DEFAULT 1,
+                  weight INTEGER DEFAULT 1,
+                  created_at TEXT,
+                  updated_at TEXT)''')
+    conn.commit()
+    c.execute("SELECT COUNT(*) FROM traffic_demo_cities")
+    if c.fetchone()[0] == 0:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            c.execute(
+                "INSERT INTO traffic_demo_cities "
+                "(name, state, lat, lon, population, enabled, weight, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
+                (city['name'], city['state'], city['lat'], city['lon'],
+                 city['population'], now_iso, now_iso)
+            )
+        conn.commit()
+
+
+def get_traffic_demo_config():
+    """Return traffic demo mode configuration from settings table."""
+    defaults = {
+        'mode':             'admin_rotation',
+        'pack_size':        '10',
+        'pack':             '[]',
+        'rotation_seconds': '120',
+    }
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
-            for key in _TRAFFIC_CONFIG_KEYS:
-                c.execute("SELECT value FROM settings WHERE key=?", (f"traffic.{key}",))
+            for key in defaults:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"traffic_demo.{key}",))
                 row = c.fetchone()
                 if row is not None:
-                    result[key] = row[0]
+                    defaults[key] = row[0]
     except Exception:
-        logging.exception("get_traffic_config failed, using defaults")
-    return result
+        logging.exception("get_traffic_demo_config failed, using defaults")
+    return defaults
 
-def save_traffic_config(config_dict):
-    """Persist traffic configuration. Validates lat/lon as floats when non-empty."""
-    cleaned = {}
-    for key in _TRAFFIC_CONFIG_KEYS:
-        val = str(config_dict.get(key, '')).strip()
-        if key in ('lat', 'lon') and val:
-            try:
-                float(val)
-            except ValueError:
-                raise ValueError(f"Invalid value for {key}: {val!r}. Must be a number.")
-        if key == 'radius_miles' and val:
-            try:
-                r = float(val)
-                if not (1 <= r <= 100):
-                    raise ValueError("radius_miles must be between 1 and 100")
-            except ValueError as exc:
-                raise ValueError(f"Invalid radius_miles: {val!r}. {exc}") from exc
-        cleaned[key] = val
+
+def save_traffic_demo_config(cfg):
+    """Persist traffic demo configuration. Raises ValueError on invalid input."""
+    allowed_modes = ('admin_rotation', 'random_pack')
+    mode = cfg.get('mode', 'admin_rotation')
+    if mode not in allowed_modes:
+        raise ValueError(f"Invalid mode: {mode!r}. Must be one of {allowed_modes}.")
+    try:
+        pack_size = int(cfg.get('pack_size', 10))
+        if not (1 <= pack_size <= 50):
+            raise ValueError("pack_size must be between 1 and 50")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid pack_size: {exc}") from exc
+    try:
+        rotation_secs = int(cfg.get('rotation_seconds', 120))
+        if not (30 <= rotation_secs <= 3600):
+            raise ValueError("rotation_seconds must be between 30 and 3600")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid rotation_seconds: {exc}") from exc
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
-            for key, value in cleaned.items():
-                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
-                          (f"traffic.{key}", value))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.mode', mode))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack_size', str(pack_size)))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.rotation_seconds', str(rotation_secs)))
             conn.commit()
     except ValueError:
         raise
     except Exception:
-        logging.exception("save_traffic_config failed")
+        logging.exception("save_traffic_demo_config failed")
         raise
 
-_TOMTOM_ICON_NAMES = {
-    0: 'Unknown', 1: 'Accident', 2: 'Fog', 3: 'Dangerous Conditions',
-    4: 'Rain', 5: 'Ice', 6: 'Traffic Jam', 7: 'Lane Closed',
-    8: 'Road Closed', 9: 'Road Works', 10: 'Wind', 11: 'Flooding',
-    12: 'Detour', 13: 'Cluster',
-}
-_TOMTOM_SEVERITY = {0: 'Unknown', 1: 'Minor', 2: 'Moderate', 3: 'Major', 4: 'Unknown'}
 
-def _fetch_tomtom_incidents(lat, lon, radius_miles, api_key):
-    """Fetch traffic incidents from TomTom Traffic Incidents API v5."""
-    import math
-    lat_f = float(lat)
-    lon_f = float(lon)
-    r     = max(1.0, min(100.0, float(radius_miles)))
-    delta_lat = r / 69.0
-    delta_lon = r / max(0.001, 69.0 * math.cos(math.radians(lat_f)))
-    bbox = (f"{lon_f - delta_lon:.6f},{lat_f - delta_lat:.6f},"
-            f"{lon_f + delta_lon:.6f},{lat_f + delta_lat:.6f}")
-    url = (
-        "https://api.tomtom.com/traffic/services/5/incidentDetails"
-        f"?key={api_key}"
-        f"&bbox={bbox}"
-        "&zoom=12&language=en-GB&projection=EPSG4326&geometries=original&expandCluster=true"
-    )
+def get_traffic_demo_cities():
+    """Return all rows from traffic_demo_cities ordered by population desc."""
     try:
-        resp = requests.get(url, timeout=10, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
-        resp.raise_for_status()
-        return resp.json()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, name, state, lat, lon, population, enabled, weight "
+                "FROM traffic_demo_cities ORDER BY population DESC"
+            )
+            rows = c.fetchall()
+        return [
+            {'id': r[0], 'name': r[1], 'state': r[2], 'lat': r[3], 'lon': r[4],
+             'population': r[5], 'enabled': bool(r[6]), 'weight': int(r[7] or 1)}
+            for r in rows
+        ]
     except Exception:
-        logging.exception("_fetch_tomtom_incidents failed for lat=%s lon=%s", lat, lon)
-        return None
+        logging.exception("get_traffic_demo_cities failed")
+        return []
 
-def _normalize_tomtom(raw, lat, lon):
-    """Normalize TomTom Traffic Incidents response to internal format."""
-    import math
-    lat_f = float(lat)
-    lon_f = float(lon)
 
-    incidents = []
-    for inc in raw.get('incidents', []):
-        props   = inc.get('properties', {})
-        icon_cat = props.get('iconCategory', 0)
-        magnitude = props.get('magnitudeOfDelay', 0)
-        events   = props.get('events', [])
-        title    = (events[0].get('description', '') if events
-                    else _TOMTOM_ICON_NAMES.get(icon_cat, 'Incident'))
-        roads    = props.get('roadNumbers', [])
-        road     = roads[0] if roads else ''
-        from_loc = props.get('from', '')
-        to_loc   = props.get('to', '')
-        direction = (f"{from_loc} → {to_loc}" if from_loc and to_loc
-                     else from_loc or to_loc or '')
-        severity  = _TOMTOM_SEVERITY.get(magnitude, 'Unknown')
+def save_traffic_demo_city(city_id, enabled, weight=1):
+    """Update enabled flag and weight for a single city row."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "UPDATE traffic_demo_cities SET enabled=?, weight=?, updated_at=? WHERE id=?",
+                (1 if enabled else 0, max(1, int(weight)), now_iso, int(city_id))
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_traffic_demo_city failed for id=%s", city_id)
+        raise
 
-        # Distance from center via first geometry coordinate
-        dist_miles = None
-        geom   = inc.get('geometry', {})
-        coords = geom.get('coordinates')
-        if coords:
-            gtype = geom.get('type', '')
-            if gtype == 'Point':
-                ic_lon, ic_lat = coords[0], coords[1]
-            elif gtype in ('LineString', 'MultiLineString') and coords:
-                first = coords[0] if gtype == 'LineString' else (coords[0][0] if coords[0] else None)
-                if first and len(first) >= 2:
-                    ic_lon, ic_lat = first[0], first[1]
-                else:
-                    ic_lon, ic_lat = None, None
-            else:
-                ic_lon, ic_lat = None, None
-            if ic_lon is not None:
-                dlat = math.radians(ic_lat - lat_f)
-                dlon = math.radians(ic_lon - lon_f)
-                a    = (math.sin(dlat / 2) ** 2
-                        + math.cos(math.radians(lat_f))
-                        * math.cos(math.radians(ic_lat))
-                        * math.sin(dlon / 2) ** 2)
-                dist_miles = round(6371 * 2 * math.asin(math.sqrt(a)) * 0.621371, 1)
 
-        if title or road:
-            incidents.append({
-                'title':         title,
-                'severity':      severity,
-                'road':          road,
-                'direction':     direction,
-                'distance_miles': dist_miles,
-            })
+def set_all_traffic_demo_cities_enabled(enabled):
+    """Enable or disable every city in one shot."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("UPDATE traffic_demo_cities SET enabled=?, updated_at=?",
+                      (1 if enabled else 0, now_iso))
+            conn.commit()
+    except Exception:
+        logging.exception("set_all_traffic_demo_cities_enabled failed")
+        raise
 
-    incidents.sort(key=lambda x: x['distance_miles'] if x['distance_miles'] is not None else 999)
 
-    major_count    = sum(1 for i in incidents if i['severity'] == 'Major')
-    moderate_count = sum(1 for i in incidents if i['severity'] == 'Moderate')
-    if major_count >= 2 or (major_count >= 1 and moderate_count >= 2):
+def pick_random_traffic_demo_pack(pack_size=10):
+    """Randomly select pack_size enabled cities and persist as traffic_demo.pack.
+    Returns list of chosen city dicts."""
+    import random as _rand
+    cities = [c for c in get_traffic_demo_cities() if c['enabled']]
+    if not cities:
+        cities = get_traffic_demo_cities()
+    chosen = _rand.sample(cities, min(pack_size, len(cities)))
+    pack_ids = [c['id'] for c in chosen]
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack', _json.dumps(pack_ids)))
+            conn.commit()
+    except Exception:
+        logging.exception("pick_random_traffic_demo_pack failed")
+    return chosen
+
+
+def _get_congestion_distribution(hour, is_weekend=False):
+    """Return (green_pct, yellow_pct, red_pct) based on local hour and day type.
+    Percentages always sum to 100."""
+    if is_weekend:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 9 <= hour < 12:
+            return 70, 20, 10
+        elif 12 <= hour < 15:
+            return 65, 25, 10
+        elif 17 <= hour < 20:
+            return 60, 28, 12
+        else:
+            return 82, 13, 5
+    else:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 7 <= hour < 9:
+            return 50, 30, 20
+        elif 12 <= hour < 14:
+            return 65, 25, 10
+        elif 16 <= hour < 19:
+            return 45, 30, 25
+        elif 22 <= hour or hour < 1:
+            return 80, 15, 5
+        else:
+            return 75, 18, 7
+
+
+def _build_traffic_demo_payload():
+    """Build the demo traffic payload with deterministic city rotation and
+    simulated congestion segments.  Results are cached per rotation slot so
+    all viewers share the same snapshot."""
+    import hashlib
+    import random as _rnd
+
+    demo_cfg = get_traffic_demo_config()
+    mode = demo_cfg.get('mode', 'admin_rotation')
+    rotation_seconds = max(30, int(demo_cfg.get('rotation_seconds', 120)))
+
+    now_ts = time.time()
+    time_slot = int(now_ts // rotation_seconds)
+
+    all_cities = get_traffic_demo_cities()
+
+    # Determine the pool to rotate through
+    if mode == 'random_pack':
+        try:
+            pack_ids = _json.loads(demo_cfg.get('pack', '[]'))
+        except Exception:
+            pack_ids = []
+        if pack_ids:
+            id_set = {c['id'] for c in all_cities}
+            pack_ids = [pid for pid in pack_ids if pid in id_set]
+            cities_pool = [c for c in all_cities if c['id'] in pack_ids]
+        else:
+            cities_pool = [c for c in all_cities if c['enabled']]
+    else:  # admin_rotation
+        cities_pool = [c for c in all_cities if c['enabled']]
+
+    if not cities_pool:
+        cities_pool = all_cities[:1] if all_cities else [
+            {'id': 0, 'name': 'Chicago', 'state': 'IL',
+             'lat': 41.8781, 'lon': -87.6298, 'population': 2696555,
+             'enabled': True, 'weight': 1}
+        ]
+
+    # Build a weighted list for round-robin
+    weighted = []
+    for city in cities_pool:
+        w = max(1, city.get('weight', 1))
+        weighted.extend([city] * w)
+
+    city = weighted[time_slot % len(weighted)]
+
+    # Cache lookup
+    cache_key = f"demo:{city['id']}:{time_slot}"
+    cached = _TRAFFIC_DEMO_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    # Evict stale entries
+    for k in list(_TRAFFIC_DEMO_CACHE):
+        if k != cache_key:
+            _TRAFFIC_DEMO_CACHE.pop(k, None)
+
+    # Time-of-day congestion distribution
+    now_dt = datetime.now(timezone.utc)
+    hour = now_dt.hour
+    is_weekend = now_dt.weekday() >= 5
+    green_pct, yellow_pct, red_pct = _get_congestion_distribution(hour, is_weekend)
+
+    # Congestion level label
+    if red_pct >= 20:
         congestion_level = 'Heavy'
-    elif major_count >= 1 or moderate_count >= 2:
+    elif red_pct >= 10 or yellow_pct >= 25:
         congestion_level = 'Moderate'
     else:
-        congestion_level = 'Low'
+        congestion_level = 'Light'
 
-    return {
-        'incident_count':   len(incidents),
-        'congestion_level': congestion_level,
-        'incidents':        incidents[:8],
-    }
+    # Generate road segments deterministically using a seeded RNG
+    # MD5 is used purely for deterministic seeding (not for security).
+    # All viewers at the same time slot see the same road-color snapshot.
+    seed_hex = hashlib.md5(f"{city['id']}:{time_slot}".encode()).hexdigest()[:8]
+    rng = _rnd.Random(int(seed_hex, 16))
 
-def _build_traffic_payload(cfg):
-    """Build the normalized traffic payload.  Results are cached per wall-clock
-    time slot so all viewers see the same snapshot regardless of tune-in time."""
-    lat           = cfg.get('lat', '')
-    lon           = cfg.get('lon', '')
-    location_name = cfg.get('location_name') or 'Local Traffic'
-    radius_miles  = cfg.get('radius_miles') or '25'
-    api_key       = cfg.get('api_key', '')
+    NUM_SEGMENTS = 24
+    colors = ['green'] * green_pct + ['yellow'] * yellow_pct + ['red'] * red_pct
+    segments = [{'id': f'seg_{i}', 'color': rng.choice(colors)}
+                for i in range(1, NUM_SEGMENTS + 1)]
 
-    now_ts   = time.time()
-    slot     = int(now_ts // _TRAFFIC_CACHE_TTL)
-    cache_key = f"{lat}:{lon}:{radius_miles}:{slot}"
-
-    cached = _traffic_cache.get(cache_key)
-    if cached:
-        return cached['data']
-
-    normalized = None
-    if lat and lon and api_key:
-        raw = _fetch_tomtom_incidents(lat, lon, radius_miles, api_key)
-        if raw:
-            normalized = _normalize_tomtom(raw, lat, lon)
-
-    if not normalized:
-        normalized = {'incident_count': 0, 'congestion_level': 'Low', 'incidents': []}
-
-    # Evict stale entries (keep cache small)
-    stale = [k for k in list(_traffic_cache) if k != cache_key]
-    for k in stale:
-        _traffic_cache.pop(k, None)
+    # Actual percentages from generated segments
+    total = len(segments)
+    actual_green  = sum(1 for s in segments if s['color'] == 'green')
+    actual_yellow = sum(1 for s in segments if s['color'] == 'yellow')
+    actual_red    = sum(1 for s in segments if s['color'] == 'red')
 
     payload = {
-        'updated':  datetime.now(timezone.utc).isoformat(),
-        'center':   {'lat': float(lat) if lat else 0.0,
-                     'lon': float(lon) if lon else 0.0},
-        'location': location_name,
-        'summary':  {
-            'incident_count':   normalized['incident_count'],
-            'congestion_level': normalized['congestion_level'],
+        'updated': now_dt.isoformat(),
+        'city': {
+            'name':  city['name'],
+            'state': city['state'],
+            'lat':   city['lat'],
+            'lon':   city['lon'],
         },
-        'incidents': normalized['incidents'],
+        'summary': {
+            'congestion_level': congestion_level,
+            'green_percent':    round(actual_green  * 100 / total),
+            'yellow_percent':   round(actual_yellow * 100 / total),
+            'red_percent':      round(actual_red    * 100 / total),
+        },
+        'segments':  segments,
+        'demo_mode': True,
     }
-    _traffic_cache[cache_key] = {'data': payload}
+    _TRAFFIC_DEMO_CACHE[cache_key] = payload
     return payload
 
 
@@ -2100,14 +2213,12 @@ def change_tuner():
                         }
                         save_weather_config(weather_cfg)
                     if tvg_id == 'virtual.traffic':
-                        traffic_cfg = {
-                            'lat':           request.form.get('ch_traffic_lat', '').strip(),
-                            'lon':           request.form.get('ch_traffic_lon', '').strip(),
-                            'location_name': request.form.get('ch_traffic_location', '').strip(),
-                            'radius_miles':  request.form.get('ch_traffic_radius', '25').strip(),
-                            'api_key':       request.form.get('ch_traffic_api_key', '').strip(),
+                        demo_cfg = {
+                            'mode':             request.form.get('ch_traffic_demo_mode', 'admin_rotation').strip(),
+                            'pack_size':        request.form.get('ch_traffic_pack_size', '10').strip(),
+                            'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
                         }
-                        save_traffic_config(traffic_cfg)
+                        save_traffic_demo_config(demo_cfg)
                     # Save background music selection for all virtual channels
                     music_file = request.form.get('ch_music_file', '').strip()
                     save_channel_music_file(tvg_id, music_file)
@@ -2174,7 +2285,8 @@ def change_tuner():
         channel_appearances=channel_appearances,
         news_feed_urls=get_news_feed_urls(),
         weather_config=get_weather_config(),
-        traffic_config=get_traffic_config(),
+        traffic_demo_config=get_traffic_demo_config(),
+        traffic_demo_cities=get_traffic_demo_cities(),
         audio_files=audio_files,
         channel_music_files=channel_music_files,
     )
@@ -2574,20 +2686,73 @@ def api_weather():
 @app.route('/api/traffic', methods=['GET'])
 @login_required
 def api_traffic():
-    """Traffic overlay data endpoint. Returns normalized, cached traffic incidents
-    for the configured location. Results are cached per wall-clock time slot
-    (TTL = overlay_refresh_seconds = 120 s) so all viewers share the same snapshot."""
-    cfg = get_traffic_config()
-    payload = dict(_build_traffic_payload(cfg))
+    """Traffic overlay data endpoint — Demo Mode.
+    Returns simulated congestion data for a rotating U.S. city.
+    No external API or configuration required."""
+    payload = dict(_build_traffic_demo_payload())
     music_filename = get_channel_music_file('virtual.traffic')
     payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
-    # Wall clock aligned refresh: tell the client exactly how long until the
-    # next 2-minute boundary so all viewers refresh in sync.
     _now_ts = time.time()
+    rotation_seconds = max(30, int(get_traffic_demo_config().get('rotation_seconds', 120)))
     payload['ms_until_next'] = int(
-        (_TRAFFIC_CACHE_TTL - (_now_ts % _TRAFFIC_CACHE_TTL)) * 1000
+        (rotation_seconds - (_now_ts % rotation_seconds)) * 1000
     )
     return jsonify(payload)
+
+
+@app.route('/api/traffic/demo', methods=['GET'])
+@login_required
+def api_traffic_demo():
+    """Alias for /api/traffic — always returns demo mode payload."""
+    return api_traffic()
+
+
+@app.route('/api/traffic/demo/cities', methods=['GET'])
+@login_required
+def api_traffic_demo_cities():
+    """Return all cities from traffic_demo_cities table."""
+    return jsonify({'cities': get_traffic_demo_cities()})
+
+
+@app.route('/api/traffic/demo/cities/<int:city_id>', methods=['POST'])
+@login_required
+def api_traffic_demo_city_update(city_id):
+    """Update enabled/weight for a single city (admin action)."""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled', True))
+    weight  = max(1, int(data.get('weight', 1)))
+    try:
+        save_traffic_demo_city(city_id, enabled, weight)
+        return jsonify({'ok': True})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/traffic/demo/enable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_enable_all():
+    """Enable all cities."""
+    set_all_traffic_demo_cities_enabled(True)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/disable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_disable_all():
+    """Disable all cities."""
+    set_all_traffic_demo_cities_enabled(False)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/pick_random', methods=['POST'])
+@login_required
+def api_traffic_demo_pick_random():
+    """Randomly pick N cities and store as the rotation pack."""
+    data = request.get_json(silent=True) or {}
+    demo_cfg = get_traffic_demo_config()
+    n = int(data.get('pack_size', demo_cfg.get('pack_size', 10)))
+    chosen = pick_random_traffic_demo_pack(n)
+    return jsonify({'ok': True, 'cities': chosen})
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required

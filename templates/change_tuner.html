@@ -340,7 +340,7 @@
                   {% elif ch.tvg_id == 'virtual.status' %}
                     Uptime, CPU, Memory
                   {% elif ch.tvg_id == 'virtual.traffic' %}
-                    Location: {{ traffic_config.location_name or 'Not set' }}&nbsp;&nbsp;Radius: {{ traffic_config.radius_miles or '25' }} mi
+                    Mode: {{ 'Admin Rotation' if traffic_demo_config.mode != 'random_pack' else 'Random Pack' }}&nbsp;&nbsp;Interval: {{ traffic_demo_config.rotation_seconds or '120' }}s
                   {% else %}
                     {{ ch.overlay_type | title }}
                   {% endif %}
@@ -438,38 +438,78 @@
                 {% endif %}
                 {% if ch.tvg_id == 'virtual.traffic' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>US Zip Code Lookup</label>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="text" id="vc-traffic-zip-input" placeholder="e.g. 33101" maxlength="5" inputmode="numeric" pattern="\d{5}" class="zip-input">
-                    <button type="button" id="vc-traffic-zip-lookup-btn" class="secondary small">Look Up</button>
-                    <span id="vc-traffic-zip-status" class="zip-status" aria-live="polite"></span>
+                  <label>&#128161; No API key required &mdash; fully self-contained demo mode.</label>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Rotation Mode</label>
+                  <select name="ch_traffic_demo_mode">
+                    <option value="admin_rotation" {% if traffic_demo_config.mode != 'random_pack' %}selected{% endif %}>Admin Rotation (all enabled cities)</option>
+                    <option value="random_pack" {% if traffic_demo_config.mode == 'random_pack' %}selected{% endif %}>Random Pack</option>
+                  </select>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Rotation Interval (seconds)</label>
+                  <input type="number" name="ch_traffic_rotation_seconds"
+                         value="{{ traffic_demo_config.rotation_seconds or '120' }}"
+                         min="30" max="3600" step="1" style="width:6em;">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Pack Size</label>
+                  <input type="number" name="ch_traffic_pack_size"
+                         value="{{ traffic_demo_config.pack_size or '10' }}"
+                         min="1" max="50" step="1" style="width:5em;"
+                         title="Number of cities in the Random Pack">
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;">
+                  <div class="form-row form-row-inline" style="gap:6px; flex-wrap:wrap;">
+                    <button type="button" class="secondary small" id="traffic-demo-pick-random-btn"
+                            aria-label="Pick Random Cities">&#127922; Pick Random Cities</button>
+                    <button type="button" class="secondary small" id="traffic-demo-enable-all-btn"
+                            aria-label="Enable All Cities">&#9745; Enable All</button>
+                    <button type="button" class="secondary small" id="traffic-demo-disable-all-btn"
+                            aria-label="Disable All Cities">&#9744; Disable All</button>
+                    <span id="traffic-demo-action-status" class="muted small" aria-live="polite"></span>
                   </div>
                 </div>
-                <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>Location Name</label>
-                  <input type="text" id="vc-traffic-location" name="ch_traffic_location" value="{{ traffic_config.location_name }}" placeholder="e.g. Miami, FL" maxlength="120">
-                </div>
-                <div class="vc-prefs-field">
-                  <label>Latitude</label>
-                  <input type="text" id="vc-traffic-lat" name="ch_traffic_lat" value="{{ traffic_config.lat }}" placeholder="e.g. 25.77" maxlength="20" inputmode="decimal">
-                </div>
-                <div class="vc-prefs-field">
-                  <label>Longitude</label>
-                  <input type="text" id="vc-traffic-lon" name="ch_traffic_lon" value="{{ traffic_config.lon }}" placeholder="e.g. -80.19" maxlength="20" inputmode="decimal">
-                </div>
-                <div class="vc-prefs-field">
-                  <label>Radius (miles)</label>
-                  <input type="number" name="ch_traffic_radius" value="{{ traffic_config.radius_miles or '25' }}" min="1" max="100" step="1" style="width:5em;">
-                </div>
-                <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>TomTom API Key
-                    <span class="muted small">
-                      &mdash; <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">Register free at developer.tomtom.com</a>,
-                      then go to <strong>My Apps &rarr; Add new app</strong>, enable the
-                      <strong>Traffic Incidents API</strong>, and paste the generated key here.
-                    </span>
-                  </label>
-                  <input type="text" name="ch_traffic_api_key" value="{{ traffic_config.api_key }}" placeholder="Enter TomTom Traffic Incidents API key" maxlength="200" autocomplete="off">
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;">
+                  <label>&#127961; Cities (US cities with population &gt; 1M)</label>
+                  <table class="traffic-demo-city-table" id="traffic-demo-city-table"
+                         style="width:100%;border-collapse:collapse;font-size:clamp(11px,1.3vw,14px);margin-top:4px;">
+                    <thead>
+                      <tr style="color:#ffd700;text-align:left;border-bottom:1px solid #3058d8;">
+                        <th style="padding:3px 6px;">Enabled</th>
+                        <th style="padding:3px 6px;">City</th>
+                        <th style="padding:3px 6px;">State</th>
+                        <th style="padding:3px 6px;">Population</th>
+                        <th style="padding:3px 6px;">Weight</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for city in traffic_demo_cities %}
+                      <tr data-city-id="{{ city.id }}"
+                          style="border-bottom:1px solid rgba(48,88,216,0.3);">
+                        <td style="padding:3px 6px; text-align:center;">
+                          <input type="checkbox" class="traffic-city-enabled"
+                                 {% if city.enabled %}checked{% endif %}
+                                 data-city-id="{{ city.id }}">
+                        </td>
+                        <td style="padding:3px 6px;">{{ city.name }}</td>
+                        <td style="padding:3px 6px;">{{ city.state }}</td>
+                        <td style="padding:3px 6px;">{{ "{:,}".format(city.population) }}</td>
+                        <td style="padding:3px 6px;">
+                          <input type="number" class="traffic-city-weight"
+                                 value="{{ city.weight }}" min="1" max="10" step="1"
+                                 data-city-id="{{ city.id }}"
+                                 style="width:4em;">
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  <div class="muted small" style="margin-top:4px;">
+                    City changes are saved immediately when you toggle or change weight.
+                    Use Save to persist rotation mode &amp; interval.
+                  </div>
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                   <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
@@ -903,37 +943,101 @@ document.addEventListener('DOMContentLoaded', () => {
   zipEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } });
 })();
 
-// US Zip Code -> lat/lon/location (traffic channel)
+// Traffic Demo Mode — city table interactions
 (function() {
-  var btn    = document.getElementById('vc-traffic-zip-lookup-btn');
-  var zipEl  = document.getElementById('vc-traffic-zip-input');
-  var latEl  = document.getElementById('vc-traffic-lat');
-  var lonEl  = document.getElementById('vc-traffic-lon');
-  var locEl  = document.getElementById('vc-traffic-location');
-  var status = document.getElementById('vc-traffic-zip-status');
-  if (!btn || !zipEl) return;
-  function doLookup() {
-    var zip = zipEl.value.trim();
-    if (!/^\d{5}$/.test(zip)) { status.textContent = 'Enter a 5-digit US zip code.'; status.className = 'zip-status zip-status-error'; return; }
-    btn.disabled = true; status.textContent = 'Looking up\u2026'; status.className = 'zip-status';
-    fetch('https://api.zippopotam.us/us/' + zip)
-      .then(r => { if (!r.ok) throw new Error('not found'); return r.json(); })
-      .then(data => {
-        var place = data.places && data.places[0];
-        if (!place) throw new Error('no places');
-        var lat = parseFloat(place.latitude), lon = parseFloat(place.longitude);
-        if (isNaN(lat) || isNaN(lon)) throw new Error('invalid coords');
-        var loc = place['place name'] + ', ' + place['state abbreviation'];
-        if (latEl) latEl.value = lat.toFixed(4);
-        if (lonEl) lonEl.value = lon.toFixed(4);
-        if (locEl) locEl.value = loc;
-        status.textContent = '\u2713 Found: ' + loc; status.className = 'zip-status zip-status-ok';
-      })
-      .catch(() => { status.textContent = 'Zip code not found.'; status.className = 'zip-status zip-status-error'; })
-      .finally(() => { btn.disabled = false; });
+  function setActionStatus(msg, isError) {
+    var el = document.getElementById('traffic-demo-action-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isError ? '#ee2222' : '#22cc44';
   }
-  btn.addEventListener('click', doLookup);
-  zipEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } });
+
+  // Auto-save city enabled/weight on change
+  document.querySelectorAll('.traffic-city-enabled, .traffic-city-weight').forEach(function(el) {
+    el.addEventListener('change', function() {
+      var cityId = this.dataset.cityId;
+      var row = document.querySelector('tr[data-city-id="' + cityId + '"]');
+      if (!row) return;
+      var enabledEl = row.querySelector('.traffic-city-enabled');
+      var weightEl  = row.querySelector('.traffic-city-weight');
+      var enabled = enabledEl ? enabledEl.checked : true;
+      var weight  = weightEl  ? parseInt(weightEl.value, 10) || 1 : 1;
+      fetch('/api/traffic/demo/cities/' + cityId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: enabled, weight: weight}),
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          setActionStatus(d.ok ? '\u2713 Saved' : ('\u2717 ' + (d.error || 'Error')), !d.ok);
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  });
+
+  // Enable All
+  var enableAllBtn = document.getElementById('traffic-demo-enable-all-btn');
+  if (enableAllBtn) {
+    enableAllBtn.addEventListener('click', function() {
+      fetch('/api/traffic/demo/enable_all', {method: 'POST', credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            document.querySelectorAll('.traffic-city-enabled').forEach(function(cb) { cb.checked = true; });
+            setActionStatus('\u2713 All cities enabled', false);
+          } else { setActionStatus('\u2717 Error', true); }
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  }
+
+  // Disable All
+  var disableAllBtn = document.getElementById('traffic-demo-disable-all-btn');
+  if (disableAllBtn) {
+    disableAllBtn.addEventListener('click', function() {
+      fetch('/api/traffic/demo/disable_all', {method: 'POST', credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            document.querySelectorAll('.traffic-city-enabled').forEach(function(cb) { cb.checked = false; });
+            setActionStatus('\u2713 All cities disabled', false);
+          } else { setActionStatus('\u2717 Error', true); }
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  }
+
+  // Pick Random Cities
+  var pickRandomBtn = document.getElementById('traffic-demo-pick-random-btn');
+  if (pickRandomBtn) {
+    pickRandomBtn.addEventListener('click', function() {
+      var packSizeEl = document.querySelector('input[name="ch_traffic_pack_size"]');
+      var n = packSizeEl ? (parseInt(packSizeEl.value, 10) || 10) : 10;
+      pickRandomBtn.disabled = true;
+      fetch('/api/traffic/demo/pick_random', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pack_size: n}),
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok && d.cities) {
+            var chosenIds = d.cities.map(function(c) { return String(c.id); });
+            var modeEl = document.querySelector('select[name="ch_traffic_demo_mode"]');
+            if (modeEl) modeEl.value = 'random_pack';
+            setActionStatus('\u2713 Random pack of ' + d.cities.length + ' cities selected', false);
+          } else { setActionStatus('\u2717 ' + (d.error || 'Error'), true); }
+          setTimeout(function() { setActionStatus(''); }, 3000);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); })
+        .finally(function() { pickRandomBtn.disabled = false; });
+    });
+  }
 })();
 
 // Audio file upload and delete
