@@ -918,6 +918,63 @@ _TRAFFIC_DEMO_CITIES_SEED = [
 _TRAFFIC_DEMO_CACHE_TTL = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
 _TRAFFIC_DEMO_CACHE: dict = {}  # cache_key -> payload dict
 
+# Per-city highway/arterial names used to generate realistic demo incidents
+_CITY_HIGHWAYS: dict = {
+    'New York City': ['I-95', 'I-278', 'I-495', 'FDR Drive', 'Belt Pkwy', 'Cross Bronx Expwy'],
+    'Los Angeles':   ['I-5', 'I-10', 'I-405', 'US-101', 'SR-110', 'SR-60'],
+    'Chicago':       ['I-90', 'I-94', 'I-290', 'I-55', 'I-88', 'Lake Shore Dr'],
+    'Houston':       ['I-10', 'I-45', 'I-610', 'US-59', 'US-290', 'Beltway 8'],
+    'Phoenix':       ['I-10', 'I-17', 'SR-51', 'SR-101', 'US-60', 'Loop 202'],
+    'Philadelphia':  ['I-95', 'I-76', 'I-676', 'US-1', 'PA-309', 'Schuylkill Expwy'],
+    'San Antonio':   ['I-10', 'I-35', 'I-37', 'US-281', 'Loop 410', 'Loop 1604'],
+    'San Diego':     ['I-5', 'I-8', 'I-15', 'SR-94', 'SR-163', 'SR-125'],
+    'Dallas':        ['I-30', 'I-35E', 'I-635', 'US-75', 'SR-114', 'Loop 12'],
+    'San Jose':      ['I-280', 'I-880', 'SR-87', 'SR-101', 'US-101', 'SR-85'],
+}
+_CITY_HIGHWAYS_DEFAULT = ['I-10', 'I-20', 'I-40', 'US-1', 'State Hwy 1', 'Main Blvd']
+
+_INCIDENT_TYPES = [
+    ('Accident',            'red',    '⚠'),
+    ('Multi-vehicle crash', 'red',    '⚠'),
+    ('Stalled vehicle',     'yellow', '🚘'),
+    ('Road work',           'yellow', '🚧'),
+    ('Debris on road',      'yellow', '⚠'),
+    ('Slow traffic',        'green',  '🐢'),
+    ('Lane closure',        'yellow', '🚧'),
+    ('Emergency response',  'red',    '🚨'),
+]
+_DIRECTIONS = ['Northbound', 'Southbound', 'Eastbound', 'Westbound']
+
+
+def _generate_demo_incidents(city_name, rng, red_pct):
+    """Generate a deterministic list of realistic-looking demo traffic incidents.
+    The number and severity of incidents scales with the congestion level."""
+    highways = _CITY_HIGHWAYS.get(city_name, _CITY_HIGHWAYS_DEFAULT)
+    # Scale incident count: heavy congestion → more incidents
+    max_incidents = 3 + (red_pct // 15)   # 3–7 depending on red_pct
+    count = rng.randint(max(1, max_incidents - 2), max_incidents)
+
+    incidents = []
+    used_roads = set()
+    for _ in range(count):
+        road = rng.choice(highways)
+        direction = rng.choice(_DIRECTIONS)
+        inc_type, severity, icon = rng.choice(_INCIDENT_TYPES)
+        # Avoid exact duplicate road+direction pairs
+        key = (road, direction)
+        if key in used_roads and len(used_roads) < len(highways) * 4:
+            road = rng.choice([h for h in highways if h != road] or highways)
+            key = (road, direction)
+        used_roads.add(key)
+        incidents.append({
+            'title':     inc_type,
+            'severity':  severity,
+            'icon':      icon,
+            'road':      road,
+            'direction': direction,
+        })
+    return incidents
+
 
 def _init_traffic_demo_db(conn):
     """Create and seed the traffic_demo_cities table (called from init_tuners_db)."""
@@ -1191,6 +1248,9 @@ def _build_traffic_demo_payload():
     actual_yellow = sum(1 for s in segments if s['color'] == 'yellow')
     actual_red    = sum(1 for s in segments if s['color'] == 'red')
 
+    # Generate deterministic demo incidents (scaled to congestion level)
+    incidents = _generate_demo_incidents(city['name'], rng, red_pct)
+
     payload = {
         'updated': now_dt.isoformat(),
         'city': {
@@ -1206,7 +1266,9 @@ def _build_traffic_demo_payload():
             'green_percent':    round(actual_green  * 100 / total),
             'yellow_percent':   round(actual_yellow * 100 / total),
             'red_percent':      round(actual_red    * 100 / total),
+            'incident_count':   len(incidents),
         },
+        'incidents': incidents,
         'segments':  segments,
         'demo_mode': True,
     }

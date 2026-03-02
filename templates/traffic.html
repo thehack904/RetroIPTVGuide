@@ -5,8 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RetroIPTV Traffic</title>
   <!-- Leaflet.js — free, open source, no API key required.
-       Loaded from local vendor bundle; CDN is used as fallback for environments
-       where the vendored copy may not be present. -->
+       Loaded from local vendor bundle (static/vendor/leaflet/). -->
   <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.min.css">
   <script src="/static/vendor/leaflet/leaflet.min.js"></script>
   <style>
@@ -55,7 +54,7 @@
     .tf-header {
       background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
       border-bottom: 3px solid #4a70ff;
-      padding: 0.45em 1.2em;
+      padding: 0.4em 1.2em;
       display: flex;
       align-items: center;
       gap: 0.6em;
@@ -88,7 +87,7 @@
     }
 
     .tf-city-label {
-      font-size: clamp(16px, 2.4vw, 32px);
+      font-size: clamp(14px, 2.2vw, 30px);
       font-weight: 900;
       letter-spacing: 0.05em;
       color: #ffd700;
@@ -96,26 +95,29 @@
       text-align: right;
     }
 
-    .tf-updated {
-      font-size: clamp(10px, 1.3vw, 16px);
+    .tf-updated-time {
+      font-size: clamp(9px, 1.1vw, 14px);
       font-weight: 700;
       color: #c8d8ff;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0.2em 1.2em 0;
+      text-align: right;
       flex-shrink: 0;
-      position: relative;
-      z-index: 1001;
     }
 
     /* ── Main content area ────────────────────────────────────────── */
     .tf-body {
       flex: 1;
       display: grid;
-      grid-template-columns: 1fr 2.4fr;
+      grid-template-columns: 1fr 2.5fr;
       gap: 0.5em;
-      padding: 0.5em 0.7em 0.3em;
+      padding: 0.4em 0.7em 0.3em;
+      min-height: 0;
+    }
+
+    /* ── Left panel ───────────────────────────────────────────────── */
+    .tf-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
       min-height: 0;
     }
 
@@ -124,73 +126,144 @@
       background: rgba(10, 40, 170, 0.75);
       border: 2px solid #3058d8;
       border-radius: 4px;
-      padding: 0.5em 0.7em;
+      padding: 0.4em 0.6em;
       box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 8px rgba(0,0,0,0.5);
       display: flex;
       flex-direction: column;
     }
 
     .tf-box-title {
-      font-size: clamp(10px, 1.3vw, 16px);
+      font-size: clamp(9px, 1.2vw, 15px);
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #ffd700;
       border-bottom: 1px solid #3058d8;
-      padding-bottom: 0.3em;
-      margin-bottom: 0.4em;
+      padding-bottom: 0.25em;
+      margin-bottom: 0.3em;
+      flex-shrink: 0;
     }
 
-    /* ── Congestion summary (left panel) ──────────────────────────── */
+    /* ── Congestion summary ───────────────────────────────────────── */
     .tf-congestion-level {
-      font-size: clamp(20px, 3vw, 40px);
+      font-size: clamp(18px, 2.8vw, 38px);
       font-weight: 900;
       text-align: center;
-      margin: 0.3em 0 0.1em;
+      margin: 0.1em 0;
+      line-height: 1.1;
     }
     .tf-congestion-level[data-level="Light"]    { color: #22cc44; }
     .tf-congestion-level[data-level="Moderate"] { color: #ffaa00; }
     .tf-congestion-level[data-level="Heavy"]    { color: #ee2222; }
 
     .tf-congestion-sub {
-      font-size: clamp(9px, 1.1vw, 13px);
+      font-size: clamp(8px, 1vw, 12px);
       color: #c8d8ff;
       text-align: center;
       letter-spacing: 0.06em;
       text-transform: uppercase;
-      margin-bottom: 0.5em;
+      margin-bottom: 0.3em;
     }
 
-    /* percent bars */
+    /* tri-color congestion bar */
+    .tf-cong-bar {
+      display: flex;
+      height: clamp(8px, 1.2vw, 14px);
+      border-radius: 3px;
+      overflow: hidden;
+      border: 1px solid #3058d8;
+      margin-bottom: 0.25em;
+    }
+    .tf-cong-bar-seg { height: 100%; transition: width 0.6s ease; }
+
+    /* percent rows */
     .tf-pct-row {
       display: flex;
       align-items: center;
+      gap: 0.3em;
+      margin-bottom: 0.15em;
+    }
+    .tf-pct-dot  { width: 0.55em; height: 0.55em; border-radius: 50%; flex-shrink: 0; }
+    .tf-pct-label { font-size: clamp(8px, 1vw, 12px); color: #c8d8ff; flex: 1; }
+    .tf-pct-num   { font-size: clamp(8px, 1vw, 12px); font-weight: 700; color: #ffd700; }
+
+    /* ── Incident count badge ─────────────────────────────────────── */
+    .tf-incident-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
       gap: 0.4em;
-      margin-bottom: 0.2em;
+      padding: 0.3em 0;
     }
-    .tf-pct-dot {
-      width: 0.6em; height: 0.6em; border-radius: 50%; flex-shrink: 0;
+
+    .tf-incident-count {
+      font-size: clamp(28px, 4.5vw, 60px);
+      font-weight: 900;
+      line-height: 1;
+      color: #fff;
     }
-    .tf-pct-label {
-      font-size: clamp(9px, 1.1vw, 13px);
+
+    .tf-incident-label {
+      font-size: clamp(10px, 1.3vw, 16px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
       color: #c8d8ff;
-      width: 4.5em;
+      line-height: 1.2;
     }
-    .tf-pct-track {
+
+    /* ── Incident list ────────────────────────────────────────────── */
+    .tf-incidents-box {
       flex: 1;
-      background: rgba(0,0,20,0.5);
-      border: 1px solid #3058d8;
-      border-radius: 3px;
-      height: clamp(8px, 1.2vw, 14px);
+      min-height: 0;
       overflow: hidden;
     }
-    .tf-pct-fill { height: 100%; border-radius: 3px; transition: width 0.6s ease; }
-    .tf-pct-num {
-      font-size: clamp(9px, 1.1vw, 13px);
+
+    .tf-incident-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2em;
+      overflow: hidden;
+    }
+
+    .tf-incident-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.35em;
+      padding: 0.2em 0.3em;
+      border-radius: 3px;
+      background: rgba(0,10,60,0.4);
+      border-left: 3px solid transparent;
+    }
+    .tf-incident-item[data-sev="red"]    { border-left-color: #ee2222; }
+    .tf-incident-item[data-sev="yellow"] { border-left-color: #ffaa00; }
+    .tf-incident-item[data-sev="green"]  { border-left-color: #22cc44; }
+
+    .tf-incident-icon {
+      font-size: clamp(10px, 1.3vw, 16px);
+      flex-shrink: 0;
+      line-height: 1.3;
+    }
+
+    .tf-incident-text {
+      min-width: 0;
+    }
+
+    .tf-incident-title {
+      font-size: clamp(8px, 1.1vw, 13px);
       font-weight: 700;
-      color: #ffd700;
-      width: 2.5em;
-      text-align: right;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tf-incident-road {
+      font-size: clamp(7px, 0.95vw, 11px);
+      color: #c8d8ff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     /* ── Map container (right panel) ──────────────────────────────── */
@@ -198,16 +271,21 @@
       position: relative;
       overflow: hidden;
       padding: 0;
+      display: flex;
+      flex-direction: column;
+      background: rgba(10, 40, 170, 0.75);
+      border: 2px solid #3058d8;
+      border-radius: 4px;
     }
 
     .tf-map-box-title {
-      font-size: clamp(10px, 1.3vw, 16px);
+      font-size: clamp(9px, 1.2vw, 15px);
       font-weight: 700;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #ffd700;
       border-bottom: 1px solid #3058d8;
-      padding: 0.5em 0.7em 0.3em;
+      padding: 0.4em 0.6em 0.25em;
       background: rgba(10,40,170,0.85);
       position: relative;
       z-index: 500;
@@ -230,14 +308,14 @@
     /* Road-loading status badge inside the map */
     .tf-road-status {
       position: absolute;
-      bottom: 8px;
-      left: 8px;
+      bottom: 6px;
+      right: 6px;
       z-index: 600;
       background: rgba(0,0,30,0.75);
       color: #c8d8ff;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 3px 8px;
+      padding: 2px 6px;
       border-radius: 3px;
       pointer-events: none;
     }
@@ -250,7 +328,7 @@
       align-items: center;
       overflow: hidden;
       flex-shrink: 0;
-      height: clamp(26px, 3.8vw, 44px);
+      height: clamp(24px, 3.6vw, 42px);
       position: relative;
       z-index: 1001;
     }
@@ -281,10 +359,10 @@
     .tf-ticker-track {
       display: inline-block;
       white-space: nowrap;
-      font-size: clamp(9px, 1.25vw, 15px);
+      font-size: clamp(9px, 1.2vw, 14px);
       font-weight: 700;
       color: #ffd700;
-      animation: tf-scroll 36s linear infinite;
+      animation: tf-scroll 40s linear infinite;
       padding-left: 100%;
     }
 
@@ -318,7 +396,6 @@
   const ERROR_RETRY_MS      = 60 * 1000;
 
   // ── Seeded PRNG (mulberry32) ─────────────────────────────────────────────
-  // Same deterministic color assignment for all viewers sharing the same time_slot.
   function mulberry32(seed) {
     return function () {
       seed |= 0;
@@ -329,10 +406,8 @@
     };
   }
 
-  // Deterministic seed matching the backend: int(md5(city_id:time_slot)[:8], 16)
-  // We approximate with a simple hash in JS (same bias, good enough for visual consistency).
+  // FNV-1a 32-bit seed matching backend determinism
   function makeSeed(cityId, timeSlot) {
-    // FNV-1a 32-bit over the string "cityId:timeSlot"
     var str = String(cityId) + ':' + String(timeSlot);
     var h = 2166136261;
     for (var i = 0; i < str.length; i++) {
@@ -343,12 +418,11 @@
   }
 
   // ── Traffic colour helpers ───────────────────────────────────────────────
-  const HIGHWAY_WIDTH = { motorway: 5, trunk: 4, primary: 3, secondary: 2 };
+  const HIGHWAY_WIDTH   = { motorway: 5, trunk: 4, primary: 3, secondary: 2 };
   const HIGHWAY_OPACITY = { motorway: 0.95, trunk: 0.92, primary: 0.88, secondary: 0.82 };
 
   function assignRoadColors(features, greenPct, yellowPct, redPct, seed) {
     var rng = mulberry32(seed);
-    // Build colour pool proportional to percentages (total = 100 elements)
     var pool = [];
     var i;
     for (i = 0; i < greenPct;  i++) pool.push('#22cc44');
@@ -364,10 +438,9 @@
   }
 
   // ── Leaflet map state ────────────────────────────────────────────────────
-  var _map          = null;
-  var _roadLayer    = null;    // current Leaflet GeoJSON layer for roads
-  var _roadsCache   = {};      // city_id -> GeoJSON FeatureCollection
-  var _currentCityId = null;
+  var _map       = null;
+  var _roadLayer = null;
+  var _roadsCache = {};
 
   function ensureMap(container) {
     if (_map) return;
@@ -381,7 +454,7 @@
       boxZoom: false,
       keyboard: false,
     });
-    // CartoDB Dark Matter — free, no API key, dark aesthetic
+    // CartoDB Dark Matter — free, no API key required
     L.tileLayer(
       'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
       {
@@ -395,14 +468,9 @@
   }
 
   function applyRoadLayer(geojson, greenPct, yellowPct, redPct, seed) {
-    if (_roadLayer) {
-      _map.removeLayer(_roadLayer);
-      _roadLayer = null;
-    }
+    if (_roadLayer) { _map.removeLayer(_roadLayer); _roadLayer = null; }
     if (!geojson || !geojson.features || geojson.features.length === 0) return;
-
     assignRoadColors(geojson.features, greenPct, yellowPct, redPct, seed);
-
     _roadLayer = L.geoJSON(geojson, {
       style: function (feature) {
         return {
@@ -433,13 +501,14 @@
     return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  function buildPctRow(color, col, label, pct) {
-    return '<div class="tf-pct-row">' +
-      '<div class="tf-pct-dot" style="background:' + col + '"></div>' +
-      '<div class="tf-pct-label">' + label + '</div>' +
-      '<div class="tf-pct-track"><div class="tf-pct-fill" style="width:' + pct + '%;background:' + col + '"></div></div>' +
-      '<div class="tf-pct-num">' + pct + '%</div>' +
-      '</div>';
+  function buildIncidentItem(inc) {
+    return '<div class="tf-incident-item" data-sev="' + esc(inc.severity) + '">' +
+      '<div class="tf-incident-icon">' + (inc.icon || '⚠') + '</div>' +
+      '<div class="tf-incident-text">' +
+        '<div class="tf-incident-title">' + esc(inc.title) + '</div>' +
+        '<div class="tf-incident-road">' + esc(inc.road) + ' ' + esc(inc.direction) + '</div>' +
+      '</div>' +
+    '</div>';
   }
 
   // ── Main build / update ──────────────────────────────────────────────────
@@ -447,54 +516,86 @@
   var _lastTimeSlot = null;
 
   async function build(data) {
-    var frame   = document.getElementById('tfFrame');
-    var city    = data.city    || {};
-    var summary = data.summary || {};
-    var level   = summary.congestion_level || 'Light';
-    var cityId  = city.id;
+    var frame    = document.getElementById('tfFrame');
+    var city     = data.city    || {};
+    var summary  = data.summary || {};
+    var incidents = Array.isArray(data.incidents) ? data.incidents : [];
+    var level    = summary.congestion_level || 'Light';
+    var cityId   = city.id;
     var timeSlot = data.time_slot || 0;
-    var cityName = city.name ? (esc(city.name) + ', ' + esc(city.state)) : 'Traffic (Demo)';
+    var cityName = city.name ? (esc(city.name) + ', ' + esc(city.state)) : 'Traffic';
     var updatedTime = data.updated
       ? new Date(data.updated).toLocaleTimeString([], {hour:'numeric', minute:'2-digit'}) : '';
 
-    var pctBars =
-      buildPctRow('green',  '#22cc44', 'Free Flow', summary.green_percent  || 0) +
-      buildPctRow('yellow', '#ffaa00', 'Slow',      summary.yellow_percent || 0) +
-      buildPctRow('red',    '#ee2222', 'Heavy',     summary.red_percent    || 0);
+    var greenPct  = summary.green_percent  || 0;
+    var yellowPct = summary.yellow_percent || 0;
+    var redPct    = summary.red_percent    || 0;
+    var incCount  = summary.incident_count != null ? summary.incident_count : incidents.length;
 
-    var tickText = [
+    // Color for bar segments
+    var incidentItems = incidents.map(buildIncidentItem).join('');
+
+    // Ticker text includes incident summary
+    var tickParts = [
       cityName + ' \u2014 ' + esc(level) + ' congestion',
-      (summary.green_percent || 0) + '% free flow \u00b7 ' +
-      (summary.yellow_percent || 0) + '% slow \u00b7 ' +
-      (summary.red_percent || 0) + '% heavy',
-      'Traffic (Demo Mode) \u2014 Simulated congestion on real city streets',
-    ].join(' \u2022 ') + ' \u2022 ';
+      incCount + ' reported incident' + (incCount !== 1 ? 's' : ''),
+      greenPct + '% free flow \u00b7 ' + yellowPct + '% slow \u00b7 ' + redPct + '% heavy',
+    ];
+    incidents.forEach(function (inc) {
+      tickParts.push((inc.icon || '') + ' ' + inc.title + ' on ' + inc.road + ' ' + inc.direction);
+    });
+    var tickText = tickParts.join(' \u2022 ') + ' \u2022 ';
 
-    // Build static chrome only on first render or city change
+    // ── Full rebuild on first render or city change ──────────────────────
     if (_lastCityId !== cityId) {
       frame.innerHTML =
+        /* HEADER */
         '<div class="tf-header">' +
-          '<div class="tf-header-title">&#128663; Traffic</div>' +
-          '<div class="tf-demo-badge">Demo Mode</div>' +
+          '<div class="tf-header-title">&#128663;&nbsp;Traffic</div>' +
+          '<div class="tf-demo-badge">Simulated</div>' +
           '<div class="tf-city-label" id="tf-city-label">' + cityName + '</div>' +
+          '<div class="tf-updated-time" id="tf-updated-time">' + updatedTime + '</div>' +
         '</div>' +
-        '<div class="tf-updated" id="tf-updated-row">' +
-          '<span>Real streets &bull; Simulated congestion</span>' +
-          '<span id="tf-updated-time">UPDATED: ' + updatedTime + '</span>' +
-        '</div>' +
+        /* BODY */
         '<div class="tf-body">' +
-          '<div class="tf-box">' +
-            '<div class="tf-box-title">Congestion</div>' +
-            '<div class="tf-congestion-level" id="tf-cong-level" data-level="' + esc(level) + '">' + esc(level) + '</div>' +
-            '<div class="tf-congestion-sub">Traffic Level</div>' +
-            '<div id="tf-pct-bars">' + pctBars + '</div>' +
+          /* LEFT PANEL */
+          '<div class="tf-left">' +
+            /* Congestion summary */
+            '<div class="tf-box">' +
+              '<div class="tf-box-title">Congestion</div>' +
+              '<div class="tf-congestion-level" id="tf-cong-level" data-level="' + esc(level) + '">' + esc(level) + '</div>' +
+              '<div class="tf-congestion-sub" id="tf-cong-sub">Traffic Level</div>' +
+              '<div class="tf-cong-bar" id="tf-cong-bar">' +
+                '<div class="tf-cong-bar-seg" id="tf-bar-green" style="width:' + greenPct + '%;background:#22cc44"></div>' +
+                '<div class="tf-cong-bar-seg" id="tf-bar-yellow" style="width:' + yellowPct + '%;background:#ffaa00"></div>' +
+                '<div class="tf-cong-bar-seg" id="tf-bar-red"    style="width:' + redPct + '%;background:#ee2222"></div>' +
+              '</div>' +
+              '<div class="tf-pct-row"><div class="tf-pct-dot" style="background:#22cc44"></div><div class="tf-pct-label">Free Flow</div><div class="tf-pct-num" id="tf-pct-green">' + greenPct + '%</div></div>' +
+              '<div class="tf-pct-row"><div class="tf-pct-dot" style="background:#ffaa00"></div><div class="tf-pct-label">Slow</div><div class="tf-pct-num" id="tf-pct-yellow">' + yellowPct + '%</div></div>' +
+              '<div class="tf-pct-row"><div class="tf-pct-dot" style="background:#ee2222"></div><div class="tf-pct-label">Heavy</div><div class="tf-pct-num" id="tf-pct-red">' + redPct + '%</div></div>' +
+            '</div>' +
+            /* Incident count badge */
+            '<div class="tf-box">' +
+              '<div class="tf-box-title">Incidents</div>' +
+              '<div class="tf-incident-badge">' +
+                '<div class="tf-incident-count" id="tf-inc-count">' + incCount + '</div>' +
+                '<div class="tf-incident-label">Active<br>Incidents</div>' +
+              '</div>' +
+            '</div>' +
+            /* Incident list */
+            '<div class="tf-box tf-incidents-box">' +
+              '<div class="tf-box-title">Active Reports</div>' +
+              '<div class="tf-incident-list" id="tf-incident-list">' + incidentItems + '</div>' +
+            '</div>' +
           '</div>' +
-          '<div class="tf-box tf-map-box" style="display:flex;flex-direction:column;">' +
-            '<div class="tf-map-box-title" id="tf-map-title">Road Conditions &mdash; ' + cityName + '</div>' +
-            '<div id="tf-map" style="flex:1;min-height:0;"></div>' +
-            '<div class="tf-road-status" id="tf-road-status">Loading roads\u2026</div>' +
+          /* RIGHT PANEL — Leaflet map */
+          '<div class="tf-map-box">' +
+            '<div class="tf-map-box-title" id="tf-map-title">Road Conditions \u2014 ' + cityName + '</div>' +
+            '<div id="tf-map"></div>' +
+            '<div class="tf-road-status" id="tf-road-status"></div>' +
           '</div>' +
         '</div>' +
+        /* TICKER */
         '<div class="tf-ticker-bar">' +
           '<div class="tf-ticker-label">Traffic:</div>' +
           '<div class="tf-ticker-scroll"><span class="tf-ticker-track" id="tf-ticker">' +
@@ -502,42 +603,47 @@
           '</span></div>' +
         '</div>';
 
-      // Initialize Leaflet on the #tf-map div
+      // Initialize Leaflet
       ensureMap(document.getElementById('tf-map'));
       _map.setView([city.lat || 41.8781, city.lon || -87.6298], 12);
+
     } else {
-      // Same city — just update text elements
+      // Same city — update dynamic elements only
       var el;
-      el = document.getElementById('tf-updated-time');  if (el) el.textContent = 'UPDATED: ' + updatedTime;
-      el = document.getElementById('tf-cong-level');    if (el) { el.textContent = level; el.dataset.level = level; }
-      el = document.getElementById('tf-pct-bars');      if (el) el.innerHTML = pctBars;
+      el = document.getElementById('tf-updated-time');   if (el) el.textContent = updatedTime;
+      el = document.getElementById('tf-cong-level');     if (el) { el.textContent = level; el.dataset.level = level; }
+      el = document.getElementById('tf-bar-green');      if (el) el.style.width = greenPct  + '%';
+      el = document.getElementById('tf-bar-yellow');     if (el) el.style.width = yellowPct + '%';
+      el = document.getElementById('tf-bar-red');        if (el) el.style.width = redPct    + '%';
+      el = document.getElementById('tf-pct-green');      if (el) el.textContent = greenPct  + '%';
+      el = document.getElementById('tf-pct-yellow');     if (el) el.textContent = yellowPct + '%';
+      el = document.getElementById('tf-pct-red');        if (el) el.textContent = redPct    + '%';
+      el = document.getElementById('tf-inc-count');      if (el) el.textContent = incCount;
+      el = document.getElementById('tf-incident-list');  if (el) el.innerHTML = incidentItems;
+      el = document.getElementById('tf-ticker');
+      if (el) { el.textContent = ''; el.appendChild(document.createTextNode(tickText.repeat(3))); }
     }
 
-    // Trigger road overlay update whenever city or time_slot changes
+    // ── Road overlay: re-render when city or time slot changes ───────────
     if (_lastCityId !== cityId || _lastTimeSlot !== timeSlot) {
       var statusEl = document.getElementById('tf-road-status');
 
-      // Different city → pan map
       if (_lastCityId !== cityId && _map) {
         _map.setView([city.lat, city.lon], 12);
       }
 
-      // Fetch roads (served from server-side cache after first call per city)
-      if (statusEl) statusEl.textContent = (_roadsCache[cityId] ? '' : 'Loading roads\u2026');
+      if (statusEl && !_roadsCache[cityId]) statusEl.textContent = 'Loading roads\u2026';
       var geojson = await fetchRoads(cityId);
       var seed = makeSeed(cityId, timeSlot);
-      applyRoadLayer(
-        geojson,
-        summary.green_percent  || 75,
-        summary.yellow_percent || 18,
-        summary.red_percent    || 7,
-        seed
-      );
+      applyRoadLayer(geojson, greenPct, yellowPct, redPct, seed);
+
       if (statusEl) {
-        statusEl.textContent = geojson.features && geojson.features.length > 0
-          ? geojson.features.length + ' road segments'
-          : 'No road data';
-        setTimeout(function () { if (statusEl) statusEl.textContent = ''; }, 3000);
+        if (geojson.features && geojson.features.length > 0) {
+          statusEl.textContent = geojson.features.length + ' road segments';
+          setTimeout(function () { if (statusEl) statusEl.textContent = ''; }, 3000);
+        } else {
+          statusEl.textContent = 'No road data';
+        }
       }
 
       _lastCityId   = cityId;
