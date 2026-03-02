@@ -13,6 +13,7 @@
   const TICKER_PX_PER_SEC  = 40;   // constant scroll speed in px/s (~50 wpm, TV-ticker pace)
   const TICKER_REPEAT_COUNT = 3;   // how many times to repeat ticker text
   const SUMMARY_MAX        = 220;  // max chars for top-story summary
+  const STATUS_POLL_MS     = 3000; // how often to poll /api/news/status for forced advances
 
   const FALLBACK_IMG = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 160 90'%3E%3Crect width='160' height='90' fill='%230a1a70'/%3E%3Ctext x='80' y='50' text-anchor='middle' font-family='Arial' font-size='12' fill='%234060cc'%3ENo Image%3C%2Ftext%3E%3C%2Fsvg%3E";
 
@@ -349,5 +350,68 @@
     return await window.OverlayEngine.fetchJson('/api/news');
   }
 
-  window.OverlayEngine.register(TYPE, { fetch: fetchData, render: render });
+  // ── Feed cycling state ────────────────────────────────────────────────────
+  // The server drives which feed is active via wall-clock time so all clients
+  // are always in sync regardless of whether anyone is tuned in.
+  let _lastFeedIndex = -1;  // feed_index from the last successful fetch
+  let _seq           = -1;  // advance sequence (forced-advance detection)
+  let _cycleTimer    = null; // fires at ms_until_next_feed to trigger next render
+  let _pollTimer     = null; // 3-second poll for forced-advance detection
+
+  // Called when the cycle timer fires — the server has already transitioned to
+  // the next slot, so a plain OverlayEngine.tick() picks up the new feed_index.
+  function advanceAndTick() {
+    _cycleTimer = null;
+    if (!window.OverlayEngine.isActive(TYPE)) { return; }
+    window.OverlayEngine.tick();
+    // fetchData() will set a new _cycleTimer after the fetch resolves
+  }
+
+  // Wraps the plain fetchData so we can hook into the response before render.
+  const _origFetchData = fetchData;
+  async function fetchDataWithCycling() {
+    const data = await _origFetchData();
+    if (data.seq !== undefined && _seq === -1) { _seq = data.seq; }
+    // Schedule the next feed transition precisely at ms_until_next_feed.
+    // Only set a new timer if one isn't already pending — this prevents
+    // OverlayEngine's own periodic refresh (e.g. every 60 s) from resetting
+    // the cycle timer early.
+    if (_cycleTimer === null) {
+      const msUntilNext = (data.ms_until_next_feed > 0) ? data.ms_until_next_feed : 5 * 60 * 1000;
+      _cycleTimer = setTimeout(advanceAndTick, msUntilNext);
+    }
+    _lastFeedIndex = data.feed_index;
+    return data;
+  }
+
+  // Lightweight 3-second poll: detect forced advances via /api/news/advance
+  async function pollStatus() {
+    try {
+      const resp = await fetch('/api/news/status', { credentials: 'same-origin' });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (_seq !== -1 && data.seq !== undefined && data.seq !== _seq) {
+          _seq = data.seq;
+          // Cancel any pending cycle timer and re-render immediately
+          clearTimeout(_cycleTimer);
+          _cycleTimer = null;
+          if (window.OverlayEngine.isActive(TYPE)) {
+            window.OverlayEngine.tick();
+          }
+        }
+      }
+    } catch (_) { /* ignore poll errors */ }
+    _pollTimer = setTimeout(pollStatus, STATUS_POLL_MS);
+  }
+
+  // Wrap render() to start the status poll lazily on first render
+  const _origRender = render;
+  function renderWithPolling(data, root) {
+    _origRender(data, root);
+    if (_pollTimer === null) {
+      _pollTimer = setTimeout(pollStatus, STATUS_POLL_MS);
+    }
+  }
+
+  window.OverlayEngine.register(TYPE, { fetch: fetchDataWithCycling, render: renderWithPolling });
 })();

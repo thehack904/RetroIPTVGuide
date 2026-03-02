@@ -817,30 +817,60 @@ def save_news_feed_url(url):
     """
     save_news_feed_urls([url])
 
-def get_news_active_feed_index():
-    """Return the server-side active feed index (int, default 0)."""
+def get_news_feed_offset():
+    """Return the feed-slot offset used to implement forced advances (int, default 0).
+
+    The offset is added to the wall-clock time slot so that
+    ``POST /api/news/advance`` can shift which feed is displayed without
+    breaking the fixed time-boundary cycling.
+    """
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
-            c.execute("SELECT value FROM settings WHERE key='news.active_feed_index'")
+            c.execute("SELECT value FROM settings WHERE key='news.feed_offset'")
             row = c.fetchone()
             return int(row[0]) if row and row[0] is not None else 0
     except Exception:
-        logging.exception("get_news_active_feed_index failed")
+        logging.exception("get_news_feed_offset failed")
         return 0
 
 
-def set_news_active_feed_index(index):
-    """Persist the server-side active feed index."""
+def set_news_feed_offset(offset):
+    """Persist the feed-slot offset."""
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.active_feed_index', ?)",
-                      (str(int(index)),))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.feed_offset', ?)",
+                      (str(int(offset)),))
             conn.commit()
     except Exception:
-        logging.exception("set_news_active_feed_index failed")
+        logging.exception("set_news_feed_offset failed")
         raise
+
+
+def get_current_feed_state(feed_count):
+    """Return ``(feed_index, ms_until_next_feed)`` driven entirely by wall-clock time.
+
+    The 30-minute block is divided equally across feeds.  All clients receive
+    the same ``feed_index`` at any given moment, so the cycling happens in the
+    background regardless of whether anyone is tuned to the channel.
+
+    ``ms_until_next_feed`` is how many milliseconds remain in the current slot,
+    letting clients schedule their next reload precisely at the transition point.
+    """
+    if feed_count <= 0:
+        return 0, 5 * 60 * 1000
+    feed_duration_s = (30 * 60) / feed_count
+    now = time.time()
+    offset = get_news_feed_offset()
+    time_slot = int(now / feed_duration_s)
+    feed_index = (time_slot + offset) % feed_count
+    elapsed_in_slot_s = now % feed_duration_s
+    remaining_ms = int((feed_duration_s - elapsed_in_slot_s) * 1000)
+    # Clamp to at least 1 s so clients never schedule a zero-delay reload
+    _MIN_MS = 1000
+    ms_until_next = max(_MIN_MS, remaining_ms)
+    return feed_index, ms_until_next
 
 
 def get_news_advance_seq():
@@ -2320,18 +2350,23 @@ def api_news():
     * 3 feeds → 10 min each (3 × 10 min = 30 min block)
     * 1 feed  → 30 min
     * 0 feeds → 5 min fallback (no feed configured)
+
+    The server computes ``feed_index`` from wall-clock time so all clients see
+    the same feed and cycling continues even when nobody is tuned in.
+    ``ms_until_next_feed`` tells the client exactly when to fetch the next feed.
+    The optional ``?feed=<n>`` override is kept for testing convenience only.
     """
     feeds = get_news_feed_urls()
     feed_count = len(feeds)
-    # 30-minute block split evenly across feeds; floor to nearest second
     refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
     seq = get_news_advance_seq()
-    # Caller may pass ?feed=<n>; if omitted use the server-side active index
+    # ?feed= override kept for testing; default is server-driven time-based index
     raw_feed = request.args.get('feed', None)
     if raw_feed is not None:
         feed_index = int(raw_feed) % feed_count if feed_count else 0
+        ms_until_next_feed = refresh_ms  # full slot for manual override
     else:
-        feed_index = get_news_active_feed_index() % feed_count if feed_count else 0
+        feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
     if feeds:
         headlines = fetch_rss_headlines(feeds[feed_index])
     else:
@@ -2342,6 +2377,7 @@ def api_news():
         "feed_count": feed_count,
         "feed_index": feed_index,
         "refresh_ms": refresh_ms,
+        "ms_until_next_feed": ms_until_next_feed,
         "seq": seq,
     })
 
@@ -2352,18 +2388,19 @@ def api_news_status():
     """Return lightweight feed status without fetching RSS headlines.
 
     Used by the news page to poll for forced advances.  Returns:
-    ``{seq, feed_index, feed_count, refresh_ms}``
+    ``{seq, feed_index, feed_count, refresh_ms, ms_until_next_feed}``
     """
     feeds = get_news_feed_urls()
     feed_count = len(feeds)
     refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
     seq = get_news_advance_seq()
-    feed_index = get_news_active_feed_index() % feed_count if feed_count else 0
+    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
     return jsonify({
         "seq": seq,
         "feed_index": feed_index,
         "feed_count": feed_count,
         "refresh_ms": refresh_ms,
+        "ms_until_next_feed": ms_until_next_feed,
     })
 
 
@@ -2372,23 +2409,25 @@ def api_news_status():
 def api_news_advance():
     """Force-advance the Virtual News Channel to the next RSS feed.
 
-    Increments the server-side active feed index (wrapping at ``feed_count``)
-    and bumps the monotonic sequence number so polling clients detect the change
-    immediately.  Returns ``{seq, feed_index, feed_count}``.
+    Increments the feed-slot offset by 1 so the next time slot shows the feed
+    that would otherwise appear one slot later.  Also bumps the monotonic
+    sequence number so polling clients detect the change immediately.
+    Returns ``{seq, feed_index, feed_count, ms_until_next_feed}``.
     """
     feeds = get_news_feed_urls()
     feed_count = len(feeds)
     if feed_count == 0:
         return jsonify({"error": "No feeds configured"}), 400
-    current = get_news_active_feed_index()
-    next_index = (current + 1) % feed_count
-    set_news_active_feed_index(next_index)
+    new_offset = get_news_feed_offset() + 1
+    set_news_feed_offset(new_offset)
     new_seq = increment_news_advance_seq()
-    log_event(current_user.username, f"Force-advanced news feed to index {next_index}")
+    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
+    log_event(current_user.username, f"Force-advanced news feed to index {feed_index}")
     return jsonify({
         "seq": new_seq,
-        "feed_index": next_index,
+        "feed_index": feed_index,
         "feed_count": feed_count,
+        "ms_until_next_feed": ms_until_next_feed,
     })
 
 @app.route('/news.html')

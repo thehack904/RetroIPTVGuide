@@ -289,9 +289,7 @@
   const FADE_MS            = 600;  // cross-fade duration between feeds
   const STATUS_POLL_MS     = 3000; // how often to poll /api/news/status for forced advances
 
-  // State for multi-feed cycling
-  let _feedIndex    = 0;
-  let _feedCount    = 1;
+  // Seq tracking for forced-advance detection
   let _seq          = -1;   // last known advance sequence number (-1 = uninitialized)
   let _refreshTimer = null;
   let _statusTimer  = null;
@@ -403,20 +401,18 @@
       _refreshTimer = null;
     }
     try {
-      const resp = await fetch(`/api/news?feed=${_feedIndex}`);
+      // Server drives feed_index based on wall-clock time — no ?feed= param needed
+      const resp = await fetch('/api/news');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
 
-      // Sync cycling state from server response
-      _feedCount = (data.feed_count && data.feed_count > 0) ? data.feed_count : 1;
       if (data.seq !== undefined) { _seq = data.seq; }
-      const refreshMs = (data.refresh_ms && data.refresh_ms > 0) ? data.refresh_ms : 5 * 60 * 1000;
 
       build(data);
 
-      // Advance local index for the next scheduled cycle
-      _feedIndex = (_feedIndex + 1) % _feedCount;
-      _refreshTimer = setTimeout(load, refreshMs);
+      // Schedule next reload at the precise moment the server transitions to the next feed
+      const msUntilNext = (data.ms_until_next_feed > 0) ? data.ms_until_next_feed : 5 * 60 * 1000;
+      _refreshTimer = setTimeout(load, msUntilNext);
     } catch (e) {
       const frame = document.getElementById('nwFrame');
       frame.innerHTML = `<div class="nw-loading">Unable to load news data.</div>`;
@@ -430,12 +426,10 @@
       const resp = await fetch('/api/news/status');
       if (resp.ok) {
         const data = await resp.json();
-        // If the server-side sequence number advanced, jump immediately
+        // If the server bumped its sequence number a forced advance happened — reload immediately
         if (_seq !== -1 && data.seq !== undefined && data.seq !== _seq) {
           _seq = data.seq;
-          _feedIndex = (data.feed_index !== undefined) ? data.feed_index : _feedIndex;
           load();
-          // load() reschedules the refresh timer; restart status poll independently
           _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
           return;
         }

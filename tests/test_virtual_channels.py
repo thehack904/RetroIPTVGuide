@@ -759,6 +759,7 @@ class TestNewsFeedAdvanceApi:
         assert 'feed_index' in data
         assert 'feed_count' in data
         assert 'refresh_ms' in data
+        assert 'ms_until_next_feed' in data
 
     def test_advance_returns_400_when_no_feeds(self, client):
         login(client, 'admin', 'adminpass')
@@ -775,13 +776,24 @@ class TestNewsFeedAdvanceApi:
         assert after == before + 1
 
     def test_advance_wraps_feed_index(self, client):
-        from app import save_news_feed_urls, set_news_active_feed_index
+        from app import save_news_feed_urls
         save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
-        # Force index to last feed so next advance wraps to 0
-        set_news_active_feed_index(1)
         login(client, 'admin', 'adminpass')
-        data = client.post('/api/news/advance').get_json()
-        assert data['feed_index'] == 0
+        # Each advance must move feed_index by exactly +1 (mod feed_count)
+        before = client.get('/api/news/status').get_json()['feed_index']
+        result = client.post('/api/news/advance').get_json()
+        assert result['feed_index'] == (before + 1) % 2
+
+    def test_multiple_advances_wrap_around(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        start = client.get('/api/news/status').get_json()['feed_index']
+        # Advancing feed_count times must return to the original feed
+        client.post('/api/news/advance')
+        client.post('/api/news/advance')
+        end = client.get('/api/news/status').get_json()['feed_index']
+        assert end == start
 
     def test_advance_returns_new_feed_index_and_seq(self, client):
         from app import save_news_feed_urls
@@ -820,3 +832,56 @@ class TestNewsFeedAdvanceApi:
         advance_data = client.post('/api/news/advance').get_json()
         status_data = client.get('/api/news/status').get_json()
         assert status_data['feed_index'] == advance_data['feed_index']
+
+    def test_news_api_includes_ms_until_next_feed(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news').get_json()
+        assert 'ms_until_next_feed' in data
+        # Must be a positive value no larger than the full slot duration (5 min for 2 feeds = 15 min)
+        assert 0 < data['ms_until_next_feed'] <= 15 * 60 * 1000
+
+    def test_status_ms_until_next_feed_is_positive(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news/status').get_json()
+        assert data['ms_until_next_feed'] > 0
+
+    def test_advance_response_includes_ms_until_next_feed(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        data = client.post('/api/news/advance').get_json()
+        assert 'ms_until_next_feed' in data
+        assert data['ms_until_next_feed'] > 0
+
+    def test_feed_index_is_time_based_and_in_range(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls([f'https://feed{i}.example.com/rss.xml' for i in range(1, 7)])
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news/status').get_json()
+        assert 0 <= data['feed_index'] < 6
+
+    def test_get_current_feed_state_returns_valid_values(self):
+        from app import get_current_feed_state
+        idx, ms = get_current_feed_state(6)
+        assert 0 <= idx < 6
+        assert 0 < ms <= 5 * 60 * 1000  # at most one full slot (5 min for 6 feeds)
+
+    def test_get_current_feed_state_zero_feeds_fallback(self):
+        from app import get_current_feed_state
+        idx, ms = get_current_feed_state(0)
+        assert idx == 0
+        assert ms == 5 * 60 * 1000
+
+    def test_feed_offset_shifts_index(self):
+        from app import get_current_feed_state, set_news_feed_offset, get_news_feed_offset
+        set_news_feed_offset(0)
+        idx0, _ = get_current_feed_state(6)
+        set_news_feed_offset(1)
+        idx1, _ = get_current_feed_state(6)
+        assert idx1 == (idx0 + 1) % 6
+        # cleanup
+        set_news_feed_offset(0)

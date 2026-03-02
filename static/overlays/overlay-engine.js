@@ -127,4 +127,8 @@
   };
 
   window.OverlayEngine = OverlayEngine;
+
+  // Public helpers for renderers that manage their own cycling
+  OverlayEngine.tick   = tick;
+  OverlayEngine.isActive = function (type) { return state.activeType === type; };
 })();
