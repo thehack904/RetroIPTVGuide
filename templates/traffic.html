@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RetroIPTV Traffic</title>
+  <!-- Leaflet — served from local vendor bundle, no CDN required -->
+  <link rel="stylesheet" href="/static/vendor/leaflet/leaflet.min.css">
+  <script src="/static/vendor/leaflet/leaflet.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -285,12 +288,18 @@
       z-index: 2;
     }
 
-    /* Canvas fills remaining map area */
-    #tf-map-canvas {
+    /* Leaflet map fills remaining map area */
+    #tf-map {
       flex: 1;
-      display: block;
-      width: 100%;
       min-height: 0;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Leaflet attribution — keep readable but small */
+    .leaflet-control-attribution {
+      font-size: 9px !important;
+      opacity: 0.8;
     }
 
     /* ── Ticker bar ───────────────────────────────────────────────── */
@@ -379,6 +388,7 @@
     };
   }
 
+  // FNV-1a 32-bit seed matching backend determinism
   function makeSeed(cityId, timeSlot) {
     var str = String(cityId) + ':' + String(timeSlot);
     var h = 2166136261;
@@ -389,146 +399,132 @@
     return h;
   }
 
-  // ── Per-city highway data ────────────────────────────────────────────────
-  // Each entry: layout template name + up to 5 highway labels.
-  // Layout templates define road geometry as fractions of canvas W/H.
-  var CITY_DATA = {
-    'New York City': { layout: 'grid',     hwy: ['I-95',  'I-278',  'I-495',  'I-87',    'FDR Dr']     },
-    'Los Angeles':   { layout: 'sprawl',   hwy: ['I-5',   'I-10',   'I-405',  'US-101',  'SR-110']     },
-    'Chicago':       { layout: 'hub',      hwy: ['I-90',  'I-94',   'I-290',  'I-55',    'Lake Shore'] },
-    'Houston':       { layout: 'ring',     hwy: ['I-10',  'I-45',   'I-610',  'US-59',   'Beltway 8']  },
-    'Phoenix':       { layout: 'sprawl',   hwy: ['I-10',  'I-17',   'SR-51',  'SR-101',  'US-60']      },
-    'Philadelphia':  { layout: 'diagonal', hwy: ['I-95',  'I-76',   'I-676',  'US-1',    'PA-309']     },
-    'San Antonio':   { layout: 'ring',     hwy: ['I-10',  'I-35',   'I-37',   'US-281',  'Loop 410']   },
-    'San Diego':     { layout: 'coastal',  hwy: ['I-5',   'I-8',    'I-15',   'SR-94',   'SR-163']     },
-    'Dallas':        { layout: 'grid',     hwy: ['I-30',  'I-35E',  'I-635',  'US-75',   'SR-114']     },
-    'San Jose':      { layout: 'coastal',  hwy: ['I-280', 'I-880',  'SR-87',  'SR-101',  'US-101']     },
-  };
+  // ── Per-city highway data (lat/lon waypoints relative to city center) ─────
+  // Waypoints defined as normalized [x_frac, y_frac] offsets (0=left/top, 1=right/bottom)
+  // converted to real lat/lon by nll(). This places simulated highways over the actual city.
+  var LAT_SPAN = 0.11;   // ~12 km N-S window
+  var LON_SPAN = 0.145;  // ~12 km E-W at mid-latitudes
 
-  // Layout templates: return array of road segment objects.
-  // x1,y1,x2,y2 are fractions of canvas W and H.  w = stroke width in px.
-  var LAYOUTS = {
-    'grid': function(W, H, names) {
-      return [
-        {x1:0,      y1:H*0.36, x2:W,      y2:H*0.40, w:7, label:names[0]}, // E-W interstate
-        {x1:0,      y1:H*0.65, x2:W,      y2:H*0.62, w:7, label:names[1]}, // E-W interstate 2
-        {x1:W*0.30, y1:0,      x2:W*0.28, y2:H,      w:7, label:names[2]}, // N-S interstate
-        {x1:W*0.72, y1:0,      x2:W*0.70, y2:H,      w:7, label:names[3]}, // N-S interstate 2
-        {x1:0,      y1:H,      x2:W*0.48, y2:0,      w:5, label:names[4]}, // diagonal bypass
-      ];
-    },
-    'sprawl': function(W, H, names) {
-      return [
-        {x1:W*0.18, y1:0,      x2:W*0.20, y2:H,      w:7, label:names[0]}, // N-S
-        {x1:0,      y1:H*0.50, x2:W,      y2:H*0.52, w:7, label:names[1]}, // E-W
-        {x1:W*0.55, y1:0,      x2:W*0.45, y2:H,      w:7, label:names[2]}, // diagonal
-        {x1:0,      y1:H*0.26, x2:W*0.62, y2:H*0.56, w:5, label:names[3]}, // diagonal 2
-        {x1:W*0.38, y1:H,      x2:W*0.54, y2:0,      w:5, label:names[4]}, // diagonal 3
-      ];
-    },
-    'hub': function(W, H, names) {
-      return [
-        {x1:0,      y1:H*0.32, x2:W*0.42, y2:H*0.60, w:7, label:names[0]}, // diagonal
-        {x1:W*0.38, y1:0,      x2:W*0.40, y2:H,      w:7, label:names[1]}, // N-S
-        {x1:0,      y1:H*0.56, x2:W,      y2:H*0.54, w:7, label:names[2]}, // E-W
-        {x1:W*0.60, y1:0,      x2:W*0.62, y2:H,      w:6, label:names[3]}, // N-S 2
-        {x1:W*0.82, y1:0,      x2:W*0.84, y2:H,      w:4, label:names[4]}, // edge road
-      ];
-    },
-    'ring': function(W, H, names) {
-      return [
-        {x1:0,      y1:H*0.52, x2:W,      y2:H*0.49, w:7, label:names[0]}, // E-W
-        {x1:W*0.38, y1:0,      x2:W*0.40, y2:H,      w:7, label:names[1]}, // N-S
-        {x1:0,      y1:H*0.28, x2:W*0.38, y2:H*0.72, w:5, label:names[2]}, // arc W
-        {x1:W*0.62, y1:H*0.72, x2:W,      y2:H*0.28, w:5, label:names[3]}, // arc E
-        {x1:0,      y1:H*0.72, x2:W*0.40, y2:H,      w:4, label:names[4]}, // spoke
-      ];
-    },
-    'diagonal': function(W, H, names) {
-      return [
-        {x1:0,      y1:H*0.22, x2:W,      y2:H*0.58, w:7, label:names[0]}, // diagonal
-        {x1:0,      y1:H*0.62, x2:W,      y2:H*0.60, w:7, label:names[1]}, // E-W
-        {x1:W*0.22, y1:H*0.70, x2:W,      y2:H*0.70, w:5, label:names[2]}, // E-W lower
-        {x1:W*0.42, y1:0,      x2:W*0.44, y2:H,      w:6, label:names[3]}, // N-S
-        {x1:0,      y1:H,      x2:W*0.32, y2:H*0.18, w:5, label:names[4]}, // diagonal 2
-      ];
-    },
-    'coastal': function(W, H, names) {
-      return [
-        {x1:W*0.22, y1:0,      x2:W*0.20, y2:H,      w:7, label:names[0]}, // N-S coastal
-        {x1:0,      y1:H*0.50, x2:W,      y2:H*0.52, w:7, label:names[1]}, // E-W
-        {x1:W*0.66, y1:0,      x2:W*0.68, y2:H,      w:7, label:names[2]}, // N-S inland
-        {x1:0,      y1:H*0.28, x2:W*0.72, y2:H*0.66, w:5, label:names[3]}, // diagonal
-        {x1:W*0.10, y1:0,      x2:W*0.10, y2:H,      w:4, label:names[4]}, // edge road
-      ];
-    },
-  };
-
-  // Fallback layout for unknown cities
-  LAYOUTS['default'] = LAYOUTS['grid'];
-
-  function getCityRoads(city, W, H) {
-    var cd  = CITY_DATA[city.name] || {};
-    var tmpl = LAYOUTS[cd.layout] || LAYOUTS['default'];
-    var names = cd.hwy || ['I-10', 'I-20', 'I-40', 'US-1', 'State Hwy'];
-    return tmpl(W, H, names);
+  function nll(xf, yf, clat, clon) {
+    return [
+      clat + (0.5 - yf) * LAT_SPAN,
+      clon + (xf - 0.5) * LON_SPAN
+    ];
   }
 
-  // ── Canvas map drawing ───────────────────────────────────────────────────
-  function drawCityMap(canvas, city, greenPct, yellowPct, redPct, seed) {
-    var W = canvas.width;
-    var H = canvas.height;
-    if (W < 4 || H < 4) return;
+  var CITY_HWY = {
+    'New York City': ['I-95', 'I-278', 'I-495', 'I-87', 'FDR Dr'],
+    'Los Angeles':   ['I-5',  'I-10',  'I-405', 'US-101', 'SR-110'],
+    'Chicago':       ['I-90', 'I-94',  'I-290', 'I-55',  'Lake Shore'],
+    'Houston':       ['I-10', 'I-45',  'I-610', 'US-59', 'Beltway 8'],
+    'Phoenix':       ['I-10', 'I-17',  'SR-51', 'SR-101','US-60'],
+    'Philadelphia':  ['I-95', 'I-76',  'I-676', 'US-1',  'PA-309'],
+    'San Antonio':   ['I-10', 'I-35',  'I-37',  'US-281','Loop 410'],
+    'San Diego':     ['I-5',  'I-8',   'I-15',  'SR-94', 'SR-163'],
+    'Dallas':        ['I-30', 'I-35E', 'I-635', 'US-75', 'SR-114'],
+    'San Jose':      ['I-280','I-880', 'SR-87', 'SR-101','US-101'],
+  };
 
-    var ctx = canvas.getContext('2d');
+  var CITY_LAYOUT = {
+    'New York City': 'grid',     'Los Angeles':  'sprawl',
+    'Chicago':       'hub',      'Houston':      'ring',
+    'Phoenix':       'sprawl',   'Philadelphia': 'diagonal',
+    'San Antonio':   'ring',     'San Diego':    'coastal',
+    'Dallas':        'grid',     'San Jose':     'coastal',
+  };
 
-    // ── Background: readable dark-navy base ─────────────────────────
-    ctx.fillStyle = '#152648';
-    ctx.fillRect(0, 0, W, H);
-
-    // ── City block grid ─────────────────────────────────────────────
-    var BLOCK = Math.max(14, Math.round(W / 24));
-
-    // Block interiors — slightly lighter squares
-    ctx.fillStyle = '#1b3060';
-    var c, r;
-    for (c = -1; c * BLOCK < W + BLOCK; c++) {
-      for (r = -1; r * BLOCK < H + BLOCK; r++) {
-        ctx.fillRect(c * BLOCK + 2, r * BLOCK + 2, BLOCK - 3, BLOCK - 3);
-      }
+  function getRoads(city) {
+    var clat = city.lat || 40.7128;
+    var clon = city.lon || -74.006;
+    var names = CITY_HWY[city.name] || ['I-10','I-20','I-40','US-1','State Hwy'];
+    var layout = CITY_LAYOUT[city.name] || 'grid';
+    var roads = [];
+    if (layout === 'grid') {
+      roads = [
+        { pts: [nll(0,0.38,clat,clon), nll(1,0.40,clat,clon)], w:5, label:names[0] },
+        { pts: [nll(0,0.65,clat,clon), nll(1,0.62,clat,clon)], w:5, label:names[1] },
+        { pts: [nll(0.30,0,clat,clon), nll(0.28,1,clat,clon)], w:5, label:names[2] },
+        { pts: [nll(0.72,0,clat,clon), nll(0.70,1,clat,clon)], w:5, label:names[3] },
+        { pts: [nll(0,1,clat,clon),    nll(0.48,0,clat,clon)], w:4, label:names[4] },
+      ];
+    } else if (layout === 'sprawl') {
+      roads = [
+        { pts: [nll(0.18,0,clat,clon), nll(0.20,1,clat,clon)], w:5, label:names[0] },
+        { pts: [nll(0,0.50,clat,clon), nll(1,0.52,clat,clon)], w:5, label:names[1] },
+        { pts: [nll(0.55,0,clat,clon), nll(0.45,1,clat,clon)], w:5, label:names[2] },
+        { pts: [nll(0,0.26,clat,clon), nll(0.62,0.56,clat,clon)], w:4, label:names[3] },
+        { pts: [nll(0.38,1,clat,clon), nll(0.54,0,clat,clon)], w:4, label:names[4] },
+      ];
+    } else if (layout === 'hub') {
+      roads = [
+        { pts: [nll(0,0.32,clat,clon), nll(0.42,0.60,clat,clon)], w:5, label:names[0] },
+        { pts: [nll(0.38,0,clat,clon), nll(0.40,1,clat,clon)],    w:5, label:names[1] },
+        { pts: [nll(0,0.56,clat,clon), nll(1,0.54,clat,clon)],    w:5, label:names[2] },
+        { pts: [nll(0.60,0,clat,clon), nll(0.62,1,clat,clon)],    w:4, label:names[3] },
+        { pts: [nll(0.82,0,clat,clon), nll(0.84,1,clat,clon)],    w:3, label:names[4] },
+      ];
+    } else if (layout === 'ring') {
+      roads = [
+        { pts: [nll(0,0.52,clat,clon), nll(1,0.49,clat,clon)],        w:5, label:names[0] },
+        { pts: [nll(0.38,0,clat,clon), nll(0.40,1,clat,clon)],        w:5, label:names[1] },
+        { pts: [nll(0,0.28,clat,clon), nll(0.38,0.72,clat,clon)],     w:4, label:names[2] },
+        { pts: [nll(0.62,0.72,clat,clon), nll(1,0.28,clat,clon)],     w:4, label:names[3] },
+        { pts: [nll(0,0.72,clat,clon), nll(0.40,1,clat,clon)],        w:3, label:names[4] },
+      ];
+    } else if (layout === 'diagonal') {
+      roads = [
+        { pts: [nll(0,0.22,clat,clon), nll(1,0.58,clat,clon)],    w:5, label:names[0] },
+        { pts: [nll(0,0.62,clat,clon), nll(1,0.60,clat,clon)],    w:5, label:names[1] },
+        { pts: [nll(0.22,0.70,clat,clon), nll(1,0.70,clat,clon)], w:4, label:names[2] },
+        { pts: [nll(0.42,0,clat,clon), nll(0.44,1,clat,clon)],    w:4, label:names[3] },
+        { pts: [nll(0,1,clat,clon), nll(0.32,0.18,clat,clon)],    w:3, label:names[4] },
+      ];
+    } else { // coastal
+      roads = [
+        { pts: [nll(0.22,0,clat,clon), nll(0.20,1,clat,clon)],        w:5, label:names[0] },
+        { pts: [nll(0,0.50,clat,clon), nll(1,0.52,clat,clon)],        w:5, label:names[1] },
+        { pts: [nll(0.66,0,clat,clon), nll(0.68,1,clat,clon)],        w:5, label:names[2] },
+        { pts: [nll(0,0.28,clat,clon), nll(0.72,0.66,clat,clon)],     w:4, label:names[3] },
+        { pts: [nll(0.10,0,clat,clon), nll(0.10,1,clat,clon)],        w:3, label:names[4] },
+      ];
     }
+    return roads;
+  }
 
-    // Minor streets (thin grid)
-    ctx.strokeStyle = '#1e3570';
-    ctx.lineWidth = 0.5;
-    for (c = 0; c * BLOCK <= W + BLOCK; c++) {
-      ctx.beginPath(); ctx.moveTo(c * BLOCK, 0); ctx.lineTo(c * BLOCK, H); ctx.stroke();
-    }
-    for (r = 0; r * BLOCK <= H + BLOCK; r++) {
-      ctx.beginPath(); ctx.moveTo(0, r * BLOCK); ctx.lineTo(W, r * BLOCK); ctx.stroke();
-    }
+  // ── Leaflet map state ────────────────────────────────────────────────────
+  var _map          = null;
+  var _overlayLayer = null;
 
-    // Collector roads (every 3 blocks)
-    ctx.strokeStyle = '#2a4580';
-    ctx.lineWidth = 1;
-    for (c = 0; c * BLOCK * 3 <= W + BLOCK; c++) {
-      ctx.beginPath(); ctx.moveTo(c * BLOCK * 3, 0); ctx.lineTo(c * BLOCK * 3, H); ctx.stroke();
-    }
-    for (r = 0; r * BLOCK * 3 <= H + BLOCK; r++) {
-      ctx.beginPath(); ctx.moveTo(0, r * BLOCK * 3); ctx.lineTo(W, r * BLOCK * 3); ctx.stroke();
-    }
+  function initMap() {
+    var el = document.getElementById('tf-map');
+    if (!el || _map) return;
+    _map = L.map('tf-map', {
+      zoomControl: false,
+      attributionControl: true,
+      scrollWheelZoom: false,
+      dragging: false,
+      doubleClickZoom: false,
+      touchZoom: false,
+      boxZoom: false,
+      keyboard: false,
+    });
+    // OpenStreetMap — bright, readable, free, no API key
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 19,
+    }).addTo(_map);
+  }
 
-    // Arterial roads (every 6 blocks) — clearly visible
-    ctx.strokeStyle = '#3a58a0';
-    ctx.lineWidth = 2;
-    for (c = 0; c * BLOCK * 6 <= W + BLOCK; c++) {
-      ctx.beginPath(); ctx.moveTo(c * BLOCK * 6, 0); ctx.lineTo(c * BLOCK * 6, H); ctx.stroke();
-    }
-    for (r = 0; r * BLOCK * 6 <= H + BLOCK; r++) {
-      ctx.beginPath(); ctx.moveTo(0, r * BLOCK * 6); ctx.lineTo(W, r * BLOCK * 6); ctx.stroke();
-    }
+  function updateMap(city, greenPct, yellowPct, redPct, seed) {
+    if (!_map) return;
 
-    // ── Build traffic colour pool ────────────────────────────────────
+    var lat = city.lat || 40.7128;
+    var lon = city.lon || -74.006;
+    _map.setView([lat, lon], 12);
+
+    if (_overlayLayer) { _map.removeLayer(_overlayLayer); _overlayLayer = null; }
+
+    // Build traffic colour pool
     var pool = [], i;
     for (i = 0; i < greenPct;  i++) pool.push('#22ee55');
     for (i = 0; i < yellowPct; i++) pool.push('#ffcc00');
@@ -536,98 +532,48 @@
     if (!pool.length) pool.push('#22ee55');
 
     var rng = mulberry32(seed);
-
-    // ── Highway corridors: base stroke then traffic-colour segments ──
-    var roads = getCityRoads(city, W, H);
-    ctx.lineCap = 'round';
+    var roads = getRoads(city);
+    var layers = [];
 
     roads.forEach(function (rd) {
-      var dx = rd.x2 - rd.x1, dy = rd.y2 - rd.y1;
-
-      // Base highway road (steel blue)
-      ctx.strokeStyle = '#4878c8';
-      ctx.lineWidth = (rd.w || 6) + 2;
-      ctx.beginPath();
-      ctx.moveTo(rd.x1, rd.y1);
-      ctx.lineTo(rd.x2, rd.y2);
-      ctx.stroke();
-
-      // Traffic-colour segments
       var SEGS = 3 + Math.floor(rng() * 4);
-      ctx.lineWidth = rd.w || 6;
+      var p0 = rd.pts[0], p1 = rd.pts[1];
+      var dlat = p1[0] - p0[0], dlon = p1[1] - p0[1];
+
+      // Semi-transparent base line (white outline for readability on OSM)
+      layers.push(L.polyline([p0, p1], {
+        color: '#ffffff', weight: (rd.w || 5) + 3, opacity: 0.35,
+      }));
+
+      // Traffic-coloured segments
       for (var s = 0; s < SEGS; s++) {
         var t0 = s / SEGS, t1 = (s + 1) / SEGS;
-        ctx.strokeStyle = pool[Math.floor(rng() * pool.length)];
-        ctx.beginPath();
-        ctx.moveTo(rd.x1 + dx * t0, rd.y1 + dy * t0);
-        ctx.lineTo(rd.x1 + dx * t1, rd.y1 + dy * t1);
-        ctx.stroke();
+        var sp0 = [p0[0] + dlat * t0, p0[1] + dlon * t0];
+        var sp1 = [p0[0] + dlat * t1, p0[1] + dlon * t1];
+        layers.push(L.polyline([sp0, sp1], {
+          color: pool[Math.floor(rng() * pool.length)],
+          weight: rd.w || 5,
+          opacity: 0.9,
+        }));
       }
 
-      // Road label badge
+      // Road label at midpoint
       if (rd.label) {
-        var mx = (rd.x1 + rd.x2) / 2;
-        var my = (rd.y1 + rd.y2) / 2;
-        var fs = Math.max(9, Math.round(W * 0.016));
-        ctx.font = 'bold ' + fs + 'px Arial';
-        var tw = ctx.measureText(rd.label).width;
-        ctx.fillStyle = 'rgba(8,18,50,0.85)';
-        roundRect(ctx, mx - tw / 2 - 4, my - fs - 1, tw + 8, fs + 6, 3);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-        ctx.textAlign = 'center';
-        ctx.fillText(rd.label, mx, my + 2);
+        var mid = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2];
+        layers.push(L.marker(mid, {
+          icon: L.divIcon({
+            className: '',
+            html: '<div style="background:rgba(8,18,50,0.82);color:#fff;font:bold 11px Arial;' +
+                  'padding:1px 5px;border-radius:3px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,0.5)">' +
+                  rd.label + '</div>',
+            iconAnchor: [0, 8],
+          }),
+          interactive: false,
+        }));
       }
     });
 
-    // ── Arterial traffic overlay ─────────────────────────────────────
-    var artRng = mulberry32(seed + 97);
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-
-    for (r = 0; r * BLOCK * 6 <= H + BLOCK; r++) {
-      var ay = r * BLOCK * 6;
-      var ASEGS = 4;
-      for (var s2 = 0; s2 < ASEGS; s2++) {
-        var ax0 = s2 * W / ASEGS, ax1 = (s2 + 1) * W / ASEGS;
-        ctx.strokeStyle = pool[Math.floor(artRng() * pool.length)];
-        ctx.beginPath(); ctx.moveTo(ax0, ay); ctx.lineTo(ax1, ay); ctx.stroke();
-      }
-    }
-    for (c = 0; c * BLOCK * 6 <= W + BLOCK; c++) {
-      var ax = c * BLOCK * 6;
-      var ASEGS2 = 3;
-      for (var s3 = 0; s3 < ASEGS2; s3++) {
-        var ay0 = s3 * H / ASEGS2, ay1 = (s3 + 1) * H / ASEGS2;
-        ctx.strokeStyle = pool[Math.floor(artRng() * pool.length)];
-        ctx.beginPath(); ctx.moveTo(ax, ay0); ctx.lineTo(ax, ay1); ctx.stroke();
-      }
-    }
-
-    // ── City name watermark ──────────────────────────────────────────
-    var wmSz = Math.max(16, Math.round(W * 0.038));
-    ctx.textAlign = 'center';
-    ctx.font = 'bold ' + wmSz + 'px Arial';
-    ctx.fillStyle = 'rgba(140,190,255,0.14)';
-    ctx.fillText((city.name || 'CITY').toUpperCase(), W / 2, H * 0.52);
-    ctx.font = Math.round(wmSz * 0.6) + 'px Arial';
-    ctx.fillStyle = 'rgba(140,190,255,0.10)';
-    ctx.fillText(city.state || '', W / 2, H * 0.52 + wmSz * 1.1);
-  }
-
-  // Polyfill helper: rounded rect path (Canvas API lacks this in older browsers)
-  function roundRect(ctx, x, y, w, h, r) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-    ctx.lineTo(x + r, y + h);
-    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-    ctx.lineTo(x, y + r);
-    ctx.quadraticCurveTo(x, y, x + r, y);
-    ctx.closePath();
+    _overlayLayer = L.layerGroup(layers).addTo(_map);
   }
 
   // ── DOM helpers ──────────────────────────────────────────────────────────
@@ -646,6 +592,7 @@
   }
 
   // ── Main build / update ──────────────────────────────────────────────────
+  var _initialized  = false;
   var _lastCityId   = null;
   var _lastTimeSlot = null;
 
@@ -678,8 +625,11 @@
     });
     var tickText = tickParts.join(' \u2022 ') + ' \u2022 ';
 
-    // ── Full rebuild on first render or city change ──────────────────
-    if (_lastCityId !== cityId) {
+    // ── Build HTML skeleton once, then update in-place ───────────────
+    // Never replace frame.innerHTML after first build — that would destroy
+    // the Leaflet container and cause the map-not-showing bug.
+    if (!_initialized) {
+      _initialized = true;
       frame.innerHTML =
         '<div class="tf-header">' +
           '<div class="tf-header-title">&#128663;&nbsp;RetroIPTV Traffic</div>' +
@@ -693,7 +643,7 @@
               '<div class="tf-box-title">Congestion</div>' +
               '<div class="tf-congestion-level" id="tf-cong-level" data-level="' + esc(level) + '">' + esc(level) + '</div>' +
               '<div class="tf-congestion-sub">Traffic Level</div>' +
-              '<div class="tf-cong-bar" id="tf-cong-bar">' +
+              '<div class="tf-cong-bar">' +
                 '<div class="tf-cong-bar-seg" id="tf-bar-green"  style="width:' + greenPct  + '%;background:#22cc44"></div>' +
                 '<div class="tf-cong-bar-seg" id="tf-bar-yellow" style="width:' + yellowPct + '%;background:#ffaa00"></div>' +
                 '<div class="tf-cong-bar-seg" id="tf-bar-red"    style="width:' + redPct    + '%;background:#ee2222"></div>' +
@@ -715,8 +665,8 @@
             '</div>' +
           '</div>' +
           '<div class="tf-map-box">' +
-            '<div class="tf-map-box-title">Road Conditions \u2014 ' + cityName + '</div>' +
-            '<canvas id="tf-map-canvas"></canvas>' +
+            '<div class="tf-map-box-title" id="tf-map-title">Road Conditions \u2014 ' + cityName + '</div>' +
+            '<div id="tf-map"></div>' +
           '</div>' +
         '</div>' +
         '<div class="tf-ticker-bar">' +
@@ -726,41 +676,33 @@
           '</span></div>' +
         '</div>';
 
-      // Draw map after layout settles
+      // Init Leaflet after the DOM has dimensions
       requestAnimationFrame(function () {
-        var canvas = document.getElementById('tf-map-canvas');
-        if (!canvas) return;
-        var parent = canvas.parentElement;
-        canvas.width  = parent ? (parent.clientWidth  || 600) : 600;
-        canvas.height = parent ? (parent.clientHeight || 340) : 340;
-        // Subtract the title bar height
-        var titleEl = parent ? parent.querySelector('.tf-map-box-title') : null;
-        if (titleEl) canvas.height = Math.max(60, canvas.height - titleEl.offsetHeight);
-        drawCityMap(canvas, city, greenPct, yellowPct, redPct, makeSeed(cityId, timeSlot));
+        initMap();
+        updateMap(city, greenPct, yellowPct, redPct, makeSeed(cityId, timeSlot));
       });
 
     } else {
-      // Same city — update text elements only
+      // ── In-place updates — Leaflet container is never touched ────────
       var el;
-      el = document.getElementById('tf-updated-time');   if (el) el.textContent = updatedTime;
-      el = document.getElementById('tf-cong-level');     if (el) { el.textContent = level; el.dataset.level = level; }
-      el = document.getElementById('tf-bar-green');      if (el) el.style.width = greenPct  + '%';
-      el = document.getElementById('tf-bar-yellow');     if (el) el.style.width = yellowPct + '%';
-      el = document.getElementById('tf-bar-red');        if (el) el.style.width = redPct    + '%';
-      el = document.getElementById('tf-pct-green');      if (el) el.textContent = greenPct  + '%';
-      el = document.getElementById('tf-pct-yellow');     if (el) el.textContent = yellowPct + '%';
-      el = document.getElementById('tf-pct-red');        if (el) el.textContent = redPct    + '%';
-      el = document.getElementById('tf-inc-count');      if (el) el.textContent = incCount;
-      el = document.getElementById('tf-incident-list');  if (el) el.innerHTML = incidentItems;
+      el = document.getElementById('tf-city-label');   if (el) el.textContent = cityName.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+      el = document.getElementById('tf-updated-time'); if (el) el.textContent = updatedTime;
+      el = document.getElementById('tf-map-title');    if (el) el.textContent = 'Road Conditions \u2014 ' + city.name + ', ' + city.state;
+      el = document.getElementById('tf-cong-level');   if (el) { el.textContent = level; el.dataset.level = level; }
+      el = document.getElementById('tf-bar-green');    if (el) el.style.width = greenPct  + '%';
+      el = document.getElementById('tf-bar-yellow');   if (el) el.style.width = yellowPct + '%';
+      el = document.getElementById('tf-bar-red');      if (el) el.style.width = redPct    + '%';
+      el = document.getElementById('tf-pct-green');    if (el) el.textContent = greenPct  + '%';
+      el = document.getElementById('tf-pct-yellow');   if (el) el.textContent = yellowPct + '%';
+      el = document.getElementById('tf-pct-red');      if (el) el.textContent = redPct    + '%';
+      el = document.getElementById('tf-inc-count');    if (el) el.textContent = incCount;
+      el = document.getElementById('tf-incident-list');if (el) el.innerHTML = incidentItems;
       el = document.getElementById('tf-ticker');
       if (el) { el.textContent = ''; el.appendChild(document.createTextNode(tickText.repeat(3))); }
 
-      // Redraw map if time slot changed (traffic colours rotate)
-      if (_lastTimeSlot !== timeSlot) {
-        var canvas = document.getElementById('tf-map-canvas');
-        if (canvas && canvas.width > 4) {
-          drawCityMap(canvas, city, greenPct, yellowPct, redPct, makeSeed(cityId, timeSlot));
-        }
+      // Update map when city or time-slot changes
+      if (_lastCityId !== cityId || _lastTimeSlot !== timeSlot) {
+        updateMap(city, greenPct, yellowPct, redPct, makeSeed(cityId, timeSlot));
       }
     }
 
@@ -785,8 +727,9 @@
       })
       .catch(function () {
         var frame = document.getElementById('tfFrame');
-        if (frame) frame.innerHTML = '<div class="tf-loading">Unable to load traffic data.</div>';
-        _lastCityId = null;
+        if (frame && !_initialized) {
+          frame.innerHTML = '<div class="tf-loading">Unable to load traffic data.</div>';
+        }
         _refreshTimer = setTimeout(load, ERROR_RETRY_MS);
       });
   }

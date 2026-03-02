@@ -483,12 +483,15 @@ class TestTrafficPage:
         resp = client.get('/traffic')
         assert b'/api/traffic' in resp.data
 
-    def test_page_uses_canvas_map(self, client):
-        """traffic.html uses a self-contained Canvas map (no external tile CDN)."""
+    def test_page_uses_osm_leaflet_map(self, client):
+        """traffic.html must use Leaflet with OpenStreetMap tiles (no dark CDN, no canvas)."""
         login(client)
         resp = client.get('/traffic')
-        assert b'canvas' in resp.data.lower()
-        # Must NOT depend on external Leaflet CDN or CartoDB tiles
+        # Leaflet vendor bundle loaded locally
+        assert b'leaflet' in resp.data.lower()
+        # OpenStreetMap tile URL present
+        assert b'openstreetmap.org' in resp.data
+        # No dark CartoDB tiles
         assert b'cartocdn' not in resp.data.lower()
 
     def test_page_has_retroiptv_traffic_title(self, client):
