@@ -462,8 +462,14 @@
                   <input type="number" name="ch_traffic_radius" value="{{ traffic_config.radius_miles or '25' }}" min="1" max="100" step="1" style="width:5em;">
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>TomTom API Key <span class="muted small">(<a href="https://developer.tomtom.com/" target="_blank" rel="noopener">get a free key</a>)</span></label>
-                  <input type="text" name="ch_traffic_api_key" value="{{ traffic_config.api_key }}" placeholder="Enter TomTom API key" maxlength="200" autocomplete="off">
+                  <label>TomTom API Key
+                    <span class="muted small">
+                      &mdash; <a href="https://developer.tomtom.com/user/register" target="_blank" rel="noopener">Register free at developer.tomtom.com</a>,
+                      then go to <strong>My Apps &rarr; Add new app</strong>, enable the
+                      <strong>Traffic Incidents API</strong>, and paste the generated key here.
+                    </span>
+                  </label>
+                  <input type="text" name="ch_traffic_api_key" value="{{ traffic_config.api_key }}" placeholder="Enter TomTom Traffic Incidents API key" maxlength="200" autocomplete="off">
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                   <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
