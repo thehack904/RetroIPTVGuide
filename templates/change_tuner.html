@@ -336,7 +336,7 @@
                   {% if ch.tvg_id == 'virtual.weather' %}
                     Location: {{ weather_config.location_name or 'Not set' }}&nbsp;&nbsp;Units: &deg;{{ weather_config.units or 'F' }}
                   {% elif ch.tvg_id == 'virtual.news' %}
-                    Source: {{ 'News Feed (Auto)' if not news_feed_url else 'Custom RSS' }}
+                    Source: {{ 'News Feed (Auto)' if not news_feed_urls else news_feed_urls|length ~ ' RSS Feed' ~ ('' if news_feed_urls|length == 1 else 's') }}
                   {% elif ch.tvg_id == 'virtual.status' %}
                     Uptime, CPU, Memory
                   {% else %}
@@ -385,8 +385,16 @@
                 {% endif %}
                 {% if ch.tvg_id == 'virtual.news' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
-                  <label>News Feed URL (RSS/Atom)</label>
-                  <input type="url" name="ch_news_rss_url" value="{{ news_feed_url }}" placeholder="https://feeds.example.com/rss.xml" maxlength="500">
+                  <label>News RSS/Atom Feeds <span class="muted small">(up to 6 &mdash; cycles every {{ (1800 // [(news_feed_urls|default([])|length), 1]|max) }} s)</span></label>
+                  {% for i in range(1, 7) %}
+                  <div class="form-row form-row-inline" style="gap:4px; align-items:center; margin-bottom:4px;">
+                    <span class="muted small" style="min-width:1.6em; text-align:right;">{{ i }}.</span>
+                    <input type="url" name="ch_news_rss_url_{{ i }}"
+                           value="{{ news_feed_urls[i-1] if news_feed_urls|length >= i else '' }}"
+                           placeholder="https://feeds.example.com/rss{{ i }}.xml"
+                           maxlength="500" style="flex:1;">
+                  </div>
+                  {% endfor %}
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                   <a href="/news" target="_blank" class="btn-link small">&#128240; Preview News Page &#8599;</a>

@@ -573,7 +573,7 @@ class TestChannelOverlayAppearance:
 # ─── News Feed URL ────────────────────────────────────────────────────────────
 
 class TestNewsFeedUrl:
-    """Tests for get/save news feed URL and the /api/news endpoint."""
+    """Tests for get/save news feed URL helpers and the /api/news endpoint."""
 
     def test_default_feed_url_is_empty(self):
         from app import get_news_feed_url
@@ -603,8 +603,21 @@ class TestNewsFeedUrl:
         assert data['headlines'] == []
         assert 'updated' in data
 
-    def test_api_news_overlay_prefs_saves_feed_url(self, client):
-        from app import get_news_feed_url
+    def test_api_news_returns_feed_count_and_refresh_ms(self, client):
+        login(client, "admin", "adminpass")
+        data = client.get('/api/news').get_json()
+        assert 'feed_count' in data
+        assert 'feed_index' in data
+        assert 'refresh_ms' in data
+
+    def test_api_news_refresh_ms_is_30_min_when_no_feeds(self, client):
+        login(client, "admin", "adminpass")
+        data = client.get('/api/news').get_json()
+        # With no feeds configured, fallback refresh is 5 min (not part of 30-min cycle)
+        assert data['refresh_ms'] == 5 * 60 * 1000
+
+    def test_api_news_overlay_prefs_saves_feed_urls(self, client):
+        from app import get_news_feed_urls
         login(client, "admin", "adminpass")
         resp = client.post('/change_tuner', data={
             'action': 'update_channel_overlay_appearance',
@@ -612,10 +625,10 @@ class TestNewsFeedUrl:
             'ch_text_color': '#ffffff',
             'ch_bg_color': '#000000',
             'ch_test_text': '',
-            'ch_news_rss_url': 'https://rss.example.com/feed.xml',
+            'ch_news_rss_url_1': 'https://rss.example.com/feed.xml',
         }, follow_redirects=True)
         assert resp.status_code == 200
-        assert get_news_feed_url() == 'https://rss.example.com/feed.xml'
+        assert get_news_feed_urls()[0] == 'https://rss.example.com/feed.xml'
 
     def test_change_tuner_page_includes_news_feed_url(self, client):
         from app import save_news_feed_url
@@ -623,3 +636,112 @@ class TestNewsFeedUrl:
         login(client, "admin", "adminpass")
         resp = client.get('/change_tuner')
         assert b'https://feeds.bbc.co.uk/news/rss.xml' in resp.data
+
+
+class TestNewsFeedUrls:
+    """Tests for the multi-feed get/save helpers."""
+
+    def test_default_feed_urls_is_empty_list(self):
+        from app import get_news_feed_urls
+        assert get_news_feed_urls() == []
+
+    def test_save_and_retrieve_multiple_urls(self):
+        from app import get_news_feed_urls, save_news_feed_urls
+        urls = ['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml']
+        save_news_feed_urls(urls)
+        result = get_news_feed_urls()
+        assert result == urls
+
+    def test_save_up_to_six_urls(self):
+        from app import get_news_feed_urls, save_news_feed_urls
+        urls = [f'https://feed{i}.example.com/rss.xml' for i in range(1, 7)]
+        save_news_feed_urls(urls)
+        assert get_news_feed_urls() == urls
+
+    def test_extra_urls_beyond_six_are_ignored(self):
+        from app import get_news_feed_urls, save_news_feed_urls
+        urls = [f'https://feed{i}.example.com/rss.xml' for i in range(1, 10)]
+        save_news_feed_urls(urls)
+        result = get_news_feed_urls()
+        assert len(result) == 6
+
+    def test_blank_entries_not_returned(self):
+        from app import get_news_feed_urls, save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', '', 'https://c.example.com/rss.xml'])
+        result = get_news_feed_urls()
+        assert '' not in result
+        assert len(result) == 2
+
+    def test_invalid_url_in_list_raises(self):
+        from app import save_news_feed_urls
+        with pytest.raises(ValueError):
+            save_news_feed_urls(['ftp://feeds.example.com/rss.xml'])
+
+    def test_api_news_refresh_ms_calculated_from_feed_count(self, client):
+        from app import save_news_feed_urls
+        # 6 feeds → 30 min / 6 = 5 min each
+        save_news_feed_urls([f'https://feed{i}.example.com/rss.xml' for i in range(1, 7)])
+        login(client, "admin", "adminpass")
+        data = client.get('/api/news').get_json()
+        assert data['feed_count'] == 6
+        assert data['refresh_ms'] == 5 * 60 * 1000
+
+    def test_api_news_refresh_ms_three_feeds(self, client):
+        from app import save_news_feed_urls
+        # 3 feeds → 30 min / 3 = 10 min each
+        save_news_feed_urls([f'https://feed{i}.example.com/rss.xml' for i in range(1, 4)])
+        login(client, "admin", "adminpass")
+        data = client.get('/api/news').get_json()
+        assert data['feed_count'] == 3
+        assert data['refresh_ms'] == 10 * 60 * 1000
+
+    def test_save_multiple_via_form(self, client):
+        from app import get_news_feed_urls
+        login(client, "admin", "adminpass")
+        resp = client.post('/change_tuner', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.news',
+            'ch_news_rss_url_1': 'https://feed1.example.com/rss.xml',
+            'ch_news_rss_url_2': 'https://feed2.example.com/rss.xml',
+            'ch_news_rss_url_3': 'https://feed3.example.com/rss.xml',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        urls = get_news_feed_urls()
+        assert len(urls) == 3
+        assert 'https://feed1.example.com/rss.xml' in urls
+        assert 'https://feed2.example.com/rss.xml' in urls
+        assert 'https://feed3.example.com/rss.xml' in urls
+
+
+# ─── News Feed Time-based Cycling ─────────────────────────────────────────────
+
+class TestNewsFeedCycling:
+    """Tests for server-driven wall-clock-time feed cycling."""
+
+    def test_news_api_includes_ms_until_next_feed(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news').get_json()
+        assert 'ms_until_next_feed' in data
+        # Must be a positive value no larger than the full slot duration (15 min for 2 feeds)
+        assert 0 < data['ms_until_next_feed'] <= 15 * 60 * 1000
+
+    def test_feed_index_is_time_based_and_in_range(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls([f'https://feed{i}.example.com/rss.xml' for i in range(1, 7)])
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news').get_json()
+        assert 0 <= data['feed_index'] < 6
+
+    def test_get_current_feed_state_returns_valid_values(self):
+        from app import get_current_feed_state
+        idx, ms = get_current_feed_state(6)
+        assert 0 <= idx < 6
+        assert 0 < ms <= 5 * 60 * 1000  # at most one full slot (5 min for 6 feeds)
+
+    def test_get_current_feed_state_zero_feeds_fallback(self):
+        from app import get_current_feed_state
+        idx, ms = get_current_feed_state(0)
+        assert idx == 0
+        assert ms == 5 * 60 * 1000

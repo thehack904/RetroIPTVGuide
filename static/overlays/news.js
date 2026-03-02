@@ -349,5 +349,34 @@
     return await window.OverlayEngine.fetchJson('/api/news');
   }
 
-  window.OverlayEngine.register(TYPE, { fetch: fetchData, render: render });
+  // ── Feed cycling state ────────────────────────────────────────────────────
+  // The server drives which feed is active via wall-clock time so all clients
+  // are always in sync regardless of whether anyone is tuned in.
+  let _cycleTimer    = null; // fires at ms_until_next_feed to trigger next render
+
+  // Called when the cycle timer fires — the server has already transitioned to
+  // the next slot, so a plain OverlayEngine.tick() picks up the new feed_index.
+  function advanceAndTick() {
+    _cycleTimer = null;
+    if (!window.OverlayEngine.isActive(TYPE)) { return; }
+    window.OverlayEngine.tick();
+    // fetchData() will set a new _cycleTimer after the fetch resolves
+  }
+
+  // Wraps the plain fetchData so we can hook into the response before render.
+  const _origFetchData = fetchData;
+  async function fetchDataWithCycling() {
+    const data = await _origFetchData();
+    // Schedule the next feed transition precisely at ms_until_next_feed.
+    // Only set a new timer if one isn't already pending — this prevents
+    // OverlayEngine's own periodic refresh (e.g. every 60 s) from resetting
+    // the cycle timer early.
+    if (_cycleTimer === null) {
+      const msUntilNext = (data.ms_until_next_feed > 0) ? data.ms_until_next_feed : 5 * 60 * 1000;
+      _cycleTimer = setTimeout(advanceAndTick, msUntilNext);
+    }
+    return data;
+  }
+
+  window.OverlayEngine.register(TYPE, { fetch: fetchDataWithCycling, render: render });
 })();

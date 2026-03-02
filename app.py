@@ -742,35 +742,105 @@ def get_all_channel_appearances():
     """Return dict of tvg_id -> appearance for all virtual channels."""
     return {ch['tvg_id']: get_channel_overlay_appearance(ch['tvg_id']) for ch in VIRTUAL_CHANNELS}
 
-def get_news_feed_url():
-    """Return the configured RSS/Atom news feed URL, or empty string if not set."""
-    try:
-        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
-            c = conn.cursor()
-            c.execute("SELECT value FROM settings WHERE key='news.rss_url'")
-            row = c.fetchone()
-            return row[0] if row else ''
-    except Exception:
-        logging.exception("get_news_feed_url failed")
-        return ''
+def get_news_feed_urls():
+    """Return list of configured RSS/Atom news feed URLs (up to 6, non-empty strings).
 
-def save_news_feed_url(url):
-    """Persist the RSS/Atom news feed URL. Validates scheme is http/https."""
-    url = str(url).strip()
-    if url:
-        parsed = urlparse(url)
-        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
-            raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+    Reads numbered keys ``news.rss_url_1`` … ``news.rss_url_6``.  Falls back to
+    the legacy ``news.rss_url`` key when no numbered keys are set.
+    """
+    urls = []
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
-            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.rss_url', ?)", (url,))
+            for i in range(1, 7):
+                c.execute("SELECT value FROM settings WHERE key=?", (f'news.rss_url_{i}',))
+                row = c.fetchone()
+                if row and row[0]:
+                    urls.append(row[0])
+            # Backward compat: if no numbered keys present, check the legacy single key
+            if not urls:
+                c.execute("SELECT value FROM settings WHERE key='news.rss_url'")
+                row = c.fetchone()
+                if row and row[0]:
+                    urls.append(row[0])
+    except Exception:
+        logging.exception("get_news_feed_urls failed")
+    return urls
+
+
+def save_news_feed_urls(urls):
+    """Persist up to 6 RSS/Atom feed URLs.
+
+    ``urls`` is an iterable of URL strings (may be empty or contain blanks which
+    are silently skipped after stripping).  Raises ``ValueError`` for any URL
+    with an invalid scheme.
+    """
+    validated = []
+    for raw in list(urls)[:6]:
+        url = str(raw).strip()
+        if url:
+            parsed = urlparse(url)
+            if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+                raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+            validated.append(url)
+        else:
+            validated.append('')
+    # Pad to exactly 6 entries so old slots are explicitly cleared
+    while len(validated) < 6:
+        validated.append('')
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for i, url in enumerate(validated, 1):
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f'news.rss_url_{i}', url))
             conn.commit()
     except Exception:
-        logging.exception("save_news_feed_url failed")
+        logging.exception("save_news_feed_urls failed")
         raise
 
-_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+
+def get_news_feed_url():
+    """Return the first configured RSS/Atom news feed URL, or empty string.
+
+    Kept for backward compatibility; delegates to :func:`get_news_feed_urls`.
+    """
+    urls = get_news_feed_urls()
+    return urls[0] if urls else ''
+
+
+def save_news_feed_url(url):
+    """Persist a single RSS/Atom news feed URL (legacy helper).
+
+    Stores the URL as slot 1, clearing all other slots.  Kept for backward
+    compatibility; prefer :func:`save_news_feed_urls` for new code.
+    """
+    save_news_feed_urls([url])
+
+def get_current_feed_state(feed_count):
+    """Return ``(feed_index, ms_until_next_feed)`` driven entirely by wall-clock time.
+
+    The 30-minute block is divided equally across feeds.  All clients receive
+    the same ``feed_index`` at any given moment, so the cycling happens in the
+    background regardless of whether anyone is tuned to the channel.
+
+    ``ms_until_next_feed`` is how many milliseconds remain in the current slot,
+    letting clients schedule their next reload precisely at the transition point.
+    """
+    if feed_count <= 0:
+        return 0, 5 * 60 * 1000
+    feed_duration_s = (30 * 60) / feed_count
+    now = time.time()
+    time_slot = int(now / feed_duration_s)
+    feed_index = time_slot % feed_count
+    elapsed_in_slot_s = now % feed_duration_s
+    remaining_ms = int((feed_duration_s - elapsed_in_slot_s) * 1000)
+    # Clamp to at least 1 s so clients never schedule a zero-delay reload
+    _MIN_MS = 1000
+    ms_until_next = max(_MIN_MS, remaining_ms)
+    return feed_index, ms_until_next
+
+
 
 def get_weather_config():
     """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
@@ -1802,8 +1872,9 @@ def change_tuner():
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
                     if tvg_id == 'virtual.news':
-                        rss_url = request.form.get('ch_news_rss_url', '').strip()
-                        save_news_feed_url(rss_url)
+                        rss_urls = [request.form.get(f'ch_news_rss_url_{i}', '').strip()
+                                    for i in range(1, 7)]
+                        save_news_feed_urls(rss_urls)
                     if tvg_id == 'virtual.weather':
                         weather_cfg = {
                             'lat':           request.form.get('ch_weather_lat', '').strip(),
@@ -1876,7 +1947,7 @@ def change_tuner():
         vc_settings=vc_settings,
         overlay_appearance=overlay_appearance,
         channel_appearances=channel_appearances,
-        news_feed_url=get_news_feed_url(),
+        news_feed_urls=get_news_feed_urls(),
         weather_config=get_weather_config(),
         audio_files=audio_files,
         channel_music_files=channel_music_files,
@@ -2203,12 +2274,32 @@ def api_channels():
 @app.route('/api/news', methods=['GET'])
 @login_required
 def api_news():
-    """Return headlines from the configured RSS/Atom feed, or empty list if none set."""
-    feed_url = get_news_feed_url()
-    headlines = fetch_rss_headlines(feed_url) if feed_url else []
+    """Return headlines from the configured RSS/Atom feeds.
+
+    The server computes ``feed_index`` from wall-clock time so all clients see
+    the same feed and cycling continues even when nobody is tuned in.
+    ``ms_until_next_feed`` tells the client exactly when to fetch the next feed.
+
+    * 6 feeds → 5 min each  (6 × 5 min = 30 min block)
+    * 3 feeds → 10 min each (3 × 10 min = 30 min block)
+    * 1 feed  → 30 min
+    * 0 feeds → 5 min fallback (no feed configured)
+    """
+    feeds = get_news_feed_urls()
+    feed_count = len(feeds)
+    refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
+    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
+    if feeds:
+        headlines = fetch_rss_headlines(feeds[feed_index])
+    else:
+        headlines = []
     return jsonify({
         "updated": datetime.now(timezone.utc).isoformat(),
         "headlines": headlines,
+        "feed_count": feed_count,
+        "feed_index": feed_index,
+        "refresh_ms": refresh_ms,
+        "ms_until_next_feed": ms_until_next_feed,
     })
 
 @app.route('/news.html')
