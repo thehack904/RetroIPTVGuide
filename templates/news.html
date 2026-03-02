@@ -284,14 +284,17 @@
   'use strict';
 
   const FALLBACK_IMG = 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 160 90%22%3E%3Crect width%3D%22160%22 height%3D%2290%22 fill%3D%22%230a1a70%22%2F%3E%3Ctext x%3D%2280%22 y%3D%2250%22 text-anchor%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2212%22 fill%3D%22%234060cc%22%3ENo Image%3C%2Ftext%3E%3C%2Fsvg%3E';
-  const SUMMARY_MAX       = 220;             // max characters for top-story summary
-  const TICKER_PX_PER_SEC = 40;             // constant scroll speed in px/s (~50 wpm, TV-ticker pace)
-  const FADE_MS           = 600;            // cross-fade duration between feeds
+  const SUMMARY_MAX        = 220;   // max characters for top-story summary
+  const TICKER_PX_PER_SEC  = 40;   // constant scroll speed in px/s
+  const FADE_MS            = 600;  // cross-fade duration between feeds
+  const STATUS_POLL_MS     = 3000; // how often to poll /api/news/status for forced advances
 
   // State for multi-feed cycling
-  let _feedIndex   = 0;
-  let _feedCount   = 1;
+  let _feedIndex    = 0;
+  let _feedCount    = 1;
+  let _seq          = -1;   // last known advance sequence number (-1 = uninitialized)
   let _refreshTimer = null;
+  let _statusTimer  = null;
 
   function esc(str) {
     return String(str || '')
@@ -311,16 +314,14 @@
     const headlines = Array.isArray(data.headlines) ? data.headlines : [];
 
     const top       = headlines[0] || null;
-    const sideItems = headlines.slice(1, 6);   // up to 5 sidebar items
-    const tickItems = headlines.slice(0, 10);  // up to 10 for ticker
+    const sideItems = headlines.slice(1, 6);
+    const tickItems = headlines.slice(0, 10);
 
-    // Ticker text
     const tickText = tickItems.length
       ? tickItems.map(h => h.title).join(' \u2022 ') + ' \u2022 '
       : 'No headlines available \u2022 ';
     const tickRepeat = tickText.repeat(3);
 
-    // Sidebar items — pad to 5 if fewer available
     const sideRows = [];
     for (let i = 0; i < 5; i++) {
       const h = sideItems[i];
@@ -337,7 +338,6 @@
       }
     }
 
-    // Top story
     let topStoryHtml = '';
     if (top) {
       const rawSummary = top.summary || '';
@@ -367,9 +367,7 @@
       </div>
       <!-- Body -->
       <div class="nw-body">
-        <!-- Top story -->
         <div class="nw-main">${topStoryHtml}</div>
-        <!-- Sidebar headlines -->
         <div class="nw-sidebar">${sideRows.join('')}</div>
       </div>
       <!-- Ticker -->
@@ -387,7 +385,6 @@
       frame.innerHTML = html;
       requestAnimationFrame(function () {
         frame.style.opacity = '1';
-        // Constant-speed ticker: measure actual track width and derive duration.
         setTimeout(function () {
           const track = frame.querySelector('.nw-ticker-track');
           if (track && track.offsetWidth > 0) {
@@ -400,7 +397,7 @@
   }
 
   async function load() {
-    // Cancel any pending timer before issuing a new fetch
+    // Cancel any pending refresh timer; status poll keeps running independently
     if (_refreshTimer !== null) {
       clearTimeout(_refreshTimer);
       _refreshTimer = null;
@@ -410,24 +407,45 @@
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
 
-      // Update cycling state from server response
+      // Sync cycling state from server response
       _feedCount = (data.feed_count && data.feed_count > 0) ? data.feed_count : 1;
+      if (data.seq !== undefined) { _seq = data.seq; }
       const refreshMs = (data.refresh_ms && data.refresh_ms > 0) ? data.refresh_ms : 5 * 60 * 1000;
 
       build(data);
 
-      // Advance to next feed index for the next cycle
+      // Advance local index for the next scheduled cycle
       _feedIndex = (_feedIndex + 1) % _feedCount;
       _refreshTimer = setTimeout(load, refreshMs);
     } catch (e) {
       const frame = document.getElementById('nwFrame');
       frame.innerHTML = `<div class="nw-loading">Unable to load news data.</div>`;
-      // Retry after 1 minute on error
       _refreshTimer = setTimeout(load, 60 * 1000);
     }
   }
 
+  // Lightweight poll: detect forced advances from the admin API
+  async function pollStatus() {
+    try {
+      const resp = await fetch('/api/news/status');
+      if (resp.ok) {
+        const data = await resp.json();
+        // If the server-side sequence number advanced, jump immediately
+        if (_seq !== -1 && data.seq !== undefined && data.seq !== _seq) {
+          _seq = data.seq;
+          _feedIndex = (data.feed_index !== undefined) ? data.feed_index : _feedIndex;
+          load();
+          // load() reschedules the refresh timer; restart status poll independently
+          _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
+          return;
+        }
+      }
+    } catch (_) { /* ignore network errors in status poll */ }
+    _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
+  }
+
   load();
+  _statusTimer = setTimeout(pollStatus, STATUS_POLL_MS);
 })();
 </script>
 </body>

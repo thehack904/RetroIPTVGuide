@@ -732,3 +732,91 @@ class TestNewsFeedUrls:
         assert 'https://feed1.example.com/rss.xml' in urls
         assert 'https://feed2.example.com/rss.xml' in urls
         assert 'https://feed3.example.com/rss.xml' in urls
+
+
+# ─── News Feed Advance API ────────────────────────────────────────────────────
+
+class TestNewsFeedAdvanceApi:
+    """Tests for POST /api/news/advance, GET /api/news/status, and seq field."""
+
+    def test_status_requires_login(self, client):
+        resp = client.get('/api/news/status')
+        assert resp.status_code in (302, 401)
+
+    def test_advance_requires_login(self, client):
+        resp = client.post('/api/news/advance')
+        assert resp.status_code in (302, 401)
+
+    def test_status_returns_200_when_authenticated(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/api/news/status')
+        assert resp.status_code == 200
+
+    def test_status_has_expected_keys(self, client):
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news/status').get_json()
+        assert 'seq' in data
+        assert 'feed_index' in data
+        assert 'feed_count' in data
+        assert 'refresh_ms' in data
+
+    def test_advance_returns_400_when_no_feeds(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/api/news/advance')
+        assert resp.status_code == 400
+
+    def test_advance_increments_seq(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        before = client.get('/api/news/status').get_json()['seq']
+        client.post('/api/news/advance')
+        after = client.get('/api/news/status').get_json()['seq']
+        assert after == before + 1
+
+    def test_advance_wraps_feed_index(self, client):
+        from app import save_news_feed_urls, set_news_active_feed_index
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        # Force index to last feed so next advance wraps to 0
+        set_news_active_feed_index(1)
+        login(client, 'admin', 'adminpass')
+        data = client.post('/api/news/advance').get_json()
+        assert data['feed_index'] == 0
+
+    def test_advance_returns_new_feed_index_and_seq(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        data = client.post('/api/news/advance').get_json()
+        assert 'feed_index' in data
+        assert 'feed_count' in data
+        assert 'seq' in data
+        assert data['feed_count'] == 2
+
+    def test_news_api_includes_seq(self, client):
+        login(client, 'admin', 'adminpass')
+        data = client.get('/api/news').get_json()
+        assert 'seq' in data
+
+    def test_seq_in_status_matches_seq_in_news_api(self, client):
+        login(client, 'admin', 'adminpass')
+        news_seq = client.get('/api/news').get_json()['seq']
+        status_seq = client.get('/api/news/status').get_json()['seq']
+        assert news_seq == status_seq
+
+    def test_seq_increases_after_advance(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        seq_before = client.get('/api/news').get_json()['seq']
+        client.post('/api/news/advance')
+        seq_after = client.get('/api/news').get_json()['seq']
+        assert seq_after > seq_before
+
+    def test_status_feed_index_matches_after_advance(self, client):
+        from app import save_news_feed_urls
+        save_news_feed_urls(['https://a.example.com/rss.xml', 'https://b.example.com/rss.xml'])
+        login(client, 'admin', 'adminpass')
+        advance_data = client.post('/api/news/advance').get_json()
+        status_data = client.get('/api/news/status').get_json()
+        assert status_data['feed_index'] == advance_data['feed_index']

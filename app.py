@@ -817,7 +817,65 @@ def save_news_feed_url(url):
     """
     save_news_feed_urls([url])
 
-_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+def get_news_active_feed_index():
+    """Return the server-side active feed index (int, default 0)."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='news.active_feed_index'")
+            row = c.fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        logging.exception("get_news_active_feed_index failed")
+        return 0
+
+
+def set_news_active_feed_index(index):
+    """Persist the server-side active feed index."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.active_feed_index', ?)",
+                      (str(int(index)),))
+            conn.commit()
+    except Exception:
+        logging.exception("set_news_active_feed_index failed")
+        raise
+
+
+def get_news_advance_seq():
+    """Return the monotonic advance sequence number (int, default 0).
+
+    Incremented each time an admin forces a feed advance via the API.
+    """
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='news.advance_seq'")
+            row = c.fetchone()
+            return int(row[0]) if row and row[0] is not None else 0
+    except Exception:
+        logging.exception("get_news_advance_seq failed")
+        return 0
+
+
+def increment_news_advance_seq():
+    """Increment and return the new advance sequence number."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='news.advance_seq'")
+            row = c.fetchone()
+            new_seq = (int(row[0]) + 1) if row and row[0] is not None else 1
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('news.advance_seq', ?)",
+                      (str(new_seq),))
+            conn.commit()
+            return new_seq
+    except Exception:
+        logging.exception("increment_news_advance_seq failed")
+        raise
+
+
 
 def get_weather_config():
     """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
@@ -2254,8 +2312,9 @@ def api_news():
     """Return headlines from the configured RSS/Atom feeds.
 
     Accepts an optional ``?feed=<index>`` query parameter (0-based) to select
-    which feed to return.  The response also includes ``feed_count`` and
-    ``refresh_ms`` so the client can auto-calculate the cycling interval:
+    which feed to return.  When omitted, the server-side active feed index is
+    used.  The response includes ``feed_count``, ``feed_index``, ``refresh_ms``,
+    and ``seq`` so the client can detect forced advances:
 
     * 6 feeds → 5 min each  (6 × 5 min = 30 min block)
     * 3 feeds → 10 min each (3 × 10 min = 30 min block)
@@ -2266,12 +2325,16 @@ def api_news():
     feed_count = len(feeds)
     # 30-minute block split evenly across feeds; floor to nearest second
     refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
-    feed_index = request.args.get('feed', 0, type=int)
+    seq = get_news_advance_seq()
+    # Caller may pass ?feed=<n>; if omitted use the server-side active index
+    raw_feed = request.args.get('feed', None)
+    if raw_feed is not None:
+        feed_index = int(raw_feed) % feed_count if feed_count else 0
+    else:
+        feed_index = get_news_active_feed_index() % feed_count if feed_count else 0
     if feeds:
-        feed_index = feed_index % feed_count
         headlines = fetch_rss_headlines(feeds[feed_index])
     else:
-        feed_index = 0
         headlines = []
     return jsonify({
         "updated": datetime.now(timezone.utc).isoformat(),
@@ -2279,6 +2342,53 @@ def api_news():
         "feed_count": feed_count,
         "feed_index": feed_index,
         "refresh_ms": refresh_ms,
+        "seq": seq,
+    })
+
+
+@app.route('/api/news/status', methods=['GET'])
+@login_required
+def api_news_status():
+    """Return lightweight feed status without fetching RSS headlines.
+
+    Used by the news page to poll for forced advances.  Returns:
+    ``{seq, feed_index, feed_count, refresh_ms}``
+    """
+    feeds = get_news_feed_urls()
+    feed_count = len(feeds)
+    refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
+    seq = get_news_advance_seq()
+    feed_index = get_news_active_feed_index() % feed_count if feed_count else 0
+    return jsonify({
+        "seq": seq,
+        "feed_index": feed_index,
+        "feed_count": feed_count,
+        "refresh_ms": refresh_ms,
+    })
+
+
+@app.route('/api/news/advance', methods=['POST'])
+@login_required
+def api_news_advance():
+    """Force-advance the Virtual News Channel to the next RSS feed.
+
+    Increments the server-side active feed index (wrapping at ``feed_count``)
+    and bumps the monotonic sequence number so polling clients detect the change
+    immediately.  Returns ``{seq, feed_index, feed_count}``.
+    """
+    feeds = get_news_feed_urls()
+    feed_count = len(feeds)
+    if feed_count == 0:
+        return jsonify({"error": "No feeds configured"}), 400
+    current = get_news_active_feed_index()
+    next_index = (current + 1) % feed_count
+    set_news_active_feed_index(next_index)
+    new_seq = increment_news_advance_seq()
+    log_event(current_user.username, f"Force-advanced news feed to index {next_index}")
+    return jsonify({
+        "seq": new_seq,
+        "feed_index": next_index,
+        "feed_count": feed_count,
     })
 
 @app.route('/news.html')
