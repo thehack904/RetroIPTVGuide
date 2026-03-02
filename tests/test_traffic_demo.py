@@ -484,14 +484,16 @@ class TestTrafficPage:
         assert b'/api/traffic' in resp.data
 
     def test_page_uses_osm_leaflet_map(self, client):
-        """traffic.html must use Leaflet with OpenStreetMap tiles (no dark CDN, no canvas)."""
+        """traffic.html uses static PNGs (primary) with Leaflet+OSM fallback; no dark CDN."""
         login(client)
         resp = client.get('/traffic')
-        # Leaflet vendor bundle loaded locally
+        # Static PNG path for pre-generated basemaps
+        assert b'static/maps/traffic_demo' in resp.data
+        # Leaflet vendor bundle present as fallback
         assert b'leaflet' in resp.data.lower()
-        # OpenStreetMap tile URL present
+        # OpenStreetMap URL present in fallback tile layer
         assert b'openstreetmap.org' in resp.data
-        # No dark CartoDB tiles
+        # CartoDB dark tiles are gone
         assert b'cartocdn' not in resp.data.lower()
 
     def test_page_has_retroiptv_traffic_title(self, client):
