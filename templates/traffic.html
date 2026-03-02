@@ -326,7 +326,7 @@
   // ── Basemap constants — must stay in sync with the tile-stitching script ──
   // Static PNGs: /static/maps/traffic_demo/<slug>.png
   // Generated at zoom BASEMAP_ZOOM, size BASEMAP_W x BASEMAP_H.
-  var BASEMAP_ZOOM = 11;
+  var BASEMAP_ZOOM = 10;
   var BASEMAP_W    = 1280;
   var BASEMAP_H    = 720;
 
@@ -461,7 +461,7 @@
 
   function applyLeafletOverlay(city, greenPct, yellowPct, redPct, seed, features) {
     if (!_map) return;
-    _map.setView([city.lat || 40.7128, city.lon || -74.006], 12);
+    _map.setView([city.lat || 40.7128, city.lon || -74.006], 10);
     if (_overlayLayer) { _map.removeLayer(_overlayLayer); _overlayLayer = null; }
     if (!features || features.length === 0) return;
     var pool   = buildPool(greenPct, yellowPct, redPct);

@@ -594,7 +594,7 @@ class TestGetTrafficDemoRoads:
 
     def test_returns_feature_collection(self, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         cities = get_traffic_demo_cities()
         result = get_traffic_demo_roads(cities[0]['id'])
         assert result['type'] == 'FeatureCollection'
@@ -602,7 +602,7 @@ class TestGetTrafficDemoRoads:
 
     def test_result_is_cached(self, monkeypatch):
         call_count = {'n': 0}
-        def fake_fetch(lat, lon, radius_m=6000):
+        def fake_fetch(lat, lon, radius_m=80_467):
             call_count['n'] += 1
             return self._minimal_overpass()
         monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
@@ -615,7 +615,7 @@ class TestGetTrafficDemoRoads:
 
     def test_overpass_failure_returns_empty_geojson(self, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: {'elements': []})
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
         cities = get_traffic_demo_cities()
         result = get_traffic_demo_roads(cities[0]['id'])
         assert result['type'] == 'FeatureCollection'
@@ -623,7 +623,7 @@ class TestGetTrafficDemoRoads:
 
     def test_unknown_city_id_returns_empty(self, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         result = get_traffic_demo_roads(99999)
         assert result['type'] == 'FeatureCollection'
         assert result['features'] == []
@@ -648,7 +648,7 @@ class TestApiTrafficDemoRoads:
 
     def test_returns_200_for_valid_city(self, client, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         login(client)
         cities = get_traffic_demo_cities()
         resp = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}')
@@ -656,7 +656,7 @@ class TestApiTrafficDemoRoads:
 
     def test_response_is_geojson_feature_collection(self, client, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         login(client)
         cities = get_traffic_demo_cities()
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
@@ -665,7 +665,7 @@ class TestApiTrafficDemoRoads:
 
     def test_features_have_geometry_and_properties(self, client, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         login(client)
         cities = get_traffic_demo_cities()
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
@@ -676,7 +676,7 @@ class TestApiTrafficDemoRoads:
 
     def test_unknown_city_returns_empty_collection(self, client, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: self._minimal_overpass())
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
         login(client)
         data = client.get('/api/traffic/demo/roads/99999').get_json()
         assert data['type'] == 'FeatureCollection'
@@ -684,7 +684,7 @@ class TestApiTrafficDemoRoads:
 
     def test_overpass_failure_returns_empty_collection(self, client, monkeypatch):
         monkeypatch.setattr(app_module, '_fetch_overpass_roads',
-                            lambda lat, lon, radius_m=6000: {'elements': []})
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
         login(client)
         cities = get_traffic_demo_cities()
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()

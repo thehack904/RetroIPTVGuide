@@ -1284,13 +1284,16 @@ _ROADS_CACHE_TTL = 86400  # 24 hours in seconds
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
 
 
-def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 6000) -> dict:
+def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
     """Fetch major road geometry from the Overpass API (free, no API key).
+    Default radius is 80_467 m (50 miles) to match the zoom-10 map view.
+    Only motorway and trunk-class roads are fetched; at this scale primary/
+    secondary roads would return thousands of segments across the viewport.
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
     On network failure returns an empty FeatureCollection."""
     query = (
-        f"[out:json][timeout:30];"
-        f"(way[\"highway\"~\"^(motorway|trunk|primary|secondary)$\"]"
+        f"[out:json][timeout:60];"
+        f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
         f"(around:{radius_m},{lat},{lon}););"
         f"out body;>;out skel qt;"
     )
@@ -1298,7 +1301,7 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 6000) -> dict:
         resp = requests.post(
             "https://overpass-api.de/api/interpreter",
             data={"data": query},
-            timeout=35,
+            timeout=65,
             headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
         )
         resp.raise_for_status()
