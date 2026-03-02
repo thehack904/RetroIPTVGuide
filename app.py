@@ -180,7 +180,7 @@ def init_tuners_db():
         # and the per-channel test_text keys for all virtual channels.  This clears any
         # stale "This is test Text!" values that were stored during early development.
         c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
-        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status'):
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status', 'virtual.traffic'):
             c.execute("DELETE FROM settings WHERE key=?",
                       (f"overlay.{_ch_id}.test_text",))
         conn.commit()
@@ -212,6 +212,9 @@ def init_tuners_db():
             # set default active tuner
             c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('current_tuner', 'Tuner 1')")
         conn.commit()
+
+        # Ensure traffic demo cities table exists and is seeded
+        _init_traffic_demo_db(conn)
 
 def get_tuners():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
@@ -627,6 +630,17 @@ VIRTUAL_CHANNELS = [
         'overlay_type': 'status',
         'overlay_refresh_seconds': 30,
     },
+    {
+        'name': 'Traffic Now',
+        'logo': '/static/logos/virtual/traffic.svg',
+        'url': '',
+        'tvg_id': 'virtual.traffic',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/traffic.mp4',
+        'overlay_type': 'traffic',
+        'overlay_refresh_seconds': 120,
+    },
 ]
 
 def get_virtual_channel_settings():
@@ -842,6 +856,8 @@ def get_current_feed_state(feed_count):
 
 
 
+_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+
 def get_weather_config():
     """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
     result = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F'}
@@ -883,7 +899,319 @@ def save_weather_config(config_dict):
         logging.exception("save_weather_config failed")
         raise
 
-# ─── Per-channel music file ───────────────────────────────────────────────────
+# ─── Traffic Demo Mode ────────────────────────────────────────────────────────
+
+# US cities with population > 1,000,000 (2024 Census estimates, city proper)
+_TRAFFIC_DEMO_CITIES_SEED = [
+    {'name': 'New York City', 'state': 'NY', 'lat': 40.7128, 'lon': -74.0060,  'population': 8258035},
+    {'name': 'Los Angeles',   'state': 'CA', 'lat': 34.0522, 'lon': -118.2437, 'population': 3898747},
+    {'name': 'Chicago',       'state': 'IL', 'lat': 41.8781, 'lon': -87.6298,  'population': 2696555},
+    {'name': 'Houston',       'state': 'TX', 'lat': 29.7604, 'lon': -95.3698,  'population': 2304580},
+    {'name': 'Phoenix',       'state': 'AZ', 'lat': 33.4484, 'lon': -112.0740, 'population': 1608139},
+    {'name': 'Philadelphia',  'state': 'PA', 'lat': 39.9526, 'lon': -75.1652,  'population': 1550542},
+    {'name': 'San Antonio',   'state': 'TX', 'lat': 29.4241, 'lon': -98.4936,  'population': 1434625},
+    {'name': 'San Diego',     'state': 'CA', 'lat': 32.7157, 'lon': -117.1611, 'population': 1386932},
+    {'name': 'Dallas',        'state': 'TX', 'lat': 32.7767, 'lon': -96.7970,  'population': 1304379},
+    {'name': 'San Jose',      'state': 'CA', 'lat': 37.3382, 'lon': -121.8863, 'population': 1013240},
+]
+
+_TRAFFIC_DEMO_CACHE_TTL = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
+_TRAFFIC_DEMO_CACHE: dict = {}  # cache_key -> payload dict
+
+
+def _init_traffic_demo_db(conn):
+    """Create and seed the traffic_demo_cities table (called from init_tuners_db)."""
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS traffic_demo_cities
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  state TEXT NOT NULL,
+                  lat REAL NOT NULL,
+                  lon REAL NOT NULL,
+                  population INTEGER DEFAULT 0,
+                  enabled INTEGER DEFAULT 1,
+                  weight INTEGER DEFAULT 1,
+                  created_at TEXT,
+                  updated_at TEXT)''')
+    conn.commit()
+    c.execute("SELECT COUNT(*) FROM traffic_demo_cities")
+    if c.fetchone()[0] == 0:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            c.execute(
+                "INSERT INTO traffic_demo_cities "
+                "(name, state, lat, lon, population, enabled, weight, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
+                (city['name'], city['state'], city['lat'], city['lon'],
+                 city['population'], now_iso, now_iso)
+            )
+        conn.commit()
+
+
+def get_traffic_demo_config():
+    """Return traffic demo mode configuration from settings table."""
+    defaults = {
+        'mode':             'admin_rotation',
+        'pack_size':        '10',
+        'pack':             '[]',
+        'rotation_seconds': '120',
+    }
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in defaults:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"traffic_demo.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[key] = row[0]
+    except Exception:
+        logging.exception("get_traffic_demo_config failed, using defaults")
+    return defaults
+
+
+def save_traffic_demo_config(cfg):
+    """Persist traffic demo configuration. Raises ValueError on invalid input."""
+    allowed_modes = ('admin_rotation', 'random_pack')
+    mode = cfg.get('mode', 'admin_rotation')
+    if mode not in allowed_modes:
+        raise ValueError(f"Invalid mode: {mode!r}. Must be one of {allowed_modes}.")
+    try:
+        pack_size = int(cfg.get('pack_size', 10))
+        if not (1 <= pack_size <= 50):
+            raise ValueError("pack_size must be between 1 and 50")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid pack_size: {exc}") from exc
+    try:
+        rotation_secs = int(cfg.get('rotation_seconds', 120))
+        if not (30 <= rotation_secs <= 3600):
+            raise ValueError("rotation_seconds must be between 30 and 3600")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid rotation_seconds: {exc}") from exc
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.mode', mode))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack_size', str(pack_size)))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.rotation_seconds', str(rotation_secs)))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_traffic_demo_config failed")
+        raise
+
+
+def get_traffic_demo_cities():
+    """Return all rows from traffic_demo_cities ordered by population desc."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, name, state, lat, lon, population, enabled, weight "
+                "FROM traffic_demo_cities ORDER BY population DESC"
+            )
+            rows = c.fetchall()
+        return [
+            {'id': r[0], 'name': r[1], 'state': r[2], 'lat': r[3], 'lon': r[4],
+             'population': r[5], 'enabled': bool(r[6]), 'weight': int(r[7] or 1)}
+            for r in rows
+        ]
+    except Exception:
+        logging.exception("get_traffic_demo_cities failed")
+        return []
+
+
+def save_traffic_demo_city(city_id, enabled, weight=1):
+    """Update enabled flag and weight for a single city row."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "UPDATE traffic_demo_cities SET enabled=?, weight=?, updated_at=? WHERE id=?",
+                (1 if enabled else 0, max(1, int(weight)), now_iso, int(city_id))
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_traffic_demo_city failed for id=%s", city_id)
+        raise
+
+
+def set_all_traffic_demo_cities_enabled(enabled):
+    """Enable or disable every city in one shot."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("UPDATE traffic_demo_cities SET enabled=?, updated_at=?",
+                      (1 if enabled else 0, now_iso))
+            conn.commit()
+    except Exception:
+        logging.exception("set_all_traffic_demo_cities_enabled failed")
+        raise
+
+
+def pick_random_traffic_demo_pack(pack_size=10):
+    """Randomly select pack_size enabled cities and persist as traffic_demo.pack.
+    Returns list of chosen city dicts."""
+    import random as _rand
+    cities = [c for c in get_traffic_demo_cities() if c['enabled']]
+    if not cities:
+        cities = get_traffic_demo_cities()
+    chosen = _rand.sample(cities, min(pack_size, len(cities)))
+    pack_ids = [c['id'] for c in chosen]
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack', _json.dumps(pack_ids)))
+            conn.commit()
+    except Exception:
+        logging.exception("pick_random_traffic_demo_pack failed")
+    return chosen
+
+
+def _get_congestion_distribution(hour, is_weekend=False):
+    """Return (green_pct, yellow_pct, red_pct) based on local hour and day type.
+    Percentages always sum to 100."""
+    if is_weekend:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 9 <= hour < 12:
+            return 70, 20, 10
+        elif 12 <= hour < 15:
+            return 65, 25, 10
+        elif 17 <= hour < 20:
+            return 60, 28, 12
+        else:
+            return 82, 13, 5
+    else:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 7 <= hour < 9:
+            return 50, 30, 20
+        elif 12 <= hour < 14:
+            return 65, 25, 10
+        elif 16 <= hour < 19:
+            return 45, 30, 25
+        elif 22 <= hour or hour < 1:
+            return 80, 15, 5
+        else:
+            return 75, 18, 7
+
+
+def _build_traffic_demo_payload():
+    """Build the demo traffic payload with deterministic city rotation and
+    simulated congestion segments.  Results are cached per rotation slot so
+    all viewers share the same snapshot."""
+    import hashlib
+    import random as _rnd
+
+    demo_cfg = get_traffic_demo_config()
+    mode = demo_cfg.get('mode', 'admin_rotation')
+    rotation_seconds = max(30, int(demo_cfg.get('rotation_seconds', 120)))
+
+    now_ts = time.time()
+    time_slot = int(now_ts // rotation_seconds)
+
+    all_cities = get_traffic_demo_cities()
+
+    # Determine the pool to rotate through
+    if mode == 'random_pack':
+        try:
+            pack_ids = _json.loads(demo_cfg.get('pack', '[]'))
+        except Exception:
+            pack_ids = []
+        if pack_ids:
+            id_set = {c['id'] for c in all_cities}
+            pack_ids = [pid for pid in pack_ids if pid in id_set]
+            cities_pool = [c for c in all_cities if c['id'] in pack_ids]
+        else:
+            cities_pool = [c for c in all_cities if c['enabled']]
+    else:  # admin_rotation
+        cities_pool = [c for c in all_cities if c['enabled']]
+
+    if not cities_pool:
+        cities_pool = all_cities[:1] if all_cities else [
+            {'id': 0, 'name': 'Chicago', 'state': 'IL',
+             'lat': 41.8781, 'lon': -87.6298, 'population': 2696555,
+             'enabled': True, 'weight': 1}
+        ]
+
+    # Build a weighted list for round-robin
+    weighted = []
+    for city in cities_pool:
+        w = max(1, city.get('weight', 1))
+        weighted.extend([city] * w)
+
+    city = weighted[time_slot % len(weighted)]
+
+    # Cache lookup
+    cache_key = f"demo:{city['id']}:{time_slot}"
+    cached = _TRAFFIC_DEMO_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    # Evict stale entries
+    for k in list(_TRAFFIC_DEMO_CACHE):
+        if k != cache_key:
+            _TRAFFIC_DEMO_CACHE.pop(k, None)
+
+    # Time-of-day congestion distribution
+    now_dt = datetime.now(timezone.utc)
+    hour = now_dt.hour
+    is_weekend = now_dt.weekday() >= 5
+    green_pct, yellow_pct, red_pct = _get_congestion_distribution(hour, is_weekend)
+
+    # Congestion level label
+    if red_pct >= 20:
+        congestion_level = 'Heavy'
+    elif red_pct >= 10 or yellow_pct >= 25:
+        congestion_level = 'Moderate'
+    else:
+        congestion_level = 'Light'
+
+    # Generate road segments deterministically using a seeded RNG
+    # MD5 is used purely for deterministic seeding (not for security).
+    # All viewers at the same time slot see the same road-color snapshot.
+    seed_hex = hashlib.md5(f"{city['id']}:{time_slot}".encode()).hexdigest()[:8]
+    rng = _rnd.Random(int(seed_hex, 16))
+
+    NUM_SEGMENTS = 24
+    colors = ['green'] * green_pct + ['yellow'] * yellow_pct + ['red'] * red_pct
+    segments = [{'id': f'seg_{i}', 'color': rng.choice(colors)}
+                for i in range(1, NUM_SEGMENTS + 1)]
+
+    # Actual percentages from generated segments
+    total = len(segments)
+    actual_green  = sum(1 for s in segments if s['color'] == 'green')
+    actual_yellow = sum(1 for s in segments if s['color'] == 'yellow')
+    actual_red    = sum(1 for s in segments if s['color'] == 'red')
+
+    payload = {
+        'updated': now_dt.isoformat(),
+        'city': {
+            'name':  city['name'],
+            'state': city['state'],
+            'lat':   city['lat'],
+            'lon':   city['lon'],
+        },
+        'summary': {
+            'congestion_level': congestion_level,
+            'green_percent':    round(actual_green  * 100 / total),
+            'yellow_percent':   round(actual_yellow * 100 / total),
+            'red_percent':      round(actual_red    * 100 / total),
+        },
+        'segments':  segments,
+        'demo_mode': True,
+    }
+    _TRAFFIC_DEMO_CACHE[cache_key] = payload
+    return payload
+
+
 
 def get_channel_music_file(tvg_id):
     """Return the selected audio filename (basename only) for a virtual channel, or ''."""
@@ -1301,9 +1629,10 @@ def get_virtual_epg(grid_start, hours_span=6):
     epg = {}
     grid_end = grid_start + timedelta(hours=hours_span)
     programs_by_tvg_id = {
-        'virtual.news': 'News Now',
+        'virtual.news':    'News Now',
         'virtual.weather': 'Local Weather',
-        'virtual.status': 'System Status',
+        'virtual.status':  'System Status',
+        'virtual.traffic': 'Traffic Now',
     }
     for tvg_id, title in programs_by_tvg_id.items():
         slots = []
@@ -1865,7 +2194,7 @@ def change_tuner():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
-                if tvg_id in ('virtual.weather', 'virtual.news'):
+                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
                     # Text color, background color, and test banner are not used by
                     # these full-page overlay channels; always clear them.
                     appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
@@ -1883,6 +2212,13 @@ def change_tuner():
                             'units':         request.form.get('ch_weather_units', 'F').strip(),
                         }
                         save_weather_config(weather_cfg)
+                    if tvg_id == 'virtual.traffic':
+                        demo_cfg = {
+                            'mode':             request.form.get('ch_traffic_demo_mode', 'admin_rotation').strip(),
+                            'pack_size':        request.form.get('ch_traffic_pack_size', '10').strip(),
+                            'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
+                        }
+                        save_traffic_demo_config(demo_cfg)
                     # Save background music selection for all virtual channels
                     music_file = request.form.get('ch_music_file', '').strip()
                     save_channel_music_file(tvg_id, music_file)
@@ -1949,6 +2285,8 @@ def change_tuner():
         channel_appearances=channel_appearances,
         news_feed_urls=get_news_feed_urls(),
         weather_config=get_weather_config(),
+        traffic_demo_config=get_traffic_demo_config(),
+        traffic_demo_cities=get_traffic_demo_cities(),
         audio_files=audio_files,
         channel_music_files=channel_music_files,
     )
@@ -2322,6 +2660,13 @@ def weather_page():
     log_event(current_user.username, "Loaded weather page")
     return render_template('weather.html')
 
+@app.route('/traffic')
+@login_required
+def traffic_page():
+    """Retro TV traffic overlay page."""
+    log_event(current_user.username, "Loaded traffic page")
+    return render_template('traffic.html')
+
 @app.route('/api/weather', methods=['GET'])
 @login_required
 def api_weather():
@@ -2331,7 +2676,83 @@ def api_weather():
     payload = _build_weather_payload(cfg)
     music_filename = get_channel_music_file('virtual.weather')
     payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    # Wall clock aligned refresh: tell the client exactly how long until the
+    # next 5-minute boundary so all viewers refresh in sync.
+    _weather_interval = 300  # seconds
+    _now_ts = datetime.now(timezone.utc).timestamp()
+    payload['ms_until_next'] = int((_weather_interval - (_now_ts % _weather_interval)) * 1000)
     return jsonify(payload)
+
+@app.route('/api/traffic', methods=['GET'])
+@login_required
+def api_traffic():
+    """Traffic overlay data endpoint — Demo Mode.
+    Returns simulated congestion data for a rotating U.S. city.
+    No external API or configuration required."""
+    payload = dict(_build_traffic_demo_payload())
+    music_filename = get_channel_music_file('virtual.traffic')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    _now_ts = time.time()
+    rotation_seconds = max(30, int(get_traffic_demo_config().get('rotation_seconds', 120)))
+    payload['ms_until_next'] = int(
+        (rotation_seconds - (_now_ts % rotation_seconds)) * 1000
+    )
+    return jsonify(payload)
+
+
+@app.route('/api/traffic/demo', methods=['GET'])
+@login_required
+def api_traffic_demo():
+    """Alias for /api/traffic — always returns demo mode payload."""
+    return api_traffic()
+
+
+@app.route('/api/traffic/demo/cities', methods=['GET'])
+@login_required
+def api_traffic_demo_cities():
+    """Return all cities from traffic_demo_cities table."""
+    return jsonify({'cities': get_traffic_demo_cities()})
+
+
+@app.route('/api/traffic/demo/cities/<int:city_id>', methods=['POST'])
+@login_required
+def api_traffic_demo_city_update(city_id):
+    """Update enabled/weight for a single city (admin action)."""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled', True))
+    weight  = max(1, int(data.get('weight', 1)))
+    try:
+        save_traffic_demo_city(city_id, enabled, weight)
+        return jsonify({'ok': True})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/traffic/demo/enable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_enable_all():
+    """Enable all cities."""
+    set_all_traffic_demo_cities_enabled(True)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/disable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_disable_all():
+    """Disable all cities."""
+    set_all_traffic_demo_cities_enabled(False)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/pick_random', methods=['POST'])
+@login_required
+def api_traffic_demo_pick_random():
+    """Randomly pick N cities and store as the rotation pack."""
+    data = request.get_json(silent=True) or {}
+    demo_cfg = get_traffic_demo_config()
+    n = int(data.get('pack_size', demo_cfg.get('pack_size', 10)))
+    chosen = pick_random_traffic_demo_pack(n)
+    return jsonify({'ok': True, 'cities': chosen})
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
