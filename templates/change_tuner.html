@@ -22,14 +22,15 @@
     {% endif %}
   {% endwith %}
 
-  <div class="tm-layout">
+  <!-- Page-level Tab Navigation -->
+  <div class="page-tab-nav" role="tablist">
+    <button class="page-tab-btn page-tab-active" role="tab" aria-selected="true" data-page-tab="tab-tuner-mgmt">Tuner Management</button>
+    <button class="page-tab-btn" role="tab" aria-selected="false" data-page-tab="tab-vc">Virtual Channels</button>
+  </div>
 
-    <!-- ===== LEFT PANEL: Tuner Management ===== -->
-    <div class="tm-left">
-      <header class="page-header">
-        <h1>Tuner Management</h1>
-        <p class="lead">Manage tuner sources, sync and configuration</p>
-      </header>
+  <!-- Tuner Management Tab Panel -->
+  <div class="page-tab-panel" id="tab-tuner-mgmt">
+    <div class="tm-content">
 
       <!-- Active Tuner + Last Sync card -->
       <section class="card card-primary" aria-labelledby="lbl-active-tuner">
@@ -299,21 +300,17 @@
         </div>
       </section>
 
-    </div><!-- /.tm-left -->
+    </div><!-- /.tm-content -->
+  </div><!-- /.page-tab-panel tab-tuner-mgmt -->
 
-    <!-- ===== RIGHT PANEL: Virtual Channels ===== -->
-    <div class="tm-right">
-      <header class="page-header vc-header">
-        <div class="vc-header-text">
-          <h1>Virtual Channels</h1>
-          <p class="lead">Manage system &amp; custom virtual channels</p>
-        </div>
-      </header>
-
-      <!-- form element for channel list save (checkboxes reference it via form= attribute) -->
-      <form method="POST" id="form-virtual-channels" style="display:none">
-        <input type="hidden" name="action" value="update_virtual_channels">
-      </form>
+  <!-- Virtual Channels Tab Panel -->
+  <div class="page-tab-panel" id="tab-vc" hidden>
+    <!-- form element for channel list save (checkboxes reference it via form= attribute) -->
+    <form method="POST" id="form-virtual-channels" style="display:none">
+      <input type="hidden" name="action" value="update_virtual_channels">
+    </form>
+    <div class="vc-content">
+      <div class="vc-left">
 
       <!-- Enabled Channels -->
       {% set enabled_count = namespace(n=0) %}
@@ -587,6 +584,9 @@
         </div>
       </section>
 
+      </div><!-- /.vc-left -->
+      <div class="vc-right">
+
       <!-- Channel Order -->
       <section class="card vc-card" aria-labelledby="lbl-channel-order">
         <div class="card-head">
@@ -642,8 +642,9 @@
         </div>
       </section>
 
-    </div><!-- /.tm-right -->
-  </div><!-- /.tm-layout -->
+      </div><!-- /.vc-right -->
+    </div><!-- /.vc-content -->
+  </div><!-- /.page-tab-panel tab-vc -->
 </div><!-- /.container-change-tuner -->
 {% endblock %}
 
@@ -685,20 +686,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   } catch(e) {}
 
-  // Tab switching
-  const tabBtns = document.querySelectorAll('.tab-btn');
-  const tabPanels = document.querySelectorAll('.tab-panel');
-  tabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const target = btn.dataset.tab;
-      tabBtns.forEach(b => { b.classList.remove('tab-btn-active'); b.setAttribute('aria-selected','false'); });
-      tabPanels.forEach(p => { p.hidden = true; });
-      btn.classList.add('tab-btn-active');
-      btn.setAttribute('aria-selected','true');
-      const panel = document.getElementById(target);
-      if (panel) panel.hidden = false;
+  // Tab switching helper (used for both inner card tabs and page-level tabs)
+  function initTabGroup(btnSelector, panelSelector, activeClass, dataKey) {
+    const btns = document.querySelectorAll(btnSelector);
+    const panels = document.querySelectorAll(panelSelector);
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset[dataKey];
+        btns.forEach(b => { b.classList.remove(activeClass); b.setAttribute('aria-selected', 'false'); });
+        panels.forEach(p => { p.hidden = true; });
+        btn.classList.add(activeClass);
+        btn.setAttribute('aria-selected', 'true');
+        const panel = document.getElementById(target);
+        if (panel) panel.hidden = false;
+      });
     });
-  });
+  }
+
+  initTabGroup('.tab-btn', '.tab-panel', 'tab-btn-active', 'tab');
+  initTabGroup('.page-tab-btn', '.page-tab-panel', 'page-tab-active', 'pageTab');
 
   // Run Now
   const runNow = document.getElementById('btn-run-now');
