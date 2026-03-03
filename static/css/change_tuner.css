@@ -72,16 +72,25 @@ body.light .container-change-tuner {
   box-sizing: border-box;
 }
 
-/* Two-column layout */
-.tm-layout {
+/* Tuner Management page: single-column content stack */
+.tm-content {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 16px;
+}
+
+/* Virtual Channels page: two-column layout */
+.vc-content {
   display: grid;
   grid-template-columns: 3fr 2fr;
   gap: 22px;
   align-items: start;
+  padding-top: 16px;
 }
 
-.tm-left,
-.tm-right {
+.vc-left,
+.vc-right {
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -819,7 +828,7 @@ button:focus, select:focus, input:focus, textarea:focus {
 /* Responsive                                                              */
 /* ====================================================================== */
 @media (max-width: 1100px) {
-  .tm-layout { grid-template-columns: 1fr; }
+  .vc-content { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 700px) {

@@ -423,7 +423,7 @@ class TestApiTrafficDemoPickRandom:
 class TestChangeTunerTrafficDemoUI:
     def test_traffic_demo_fields_in_change_tuner_page(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert resp.status_code == 200
         assert b'ch_traffic_demo_mode'       in resp.data
         assert b'ch_traffic_rotation_seconds' in resp.data
@@ -432,24 +432,24 @@ class TestChangeTunerTrafficDemoUI:
     def test_no_api_key_field_in_change_tuner_page(self, client):
         """TomTom API key input must no longer be present."""
         login(client, 'admin', 'adminpass')
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert b'ch_traffic_api_key' not in resp.data
         assert b'TomTom' not in resp.data
 
     def test_city_table_present(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert b'traffic-demo-city-table' in resp.data
         assert b'New York City' in resp.data
 
     def test_demo_mode_badge_in_traffic_section(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert b'Demo Mode' in resp.data or b'demo' in resp.data.lower()
 
     def test_save_demo_config_via_change_tuner_post(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action':                        'update_channel_overlay_appearance',
             'tvg_id':                        'virtual.traffic',
             'ch_text_color':                 '',
@@ -467,7 +467,7 @@ class TestChangeTunerTrafficDemoUI:
 
     def test_invalid_rotation_seconds_shows_warning(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action':                      'update_channel_overlay_appearance',
             'tvg_id':                      'virtual.traffic',
             'ch_text_color':               '',

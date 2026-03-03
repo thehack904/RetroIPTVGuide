@@ -22,6 +22,7 @@
                   {% endif %}
                   <li class="separator"></li>
                   <li><a href="{{ url_for('change_tuner') }}">Tuner Management…</a></li>
+                  <li><a href="{{ url_for('virtual_channels') }}">Virtual Channels…</a></li>
                 </ul>
               </li>
               <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a>
@@ -132,6 +133,9 @@
               <li class="separator"></li>
               <li role="none">
                 <a role="menuitem" href="{{ url_for('change_tuner') }}">Tuner Management…</a>
+              </li>
+              <li role="none">
+                <a role="menuitem" href="{{ url_for('virtual_channels') }}">Virtual Channels…</a>
               </li>
             </ul>
           </li>
