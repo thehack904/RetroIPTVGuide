@@ -668,6 +668,18 @@
 
   function build(data) {
     var frame     = document.getElementById('tfFrame');
+
+    // No cities enabled — show a friendly placeholder and keep polling.
+    if (data.no_cities) {
+      _initialized = false;
+      frame.innerHTML =
+        '<div class="tf-loading">' +
+          '\u{1F6A6}\u00a0No cities selected \u2014 ' +
+          'enable at least one city in Traffic settings.' +
+        '</div>';
+      return;
+    }
+
     var city      = data.city    || {};
     var summary   = data.summary || {};
     var incidents = Array.isArray(data.incidents) ? data.incidents : [];

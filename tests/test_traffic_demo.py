@@ -273,6 +273,11 @@ class TestBuildTrafficDemoPayload:
         dt = _dt.fromisoformat(updated)
         assert dt.tzinfo is not None
 
+    def test_no_cities_returns_no_cities_flag(self):
+        set_all_traffic_demo_cities_enabled(False)
+        p = _build_traffic_demo_payload()
+        assert p == {'no_cities': True}
+
 
 # ─── /api/traffic endpoint ────────────────────────────────────────────────────
 
@@ -314,6 +319,13 @@ class TestApiTrafficEndpoint:
         data = client.get('/api/traffic').get_json()
         for k in ('green_percent', 'yellow_percent', 'red_percent', 'congestion_level'):
             assert k in data['summary']
+
+    def test_no_cities_selected_returns_no_cities_flag(self, client):
+        login(client)
+        client.post('/api/traffic/demo/disable_all')
+        data = client.get('/api/traffic').get_json()
+        assert data['no_cities'] is True
+        assert data['ms_until_next'] > 0
 
 
 # ─── /api/traffic/demo alias ─────────────────────────────────────────────────

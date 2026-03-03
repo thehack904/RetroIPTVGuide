@@ -1192,11 +1192,7 @@ def _build_traffic_demo_payload():
         cities_pool = [c for c in all_cities if c['enabled']]
 
     if not cities_pool:
-        cities_pool = all_cities[:1] if all_cities else [
-            {'id': 0, 'name': 'Chicago', 'state': 'IL',
-             'lat': 41.8781, 'lon': -87.6298, 'population': 2696555,
-             'enabled': True, 'weight': 1}
-        ]
+        return {'no_cities': True}
 
     # Build a weighted list for round-robin
     weighted = []
