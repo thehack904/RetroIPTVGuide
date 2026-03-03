@@ -438,15 +438,11 @@
                 </div>
                 <div class="vc-prefs-field">
                   <label>Rotation Mode</label>
-                  <select name="ch_traffic_demo_mode">
+                  <select name="ch_traffic_demo_mode"
+                          title="Admin Rotation: cycles through checked cities. Random Pack: rotates a random subset. Unchecked cities are excluded from both.">
                     <option value="admin_rotation" {% if traffic_demo_config.mode != 'random_pack' %}selected{% endif %}>Admin Rotation</option>
                     <option value="random_pack" {% if traffic_demo_config.mode == 'random_pack' %}selected{% endif %}>Random Pack</option>
                   </select>
-                  <div class="muted small" style="margin-top:4px;">
-                    <strong>Admin Rotation</strong> cycles through the cities checked below.
-                    <strong>Random Pack</strong> rotates through a random subset picked via the button below.
-                    Unchecked cities are excluded from both modes.
-                  </div>
                 </div>
                 <div class="vc-prefs-field">
                   <label>Rotation Interval (seconds)</label>
@@ -455,11 +451,11 @@
                          min="30" max="3600" step="1" style="width:6em;">
                 </div>
                 <div class="vc-prefs-field">
-                  <label>Pack Size</label>
+                  <label>Random Pack Size</label>
                   <input type="number" name="ch_traffic_pack_size"
                          value="{{ traffic_demo_config.pack_size or '10' }}"
                          min="1" max="50" step="1" style="width:5em;"
-                         title="Number of cities in the Random Pack">
+                         title="Random Pack only — how many cities are picked when you click Pick Random Cities">
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;">
                   <div class="form-row form-row-inline" style="gap:6px; flex-wrap:wrap;">
@@ -482,7 +478,7 @@
                         <th style="padding:3px 6px;">City</th>
                         <th style="padding:3px 6px;">State</th>
                         <th style="padding:3px 6px;">Population</th>
-                        <th style="padding:3px 6px;">Weight</th>
+                        <th style="padding:3px 6px;" title="Higher frequency = city appears more often in rotation">Frequency</th>
                       </tr>
                     </thead>
                     <tbody>
