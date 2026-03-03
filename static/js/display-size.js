@@ -94,6 +94,8 @@
       _scale = 1.0;
       document.documentElement.removeAttribute('data-display-size');
       applyUiZoom(1.0);
+      // Also reset video player size/aspect ratio and channel-column width
+      if (typeof window.resetVideoSize === 'function') window.resetVideoSize();
       try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
       try {
         window.dispatchEvent(new CustomEvent('displaySize:applied', { detail: { size: 'default' } }));
