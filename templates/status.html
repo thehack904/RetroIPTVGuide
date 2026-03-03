@@ -1,0 +1,522 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV Status</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #07124a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ────────────────────────────────────────────── */
+    .st-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1535cc 0%, #0c22a0 35%, #081870 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .st-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.05) 3px,
+        rgba(0,0,0,0.05) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .st-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 1.2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(48px, 8.5vw, 100px);
+    }
+
+    .st-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+    }
+
+    .st-icon-header {
+      font-size: clamp(24px, 4vw, 52px);
+      line-height: 1;
+    }
+
+    .st-brand {
+      font-size: clamp(18px, 3vw, 40px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .st-brand strong {
+      font-weight: 900;
+    }
+
+    .st-header-right {
+      font-size: clamp(18px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    /* ── Body area — mirrors news.html .nw-body exactly ─────────── */
+    .st-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 0.46fr;
+      gap: 0.5em;
+      padding: 0.55em 0.7em 0.35em;
+      min-height: 0;
+    }
+
+    /* ── Left (main status) panel — mirrors .nw-main ────────────── */
+    .st-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.6);
+    }
+
+    /* "Status Report" italic gold label — mirrors .nw-top-story-label */
+    .st-report-label {
+      background: transparent;
+      padding: 0.28em 0.65em 0.12em;
+      font-size: clamp(11px, 1.6vw, 20px);
+      font-style: italic;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    /* Coloured headline bar — mirrors .nw-headline-bar */
+    .st-headline-bar {
+      background: linear-gradient(90deg, #006622 0%, #008833 55%, #005518 100%);
+      padding: 0.3em 0.65em;
+    }
+
+    .st-headline-bar[data-state="warn"] {
+      background: linear-gradient(90deg, #886600 0%, #aa8800 55%, #775500 100%);
+    }
+
+    .st-headline-bar[data-state="error"] {
+      background: linear-gradient(90deg, #8b0000 0%, #b20000 55%, #800000 100%);
+    }
+
+    .st-headline-text {
+      font-size: clamp(13px, 2.1vw, 28px);
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #fff;
+      line-height: 1.15;
+    }
+
+    /* Main content area — mirrors .nw-main-image (reused for status body) */
+    .st-main-content {
+      flex: 1;
+      background: rgba(6, 18, 80, 0.5);
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4em;
+      padding: 0.6em 1em;
+    }
+
+    .st-big-uptime {
+      font-size: clamp(28px, 5.5vw, 72px);
+      font-weight: 900;
+      line-height: 1;
+      color: #fff;
+      letter-spacing: 0.02em;
+    }
+
+    .st-big-label {
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+    }
+
+    .st-meta-row {
+      display: flex;
+      gap: clamp(1em, 3vw, 3em);
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 0.3em;
+    }
+
+    .st-meta-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.1em;
+    }
+
+    .st-meta-value {
+      font-size: clamp(11px, 1.6vw, 22px);
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .st-meta-key {
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #90a8d8;
+    }
+
+    /* Summary box — mirrors .nw-summary-box */
+    .st-summary-box {
+      background: rgba(6, 20, 90, 0.85);
+      border-top: 2px solid #3a5ccc;
+      padding: 0.45em 0.75em;
+    }
+
+    .st-summary-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.2em 1.2em;
+    }
+
+    .st-summary-entry {
+      font-size: clamp(8px, 1.15vw, 15px);
+      font-weight: 400;
+      color: #e8eeff;
+      line-height: 1.5;
+    }
+
+    .st-summary-entry strong {
+      font-weight: 700;
+      color: #ffd700;
+    }
+
+    /* ── Right (metrics) sidebar — mirrors .nw-sidebar / .nw-item ── */
+    .st-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
+    }
+
+    .st-item {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      min-height: 0;
+    }
+
+    /* Coloured dot panel — mirrors .nw-item-img */
+    .st-item-dot-panel {
+      width: clamp(28px, 4vw, 52px);
+      flex-shrink: 0;
+      background: rgba(4, 12, 60, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .st-item-dot {
+      width: clamp(10px, 1.4vw, 18px);
+      height: clamp(10px, 1.4vw, 18px);
+      border-radius: 50%;
+      background: #22cc44;
+      box-shadow: 0 0 clamp(4px, 0.8vw, 8px) #22cc4466;
+    }
+
+    .st-item-dot[data-state="warn"]  { background: #ffaa00; box-shadow: 0 0 clamp(4px,0.8vw,8px) #ffaa0066; }
+    .st-item-dot[data-state="error"] { background: #ee2222; box-shadow: 0 0 clamp(4px,0.8vw,8px) #ee222266; }
+
+    /* Text area — mirrors .nw-item-text */
+    .st-item-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0.25em 0.5em;
+      min-width: 0;
+    }
+
+    .st-item-label {
+      font-size: clamp(8px, 1.05vw, 13px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+      line-height: 1.2;
+    }
+
+    .st-item-value {
+      font-size: clamp(9px, 1.3vw, 17px);
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Breaking news ticker — mirrors .nw-ticker-bar ──────────── */
+    .st-ticker-bar {
+      background: #04091f;
+      border-top: 2px solid #3a5ccc;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4.2vw, 50px);
+    }
+
+    .st-ticker-label {
+      background: #0a0e2a;
+      color: #ffd700;
+      font-size: clamp(10px, 1.5vw, 18px);
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.75em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #3a5ccc;
+    }
+
+    .st-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .st-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: st-scroll 300s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes st-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error state ─────────────────────────────────── */
+    .st-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="st-frame" id="stFrame">
+  <div class="st-loading" id="stLoading">Loading status&#8230;</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const TICKER_PX_PER_SEC = 40;
+  const FADE_MS           = 600;
+  let _refreshTimer = null;
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
+  function headlineText(state) {
+    if (state === 'error') return 'System Warning — Attention Required';
+    if (state === 'warn')  return 'System Advisory — Minor Issues Detected';
+    return 'All Systems Operational';
+  }
+
+  function build(data) {
+    const frame        = document.getElementById('stFrame');
+    const items        = Array.isArray(data.items) ? data.items : [];
+    const ticks        = Array.isArray(data.ticker) ? data.ticker : [];
+    const overallState = data.overall_state || 'good';
+    const diskUsedPct  = typeof data.disk_used_pct === 'number' ? data.disk_used_pct : 0;
+
+    // ── ticker ───────────────────────────────────────────────────
+    const tickText = ticks.length
+      ? ticks.join(' \u2022 ') + ' \u2022 '
+      : 'System Status: Running \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    // ── helper to pull a named item ──────────────────────────────
+    function findItem(label) {
+      return items.find(it => it.label === label) || null;
+    }
+    const uptime   = findItem('Uptime');
+    const version  = findItem('Version');
+    const channels = findItem('Channels');
+    const platform = findItem('Platform');
+    const python   = findItem('Python');
+    const load     = findItem('Load Avg');
+    const disk     = findItem('Disk');
+
+    // ── sidebar rows (mirrors news sidebar — up to 7 items) ──────
+    const sidebarItems = items.filter(it =>
+      it.label !== 'App Status'  // skip — overall state is conveyed by the headline bar colour
+    );
+    const sideRows = sidebarItems.map(it => `
+      <div class="st-item">
+        <div class="st-item-dot-panel">
+          <div class="st-item-dot" data-state="${esc(it.state || 'good')}"></div>
+        </div>
+        <div class="st-item-text">
+          <div class="st-item-label">${esc(it.label)}</div>
+          <div class="st-item-value">${esc(it.value)}</div>
+        </div>
+      </div>`).join('');
+
+    // ── summary entries for the bottom strip ─────────────────────
+    const summaryParts = [];
+    if (platform) summaryParts.push(`<span class="st-summary-entry"><strong>Platform:</strong> ${esc(platform.value)}</span>`);
+    if (python)   summaryParts.push(`<span class="st-summary-entry"><strong>Python:</strong> ${esc(python.value)}</span>`);
+    if (load)     summaryParts.push(`<span class="st-summary-entry"><strong>Load:</strong> ${esc(load.value)}</span>`);
+    if (disk)     summaryParts.push(`<span class="st-summary-entry"><strong>Disk:</strong> ${esc(disk.value)} (${diskUsedPct}% used)</span>`);
+    if (data.updated) summaryParts.push(`<span class="st-summary-entry"><strong>Updated:</strong> ${formatLocalTime(data.updated)}</span>`);
+
+    const html = `
+      <!-- Header — identical structure to news.html -->
+      <div class="st-header">
+        <div class="st-header-left">
+          <span class="st-icon-header">🖥️</span>
+          <span class="st-brand">RetroIPTV <strong>Status</strong></span>
+        </div>
+        <div class="st-header-right">System Health</div>
+      </div>
+      <!-- Body grid: 1fr 0.46fr — identical ratio to news.html -->
+      <div class="st-body">
+        <!-- Left main panel -->
+        <div class="st-main">
+          <div class="st-report-label">Status Report</div>
+          <div class="st-headline-bar" data-state="${esc(overallState)}">
+            <div class="st-headline-text">${esc(headlineText(overallState))}</div>
+          </div>
+          <div class="st-main-content">
+            <div class="st-big-label">Server Uptime</div>
+            <div class="st-big-uptime">${esc(uptime ? uptime.value : '--')}</div>
+            <div class="st-meta-row">
+              ${version  ? `<div class="st-meta-item"><div class="st-meta-value">${esc(version.value)}</div><div class="st-meta-key">Version</div></div>` : ''}
+              ${channels ? `<div class="st-meta-item"><div class="st-meta-value">${esc(channels.value)}</div><div class="st-meta-key">Channels</div></div>` : ''}
+              <div class="st-meta-item"><div class="st-meta-value">${diskUsedPct}%</div><div class="st-meta-key">Disk Used</div></div>
+            </div>
+          </div>
+          ${summaryParts.length ? `<div class="st-summary-box"><div class="st-summary-row">${summaryParts.join('')}</div></div>` : ''}
+        </div>
+        <!-- Right sidebar — same structure as news sidebar -->
+        <div class="st-sidebar">${sideRows}</div>
+      </div>
+      <!-- Ticker — identical to news.html ticker -->
+      <div class="st-ticker-bar">
+        <div class="st-ticker-label">System Status:</div>
+        <div class="st-ticker-scroll">
+          <span class="st-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    frame.style.transition = `opacity ${FADE_MS}ms ease`;
+    frame.style.opacity = '0';
+    requestAnimationFrame(function () {
+      frame.innerHTML = html;
+      requestAnimationFrame(function () {
+        frame.style.opacity = '1';
+        setTimeout(function () {
+          const track = frame.querySelector('.st-ticker-track');
+          if (track && track.offsetWidth > 0) {
+            const dur = (track.offsetWidth / TICKER_PX_PER_SEC).toFixed(1);
+            track.style.animationDuration = dur + 's';
+          }
+        }, 0);
+      });
+    });
+  }
+
+  async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    try {
+      const resp = await fetch('/api/virtual/status');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      build(data);
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : 30000;
+      _refreshTimer = setTimeout(load, msUntilNext);
+    } catch (e) {
+      const frame = document.getElementById('stFrame');
+      frame.innerHTML = `<div class="st-loading">Unable to load status data.</div>`;
+      _refreshTimer = setTimeout(load, 30000);
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
