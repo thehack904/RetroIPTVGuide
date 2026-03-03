@@ -278,6 +278,15 @@ class TestBuildTrafficDemoPayload:
         p = _build_traffic_demo_payload()
         assert p == {'no_cities': True}
 
+    def test_random_pack_mode_disable_all_returns_no_cities_flag(self):
+        # Reproduce: pick random pack, then disable all cities — must see no_cities
+        pick_random_traffic_demo_pack(5)
+        save_traffic_demo_config({'mode': 'random_pack', 'pack_size': '5',
+                                  'rotation_seconds': '120'})
+        set_all_traffic_demo_cities_enabled(False)
+        p = _build_traffic_demo_payload()
+        assert p == {'no_cities': True}
+
 
 # ─── /api/traffic endpoint ────────────────────────────────────────────────────
 

@@ -1185,7 +1185,7 @@ def _build_traffic_demo_payload():
         if pack_ids:
             id_set = {c['id'] for c in all_cities}
             pack_ids = [pid for pid in pack_ids if pid in id_set]
-            cities_pool = [c for c in all_cities if c['id'] in pack_ids]
+            cities_pool = [c for c in all_cities if c['id'] in pack_ids and c['enabled']]
         else:
             cities_pool = [c for c in all_cities if c['enabled']]
     else:  # admin_rotation
