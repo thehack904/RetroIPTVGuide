@@ -97,14 +97,32 @@
       // First render immediately
       tick();
 
-      // Schedule refresh
-      state.timer = window.setInterval(tick, state.refreshSeconds * 1000);
+      // Schedule refresh aligned to wall clock so all viewers see the same
+      // snapshot regardless of when they tuned in.  Wait until the next
+      // interval boundary (e.g. :00, :02, :05 ...) then tick on a regular
+      // setInterval from that point forward.
+      (function scheduleAligned() {
+        const intervalMs = state.refreshSeconds * 1000;
+        const delay = intervalMs - (Date.now() % intervalMs);
+        state._timerIsInterval = false;
+        state.timer = window.setTimeout(function () {
+          if (!state.activeType) return;
+          tick();
+          state._timerIsInterval = true;
+          state.timer = window.setInterval(tick, intervalMs);
+        }, delay);
+      })();
     },
 
     stop() {
       if (state.timer) {
-        window.clearInterval(state.timer);
+        if (state._timerIsInterval) {
+          window.clearInterval(state.timer);
+        } else {
+          window.clearTimeout(state.timer);
+        }
         state.timer = null;
+        state._timerIsInterval = false;
       }
       state.activeType = null;
       state.lastData = null;

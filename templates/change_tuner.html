@@ -326,7 +326,6 @@
         <div class="card-body vc-card-body">
           {% for ch in VIRTUAL_CHANNELS %}
           {% if vc_settings.get(ch.tvg_id, true) %}
-          {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': '', 'test_text': ''}) %}
           <div class="vc-enabled-item">
             <div class="vc-item-left">
               {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
@@ -339,6 +338,8 @@
                     Source: {{ 'News Feed (Auto)' if not news_feed_urls else news_feed_urls|length ~ ' RSS Feed' ~ ('' if news_feed_urls|length == 1 else 's') }}
                   {% elif ch.tvg_id == 'virtual.status' %}
                     Uptime, CPU, Memory
+                  {% elif ch.tvg_id == 'virtual.traffic' %}
+                    Mode: {{ 'Admin Rotation' if traffic_demo_config.mode != 'random_pack' else 'Random Pack' }}&nbsp;&nbsp;Interval: {{ traffic_demo_config.rotation_seconds or '120' }}s
                   {% else %}
                     {{ ch.overlay_type | title }}
                   {% endif %}
@@ -367,22 +368,7 @@
               <input type="hidden" name="action" value="update_channel_overlay_appearance">
               <input type="hidden" name="tvg_id" value="{{ ch.tvg_id }}">
               <div class="vc-prefs-fields">
-                {% if ch.tvg_id not in ('virtual.weather', 'virtual.news') %}
-                <div class="vc-prefs-field">
-                  <label>Text Color</label>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="color" name="ch_text_color" value="{{ ch_app.text_color or '#ffffff' }}">
-                    <button type="button" class="secondary small vc-prefs-reset" data-default="#ffffff">Reset</button>
-                  </div>
-                </div>
-                <div class="vc-prefs-field">
-                  <label>Background Color</label>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="color" name="ch_bg_color" value="{{ ch_app.bg_color or '#000000' }}">
-                    <button type="button" class="secondary small vc-prefs-reset" data-default="#000000">Reset</button>
-                  </div>
-                </div>
-                {% endif %}
+
                 {% if ch.tvg_id == 'virtual.news' %}
                 <div class="vc-prefs-field vc-prefs-field-wide">
                   <label>News RSS/Atom Feeds <span class="muted small">(up to 6 &mdash; cycles every {{ (1800 // [(news_feed_urls|default([])|length), 1]|max) }} s)</span></label>
@@ -431,6 +417,99 @@
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                   <a href="/weather" target="_blank" class="btn-link small">&#127780; Preview Weather Page &#8599;</a>
+                  <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+                </div>
+                {% endif %}
+                {% if ch.tvg_id == 'virtual.traffic' %}
+                <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                  <div style="padding:8px 10px; background:rgba(0,10,60,0.45);
+                              border:1px solid #3058d8; border-radius:4px;">
+                    <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
+                                 font-size:0.8em; letter-spacing:0.07em; text-transform:uppercase;
+                                 padding:0.2em 0.55em; border-radius:3px; margin-right:6px;
+                                 vertical-align:middle;">Simulated</span><span style="color:#c8d8ff; font-size:0.88em; line-height:1.6; vertical-align:middle;">
+                      &#128663; All traffic data displayed on this channel is <strong style="color:#fff;">simulated</strong>
+                      and is <strong style="color:#fff;">not</strong> real-time or live traffic information.
+                      This channel is intended for <em>virtual TV broadcast purposes only</em> and should
+                      <strong style="color:#ff9999;">not</strong> be used for navigation, travel planning, or
+                      any real-world decisions. No external API key required &mdash; all data is generated locally.
+                    </span>
+                  </div>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Rotation Mode</label>
+                  <select name="ch_traffic_demo_mode"
+                          title="Admin Rotation: cycles through checked cities.&#10;Random Pack: rotates a random subset. Unchecked cities are excluded from both.">
+                    <option value="admin_rotation" {% if traffic_demo_config.mode != 'random_pack' %}selected{% endif %}>Admin Rotation</option>
+                    <option value="random_pack" {% if traffic_demo_config.mode == 'random_pack' %}selected{% endif %}>Random Pack</option>
+                  </select>
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Rotation Interval (seconds)</label>
+                  <input type="number" name="ch_traffic_rotation_seconds"
+                         value="{{ traffic_demo_config.rotation_seconds or '120' }}"
+                         min="30" max="3600" step="1" style="width:6em;">
+                </div>
+                <div class="vc-prefs-field">
+                  <label>Random Pack Size</label>
+                  <input type="number" name="ch_traffic_pack_size"
+                         value="{{ traffic_demo_config.pack_size or '10' }}"
+                         min="1" max="50" step="1" style="width:5em;"
+                         title="Random Pack only — how many cities are picked when you click Pick Random Cities">
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;">
+                  <div class="form-row form-row-inline" style="gap:6px; flex-wrap:wrap;">
+                    <button type="button" class="secondary small" id="traffic-demo-pick-random-btn"
+                            aria-label="Pick Random Cities">&#127922; Pick Random Cities</button>
+                    <button type="button" class="secondary small" id="traffic-demo-enable-all-btn"
+                            aria-label="Enable All Cities">&#9745; Enable All</button>
+                    <button type="button" class="secondary small" id="traffic-demo-disable-all-btn"
+                            aria-label="Disable All Cities">&#9744; Disable All</button>
+                    <span id="traffic-demo-action-status" class="muted small" aria-live="polite"></span>
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;flex-basis:100%;width:100%;">
+                  <label>&#127961; Cities (US cities with population &gt; 1M)</label>
+                  <table class="traffic-demo-city-table" id="traffic-demo-city-table"
+                         style="width:100%;border-collapse:collapse;font-size:clamp(11px,1.3vw,14px);margin-top:4px;">
+                    <thead>
+                      <tr style="color:#ffd700;text-align:left;border-bottom:1px solid #3058d8;">
+                        <th style="padding:3px 6px;">Enabled</th>
+                        <th style="padding:3px 6px;">City</th>
+                        <th style="padding:3px 6px;">State</th>
+                        <th style="padding:3px 6px;">Population</th>
+                        <th style="padding:3px 6px;" title="Higher frequency = city appears more often in rotation">Frequency</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {% for city in traffic_demo_cities %}
+                      <tr data-city-id="{{ city.id }}"
+                          style="border-bottom:1px solid rgba(48,88,216,0.3);">
+                        <td style="padding:3px 6px; text-align:center;">
+                          <input type="checkbox" class="traffic-city-enabled"
+                                 {% if city.enabled %}checked{% endif %}
+                                 data-city-id="{{ city.id }}">
+                        </td>
+                        <td style="padding:3px 6px;">{{ city.name }}</td>
+                        <td style="padding:3px 6px;">{{ city.state }}</td>
+                        <td style="padding:3px 6px;">{{ "{:,}".format(city.population) }}</td>
+                        <td style="padding:3px 6px;">
+                          <input type="number" class="traffic-city-weight"
+                                 value="{{ city.weight }}" min="1" max="10" step="1"
+                                 data-city-id="{{ city.id }}"
+                                 style="width:4em;">
+                        </td>
+                      </tr>
+                      {% endfor %}
+                    </tbody>
+                  </table>
+                  <div class="muted small" style="margin-top:4px;">
+                    Check or uncheck cities to include or exclude them from rotation. Changes save immediately.
+                    Use Save above to persist the Rotation Mode and Interval settings.
+                  </div>
+                </div>
+                <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                  <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
                   <span class="muted small" style="margin-left:8px;">Save settings first.</span>
                 </div>
                 {% endif %}
@@ -859,6 +938,103 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   btn.addEventListener('click', doLookup);
   zipEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); doLookup(); } });
+})();
+
+// Traffic Demo Mode — city table interactions
+(function() {
+  function setActionStatus(msg, isError) {
+    var el = document.getElementById('traffic-demo-action-status');
+    if (!el) return;
+    el.textContent = msg;
+    el.style.color = isError ? '#ee2222' : '#22cc44';
+  }
+
+  // Auto-save city enabled/weight on change
+  document.querySelectorAll('.traffic-city-enabled, .traffic-city-weight').forEach(function(el) {
+    el.addEventListener('change', function() {
+      var cityId = this.dataset.cityId;
+      var row = document.querySelector('tr[data-city-id="' + cityId + '"]');
+      if (!row) return;
+      var enabledEl = row.querySelector('.traffic-city-enabled');
+      var weightEl  = row.querySelector('.traffic-city-weight');
+      var enabled = enabledEl ? enabledEl.checked : true;
+      var weight  = weightEl  ? parseInt(weightEl.value, 10) || 1 : 1;
+      fetch('/api/traffic/demo/cities/' + cityId, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({enabled: enabled, weight: weight}),
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          setActionStatus(d.ok ? '\u2713 Saved' : ('\u2717 ' + (d.error || 'Error')), !d.ok);
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  });
+
+  // Enable All
+  var enableAllBtn = document.getElementById('traffic-demo-enable-all-btn');
+  if (enableAllBtn) {
+    enableAllBtn.addEventListener('click', function() {
+      fetch('/api/traffic/demo/enable_all', {method: 'POST', credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            document.querySelectorAll('.traffic-city-enabled').forEach(function(cb) { cb.checked = true; });
+            setActionStatus('\u2713 All cities enabled', false);
+          } else { setActionStatus('\u2717 Error', true); }
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  }
+
+  // Disable All
+  var disableAllBtn = document.getElementById('traffic-demo-disable-all-btn');
+  if (disableAllBtn) {
+    disableAllBtn.addEventListener('click', function() {
+      fetch('/api/traffic/demo/disable_all', {method: 'POST', credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            document.querySelectorAll('.traffic-city-enabled').forEach(function(cb) { cb.checked = false; });
+            setActionStatus('\u2713 All cities disabled', false);
+          } else { setActionStatus('\u2717 Error', true); }
+          setTimeout(function() { setActionStatus(''); }, 2500);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); });
+    });
+  }
+
+  // Pick Random Cities
+  var pickRandomBtn = document.getElementById('traffic-demo-pick-random-btn');
+  if (pickRandomBtn) {
+    pickRandomBtn.addEventListener('click', function() {
+      var packSizeEl = document.querySelector('input[name="ch_traffic_pack_size"]');
+      var n = packSizeEl ? (parseInt(packSizeEl.value, 10) || 10) : 10;
+      pickRandomBtn.disabled = true;
+      fetch('/api/traffic/demo/pick_random', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({pack_size: n}),
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok && d.cities) {
+            var chosenIds = d.cities.map(function(c) { return String(c.id); });
+            var modeEl = document.querySelector('select[name="ch_traffic_demo_mode"]');
+            if (modeEl) modeEl.value = 'random_pack';
+            setActionStatus('\u2713 Random pack of ' + d.cities.length + ' cities selected', false);
+          } else { setActionStatus('\u2717 ' + (d.error || 'Error'), true); }
+          setTimeout(function() { setActionStatus(''); }, 3000);
+        })
+        .catch(function() { setActionStatus('\u2717 Network error', true); })
+        .finally(function() { pickRandomBtn.disabled = false; });
+    });
+  }
 })();
 
 // Audio file upload and delete

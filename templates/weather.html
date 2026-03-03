@@ -603,21 +603,32 @@
     });
   }
 
+  // Must match the interval used in app.py's api_weather() ms_until_next computation
+  const WEATHER_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+  const ERROR_RETRY_MS              = 60 * 1000;
+
+  let _refreshTimer = null;
+
   async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
     try {
       const resp = await fetch('/api/weather');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       build(data);
       applyMusic(new URLSearchParams(window.location.search).get('embedded') ? '' : (data.music_file || ''));
+      // Refresh aligned to wall clock: server tells us exactly how long until
+      // the next 5-minute boundary so all viewers stay in sync.
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : WEATHER_REFRESH_INTERVAL_MS;
+      _refreshTimer = setTimeout(load, msUntilNext);
     } catch (e) {
       const frame = document.getElementById('wxFrame');
       frame.innerHTML = `<div class="wx-loading">Unable to load weather data.</div>`;
+      _refreshTimer = setTimeout(load, ERROR_RETRY_MS);
     }
   }
 
   load();
-  setInterval(load, 5 * 60 * 1000);   // refresh every 5 minutes
 })();
 </script>
 </body>
