@@ -484,7 +484,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Overlay types that have a dedicated standalone page we can iframe in.
     // ?embedded=1 tells those pages to suppress their own audio (parent already plays it).
-    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1', traffic: '/traffic?embedded=1' };
+    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1', traffic: '/traffic?embedded=1', status: '/status?embedded=1' };
 
     function fsElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || null;
