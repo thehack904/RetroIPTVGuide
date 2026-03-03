@@ -295,6 +295,7 @@
       color: #ffd700;
       animation: tf-scroll 40s linear infinite;
       padding-left: 100%;
+      will-change: transform;
     }
     @keyframes tf-scroll {
       from { transform: translateX(0); }
@@ -765,8 +766,13 @@
       el = document.getElementById('tf-pct-red');       if (el) el.textContent=redPct+'%';
       el = document.getElementById('tf-inc-count');     if (el) el.textContent=incCount;
       el = document.getElementById('tf-incident-list'); if (el) el.innerHTML=incidentItems;
-      el = document.getElementById('tf-ticker');
-      if (el) { el.textContent=''; el.appendChild(document.createTextNode(tickText.repeat(3))); }
+      el = document.querySelector('.tf-ticker-bar');
+      if (el) {
+        el.innerHTML =
+          '<div class="tf-ticker-label">Traffic:</div>'+
+          '<div class="tf-ticker-scroll"><span class="tf-ticker-track" id="tf-ticker">'+
+            esc(tickText).repeat(3)+'</span></div>';
+      }
 
       if (_lastCityId !== cityId || _lastTimeSlot !== timeSlot) {
         updateMap(city, greenPct, yellowPct, redPct, makeSeed(cityId, timeSlot));
