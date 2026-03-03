@@ -253,14 +253,14 @@ class TestApiWeatherMusicFile:
 class TestChangeTunerAudioUI:
     def test_audio_upload_section_present(self, client):
         login(client)
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert resp.status_code == 200
         assert b'audio-upload-section' in resp.data
         assert b'audio_file' in resp.data
 
     def test_music_dropdown_present(self, client):
         login(client)
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert b'ch_music_file' in resp.data
 
     def test_save_music_file_via_change_tuner(self, client, tmp_path, monkeypatch):
@@ -269,7 +269,7 @@ class TestChangeTunerAudioUI:
         monkeypatch.setattr(app_module, "AUDIO_UPLOAD_DIR", str(d))
         (d / "loop.mp3").write_bytes(b'x')
         login(client)
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
             'ch_text_color': '',
@@ -291,7 +291,7 @@ class TestChangeTunerAudioUI:
         (d / "loop.mp3").write_bytes(b'x')
         save_channel_music_file('virtual.weather', 'loop.mp3')
         login(client)
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
             'ch_text_color': '',

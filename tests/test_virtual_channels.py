@@ -178,13 +178,13 @@ class TestChangeTunerVirtualChannels:
 
     def test_virtual_channels_section_in_page(self, client):
         login(client, "admin", "adminpass")
-        resp = client.get("/change_tuner")
+        resp = client.get("/virtual_channels")
         assert b"Virtual Channels" in resp.data
 
     def test_admin_can_disable_virtual_channel(self, client):
         login(client, "admin", "adminpass")
         # Omit news (unchecked) — only submit checked channels, matching real browser behaviour
-        resp = client.post("/change_tuner", data={
+        resp = client.post("/virtual_channels", data={
             "action": "update_virtual_channels",
             "vc_virtual.weather": "1",
             "vc_virtual.status": "1",
@@ -204,7 +204,7 @@ class TestChangeTunerVirtualChannels:
             "virtual.traffic": False,
         })
         login(client, "admin", "adminpass")
-        resp = client.post("/change_tuner", data={
+        resp = client.post("/virtual_channels", data={
             "action": "update_virtual_channels",
             "vc_virtual.news": "1",
             "vc_virtual.weather": "1",
@@ -362,13 +362,13 @@ class TestOverlayAppearance:
 class TestChangeTunerOverlayAppearance:
     def test_section_present_in_page(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         # Each channel has a per-channel settings button; overlay action present in page
         assert b'update_channel_overlay_appearance' in resp.data
 
     def test_admin_can_save_per_channel_appearance(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.status',
             'ch_text_color': '#ffffff',
@@ -383,7 +383,7 @@ class TestChangeTunerOverlayAppearance:
 
     def test_invalid_color_shows_warning(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.status',
             'ch_text_color': 'notacolor',
@@ -395,7 +395,7 @@ class TestChangeTunerOverlayAppearance:
 
     def test_unknown_tvg_id_shows_warning(self, client):
         login(client, 'admin', 'adminpass')
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.nonexistent',
             'ch_text_color': '#ffffff',
@@ -408,7 +408,7 @@ class TestChangeTunerOverlayAppearance:
     def test_clear_test_text_saves_empty(self, client):
         save_channel_overlay_appearance('virtual.weather', {'text_color': '', 'bg_color': '', 'test_text': 'old'})
         login(client, 'admin', 'adminpass')
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
             'ch_text_color': '',
@@ -419,7 +419,7 @@ class TestChangeTunerOverlayAppearance:
 
     def test_channels_can_have_independent_settings(self, client):
         login(client, 'admin', 'adminpass')
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.status',
             'ch_text_color': '#ff0000',
@@ -427,7 +427,7 @@ class TestChangeTunerOverlayAppearance:
             'ch_test_text': 'status test',
         }, follow_redirects=True)
         # Weather channel: appearance fields are always cleared via HTTP route
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
             'ch_text_color': '#00ff00',
@@ -450,7 +450,7 @@ class TestChangeTunerOverlayAppearance:
                                         {'text_color': '#abcdef', 'bg_color': '#123456',
                                          'test_text': 'This is test Text!'})
         login(client, 'admin', 'adminpass')
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.weather',
             'ch_text_color': '#abcdef',
@@ -474,7 +474,7 @@ class TestChangeTunerOverlayAppearance:
                                         {'text_color': '#abcdef', 'bg_color': '#123456',
                                          'test_text': 'Breaking!'})
         login(client, 'admin', 'adminpass')
-        client.post('/change_tuner', data={
+        client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.news',
             'ch_text_color': '#abcdef',
@@ -621,7 +621,7 @@ class TestNewsFeedUrl:
     def test_api_news_overlay_prefs_saves_feed_urls(self, client):
         from app import get_news_feed_urls
         login(client, "admin", "adminpass")
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.news',
             'ch_text_color': '#ffffff',
@@ -636,7 +636,7 @@ class TestNewsFeedUrl:
         from app import save_news_feed_url
         save_news_feed_url('https://feeds.bbc.co.uk/news/rss.xml')
         login(client, "admin", "adminpass")
-        resp = client.get('/change_tuner')
+        resp = client.get('/virtual_channels')
         assert b'https://feeds.bbc.co.uk/news/rss.xml' in resp.data
 
 
@@ -700,7 +700,7 @@ class TestNewsFeedUrls:
     def test_save_multiple_via_form(self, client):
         from app import get_news_feed_urls
         login(client, "admin", "adminpass")
-        resp = client.post('/change_tuner', data={
+        resp = client.post('/virtual_channels', data={
             'action': 'update_channel_overlay_appearance',
             'tvg_id': 'virtual.news',
             'ch_news_rss_url_1': 'https://feed1.example.com/rss.xml',

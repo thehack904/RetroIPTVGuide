@@ -2191,6 +2191,105 @@ def set_tuner(name):
     return redirect(dest)
 
 
+@app.route('/virtual_channels', methods=['GET', 'POST'])
+@login_required
+def virtual_channels():
+    if current_user.username != 'admin':
+        log_event(current_user.username, "Unauthorized access attempt to /virtual_channels")
+        return redirect(url_for('guide'))
+
+    if request.method == 'POST':
+        action = request.form.get("action")
+
+        if action == "update_virtual_channels":
+            new_settings = {}
+            for ch in VIRTUAL_CHANNELS:
+                tvg_id = ch['tvg_id']
+                new_settings[tvg_id] = request.form.get(f"vc_{tvg_id}", "0") == "1"
+            try:
+                save_virtual_channel_settings(new_settings)
+                log_event(current_user.username, "Updated virtual channel settings")
+                flash("Virtual channel settings saved.", "success")
+            except Exception:
+                flash("Failed to save virtual channel settings.", "warning")
+
+        elif action == "update_virtual_channel_order":
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            raw_order = request.form.getlist('channel_order[]')
+            order = [tid for tid in raw_order if tid in valid_ids]
+            if set(order) == valid_ids:
+                try:
+                    save_virtual_channel_order(order)
+                    return ('', 204)
+                except Exception:
+                    return ('Failed to save channel order', 500)
+            return ('Invalid channel order', 400)
+
+        elif action == "update_channel_overlay_appearance":
+            tvg_id = request.form.get('tvg_id', '').strip()
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            if tvg_id not in valid_ids:
+                flash("Unknown virtual channel.", "warning")
+            else:
+                appearance = {
+                    'text_color': request.form.get('ch_text_color', '').strip(),
+                    'bg_color': request.form.get('ch_bg_color', '').strip(),
+                    'test_text': request.form.get('ch_test_text', '').strip(),
+                }
+                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
+                    appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
+                try:
+                    save_channel_overlay_appearance(tvg_id, appearance)
+                    if tvg_id == 'virtual.news':
+                        rss_urls = [request.form.get(f'ch_news_rss_url_{i}', '').strip()
+                                    for i in range(1, 7)]
+                        save_news_feed_urls(rss_urls)
+                    if tvg_id == 'virtual.weather':
+                        weather_cfg = {
+                            'lat':           request.form.get('ch_weather_lat', '').strip(),
+                            'lon':           request.form.get('ch_weather_lon', '').strip(),
+                            'location_name': request.form.get('ch_weather_location', '').strip(),
+                            'units':         request.form.get('ch_weather_units', 'F').strip(),
+                        }
+                        save_weather_config(weather_cfg)
+                    if tvg_id == 'virtual.traffic':
+                        demo_cfg = {
+                            'mode':             request.form.get('ch_traffic_demo_mode', 'admin_rotation').strip(),
+                            'pack_size':        request.form.get('ch_traffic_pack_size', '10').strip(),
+                            'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
+                        }
+                        save_traffic_demo_config(demo_cfg)
+                    music_file = request.form.get('ch_music_file', '').strip()
+                    save_channel_music_file(tvg_id, music_file)
+                    log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
+                    flash("Channel overlay settings saved.", "success")
+                except ValueError as exc:
+                    flash(str(exc), "warning")
+                except Exception:
+                    flash("Failed to save channel overlay settings.", "warning")
+
+    vc_settings = get_virtual_channel_settings()
+    overlay_appearance = get_overlay_appearance()
+    channel_appearances = get_all_channel_appearances()
+    audio_files = list_audio_files()
+    channel_music_files = {ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
+                           for ch in VIRTUAL_CHANNELS}
+
+    return render_template(
+        "virtual_channels.html",
+        VIRTUAL_CHANNELS=get_virtual_channels(),
+        vc_settings=vc_settings,
+        overlay_appearance=overlay_appearance,
+        channel_appearances=channel_appearances,
+        news_feed_urls=get_news_feed_urls(),
+        weather_config=get_weather_config(),
+        traffic_demo_config=get_traffic_demo_config(),
+        traffic_demo_cities=get_traffic_demo_cities(),
+        audio_files=audio_files,
+        channel_music_files=channel_music_files,
+    )
+
+
 @app.route('/change_tuner', methods=['GET', 'POST'])
 @login_required
 def change_tuner():
@@ -2311,91 +2410,6 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
-        elif action == "update_virtual_channels":
-            new_settings = {}
-            for ch in VIRTUAL_CHANNELS:
-                tvg_id = ch['tvg_id']
-                # A hidden input always submits "0"; the checkbox overrides it with "1" when checked
-                new_settings[tvg_id] = request.form.get(f"vc_{tvg_id}", "0") == "1"
-            try:
-                save_virtual_channel_settings(new_settings)
-                log_event(current_user.username, "Updated virtual channel settings")
-                flash("Virtual channel settings saved.", "success")
-            except Exception:
-                flash("Failed to save virtual channel settings.", "warning")
-
-        elif action == "update_virtual_channel_order":
-            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
-            raw_order = request.form.getlist('channel_order[]')
-            order = [tid for tid in raw_order if tid in valid_ids]
-            if set(order) == valid_ids:
-                try:
-                    save_virtual_channel_order(order)
-                    return ('', 204)
-                except Exception:
-                    return ('Failed to save channel order', 500)
-            return ('Invalid channel order', 400)
-
-        elif action == "update_overlay_appearance":
-            appearance = {
-                'text_color': request.form.get('overlay_text_color', '').strip(),
-                'bg_color': request.form.get('overlay_bg_color', '').strip(),
-                'test_text': request.form.get('overlay_test_text', '').strip(),
-            }
-            try:
-                save_overlay_appearance(appearance)
-                log_event(current_user.username, "Updated overlay appearance settings")
-                flash("Overlay appearance settings saved.", "success")
-            except ValueError as exc:
-                flash(f"Invalid color value: {exc}", "warning")
-            except Exception:
-                flash("Failed to save overlay appearance settings.", "warning")
-
-        elif action == "update_channel_overlay_appearance":
-            tvg_id = request.form.get('tvg_id', '').strip()
-            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
-            if tvg_id not in valid_ids:
-                flash("Unknown virtual channel.", "warning")
-            else:
-                appearance = {
-                    'text_color': request.form.get('ch_text_color', '').strip(),
-                    'bg_color': request.form.get('ch_bg_color', '').strip(),
-                    'test_text': request.form.get('ch_test_text', '').strip(),
-                }
-                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
-                    # Text color, background color, and test banner are not used by
-                    # these full-page overlay channels; always clear them.
-                    appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
-                try:
-                    save_channel_overlay_appearance(tvg_id, appearance)
-                    if tvg_id == 'virtual.news':
-                        rss_urls = [request.form.get(f'ch_news_rss_url_{i}', '').strip()
-                                    for i in range(1, 7)]
-                        save_news_feed_urls(rss_urls)
-                    if tvg_id == 'virtual.weather':
-                        weather_cfg = {
-                            'lat':           request.form.get('ch_weather_lat', '').strip(),
-                            'lon':           request.form.get('ch_weather_lon', '').strip(),
-                            'location_name': request.form.get('ch_weather_location', '').strip(),
-                            'units':         request.form.get('ch_weather_units', 'F').strip(),
-                        }
-                        save_weather_config(weather_cfg)
-                    if tvg_id == 'virtual.traffic':
-                        demo_cfg = {
-                            'mode':             request.form.get('ch_traffic_demo_mode', 'admin_rotation').strip(),
-                            'pack_size':        request.form.get('ch_traffic_pack_size', '10').strip(),
-                            'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
-                        }
-                        save_traffic_demo_config(demo_cfg)
-                    # Save background music selection for all virtual channels
-                    music_file = request.form.get('ch_music_file', '').strip()
-                    save_channel_music_file(tvg_id, music_file)
-                    log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
-                    flash("Channel overlay settings saved.", "success")
-                except ValueError as exc:
-                    flash(str(exc), "warning")
-                except Exception:
-                    flash("Failed to save channel overlay settings.", "warning")
 
     tuners = get_tuners()
     current_tuner = get_current_tuner()
@@ -2430,13 +2444,6 @@ def change_tuner():
             sync_dt = ''
         tuner_sync_info[tname] = {'status': sync_status, 'last_sync': sync_dt}
 
-    vc_settings = get_virtual_channel_settings()
-    overlay_appearance = get_overlay_appearance()
-    channel_appearances = get_all_channel_appearances()
-    audio_files = list_audio_files()
-    channel_music_files = {ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
-                           for ch in VIRTUAL_CHANNELS}
-
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
@@ -2447,17 +2454,9 @@ def change_tuner():
         auto_refresh_interval_hours=auto_refresh_interval_hours,
         last_auto_refresh=last_auto_refresh,
         tuner_sync_info=tuner_sync_info,
-        VIRTUAL_CHANNELS=get_virtual_channels(),
-        vc_settings=vc_settings,
-        overlay_appearance=overlay_appearance,
-        channel_appearances=channel_appearances,
-        news_feed_urls=get_news_feed_urls(),
-        weather_config=get_weather_config(),
-        traffic_demo_config=get_traffic_demo_config(),
-        traffic_demo_cities=get_traffic_demo_cities(),
-        audio_files=audio_files,
-        channel_music_files=channel_music_files,
     )
+
+
 
 @app.route('/guide')
 @login_required

@@ -72,47 +72,7 @@ body.light .container-change-tuner {
   box-sizing: border-box;
 }
 
-/* ====================================================================== */
-/* Page-level Tab Navigation                                               */
-/* ====================================================================== */
-.page-tab-nav {
-  display: flex;
-  border-bottom: 2px solid var(--panel-border);
-  background: var(--card-head-bg);
-  border-radius: var(--card-border-radius) var(--card-border-radius) 0 0;
-  overflow: hidden;
-}
-
-.page-tab-btn {
-  background: transparent;
-  border: none;
-  border-bottom: 3px solid transparent;
-  padding: 14px 32px;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--muted-color);
-  cursor: pointer;
-  white-space: nowrap;
-  position: relative;
-  bottom: -2px;
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.page-tab-btn:hover {
-  color: var(--panel-text);
-  background: color-mix(in srgb, var(--input-bg) 60%, transparent 40%);
-}
-
-.page-tab-active {
-  color: var(--panel-text);
-  font-weight: 800;
-  border-bottom-color: var(--primary-color);
-}
-
-.page-tab-panel { display: block; }
-.page-tab-panel[hidden] { display: none; }
-
-/* Tuner Management tab panel content */
+/* Tuner Management page: single-column content stack */
 .tm-content {
   display: flex;
   flex-direction: column;
@@ -120,7 +80,7 @@ body.light .container-change-tuner {
   padding-top: 16px;
 }
 
-/* Virtual Channels tab panel two-column layout */
+/* Virtual Channels page: two-column layout */
 .vc-content {
   display: grid;
   grid-template-columns: 3fr 2fr;
