@@ -2834,6 +2834,13 @@ def traffic_page():
     log_event(current_user.username, "Loaded traffic page")
     return render_template('traffic.html')
 
+@app.route('/status')
+@login_required
+def status_page():
+    """Retro TV system status overlay page."""
+    log_event(current_user.username, "Loaded status page")
+    return render_template('status.html')
+
 @app.route('/api/weather', methods=['GET'])
 @login_required
 def api_weather():
@@ -2934,16 +2941,69 @@ def api_traffic_demo_roads(city_id):
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
 def api_virtual_status():
-    """Stub endpoint for virtual system status channel overlay data."""
+    """Return system status data for the virtual status channel overlay."""
+    _LOAD_WARN_THRESHOLD  = 2.0
+    _DISK_WARN_THRESHOLD  = 70
+    _DISK_ERROR_THRESHOLD = 85
+
     uptime_seconds = int((datetime.now() - APP_START_TIME).total_seconds())
     hours, rem = divmod(uptime_seconds, 3600)
     minutes = rem // 60
+
+    # System load (Unix only; graceful fallback on Windows)
+    try:
+        load1, load5, load15 = os.getloadavg()
+        load_str = f"{load1:.2f}  {load5:.2f}  {load15:.2f}"
+        load_state = "warn" if load1 > _LOAD_WARN_THRESHOLD else "good"
+    except (AttributeError, OSError):
+        load_str = "N/A"
+        load_state = "good"
+
+    # Disk free on root (Unix) or current drive (Windows)
+    try:
+        st = os.statvfs('/')
+        disk_free_gb = (st.f_bavail * st.f_frsize) / (1024 ** 3)
+        disk_total_gb = (st.f_blocks * st.f_frsize) / (1024 ** 3)
+        disk_used_pct = int(100 * (1 - st.f_bavail / st.f_blocks)) if st.f_blocks else 0
+        disk_str = f"{disk_free_gb:.1f} GB free of {disk_total_gb:.1f} GB"
+        if disk_used_pct > _DISK_ERROR_THRESHOLD:
+            disk_state = "error"
+        elif disk_used_pct > _DISK_WARN_THRESHOLD:
+            disk_state = "warn"
+        else:
+            disk_state = "good"
+    except (AttributeError, OSError):
+        disk_str = "N/A"
+        disk_state = "good"
+        disk_used_pct = 0
+
+    # Channel count
+    try:
+        channel_count = len(cached_channels)
+    except Exception:
+        channel_count = 0
+
+    items = [
+        {"label": "App Status",     "value": "Running",                     "state": "good"},
+        {"label": "Version",        "value": APP_VERSION,                    "state": "good"},
+        {"label": "Uptime",         "value": f"{hours}h {minutes}m",        "state": "good"},
+        {"label": "Platform",       "value": platform.system() + " " + platform.release(), "state": "good"},
+        {"label": "Python",         "value": sys.version.split()[0],        "state": "good"},
+        {"label": "Load Avg",       "value": load_str,                      "state": load_state},
+        {"label": "Disk",           "value": disk_str,                      "state": disk_state},
+        {"label": "Channels",       "value": str(channel_count),            "state": "good"},
+    ]
+
     return jsonify({
         "updated": datetime.now(timezone.utc).isoformat(),
-        "items": [
-            {"label": "RetroIPTVGuide", "value": "Running", "state": "good"},
-            {"label": "Uptime", "value": f"{hours}h {minutes}m", "state": "good"},
-        ],
+        "app_version": APP_VERSION,
+        "uptime": f"{hours}h {minutes}m",
+        "uptime_seconds": uptime_seconds,
+        "overall_state": "good",
+        "items": items,
+        "disk_used_pct": disk_used_pct,
+        "ticker": [item["label"] + ": " + item["value"] for item in items],
+        "ms_until_next": 30000,
     })
 
 # ─── Audio upload / management routes ────────────────────────────────────────

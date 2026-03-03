@@ -324,6 +324,62 @@ class TestApiVirtualStatus:
         data = client.get("/api/virtual/status").get_json()
         assert "updated" in data
 
+    def test_response_has_enhanced_fields(self, client):
+        login(client)
+        data = client.get("/api/virtual/status").get_json()
+        assert "app_version" in data
+        assert "uptime" in data
+        assert "uptime_seconds" in data
+        assert "overall_state" in data
+        assert "ticker" in data
+        assert "ms_until_next" in data
+        assert "disk_used_pct" in data
+
+    def test_items_have_state_field(self, client):
+        login(client)
+        data = client.get("/api/virtual/status").get_json()
+        for item in data["items"]:
+            assert "state" in item
+            assert item["state"] in ("good", "warn", "error")
+
+    def test_ticker_is_list_of_strings(self, client):
+        login(client)
+        data = client.get("/api/virtual/status").get_json()
+        assert isinstance(data["ticker"], list)
+        for entry in data["ticker"]:
+            assert isinstance(entry, str)
+
+    def test_uptime_seconds_non_negative(self, client):
+        login(client)
+        data = client.get("/api/virtual/status").get_json()
+        assert data["uptime_seconds"] >= 0
+
+
+# ─── /status page ─────────────────────────────────────────────────────────────
+
+class TestStatusPage:
+    def test_requires_login(self, client):
+        resp = client.get("/status")
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get("/status")
+        assert resp.status_code == 200
+
+    def test_page_contains_status_branding(self, client):
+        login(client)
+        resp = client.get("/status")
+        html = resp.data.decode()
+        assert "RetroIPTV" in html
+        assert "Status" in html
+
+    def test_page_contains_api_reference(self, client):
+        login(client)
+        resp = client.get("/status")
+        html = resp.data.decode()
+        assert "/api/virtual/status" in html
+
 
 
 

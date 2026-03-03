@@ -1,0 +1,535 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV Status</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #07124a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ────────────────────────────────────────────── */
+    .st-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1535cc 0%, #0c22a0 35%, #081870 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .st-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.05) 3px,
+        rgba(0,0,0,0.05) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .st-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 1.2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(48px, 8.5vw, 100px);
+    }
+
+    .st-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+    }
+
+    .st-icon-header {
+      font-size: clamp(24px, 4vw, 52px);
+      line-height: 1;
+    }
+
+    .st-brand {
+      font-size: clamp(18px, 3vw, 40px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .st-brand strong {
+      font-weight: 900;
+    }
+
+    .st-header-right {
+      font-size: clamp(18px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    /* ── Updated timestamp row ───────────────────────────────────── */
+    .st-updated {
+      font-size: clamp(10px, 1.4vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      display: flex;
+      justify-content: flex-end;
+      padding: 0.2em 1.2em 0;
+      flex-shrink: 0;
+    }
+
+    /* ── Body area ──────────────────────────────────────────────── */
+    .st-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0.5em;
+      padding: 0.45em 0.7em 0.3em;
+      min-height: 0;
+    }
+
+    /* ── Section box ─────────────────────────────────────────────── */
+    .st-box {
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 4px;
+      padding: 0.5em 0.7em;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 2px 8px rgba(0,0,0,0.5);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .st-box-title {
+      font-size: clamp(10px, 1.3vw, 16px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd700;
+      border-bottom: 1px solid #3a5ccc;
+      padding-bottom: 0.3em;
+      margin-bottom: 0.4em;
+      flex-shrink: 0;
+    }
+
+    /* ── Left panel: overall health + item list ─────────────────── */
+    .st-left {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4em;
+    }
+
+    /* Big status badge */
+    .st-health-box {
+      flex-shrink: 0;
+    }
+
+    .st-health-badge {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4em;
+      padding: 0.35em 0;
+    }
+
+    .st-health-dot {
+      width: clamp(14px, 2vw, 26px);
+      height: clamp(14px, 2vw, 26px);
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #22cc44;
+      box-shadow: 0 0 clamp(6px, 1.2vw, 14px) #22cc4490;
+    }
+
+    .st-health-dot[data-state="warn"]  { background: #ffaa00; box-shadow: 0 0 clamp(6px,1.2vw,14px) #ffaa0090; }
+    .st-health-dot[data-state="error"] { background: #ee2222; box-shadow: 0 0 clamp(6px,1.2vw,14px) #ee222290; }
+
+    .st-health-label {
+      font-size: clamp(20px, 3.5vw, 48px);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #22cc44;
+    }
+
+    .st-health-label[data-state="warn"]  { color: #ffaa00; }
+    .st-health-label[data-state="error"] { color: #ee2222; }
+
+    /* Status metric rows */
+    .st-items-box {
+      flex: 1;
+      min-height: 0;
+    }
+
+    .st-item-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.2em;
+      overflow: hidden;
+    }
+
+    .st-item {
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+      padding: 0.22em 0.4em;
+      border-radius: 3px;
+      background: rgba(0, 10, 60, 0.35);
+      border-left: 3px solid #3a5ccc;
+    }
+
+    .st-item[data-state="warn"]  { border-left-color: #ffaa00; }
+    .st-item[data-state="error"] { border-left-color: #ee2222; }
+
+    .st-item-dot {
+      width: clamp(7px, 1vw, 12px);
+      height: clamp(7px, 1vw, 12px);
+      border-radius: 50%;
+      flex-shrink: 0;
+      background: #22cc44;
+    }
+
+    .st-item-dot[data-state="warn"]  { background: #ffaa00; }
+    .st-item-dot[data-state="error"] { background: #ee2222; }
+
+    .st-item-label {
+      font-size: clamp(9px, 1.2vw, 15px);
+      font-weight: 700;
+      color: #c8d8ff;
+      flex-shrink: 0;
+      min-width: clamp(60px, 7vw, 90px);
+    }
+
+    .st-item-value {
+      font-size: clamp(9px, 1.2vw, 15px);
+      font-weight: 400;
+      color: #fff;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Right panel: metric cards 2×2 grid ──────────────────────── */
+    .st-right {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr;
+      gap: 0.4em;
+    }
+
+    .st-card {
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 4px;
+      padding: 0.4em 0.6em;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      overflow: hidden;
+    }
+
+    .st-card-icon {
+      font-size: clamp(22px, 3.5vw, 48px);
+      line-height: 1;
+      margin-bottom: 0.1em;
+    }
+
+    .st-card-value {
+      font-size: clamp(14px, 2.2vw, 30px);
+      font-weight: 900;
+      line-height: 1.1;
+      color: #fff;
+    }
+
+    .st-card-value[data-state="warn"]  { color: #ffaa00; }
+    .st-card-value[data-state="error"] { color: #ee2222; }
+
+    .st-card-label {
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+      margin-top: 0.15em;
+    }
+
+    /* ── Disk usage bar ──────────────────────────────────────────── */
+    .st-disk-bar {
+      width: 100%;
+      height: clamp(5px, 0.9vw, 10px);
+      background: rgba(255,255,255,0.1);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 0.3em;
+    }
+
+    .st-disk-bar-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: #22cc44;
+      transition: width 0.6s ease;
+    }
+
+    .st-disk-bar-fill[data-state="warn"]  { background: #ffaa00; }
+    .st-disk-bar-fill[data-state="error"] { background: #ee2222; }
+
+    /* ── Breaking news ticker ───────────────────────────────────── */
+    .st-ticker-bar {
+      background: #04091f;
+      border-top: 2px solid #3a5ccc;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4.2vw, 50px);
+    }
+
+    .st-ticker-label {
+      background: #0a0e2a;
+      color: #ffd700;
+      font-size: clamp(10px, 1.5vw, 18px);
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.75em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #3a5ccc;
+    }
+
+    .st-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .st-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: st-scroll 300s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes st-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error state ─────────────────────────────────── */
+    .st-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="st-frame" id="stFrame">
+  <div class="st-loading" id="stLoading">Loading status&#8230;</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const TICKER_PX_PER_SEC = 40;
+  const FADE_MS           = 400;
+  let _refreshTimer = null;
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
+  function stateLabel(state) {
+    if (state === 'warn')  return 'Warning';
+    if (state === 'error') return 'Error';
+    return 'Healthy';
+  }
+
+  function build(data) {
+    const frame         = document.getElementById('stFrame');
+    const items         = Array.isArray(data.items) ? data.items : [];
+    const ticks         = Array.isArray(data.ticker) ? data.ticker : [];
+    const overallState  = data.overall_state || 'good';
+    const diskUsedPct   = typeof data.disk_used_pct === 'number' ? data.disk_used_pct : 0;
+    const diskState     = diskUsedPct > 85 ? 'error' : diskUsedPct > 70 ? 'warn' : 'good';
+
+    // ── ticker ──────────────────────────────────────────────────
+    const tickText = ticks.length
+      ? ticks.join(' \u2022 ') + ' \u2022 '
+      : 'System Status: Running \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    // ── item rows ────────────────────────────────────────────────
+    const itemRows = items.map(it => `
+      <div class="st-item" data-state="${esc(it.state || 'good')}">
+        <div class="st-item-dot" data-state="${esc(it.state || 'good')}"></div>
+        <div class="st-item-label">${esc(it.label)}</div>
+        <div class="st-item-value">${esc(it.value)}</div>
+      </div>`).join('');
+
+    // ── pull named items for the cards ───────────────────────────
+    function findItem(label) {
+      return items.find(it => it.label === label) || null;
+    }
+    const uptime   = findItem('Uptime');
+    const channels = findItem('Channels');
+    const version  = findItem('Version');
+    const pyItem   = findItem('Python');
+
+    const html = `
+      <!-- Header -->
+      <div class="st-header">
+        <div class="st-header-left">
+          <span class="st-icon-header">🖥️</span>
+          <span class="st-brand">RetroIPTV <strong>Status</strong></span>
+        </div>
+        <div class="st-header-right">System Health</div>
+      </div>
+      <!-- Updated timestamp -->
+      <div class="st-updated">
+        <span>UPDATED: ${data.updated ? formatLocalTime(data.updated) : ''}</span>
+      </div>
+      <!-- Body -->
+      <div class="st-body">
+        <!-- Left column -->
+        <div class="st-left">
+          <!-- Overall health -->
+          <div class="st-box st-health-box">
+            <div class="st-box-title">Overall Status</div>
+            <div class="st-health-badge">
+              <div class="st-health-dot" data-state="${esc(overallState)}"></div>
+              <div class="st-health-label" data-state="${esc(overallState)}">${esc(stateLabel(overallState))}</div>
+            </div>
+          </div>
+          <!-- Metrics list -->
+          <div class="st-box st-items-box">
+            <div class="st-box-title">Metrics</div>
+            <div class="st-item-list">${itemRows}</div>
+          </div>
+        </div>
+        <!-- Right column: 2×2 cards -->
+        <div class="st-right">
+          <!-- Uptime card -->
+          <div class="st-card">
+            <div class="st-card-icon">⏱️</div>
+            <div class="st-card-value">${esc(uptime ? uptime.value : '--')}</div>
+            <div class="st-card-label">Uptime</div>
+          </div>
+          <!-- Channels card -->
+          <div class="st-card">
+            <div class="st-card-icon">📺</div>
+            <div class="st-card-value">${esc(channels ? channels.value : '--')}</div>
+            <div class="st-card-label">Channels</div>
+          </div>
+          <!-- Version card -->
+          <div class="st-card">
+            <div class="st-card-icon">🔖</div>
+            <div class="st-card-value">${esc(version ? version.value : '--')}</div>
+            <div class="st-card-label">App Version</div>
+          </div>
+          <!-- Disk card -->
+          <div class="st-card">
+            <div class="st-card-icon">💾</div>
+            <div class="st-card-value" data-state="${esc(diskState)}">${diskUsedPct}%</div>
+            <div class="st-card-label">Disk Used</div>
+            <div class="st-disk-bar">
+              <div class="st-disk-bar-fill" data-state="${esc(diskState)}" style="width:${diskUsedPct}%"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Ticker -->
+      <div class="st-ticker-bar">
+        <div class="st-ticker-label">Status:</div>
+        <div class="st-ticker-scroll">
+          <span class="st-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    frame.style.transition = `opacity ${FADE_MS}ms ease`;
+    frame.style.opacity = '0';
+    requestAnimationFrame(function () {
+      frame.innerHTML = html;
+      requestAnimationFrame(function () {
+        frame.style.opacity = '1';
+        setTimeout(function () {
+          const track = frame.querySelector('.st-ticker-track');
+          if (track && track.offsetWidth > 0) {
+            const dur = (track.offsetWidth / TICKER_PX_PER_SEC).toFixed(1);
+            track.style.animationDuration = dur + 's';
+          }
+        }, 0);
+      });
+    });
+  }
+
+  async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    try {
+      const resp = await fetch('/api/virtual/status');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+      build(data);
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : 30000;
+      _refreshTimer = setTimeout(load, msUntilNext);
+    } catch (e) {
+      const frame = document.getElementById('stFrame');
+      frame.innerHTML = `<div class="st-loading">Unable to load status data.</div>`;
+      _refreshTimer = setTimeout(load, 30000);
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
