@@ -222,4 +222,26 @@
   /* Expose globally so grid-adapt.js and other modules can call the canonical
      zoom-aware guide height computation rather than clearing the style. */
   window.updateGuideHeight = updateGuideHeight;
+
+  /**
+   * Resets the video player and channel column back to their default sizes by
+   * removing saved localStorage values and clearing any inline size styles.
+   * Called by display-size.js when the user selects "Default".
+   */
+  window.resetVideoSize = function () {
+    try {
+      localStorage.removeItem(LS_VIDEO_W);
+      localStorage.removeItem(LS_VIDEO_H);
+      localStorage.removeItem(LS_CHAN_W);
+    } catch (e) {}
+    var video = document.getElementById('video');
+    if (video) {
+      video.style.removeProperty('width');
+      video.style.removeProperty('height');
+      video.style.removeProperty('max-height');
+    }
+    document.documentElement.style.removeProperty('--chan-col-width');
+    updateGuideHeight();
+    reflow();
+  };
 })();
