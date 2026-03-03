@@ -439,9 +439,14 @@
                 <div class="vc-prefs-field">
                   <label>Rotation Mode</label>
                   <select name="ch_traffic_demo_mode">
-                    <option value="admin_rotation" {% if traffic_demo_config.mode != 'random_pack' %}selected{% endif %}>Admin Rotation (all enabled cities)</option>
+                    <option value="admin_rotation" {% if traffic_demo_config.mode != 'random_pack' %}selected{% endif %}>Admin Rotation</option>
                     <option value="random_pack" {% if traffic_demo_config.mode == 'random_pack' %}selected{% endif %}>Random Pack</option>
                   </select>
+                  <div class="muted small" style="margin-top:4px;">
+                    <strong>Admin Rotation</strong> cycles through the cities checked below.
+                    <strong>Random Pack</strong> rotates through a random subset picked via the button below.
+                    Unchecked cities are excluded from both modes.
+                  </div>
                 </div>
                 <div class="vc-prefs-field">
                   <label>Rotation Interval (seconds)</label>
@@ -503,8 +508,8 @@
                     </tbody>
                   </table>
                   <div class="muted small" style="margin-top:4px;">
-                    City changes are saved immediately when you toggle or change weight.
-                    Use Save to persist rotation mode &amp; interval.
+                    Check or uncheck cities to include or exclude them from rotation. Changes save immediately.
+                    Use Save above to persist the Rotation Mode and Interval settings.
                   </div>
                 </div>
                 <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
