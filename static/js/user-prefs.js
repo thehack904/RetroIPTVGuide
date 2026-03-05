@@ -22,13 +22,14 @@
 
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
-    { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false },
+    { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false, auto_fullscreen_delay: 0 },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
   let sizzleTimer   = null;
   let sizzleHls     = null;
   let sizzleVideo   = null;
+  let autoFsTimer   = null;
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   function log() {
@@ -269,6 +270,56 @@
     });
   }
 
+  // ─── Auto-fullscreen ──────────────────────────────────────────────────────
+  const _AUTO_FS_VALID = [0, 30, 90, 180];
+
+  /** Mark the menu item matching the current delay as active (bold + checkmark). */
+  function syncAutoFullscreenMenuItems() {
+    const delay = prefs.auto_fullscreen_delay || 0;
+    document.querySelectorAll('[data-auto-fs-delay]').forEach(function (el) {
+      // Lazily cache the original label so re-runs never accumulate prefixes
+      if (!el.dataset.autoFsLabel) el.dataset.autoFsLabel = el.textContent.trim();
+      const val = parseInt(el.dataset.autoFsDelay, 10);
+      el.style.fontWeight = val === delay ? 'bold' : '';
+      el.textContent = (val === delay ? '✔ ' : '') + el.dataset.autoFsLabel;
+    });
+  }
+
+  async function setAutoFullscreenDelay(delay) {
+    if (!_AUTO_FS_VALID.includes(delay)) return;
+    await savePatch({ auto_fullscreen_delay: delay });
+    syncAutoFullscreenMenuItems();
+    log('auto-fullscreen delay set to', delay);
+  }
+
+  /** Cancel any pending auto-fullscreen timer. */
+  function cancelAutoFullscreen() {
+    if (autoFsTimer) { clearTimeout(autoFsTimer); autoFsTimer = null; }
+  }
+
+  /**
+   * Schedule a fullscreen request on the #video element after the saved delay.
+   * Call this whenever a new channel starts playing.
+   * Passing delay=0 or no saved delay is a no-op.
+   */
+  function scheduleAutoFullscreen() {
+    cancelAutoFullscreen();
+    const delay = prefs.auto_fullscreen_delay || 0;
+    if (!delay) return;
+    autoFsTimer = setTimeout(function () {
+      autoFsTimer = null;
+      const video = document.getElementById('video');
+      if (!video) return;
+      const req = video.requestFullscreen
+               || video.webkitRequestFullscreen
+               || video.mozRequestFullscreen;
+      if (req) {
+        req.call(video).catch(function (e) { log('auto-fullscreen request failed', e); });
+      }
+    }, delay * 1000);
+    log('auto-fullscreen scheduled in', delay, 'seconds');
+  }
+
   // ─── Right-click context menu ──────────────────────────────────────────────
   let ctxMenu = null;
   let ctxTarget = null;   // the .chan-name element that was right-clicked
@@ -365,6 +416,7 @@
     syncAutoLoadButton();
     syncSizzleButton();
     syncShowHiddenButton();
+    syncAutoFullscreenMenuItems();
     scheduleAutoLoad();
 
     if (prefs.sizzle_reels_enabled) {
@@ -384,6 +436,14 @@
     wire('mobileClearAutoLoadChannel', clearAutoLoad);
     wire('mobileToggleSizzleReels',  toggleSizzleReels);
     wire('mobileToggleShowHidden',   toggleShowHidden);
+
+    // Wire data-auto-fs-delay buttons (desktop submenu + mobile submenu)
+    document.querySelectorAll('[data-auto-fs-delay]').forEach(function (el) {
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        setAutoFullscreenDelay(parseInt(el.dataset.autoFsDelay, 10));
+      });
+    });
 
     // Right-click context menu on channel names
     document.querySelectorAll('.chan-name').forEach(function (el) {
@@ -406,13 +466,15 @@
   // ─── Public API ───────────────────────────────────────────────────────────
   window.__userPrefs = {
     get prefs() { return prefs; },
-    save:             savePatch,
-    setAutoLoad:      setAutoLoad,
-    clearAutoLoad:    clearAutoLoad,
-    toggleSizzleReels: toggleSizzleReels,
-    toggleShowHidden: toggleShowHidden,
-    hideChannel:      hideChannel,
-    unhideChannel:    unhideChannel
+    save:                  savePatch,
+    setAutoLoad:           setAutoLoad,
+    clearAutoLoad:         clearAutoLoad,
+    toggleSizzleReels:     toggleSizzleReels,
+    toggleShowHidden:      toggleShowHidden,
+    hideChannel:           hideChannel,
+    unhideChannel:         unhideChannel,
+    scheduleAutoFullscreen: scheduleAutoFullscreen,
+    cancelAutoFullscreen:  cancelAutoFullscreen,
   };
 
   // Bootstrap when DOM is ready

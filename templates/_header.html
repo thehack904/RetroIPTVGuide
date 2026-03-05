@@ -50,6 +50,15 @@
                 <ul class="submenu-content">
                   <li><a href="#" id="setAutoLoadChannel">Set Auto-Load Channel</a></li>
                   <li><a href="#" id="clearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+                  <li class="submenu">
+                    <a href="#">⛶ Auto-Fullscreen</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" data-auto-fs-delay="0">Disabled</a></li>
+                      <li><a href="#" data-auto-fs-delay="30">30 seconds</a></li>
+                      <li><a href="#" data-auto-fs-delay="90">1 min 30 sec</a></li>
+                      <li><a href="#" data-auto-fs-delay="180">3 minutes</a></li>
+                    </ul>
+                  </li>
                 </ul>
               </li>
               {% endif %}
@@ -191,6 +200,22 @@
             <ul id="mobileChannelPrefsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
               <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Set Auto-Load Channel</a></li>
               <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileAutoFsList"
+                  type="button">
+                  ⛶ Auto-Fullscreen
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileAutoFsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" data-auto-fs-delay="0">Disabled</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-auto-fs-delay="30">30 seconds</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-auto-fs-delay="90">1 min 30 sec</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-auto-fs-delay="180">3 minutes</a></li>
+                </ul>
+              </li>
             </ul>
           </li>
           {% endif %}

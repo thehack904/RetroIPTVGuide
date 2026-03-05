@@ -427,6 +427,7 @@ _DEFAULT_PREFS = {
     "hidden_channels": [],
     "sizzle_reels_enabled": False,
     "default_theme": None,
+    "auto_fullscreen_delay": 0,
 }
 
 
@@ -2114,9 +2115,16 @@ def manage_users():
             ch_name = request.form.get('auto_load_channel_name', '').strip() or ch_id
             auto_load = {"id": ch_id, "name": ch_name} if ch_id else None
             raw_theme = request.form.get('default_theme', '').strip() or None
+            try:
+                afd = int(request.form.get('auto_fullscreen_delay', '0').strip())
+            except (TypeError, ValueError):
+                afd = 0
+            if afd not in (0, 30, 90, 180):
+                afd = 0
             save_user_prefs(username, {
                 "auto_load_channel": auto_load,
                 "default_theme": raw_theme,
+                "auto_fullscreen_delay": afd,
             })
             log_event(current_user.username, f"Updated prefs for {username}")
             flash(f"✅ Preferences saved for '{username}'.")
@@ -2753,6 +2761,14 @@ def api_user_prefs_post():
         alc = data["auto_load_channel"]
         if not (isinstance(alc, dict) and alc.get("id")):
             data["auto_load_channel"] = None
+
+    # Sanitise auto_fullscreen_delay: must be one of the allowed values
+    if "auto_fullscreen_delay" in data:
+        try:
+            afd = int(data["auto_fullscreen_delay"])
+        except (TypeError, ValueError):
+            afd = 0
+        data["auto_fullscreen_delay"] = afd if afd in (0, 30, 90, 180) else 0
 
     save_user_prefs(current_user.username, data)
     return jsonify({"status": "ok", "prefs": get_user_prefs(current_user.username)})

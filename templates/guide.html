@@ -663,6 +663,9 @@ function playChannel(url, cid, name) {
     window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
 
+    // Cancel any pending auto-fullscreen from a previous channel selection
+    if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
+
     fetch("/play_channel", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -713,6 +716,7 @@ function playChannel(url, cid, name) {
             video.play().catch(()=>{});
             if (unmuteBtn) unmuteBtn.hidden = false;
         });
+        if (window.__userPrefs) window.__userPrefs.scheduleAutoFullscreen();
     }
 
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }

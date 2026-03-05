@@ -50,6 +50,7 @@ class TestUserPrefsHelpers:
         assert prefs["auto_load_channel"] is None
         assert prefs["hidden_channels"] == []
         assert prefs["sizzle_reels_enabled"] is False
+        assert prefs["auto_fullscreen_delay"] == 0
 
     def test_all_default_keys_present(self):
         prefs = get_user_prefs("nobody")
@@ -222,6 +223,43 @@ class TestApiUserPrefsPost:
                     content_type="application/json")
         assert get_user_prefs("testuser")["auto_load_channel"] is None
 
+    def test_set_auto_fullscreen_delay_valid(self, client):
+        login(client)
+        for delay in (0, 30, 90, 180):
+            resp = client.post("/api/user_prefs",
+                               data=json.dumps({"auto_fullscreen_delay": delay}),
+                               content_type="application/json")
+            assert resp.status_code == 200
+            assert get_user_prefs("testuser")["auto_fullscreen_delay"] == delay
+
+    def test_set_auto_fullscreen_delay_invalid_resets_to_zero(self, client):
+        login(client)
+        save_user_prefs("testuser", {"auto_fullscreen_delay": 30})
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"auto_fullscreen_delay": 999}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["auto_fullscreen_delay"] == 0
+
+    def test_set_auto_fullscreen_delay_non_integer_resets_to_zero(self, client):
+        login(client)
+        save_user_prefs("testuser", {"auto_fullscreen_delay": 30})
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"auto_fullscreen_delay": "bad"}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["auto_fullscreen_delay"] == 0
+
+    def test_auto_fullscreen_delay_preserved_on_partial_update(self, client):
+        login(client)
+        save_user_prefs("testuser", {"auto_fullscreen_delay": 90, "sizzle_reels_enabled": False})
+        client.post("/api/user_prefs",
+                    data=json.dumps({"sizzle_reels_enabled": True}),
+                    content_type="application/json")
+        prefs = get_user_prefs("testuser")
+        assert prefs["auto_fullscreen_delay"] == 90   # unchanged
+        assert prefs["sizzle_reels_enabled"] is True  # updated
+
 
 # ─── Admin: manage_users set_user_prefs action ───────────────────────────────
 
@@ -264,6 +302,29 @@ class TestManageUsersSetPrefs:
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"]["id"] == "tvg-fallback"
         assert prefs["auto_load_channel"]["name"] == "tvg-fallback"
+
+    def test_admin_can_set_auto_fullscreen_delay(self, client):
+        """Admin can set auto_fullscreen_delay for a user via manage_users form."""
+        login(client, "admin", "adminpass")
+        for delay in ("0", "30", "90", "180"):
+            resp = client.post("/manage_users", data={
+                "action": "set_user_prefs",
+                "username": "testuser",
+                "auto_fullscreen_delay": delay,
+            }, follow_redirects=True)
+            assert resp.status_code == 200
+            assert get_user_prefs("testuser")["auto_fullscreen_delay"] == int(delay)
+
+    def test_admin_invalid_auto_fullscreen_delay_resets_to_zero(self, client):
+        """An invalid auto_fullscreen_delay submitted by admin is normalised to 0."""
+        login(client, "admin", "adminpass")
+        save_user_prefs("testuser", {"auto_fullscreen_delay": 90})
+        client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "auto_fullscreen_delay": "999",
+        }, follow_redirects=True)
+        assert get_user_prefs("testuser")["auto_fullscreen_delay"] == 0
 
     def test_manage_users_get_returns_200_for_admin(self, client):
         """GET /manage_users renders without error for admin."""
