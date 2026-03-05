@@ -44,6 +44,8 @@ DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
+LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
+_ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -1438,7 +1440,57 @@ def list_audio_files():
         logging.exception("list_audio_files failed")
         return []
 
-# WMO weather code → (label, icon_key)
+# Default logo paths for each virtual channel (used to restore after a reset)
+_DEFAULT_CHANNEL_LOGOS = {
+    'virtual.news':    '/static/logos/virtual/news.svg',
+    'virtual.weather': '/static/logos/virtual/weather.svg',
+    'virtual.status':  '/static/logos/virtual/status.svg',
+    'virtual.traffic': '/static/logos/virtual/traffic.svg',
+}
+
+def get_channel_custom_logo(tvg_id):
+    """Return the custom logo filename for a virtual channel, or '' if none is set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?", (f"channel.{tvg_id}.logo",))
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_channel_custom_logo failed")
+        return ''
+
+def save_channel_custom_logo(tvg_id, filename):
+    """Persist a custom logo filename for a virtual channel.
+    Pass '' to clear.  Validates that the file exists in LOGO_UPLOAD_DIR."""
+    filename = str(filename).strip()
+    if filename:
+        safe = secure_filename(filename)
+        if safe != filename or not safe:
+            raise ValueError(f"Invalid logo filename: {filename!r}")
+        ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+        if ext not in _ALLOWED_LOGO_EXTENSIONS:
+            raise ValueError(f"Unsupported logo type: {ext!r}")
+        target = os.path.join(LOGO_UPLOAD_DIR, safe)
+        real_target = os.path.realpath(target)
+        real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
+        if os.path.commonpath([real_dir, real_target]) != real_dir:
+            raise ValueError(f"Invalid logo filename: {filename!r}")
+        if not os.path.isfile(target):
+            raise ValueError(f"Logo file not found: {safe!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      (f"channel.{tvg_id}.logo", filename))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_custom_logo failed")
+        raise
+
+
 # icon_key maps to SVG/emoji used in the weather template
 _WMO_MAP = {
     0:  ('Sunny',           'sunny'),
@@ -1783,9 +1835,15 @@ def save_virtual_channel_order(order):
         raise
 
 def get_virtual_channels():
-    """Return the list of virtual channel definitions in the user-defined order."""
+    """Return the list of virtual channel definitions in the user-defined order.
+    Any channel that has a custom logo uploaded will have its logo field updated."""
     import copy
     channels = copy.deepcopy(VIRTUAL_CHANNELS)
+    # Apply custom logos where set
+    for ch in channels:
+        custom = get_channel_custom_logo(ch['tvg_id'])
+        if custom:
+            ch['logo'] = f'/static/logos/virtual/{custom}'
     order = get_virtual_channel_order()
     if order:
         id_to_ch = {ch['tvg_id']: ch for ch in channels}
@@ -3062,6 +3120,63 @@ def api_audio_delete(filename):
     os.remove(target)
     log_event(current_user.username, f"Deleted audio file: {safe_name}")
     return jsonify({'ok': True})
+
+
+# ─── Logo upload / management routes ─────────────────────────────────────────
+
+@app.route('/api/logo/upload', methods=['POST'])
+@login_required
+def api_logo_upload():
+    """Upload a custom channel logo image for a virtual channel."""
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Admin access required.'}), 403
+    tvg_id = request.form.get('tvg_id', '').strip()
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if tvg_id not in valid_ids:
+        return jsonify({'error': 'Unknown virtual channel.'}), 400
+    if 'logo_file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    f = request.files['logo_file']
+    if not f or not f.filename:
+        return jsonify({'error': 'No file selected.'}), 400
+    original_name = f.filename
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_LOGO_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_LOGO_EXTENSIONS))}'}), 400
+    # Prefix filename with tvg_id slug to avoid name collisions between channels
+    slug = tvg_id.replace('.', '_')
+    dest_name = f'{slug}_logo.{ext}'
+    os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+    dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
+    f.save(dest)
+    try:
+        save_channel_custom_logo(tvg_id, dest_name)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    log_event(current_user.username, f"Uploaded logo for {tvg_id}: {dest_name}")
+    return jsonify({'ok': True, 'filename': dest_name, 'url': f'/static/logos/virtual/{dest_name}'}), 201
+
+
+@app.route('/api/logo/reset/<tvg_id>', methods=['POST'])
+@login_required
+def api_logo_reset(tvg_id):
+    """Reset a virtual channel's logo to the built-in default."""
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Admin access required.'}), 403
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if tvg_id not in valid_ids:
+        return jsonify({'error': 'Unknown virtual channel.'}), 400
+    try:
+        save_channel_custom_logo(tvg_id, '')
+    except Exception:
+        return jsonify({'error': 'Failed to reset logo.'}), 500
+    log_event(current_user.username, f"Reset logo for {tvg_id} to default")
+    default_url = _DEFAULT_CHANNEL_LOGOS.get(tvg_id, '')
+    return jsonify({'ok': True, 'url': default_url})
+
 
 @app.route('/api/overlay/settings', methods=['GET'])
 @login_required
