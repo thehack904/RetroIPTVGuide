@@ -82,11 +82,26 @@
     }
 
     .nw-header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.1em;
+    }
+
+    .nw-header-title {
       font-size: clamp(18px, 2.8vw, 38px);
       font-weight: 900;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #fff;
+    }
+
+    .nw-header-updated {
+      font-size: clamp(11px, 1.5vw, 20px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd700;
     }
 
     /* ── Body area ──────────────────────────────────────────────── */
@@ -289,6 +304,12 @@
   const FADE_MS            = 600;  // cross-fade duration between feeds
   let _refreshTimer = null;
 
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
   function esc(str) {
     return String(str || '')
       .replace(/&/g, '&amp;')
@@ -356,7 +377,10 @@
           <span class="nw-globe">🌐</span>
           <span class="nw-brand">RetroIPTV <strong>News</strong></span>
         </div>
-        <div class="nw-header-right">Latest Headlines</div>
+        <div class="nw-header-right">
+          <div class="nw-header-title">Latest Headlines</div>
+          <div class="nw-header-updated">Updated: ${data.updated ? formatLocalTime(data.updated) : ''}</div>
+        </div>
       </div>
       <!-- Body -->
       <div class="nw-body">
