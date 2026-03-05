@@ -969,16 +969,17 @@ function applyThemeGuide(theme){
 // expose to the shared theme system; theme.js will prefer this when calling setTheme(...)
 try { window.applyTheme = applyThemeGuide; } catch (e) {}
 
-/* applyTvGuide1990Capsules remains unchanged */
 function applyTvGuide1990Capsules(){
   const originalCols = Array.from(document.querySelectorAll('.chan-col')).filter(c => !c.closest('.__auto_scroll_clone'));
-  originalCols.forEach((col,i)=>{
+  let channelNum = 0;
+  originalCols.forEach((col)=>{
     const box = col.querySelector('.chan-name');
     if(!box) return;
     if(box.querySelector('.channel-number')) return;
+    channelNum++;
     const cap = document.createElement('span');
     cap.className='channel-number';
-    cap.textContent = String(i+1);
+    cap.textContent = String(channelNum);
     box.innerHTML = '';
     box.appendChild(cap);
     col.classList.add('tvguide1990-applied');
