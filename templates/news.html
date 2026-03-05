@@ -303,6 +303,8 @@
   const TICKER_PX_PER_SEC  = 40;   // constant scroll speed in px/s
   const FADE_MS            = 600;  // cross-fade duration between feeds
   let _refreshTimer = null;
+  let _lastFeedIndex = null;
+  let _feedUpdatedAt = null;
 
   function formatLocalTime(isoStr) {
     try {
@@ -424,6 +426,13 @@
       const resp = await fetch('/api/news');
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
+
+      // Only advance the "Updated" timestamp when the feed index changes.
+      if (data.feed_index !== _lastFeedIndex) {
+        _lastFeedIndex = data.feed_index;
+        _feedUpdatedAt = data.updated;
+      }
+      data.updated = _feedUpdatedAt || data.updated;
 
       build(data);
 

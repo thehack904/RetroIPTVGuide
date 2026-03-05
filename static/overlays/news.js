@@ -376,6 +376,11 @@
   // are always in sync regardless of whether anyone is tuned in.
   let _cycleTimer    = null; // fires at ms_until_next_feed to trigger next render
 
+  // Tracks the last-seen feed index so we only update the displayed "Updated"
+  // timestamp when the feed actually switches, not on every periodic refresh.
+  let _lastFeedIndex = null;
+  let _feedUpdatedAt = null;
+
   // Called when the cycle timer fires — the server has already transitioned to
   // the next slot, so a plain OverlayEngine.tick() picks up the new feed_index.
   function advanceAndTick() {
@@ -389,6 +394,12 @@
   const _origFetchData = fetchData;
   async function fetchDataWithCycling() {
     const data = await _origFetchData();
+    // Only advance the "Updated" timestamp when the feed index changes.
+    if (data.feed_index !== _lastFeedIndex) {
+      _lastFeedIndex = data.feed_index;
+      _feedUpdatedAt = data.updated;
+    }
+    data.updated = _feedUpdatedAt || data.updated;
     // Schedule the next feed transition precisely at ms_until_next_feed.
     // Only set a new timer if one isn't already pending — this prevents
     // OverlayEngine's own periodic refresh (e.g. every 60 s) from resetting
