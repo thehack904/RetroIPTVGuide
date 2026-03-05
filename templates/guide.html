@@ -198,6 +198,40 @@
         cursor: default;
     }
     #vcFsMouseTrap.active { pointer-events: auto; }
+
+    /* ── Auto-fullscreen CSS maximize ───────────────────────────────────────────
+       Applied when the scheduled auto-fullscreen timer fires.
+       Uses position:fixed so no browser user-gesture is required
+       (unlike requestFullscreen which is blocked from setTimeout callbacks). */
+    #videoPlayerWrap.auto-fs-active {
+        position: fixed !important;
+        inset: 0 !important;
+        width: 100vw !important;
+        height: 100vh !important;
+        z-index: 9800 !important;
+        background: #000 !important;
+        display: block !important;
+    }
+    /* video-resize.js may wrap #video in a .video-wrapper — fill the wrap too */
+    #videoPlayerWrap.auto-fs-active .video-wrapper {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+    }
+    #videoPlayerWrap.auto-fs-active #video {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+    }
+    /* Exit button: hidden normally, shown only in maximize mode */
+    #autoFsExitBtn { display: none !important; }
+    #videoPlayerWrap.auto-fs-active #autoFsExitBtn { display: block !important; }
+    /* In auto-fs mode, suppress the VC-specific buttons (they re-appear on exit) */
+    #videoPlayerWrap.auto-fs-active #vcFsBtn,
+    #videoPlayerWrap.auto-fs-active #vcMuteBtn { display: none !important; }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -223,6 +257,7 @@
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
         <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
         <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
+        <button id="autoFsExitBtn" class="vc-fs-btn" aria-label="Exit fullscreen" title="Exit fullscreen">✕</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
@@ -700,6 +735,7 @@ function playChannel(url, cid, name) {
         startBgMusic(chanEl.dataset.musicFile || '');
         _vcCurrentOverlayType = chanEl.dataset.overlayType || '';
         showVcFsBtn();
+        if (window.__userPrefs) window.__userPrefs.scheduleAutoFullscreen();
         return;
     }
 
@@ -1052,6 +1088,25 @@ document.addEventListener("DOMContentLoaded", () => {
   video.addEventListener('play', recomputeAll);
   video.addEventListener('pause', recomputeAll);
   video.addEventListener('ended', recomputeAll);
+});
+</script>
+
+<script>
+/* ── Auto-fullscreen exit button and ESC key handler ──────────────────────── */
+document.addEventListener('DOMContentLoaded', function () {
+  const exitBtn = document.getElementById('autoFsExitBtn');
+  if (exitBtn) {
+    exitBtn.addEventListener('click', function () {
+      if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
+    });
+  }
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape') return;
+    const wrap = document.getElementById('videoPlayerWrap');
+    if (wrap && wrap.classList.contains('auto-fs-active')) {
+      if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
+    }
+  });
 });
 </script>
 

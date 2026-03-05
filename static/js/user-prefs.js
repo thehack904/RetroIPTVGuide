@@ -292,15 +292,36 @@
     log('auto-fullscreen delay set to', delay);
   }
 
-  /** Cancel any pending auto-fullscreen timer. */
+  /**
+   * Enter CSS-based maximize: sets #videoPlayerWrap to position:fixed covering
+   * the full viewport.  No browser user-gesture is required (unlike
+   * requestFullscreen), so this reliably works when triggered from a timer.
+   */
+  function _enterCssMaximize() {
+    const wrap = document.getElementById('videoPlayerWrap');
+    if (!wrap) return;
+    wrap.classList.add('auto-fs-active');
+    log('auto-fullscreen: CSS maximize entered');
+  }
+
+  /** Remove the CSS maximize class, restoring the normal player layout. */
+  function _exitCssMaximize() {
+    const wrap = document.getElementById('videoPlayerWrap');
+    if (!wrap) return;
+    wrap.classList.remove('auto-fs-active');
+  }
+
+  /** Cancel any pending auto-fullscreen timer and exit CSS maximize if active. */
   function cancelAutoFullscreen() {
     if (autoFsTimer) { clearTimeout(autoFsTimer); autoFsTimer = null; }
+    _exitCssMaximize();
   }
 
   /**
-   * Schedule a fullscreen request on the #video element after the saved delay.
-   * Call this whenever a new channel starts playing.
-   * Passing delay=0 or no saved delay is a no-op.
+   * Schedule a CSS maximize of the video player after the saved delay.
+   * Uses CSS position:fixed (no user-gesture required) so it works reliably
+   * from a timer for both regular channels and virtual channels.
+   * A delay of 0 is a no-op.
    */
   function scheduleAutoFullscreen() {
     cancelAutoFullscreen();
@@ -308,14 +329,7 @@
     if (!delay) return;
     autoFsTimer = setTimeout(function () {
       autoFsTimer = null;
-      const video = document.getElementById('video');
-      if (!video) return;
-      const req = video.requestFullscreen
-               || video.webkitRequestFullscreen
-               || video.mozRequestFullscreen;
-      if (req) {
-        req.call(video).catch(function (e) { log('auto-fullscreen request failed', e); });
-      }
+      _enterCssMaximize();
     }, delay * 1000);
     log('auto-fullscreen scheduled in', delay, 'seconds');
   }
