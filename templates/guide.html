@@ -199,15 +199,16 @@
     }
     #vcFsMouseTrap.active { pointer-events: auto; }
 
-    /* ── Auto-fullscreen CSS maximize ───────────────────────────────────────────
-       Applied when the scheduled auto-fullscreen timer fires.
+    /* ── Auto-expand: fill the full browser window ──────────────────────────────
+       Applied when the scheduled auto-expand timer fires.
        Uses position:fixed so no browser user-gesture is required.
 
-       BROWSER SECURITY LIMIT: requestFullscreen() is blocked by all major
-       browsers from a timer callback.  This CSS maximize is the maximum that
-       can be achieved automatically.  The browser chrome (URL bar, tabs)
-       stays visible.  The user must click ⛶ (a real gesture) for true
-       OS fullscreen.  This is a hard browser security rule, not a bug. */
+       BROWSER SECURITY LIMIT: requestFullscreen() (true OS fullscreen) is
+       blocked by all major browsers from a timer callback — it requires a
+       direct user gesture (click/keypress).  This CSS expand fills the browser
+       viewport (URL bar and tabs stay visible) and is the maximum achievable
+       automatically.  The user can press ⛶ at any time for true OS fullscreen.
+       This is a hard browser security rule, not a bug. */
     #videoPlayerWrap.auto-fs-active {
         position: fixed !important;
         inset: 0 !important;
@@ -231,32 +232,11 @@
         height: 100% !important;
         object-fit: contain !important;
     }
-    /* Exit button: hidden normally, shown centered + enlarged only in CSS maximize mode */
+    /* ⛶ button: hidden normally, shown in its corner when browser-window fill is active */
     #autoFsBtn { display: none !important; }
     #videoPlayerWrap.auto-fs-active #autoFsBtn {
-        display: flex !important;
-        flex-direction: column !important;
-        align-items: center !important;
-        gap: 6px !important;
-        top: 50% !important;
-        left: 50% !important;
-        right: auto !important;
-        transform: translate(-50%, -50%);
-        font-size: 36px !important;
-        padding: 18px 30px !important;
-        border-radius: 10px !important;
-        background: rgba(0, 0, 0, 0.75) !important;
-        opacity: 0.9;
+        display: block !important;
         z-index: 30;
-    }
-    #videoPlayerWrap.auto-fs-active #autoFsBtn::after {
-        content: 'Click for true fullscreen';
-        display: block;
-        font-size: 13px !important;
-        font-family: sans-serif;
-        letter-spacing: 0.03em;
-        opacity: 0.85;
-        white-space: nowrap;
     }
     /* In auto-fs mode, suppress the VC-specific buttons (they re-appear on exit) */
     #videoPlayerWrap.auto-fs-active #vcFsBtn,
@@ -286,7 +266,7 @@
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
         <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
         <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
-        <button id="autoFsBtn" class="vc-fs-btn" aria-label="Enter fullscreen" title="Click for true fullscreen (browser security requires a click)">⛶</button>
+        <button id="autoFsBtn" class="vc-fs-btn" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>

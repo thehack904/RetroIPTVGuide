@@ -124,15 +124,16 @@
                       </select>
                     </div>
 
-                    <!-- Auto-Fullscreen delay -->
+                    <!-- Auto-expand to full browser window delay -->
                     <div class="prefs-field">
-                      <label for="auto-fs-delay-{{ user.username }}">⛶ Auto-Fullscreen Delay</label>
+                      <label for="auto-fs-delay-{{ user.username }}">⛶ Auto-Expand Delay</label>
                       <select id="auto-fs-delay-{{ user.username }}" name="auto_fullscreen_delay">
                         <option value="0"   {% if user.prefs.auto_fullscreen_delay == 0   %}selected{% endif %}>Disabled</option>
                         <option value="30"  {% if user.prefs.auto_fullscreen_delay == 30  %}selected{% endif %}>30 seconds</option>
                         <option value="90"  {% if user.prefs.auto_fullscreen_delay == 90  %}selected{% endif %}>1 min 30 sec</option>
                         <option value="180" {% if user.prefs.auto_fullscreen_delay == 180 %}selected{% endif %}>3 minutes</option>
                       </select>
+                      <small class="prefs-hint">Fills the browser window after the chosen delay. Due to a browser security limitation, automatic true OS fullscreen is not possible — the user can still press ⛶ at any time for true fullscreen.</small>
                     </div>
 
                   </div>

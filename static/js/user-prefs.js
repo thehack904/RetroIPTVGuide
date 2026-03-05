@@ -270,7 +270,7 @@
     });
   }
 
-  // ─── Auto-fullscreen ──────────────────────────────────────────────────────
+  // ─── Auto-expand (fill browser window) ──────────────────────────────────────
   const _AUTO_FS_VALID = [0, 30, 90, 180];
 
   /** Mark the menu item matching the current delay as active (bold + checkmark). */
@@ -293,7 +293,7 @@
   }
 
   /**
-   * Enter CSS-based maximize: sets #videoPlayerWrap to position:fixed covering
+   * Enter browser-window expand: sets #videoPlayerWrap to position:fixed covering
    * the full viewport.  No browser user-gesture is required (unlike
    * requestFullscreen), so this reliably works when triggered from a timer.
    */
@@ -301,34 +301,32 @@
     const wrap = document.getElementById('videoPlayerWrap');
     if (!wrap) return;
     wrap.classList.add('auto-fs-active');
-    log('auto-fullscreen: CSS maximize entered');
+    log('auto-expand: browser window fill entered');
   }
 
-  /** Remove the CSS maximize class, restoring the normal player layout. */
+  /** Remove the browser-window expand class, restoring the normal player layout. */
   function _exitCssMaximize() {
     const wrap = document.getElementById('videoPlayerWrap');
     if (!wrap) return;
     wrap.classList.remove('auto-fs-active');
   }
 
-  /** Cancel any pending auto-fullscreen timer and exit CSS maximize if active. */
+  /** Cancel any pending auto-expand timer and exit browser-window fill if active. */
   function cancelAutoFullscreen() {
     if (autoFsTimer) { clearTimeout(autoFsTimer); autoFsTimer = null; }
     _exitCssMaximize();
   }
 
   /**
-   * Schedule auto-fullscreen after the saved delay.
+   * Schedule auto-expand (fill browser window) after the saved delay.
    *
-   * BROWSER SECURITY CONSTRAINT: requestFullscreen() is blocked by every major
-   * browser when called from a timer (setTimeout/setInterval).  It requires a
-   * direct user gesture (click, keypress) — this is enforced by the spec and
+   * BROWSER SECURITY CONSTRAINT: requestFullscreen() (true OS fullscreen) is
+   * blocked by every major browser when called from a timer (setTimeout/
+   * setInterval).  It requires a direct user gesture (click, keypress) and
    * cannot be bypassed in JavaScript.  There is NO workaround.
    *
-   * Therefore the timer can only enter CSS maximize: position:fixed covering the
-   * full viewport.  The browser chrome (URL bar, tabs) remains visible.  A large
-   * centered ⛶ button is shown; the user can click it (a real user gesture) to
-   * promote to true OS fullscreen.
+   * Therefore the timer fills the browser viewport (URL bar and tabs stay
+   * visible).  The user can press ⛶ at any time for true OS fullscreen.
    *
    * A delay of 0 is a no-op.
    */
@@ -339,16 +337,16 @@
     autoFsTimer = setTimeout(function () {
       autoFsTimer = null;
       // Virtual channel active: delegate to the VC overlay mechanism so the
-      // proper weather/news iframe is shown instead of just CSS-maximizing the
+      // proper weather/news iframe is shown instead of just expanding the
       // video wrapper (which would stretch the looping video).
       if (typeof window.__vcAutoFullscreen === 'function' && window.__vcAutoFullscreen()) {
         return;
       }
-      // Regular channel: CSS maximize (the only option from a timer callback).
+      // Regular channel: fill browser window (the only option from a timer callback).
       _enterCssMaximize();
-      log('auto-fullscreen: CSS maximize entered (click ⛶ for true OS fullscreen)');
+      log('auto-expand: browser window fill entered (press ⛶ for true OS fullscreen)');
     }, delay * 1000);
-    log('auto-fullscreen scheduled in', delay, 'seconds');
+    log('auto-expand scheduled in', delay, 'seconds');
   }
 
   // ─── Right-click context menu ──────────────────────────────────────────────
