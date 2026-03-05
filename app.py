@@ -832,7 +832,7 @@ def save_news_feed_url(url):
     save_news_feed_urls([url])
 
 def get_current_feed_state(feed_count):
-    """Return ``(feed_index, ms_until_next_feed)`` driven entirely by wall-clock time.
+    """Return ``(feed_index, ms_until_next_feed, elapsed_in_slot_ms)`` driven entirely by wall-clock time.
 
     The 30-minute block is divided equally across feeds.  All clients receive
     the same ``feed_index`` at any given moment, so the cycling happens in the
@@ -840,19 +840,23 @@ def get_current_feed_state(feed_count):
 
     ``ms_until_next_feed`` is how many milliseconds remain in the current slot,
     letting clients schedule their next reload precisely at the transition point.
+
+    ``elapsed_in_slot_ms`` is how many milliseconds have elapsed since the slot
+    started, so callers can compute the exact slot-start wall-clock time.
     """
     if feed_count <= 0:
-        return 0, 5 * 60 * 1000
+        return 0, 5 * 60 * 1000, 0
     feed_duration_s = (30 * 60) / feed_count
     now = time.time()
     time_slot = int(now / feed_duration_s)
     feed_index = time_slot % feed_count
     elapsed_in_slot_s = now % feed_duration_s
+    elapsed_in_slot_ms = int(elapsed_in_slot_s * 1000)
     remaining_ms = int((feed_duration_s - elapsed_in_slot_s) * 1000)
     # Clamp to at least 1 s so clients never schedule a zero-delay reload
     _MIN_MS = 1000
     ms_until_next = max(_MIN_MS, remaining_ms)
-    return feed_index, ms_until_next
+    return feed_index, ms_until_next, elapsed_in_slot_ms
 
 
 
@@ -2793,13 +2797,16 @@ def api_news():
     feeds = get_news_feed_urls()
     feed_count = len(feeds)
     refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
-    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
+    feed_index, ms_until_next_feed, elapsed_in_slot_ms = get_current_feed_state(feed_count)
+    # Compute the wall-clock time when the current feed slot started so that
+    # all viewers see the same "Updated" time regardless of when they tune in.
+    slot_start = datetime.now(timezone.utc) - timedelta(milliseconds=elapsed_in_slot_ms)
     if feeds:
         headlines = fetch_rss_headlines(feeds[feed_index])
     else:
         headlines = []
     return jsonify({
-        "updated": datetime.now(timezone.utc).isoformat(),
+        "updated": slot_start.isoformat(),
         "headlines": headlines,
         "feed_count": feed_count,
         "feed_index": feed_index,
