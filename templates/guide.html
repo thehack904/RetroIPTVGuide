@@ -226,9 +226,21 @@
         height: 100% !important;
         object-fit: contain !important;
     }
-    /* Exit button: hidden normally, shown only in maximize mode */
+    /* Exit button: hidden normally, shown centered + enlarged only in CSS maximize mode */
     #autoFsBtn { display: none !important; }
-    #videoPlayerWrap.auto-fs-active #autoFsBtn { display: block !important; }
+    #videoPlayerWrap.auto-fs-active #autoFsBtn {
+        display: block !important;
+        top: 50% !important;
+        left: 50% !important;
+        right: auto !important;
+        transform: translate(-50%, -50%);
+        font-size: 36px !important;
+        padding: 18px 30px !important;
+        border-radius: 10px !important;
+        background: rgba(0, 0, 0, 0.75) !important;
+        opacity: 0.9;
+        z-index: 30;
+    }
     /* In auto-fs mode, suppress the VC-specific buttons (they re-appear on exit) */
     #videoPlayerWrap.auto-fs-active #vcFsBtn,
     #videoPlayerWrap.auto-fs-active #vcMuteBtn { display: none !important; }
@@ -582,6 +594,39 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
     });
+
+    /**
+     * Used by scheduleAutoFullscreen() when the timer fires (no user gesture).
+     * Opens the VC overlay iframe with the proper weather/news page.
+     * requestFullscreen() inside openVcFsOverlay may fail (no gesture) but the
+     * overlay still displays the correct content filling the browser viewport.
+     * Returns true if handled (virtual channel active), false otherwise.
+     */
+    window.__vcAutoFullscreen = function () {
+        if (!btn || btn.hidden) return false;
+        btn.click();
+        return true;
+    };
+
+    /**
+     * Used by the autoFsBtn click handler where a real user gesture is present.
+     * Calls openVcFsOverlay() directly (synchronously within the gesture chain)
+     * so requestFullscreen() on the overlay div succeeds and gives OS fullscreen.
+     * Returns true if handled (virtual channel active), false otherwise.
+     */
+    window.__vcOpenOverlayAndFs = function () {
+        if (!btn || btn.hidden) return false;
+        const pageUrl = VC_PAGE_URL[_vcCurrentOverlayType];
+        if (pageUrl) {
+            openVcFsOverlay(pageUrl);
+        } else {
+            // Overlay type without a dedicated page — fullscreen the wrapper
+            const wrapEl = document.getElementById('videoPlayerWrap');
+            const req = wrapEl && (wrapEl.requestFullscreen || wrapEl.webkitRequestFullscreen || wrapEl.mozRequestFullscreen);
+            if (req) req.call(wrapEl).catch(function (e) { console.warn('[VC FS fallback]', e); });
+        }
+        return true;
+    };
 
     const closeBtn = document.getElementById('vcFsOverlayClose');
     if (closeBtn) closeBtn.addEventListener('click', closeVcFsOverlay);
@@ -1099,26 +1144,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* #autoFsBtn is visible in CSS-maximize state (auto-fs-active class).
    * Clicking it is a real user gesture, so requestFullscreen() is permitted.
-   * On success the fullscreenchange handler removes auto-fs-active.
-   * On failure (very unlikely with a fresh gesture) we just exit CSS maximize. */
+   * For virtual channels we delegate to __vcOpenOverlayAndFs() which opens
+   * the proper weather/news iframe overlay (synchronous call chain preserves
+   * the user gesture for requestFullscreen on the overlay div).
+   * For regular channels we request fullscreen on #videoPlayerWrap directly. */
   if (autoFsBtn) {
     autoFsBtn.addEventListener('click', function () {
+      // Always clear CSS maximize first (this is safe to call before FS request)
+      if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
+
+      // Virtual channel: open the proper weather/news overlay with OS fullscreen
+      if (typeof window.__vcOpenOverlayAndFs === 'function' && window.__vcOpenOverlayAndFs()) {
+        return;
+      }
+
+      // Regular channel: request OS fullscreen on the video wrapper
       if (wrap) {
         const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
         if (req) {
-          const p = req.call(wrap);
-          if (p && typeof p.catch === 'function') {
-            p.catch(function () {
-              // Native FS still blocked — just cancel maximize gracefully
-              if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
-            });
-          }
-          // fullscreenchange will clean up auto-fs-active on success
-          return;
+          req.call(wrap).catch(function () { /* blocked — CSS maximize already cleared */ });
         }
       }
-      // No fullscreen API available — cancel CSS maximize
-      if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
     });
   }
 

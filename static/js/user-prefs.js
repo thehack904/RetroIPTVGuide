@@ -333,6 +333,13 @@
     if (!delay) return;
     autoFsTimer = setTimeout(function () {
       autoFsTimer = null;
+      // Virtual channel active: delegate to the VC overlay mechanism so the
+      // proper weather/news iframe is shown instead of just CSS-maximizing the
+      // video wrapper (which would stretch the looping video).
+      if (typeof window.__vcAutoFullscreen === 'function' && window.__vcAutoFullscreen()) {
+        return;
+      }
+      // Regular channel: try native requestFullscreen() on #videoPlayerWrap.
       const wrap = document.getElementById('videoPlayerWrap');
       if (!wrap) return;
       const req = wrap.requestFullscreen
