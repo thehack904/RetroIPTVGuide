@@ -227,8 +227,8 @@
         object-fit: contain !important;
     }
     /* Exit button: hidden normally, shown only in maximize mode */
-    #autoFsExitBtn { display: none !important; }
-    #videoPlayerWrap.auto-fs-active #autoFsExitBtn { display: block !important; }
+    #autoFsBtn { display: none !important; }
+    #videoPlayerWrap.auto-fs-active #autoFsBtn { display: block !important; }
     /* In auto-fs mode, suppress the VC-specific buttons (they re-appear on exit) */
     #videoPlayerWrap.auto-fs-active #vcFsBtn,
     #videoPlayerWrap.auto-fs-active #vcMuteBtn { display: none !important; }
@@ -257,7 +257,7 @@
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
         <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
         <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
-        <button id="autoFsExitBtn" class="vc-fs-btn" aria-label="Exit fullscreen" title="Exit fullscreen">✕</button>
+        <button id="autoFsBtn" class="vc-fs-btn" aria-label="Enter fullscreen" title="Enter fullscreen">⛶</button>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
@@ -1092,21 +1092,62 @@ document.addEventListener("DOMContentLoaded", () => {
 </script>
 
 <script>
-/* ── Auto-fullscreen exit button and ESC key handler ──────────────────────── */
+/* ── Auto-fullscreen button and ESC key handler ───────────────────────────── */
 document.addEventListener('DOMContentLoaded', function () {
-  const exitBtn = document.getElementById('autoFsExitBtn');
-  if (exitBtn) {
-    exitBtn.addEventListener('click', function () {
+  const wrap = document.getElementById('videoPlayerWrap');
+  const autoFsBtn = document.getElementById('autoFsBtn');
+
+  /* #autoFsBtn is visible in CSS-maximize state (auto-fs-active class).
+   * Clicking it is a real user gesture, so requestFullscreen() is permitted.
+   * On success the fullscreenchange handler removes auto-fs-active.
+   * On failure (very unlikely with a fresh gesture) we just exit CSS maximize. */
+  if (autoFsBtn) {
+    autoFsBtn.addEventListener('click', function () {
+      if (wrap) {
+        const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
+        if (req) {
+          const p = req.call(wrap);
+          if (p && typeof p.catch === 'function') {
+            p.catch(function () {
+              // Native FS still blocked — just cancel maximize gracefully
+              if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
+            });
+          }
+          // fullscreenchange will clean up auto-fs-active on success
+          return;
+        }
+      }
+      // No fullscreen API available — cancel CSS maximize
       if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
     });
   }
+
+  /* ESC key: exit CSS maximize when it is active.
+   * (Native fullscreen ESC is handled by the browser automatically.) */
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape') return;
-    const wrap = document.getElementById('videoPlayerWrap');
     if (wrap && wrap.classList.contains('auto-fs-active')) {
       if (window.__userPrefs) window.__userPrefs.cancelAutoFullscreen();
     }
   });
+
+  /* fullscreenchange: keep auto-fs-active class in sync with native fullscreen.
+   * - Entering native FS from CSS maximize → remove auto-fs-active (no longer needed).
+   * - Exiting native FS (e.g. user pressed ESC) → remove auto-fs-active if somehow set. */
+  function onAutoFsChange() {
+    const fsEl = document.fullscreenElement || document.webkitFullscreenElement || null;
+    if (wrap) {
+      if (!fsEl) {
+        // Exited native FS — also clear CSS maximize
+        wrap.classList.remove('auto-fs-active');
+      } else if (fsEl === wrap) {
+        // Entered native FS via our button — CSS maximize no longer needed
+        wrap.classList.remove('auto-fs-active');
+      }
+    }
+  }
+  document.addEventListener('fullscreenchange', onAutoFsChange);
+  document.addEventListener('webkitfullscreenchange', onAutoFsChange);
 });
 </script>
 

@@ -318,9 +318,13 @@
   }
 
   /**
-   * Schedule a CSS maximize of the video player after the saved delay.
-   * Uses CSS position:fixed (no user-gesture required) so it works reliably
-   * from a timer for both regular channels and virtual channels.
+   * Schedule auto-fullscreen after the saved delay.
+   * First attempts native requestFullscreen() on #videoPlayerWrap (hides browser
+   * chrome for a true fullscreen experience).  If the browser blocks the call
+   * (which happens when the user-gesture has expired — common in desktop Chrome/
+   * Firefox after a timer), falls back to CSS maximize so the video still fills
+   * the viewport.  In the CSS-maximize fallback state a ⛶ button is shown; the
+   * user can click it (a fresh user gesture) to promote to native fullscreen.
    * A delay of 0 is a no-op.
    */
   function scheduleAutoFullscreen() {
@@ -329,7 +333,20 @@
     if (!delay) return;
     autoFsTimer = setTimeout(function () {
       autoFsTimer = null;
-      _enterCssMaximize();
+      const wrap = document.getElementById('videoPlayerWrap');
+      if (!wrap) return;
+      const req = wrap.requestFullscreen
+               || wrap.webkitRequestFullscreen
+               || wrap.mozRequestFullscreen;
+      if (!req) { _enterCssMaximize(); return; }
+      const p = req.call(wrap);
+      if (p && typeof p.catch === 'function') {
+        p.catch(function (e) {
+          log('auto-fullscreen native blocked (' + e.message + '), using CSS maximize');
+          _enterCssMaximize();
+        });
+      }
+      log('auto-fullscreen: native fullscreen requested');
     }, delay * 1000);
     log('auto-fullscreen scheduled in', delay, 'seconds');
   }
