@@ -228,12 +228,12 @@
                   Use Save above to persist the Rotation Mode and Interval settings.
                 </div>
               </div>
-              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px; flex-basis:100%; width:100%;">
                 <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
               {% endif %}
-              <div class="vc-prefs-field vc-prefs-field-wide">
+              <div class="vc-prefs-field vc-prefs-field-wide" style="align-self:flex-start;">
                 <label>&#128247; Channel Logo</label>
                 <div class="vc-logo-upload-section" data-tvg-id="{{ ch.tvg_id }}">
                   <div class="form-row form-row-inline" style="gap:8px; align-items:center; margin-bottom:6px;">
@@ -241,9 +241,9 @@
                          style="width:48px;height:48px;object-fit:contain;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:#0a0e2a;">
                     <span class="muted small">Current logo</span>
                   </div>
-                  <div class="form-row form-row-inline" style="gap:6px; align-items:center;">
-                    <input type="file" class="vc-logo-file-input" id="vc-logo-input-{{ loop.index }}"
-                           accept=".png,.jpg,.jpeg,.gif,.svg,.webp" style="flex:1;">
+                  <input type="file" class="vc-logo-file-input" id="vc-logo-input-{{ loop.index }}"
+                         accept=".png,.jpg,.jpeg,.gif,.svg,.webp" style="max-width:100%; min-width:0; margin-bottom:4px;">
+                  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
                     <button type="button" class="primary small vc-logo-upload-btn"
                             data-index="{{ loop.index }}" data-tvg-id="{{ ch.tvg_id }}">Upload</button>
                     <button type="button" class="secondary small vc-logo-reset-btn"
@@ -253,7 +253,7 @@
                   <p class="muted small" style="margin:4px 0 0;">Allowed: png, jpg, jpeg, gif, svg, webp. Reset restores the default logo.</p>
                 </div>
               </div>
-              <div class="vc-prefs-field vc-prefs-field-wide">
+              <div class="vc-prefs-field vc-prefs-field-wide" style="align-self:flex-start;">
                 <label>&#127925; Background Music</label>
                 <select name="ch_music_file">
                   <option value="">&#8212; None &#8212;</option>
