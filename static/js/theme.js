@@ -46,39 +46,6 @@
     setHtmlAndBodyTheme(actualTheme);
     try { localStorage.setItem(STORAGE_KEY, name); } catch (e) {} // Store user choice (including 'auto')
 
-    // If TV Guide (Classic) selected, ensure auto-scroll is turned off and disabled.
-    // We set localStorage autoScrollEnabled to 'false' and call any available auto-scroll API.
-    try {
-      if (name === 'tvguide1990') {
-        try { localStorage.setItem('autoScrollEnabled', 'false'); } catch (e) {}
-        if (window.__autoScroll) {
-          try {
-            // Preferred API: disable()
-            if (typeof window.__autoScroll.disable === 'function') {
-              window.__autoScroll.disable();
-            } else if (typeof window.__autoScroll.toggle === 'function') {
-              // If toggle exists and status shows enabled, toggle it off
-              try {
-                var status = (typeof window.__autoScroll.status === 'function') ? window.__autoScroll.status() : null;
-                var pref = status && typeof status.pref !== 'undefined' ? status.pref : null;
-                if (pref === null && typeof window.__autoScroll.pref === 'function') {
-                  pref = window.__autoScroll.pref();
-                }
-                if (pref) window.__autoScroll.toggle();
-              } catch (inner) { /* ignore */ }
-            }
-            // Mark that auto-scroll was disabled due to theme so other code can detect it
-            try { window.__autoScroll._disabledByTheme = true; } catch (e) {}
-          } catch (e) { /* ignore */ }
-        }
-      } else {
-        // Leaving tvguide1990: clear the theme-disable marker (do NOT auto-enable auto-scroll)
-        if (window.__autoScroll && window.__autoScroll._disabledByTheme) {
-          try { delete window.__autoScroll._disabledByTheme; } catch (e) {}
-        }
-      }
-    } catch (e) { /* ignore */ }
-
     // update any controls that use data-theme-selector
     try {
       document.querySelectorAll('[data-theme-selector]').forEach(function (el) {
