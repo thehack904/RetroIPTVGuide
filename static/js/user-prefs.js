@@ -319,12 +319,17 @@
 
   /**
    * Schedule auto-fullscreen after the saved delay.
-   * First attempts native requestFullscreen() on #videoPlayerWrap (hides browser
-   * chrome for a true fullscreen experience).  If the browser blocks the call
-   * (which happens when the user-gesture has expired — common in desktop Chrome/
-   * Firefox after a timer), falls back to CSS maximize so the video still fills
-   * the viewport.  In the CSS-maximize fallback state a ⛶ button is shown; the
-   * user can click it (a fresh user gesture) to promote to native fullscreen.
+   *
+   * BROWSER SECURITY CONSTRAINT: requestFullscreen() is blocked by every major
+   * browser when called from a timer (setTimeout/setInterval).  It requires a
+   * direct user gesture (click, keypress) — this is enforced by the spec and
+   * cannot be bypassed in JavaScript.  There is NO workaround.
+   *
+   * Therefore the timer can only enter CSS maximize: position:fixed covering the
+   * full viewport.  The browser chrome (URL bar, tabs) remains visible.  A large
+   * centered ⛶ button is shown; the user can click it (a real user gesture) to
+   * promote to true OS fullscreen.
+   *
    * A delay of 0 is a no-op.
    */
   function scheduleAutoFullscreen() {
@@ -339,21 +344,9 @@
       if (typeof window.__vcAutoFullscreen === 'function' && window.__vcAutoFullscreen()) {
         return;
       }
-      // Regular channel: try native requestFullscreen() on #videoPlayerWrap.
-      const wrap = document.getElementById('videoPlayerWrap');
-      if (!wrap) return;
-      const req = wrap.requestFullscreen
-               || wrap.webkitRequestFullscreen
-               || wrap.mozRequestFullscreen;
-      if (!req) { _enterCssMaximize(); return; }
-      const p = req.call(wrap);
-      if (p && typeof p.catch === 'function') {
-        p.catch(function (e) {
-          log('auto-fullscreen native blocked (' + e.message + '), using CSS maximize');
-          _enterCssMaximize();
-        });
-      }
-      log('auto-fullscreen: native fullscreen requested');
+      // Regular channel: CSS maximize (the only option from a timer callback).
+      _enterCssMaximize();
+      log('auto-fullscreen: CSS maximize entered (click ⛶ for true OS fullscreen)');
     }, delay * 1000);
     log('auto-fullscreen scheduled in', delay, 'seconds');
   }
