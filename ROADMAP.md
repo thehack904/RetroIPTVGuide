@@ -19,8 +19,8 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Optional auto-refresh of tuner lineup on a schedule. *(v4.3.0)*  
 - [x] Add per-user tuner assignment and default tuner preferences. *(v4.7.0)*  
 - [x] Introduce combined tuner builder (custom tuner aggregation). *(v4.7.0)*  
-- [x] Reworked Tuner Management page: two-column layout, tabbed interface, drag-and-drop channel ordering. *(dev)*  
-- [x] Separate **Virtual Channels** management page split from Tuner Management. *(dev)*  
+- [x] Reworked Tuner Management page: two-column layout, tabbed interface, drag-and-drop channel ordering. *(v4.8.0)*  
+- [x] Separate **Virtual Channels** management page split from Tuner Management. *(v4.8.0)*  
 
 ---
 
@@ -83,12 +83,12 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Added new templates: change_tuner.html, manage_users.html, logs.html. (v4.3.0)  
 - [x] Fixed scrolling on About, Logs, Tuner Management, and Manage Users pages. *(v4.5.0)*
 - [x] Display size setting (Large/Medium/Small) for all themes via transform scale. *(v4.6.0)*
-- [x] Default Display Size option to reset UI scaling back to initial state. *(dev)*
+- [x] Default Display Size option to reset UI scaling back to initial state. *(v4.8.0)*
 - [x] Fire TV / Android TV DPAD remote navigation + TV-mode proportional UI scaling. *(v4.6.0)*
 - [x] Video player aspect-ratio-locked resize handle. *(v4.6.0)*
 - [x] Fixed time bar style normalized across all themes. *(v4.6.0)*
-- [x] Virtual channel fullscreen overlay with background music preservation. *(dev)*
-- [x] Auto-hide virtual channel fullscreen button and in-overlay mute control after inactivity. *(dev)*
+- [x] Virtual channel fullscreen overlay with background music preservation. *(v4.8.0)*
+- [x] Auto-hide virtual channel fullscreen button and in-overlay mute control after inactivity. *(v4.8.0)*
 - [ ] Retro Theme Packs (1997 Analog, 2002 Digital Cable, TV Guide style, Modern Clean).
 - [ ] Advanced Mode toggle (hide/show power-user features).
 - [ ] Screen saver / burn-in protection mode.
@@ -117,13 +117,13 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ---
 
 ### 8. Virtual Channels
-- [x] Virtual Channels framework: channels, EPG entries, API endpoints, and guide integration. *(dev)*  
-- [x] **Weather Virtual Channel** — retro TV broadcast layout at `/weather`; US zip code auto-lookup; background music upload and looped playback. *(dev)*  
-- [x] **News Virtual Channel** — `/news` route with RSS image/summary extraction and constant-speed news ticker. *(dev)*  
-- [x] Multiple RSS feeds support — up to 6 RSS feeds on News Channel with server-driven time-based cycling. *(dev)*  
-- [x] **Traffic Virtual Channel** — OSM Leaflet map with real GPS highway waypoints; Demo Mode rotates major US cities without requiring an API key; optional TomTom API key for live data. *(dev)*  
-- [x] **System Status Virtual Channel** — TV-broadcast layout matching news/weather design. *(dev)*  
-- [x] Per-channel overlay appearance settings (overlay preferences button per virtual channel). *(dev)*  
+- [x] Virtual Channels framework: channels, EPG entries, API endpoints, and guide integration. *(v4.8.0)*  
+- [x] **Weather Virtual Channel** — retro TV broadcast layout at `/weather`; US zip code auto-lookup; background music upload and looped playback. *(v4.8.0)*  
+- [x] **News Virtual Channel** — `/news` route with RSS image/summary extraction and constant-speed news ticker. *(v4.8.0)*  
+- [x] Multiple RSS feeds support — up to 6 RSS feeds on News Channel with server-driven time-based cycling. *(v4.8.0)*  
+- [x] **Traffic Virtual Channel** — OSM Leaflet map with real GPS highway waypoints; Demo Mode rotates major US cities without requiring an API key; optional TomTom API key for live data. *(v4.8.0)*  
+- [x] **System Status Virtual Channel** — TV-broadcast layout matching news/weather design. *(v4.8.0)*  
+- [x] Per-channel overlay appearance settings (overlay preferences button per virtual channel). *(v4.8.0)*  
 - [ ] Casting support for virtual channels.  
 - [ ] DVR / recording integration for virtual channels.  
 
@@ -150,7 +150,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Open redirect vulnerability in login `?next=` parameter fixed with `is_safe_url()` helper. *(v4.7.1)*  
 - [ ] Add migrations for DB schema changes.  
 - [ ] CI/CD automation for official builds.  
-- [x] Test suite added: virtual channels, weather, audio, and traffic demo tests. *(dev)*  
+- [x] Test suite added: virtual channels, weather, audio, and traffic demo tests. *(v4.8.0)*  
 
 ---
 
