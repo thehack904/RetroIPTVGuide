@@ -168,7 +168,8 @@
         if (!chanEl) { log('auto-load channel not found in guide', al.id); return; }
         const url  = chanEl.dataset.url;
         const name = chanEl.dataset.name || al.name;
-        if (!url) { log('auto-load channel has no URL'); return; }
+        const isVirtual = chanEl.dataset.isVirtual === 'true';
+        if (!url && !isVirtual) { log('auto-load channel has no URL'); return; }
         log('auto-loading channel', name);
         if (typeof window.playChannel === 'function') {
           window.playChannel(url, al.id, name);

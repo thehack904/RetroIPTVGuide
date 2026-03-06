@@ -1,10 +1,11 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.7.1"
-APP_RELEASE_DATE = "2026-02-28"
+APP_VERSION = "v4.8.0"
+APP_RELEASE_DATE = "2026-03-05"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from werkzeug.utils import secure_filename
 import sqlite3
 import re
 import sys
@@ -20,7 +21,7 @@ import socket
 import ipaddress
 import logging
 import subprocess
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 import threading
 
 # New import: vlc control helper (optional - keep existing integration compatibility)
@@ -41,6 +42,8 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
+_ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
@@ -173,6 +176,15 @@ def init_tuners_db():
         except sqlite3.OperationalError:
             pass
 
+        # Remove the test banner feature entirely: delete the global overlay.test_text key
+        # and the per-channel test_text keys for all virtual channels.  This clears any
+        # stale "This is test Text!" values that were stored during early development.
+        c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status', 'virtual.traffic'):
+            c.execute("DELETE FROM settings WHERE key=?",
+                      (f"overlay.{_ch_id}.test_text",))
+        conn.commit()
+
         # bootstrap if empty
         c.execute("SELECT COUNT(*) FROM tuners")
         if c.fetchone()[0] == 0:
@@ -200,6 +212,9 @@ def init_tuners_db():
             # set default active tuner
             c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('current_tuner', 'Tuner 1')")
         conn.commit()
+
+        # Ensure traffic demo cities table exists and is seeded
+        _init_traffic_demo_db(conn)
 
 def get_tuners():
     with sqlite3.connect(TUNER_DB, timeout=10) as conn:
@@ -580,6 +595,1223 @@ def apply_epg_fallback(channels, epg):
     return epg
 
 
+# ------------------- Virtual Channels -------------------
+VIRTUAL_CHANNELS = [
+    {
+        'name': 'News Now',
+        'logo': '/static/logos/virtual/news.svg',
+        'url': '',
+        'tvg_id': 'virtual.news',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/news.mp4',
+        'overlay_type': 'news',
+        'overlay_refresh_seconds': 60,
+    },
+    {
+        'name': 'Weather Now',
+        'logo': '/static/logos/virtual/weather.svg',
+        'url': '',
+        'tvg_id': 'virtual.weather',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/weather.mp4',
+        'overlay_type': 'weather',
+        'overlay_refresh_seconds': 300,
+    },
+    {
+        'name': 'System Status',
+        'logo': '/static/logos/virtual/status.svg',
+        'url': '',
+        'tvg_id': 'virtual.status',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/status.mp4',
+        'overlay_type': 'status',
+        'overlay_refresh_seconds': 30,
+    },
+    {
+        'name': 'Traffic Now',
+        'logo': '/static/logos/virtual/traffic.svg',
+        'url': '',
+        'tvg_id': 'virtual.traffic',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/traffic.mp4',
+        'overlay_type': 'traffic',
+        'overlay_refresh_seconds': 120,
+    },
+]
+
+def get_virtual_channel_settings():
+    """Return a dict mapping each virtual channel tvg_id to its enabled state (bool).
+    Defaults to True (enabled) when no setting has been persisted yet."""
+    defaults = {ch['tvg_id']: True for ch in VIRTUAL_CHANNELS}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id in defaults:
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("SELECT value FROM settings WHERE key=?", (key,))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[tvg_id] = row[0] == "1"
+    except Exception:
+        logging.exception("get_virtual_channel_settings failed, using defaults")
+    return defaults
+
+def save_virtual_channel_settings(settings_dict):
+    """Persist virtual channel enabled states.  settings_dict maps tvg_id -> bool."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for tvg_id, enabled in settings_dict.items():
+                key = f"virtual_channel.{tvg_id}.enabled"
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (key, "1" if enabled else "0"))
+            conn.commit()
+    except Exception:
+        logging.exception("save_virtual_channel_settings failed")
+        raise
+
+_OVERLAY_APPEARANCE_KEYS = ('text_color', 'bg_color', 'test_text')
+_HEX_COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+
+def get_overlay_appearance():
+    """Return overlay appearance settings: text_color, bg_color (hex or ''), test_text (str)."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_overlay_appearance failed, using defaults")
+    return result
+
+def save_overlay_appearance(appearance_dict):
+    """Persist overlay appearance settings.  Validates hex colors; strips test_text."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_overlay_appearance failed")
+        raise
+
+def get_channel_overlay_appearance(tvg_id):
+    """Return overlay appearance settings for a specific virtual channel.
+    Keys stored as overlay.{tvg_id}.text_color etc. in the settings table."""
+    result = {'text_color': '', 'bg_color': '', 'test_text': ''}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _OVERLAY_APPEARANCE_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"overlay.{tvg_id}.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_channel_overlay_appearance failed, using defaults")
+    return result
+
+def save_channel_overlay_appearance(tvg_id, appearance_dict):
+    """Persist per-channel overlay appearance settings."""
+    cleaned = {}
+    for key in _OVERLAY_APPEARANCE_KEYS:
+        val = str(appearance_dict.get(key, '')).strip()
+        if key in ('text_color', 'bg_color'):
+            if val and not _HEX_COLOR_RE.match(val):
+                raise ValueError(f"Invalid color value for {key}: {val!r}")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"overlay.{tvg_id}.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_overlay_appearance failed")
+        raise
+
+def get_all_channel_appearances():
+    """Return dict of tvg_id -> appearance for all virtual channels."""
+    return {ch['tvg_id']: get_channel_overlay_appearance(ch['tvg_id']) for ch in VIRTUAL_CHANNELS}
+
+def get_news_feed_urls():
+    """Return list of configured RSS/Atom news feed URLs (up to 6, non-empty strings).
+
+    Reads numbered keys ``news.rss_url_1`` … ``news.rss_url_6``.  Falls back to
+    the legacy ``news.rss_url`` key when no numbered keys are set.
+    """
+    urls = []
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for i in range(1, 7):
+                c.execute("SELECT value FROM settings WHERE key=?", (f'news.rss_url_{i}',))
+                row = c.fetchone()
+                if row and row[0]:
+                    urls.append(row[0])
+            # Backward compat: if no numbered keys present, check the legacy single key
+            if not urls:
+                c.execute("SELECT value FROM settings WHERE key='news.rss_url'")
+                row = c.fetchone()
+                if row and row[0]:
+                    urls.append(row[0])
+    except Exception:
+        logging.exception("get_news_feed_urls failed")
+    return urls
+
+
+def save_news_feed_urls(urls):
+    """Persist up to 6 RSS/Atom feed URLs.
+
+    ``urls`` is an iterable of URL strings (may be empty or contain blanks which
+    are silently skipped after stripping).  Raises ``ValueError`` for any URL
+    with an invalid scheme.
+    """
+    validated = []
+    for raw in list(urls)[:6]:
+        url = str(raw).strip()
+        if url:
+            parsed = urlparse(url)
+            if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+                raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+            validated.append(url)
+        else:
+            validated.append('')
+    # Pad to exactly 6 entries so old slots are explicitly cleared
+    while len(validated) < 6:
+        validated.append('')
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for i, url in enumerate(validated, 1):
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f'news.rss_url_{i}', url))
+            conn.commit()
+    except Exception:
+        logging.exception("save_news_feed_urls failed")
+        raise
+
+
+def get_news_feed_url():
+    """Return the first configured RSS/Atom news feed URL, or empty string.
+
+    Kept for backward compatibility; delegates to :func:`get_news_feed_urls`.
+    """
+    urls = get_news_feed_urls()
+    return urls[0] if urls else ''
+
+
+def save_news_feed_url(url):
+    """Persist a single RSS/Atom news feed URL (legacy helper).
+
+    Stores the URL as slot 1, clearing all other slots.  Kept for backward
+    compatibility; prefer :func:`save_news_feed_urls` for new code.
+    """
+    save_news_feed_urls([url])
+
+def get_current_feed_state(feed_count):
+    """Return ``(feed_index, ms_until_next_feed)`` driven entirely by wall-clock time.
+
+    The 30-minute block is divided equally across feeds.  All clients receive
+    the same ``feed_index`` at any given moment, so the cycling happens in the
+    background regardless of whether anyone is tuned to the channel.
+
+    ``ms_until_next_feed`` is how many milliseconds remain in the current slot,
+    letting clients schedule their next reload precisely at the transition point.
+    """
+    if feed_count <= 0:
+        return 0, 5 * 60 * 1000
+    feed_duration_s = (30 * 60) / feed_count
+    now = time.time()
+    time_slot = int(now / feed_duration_s)
+    feed_index = time_slot % feed_count
+    elapsed_in_slot_s = now % feed_duration_s
+    remaining_ms = int((feed_duration_s - elapsed_in_slot_s) * 1000)
+    # Clamp to at least 1 s so clients never schedule a zero-delay reload
+    _MIN_MS = 1000
+    ms_until_next = max(_MIN_MS, remaining_ms)
+    return feed_index, ms_until_next
+
+
+
+_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units')
+
+def get_weather_config():
+    """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C')."""
+    result = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F'}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in _WEATHER_CONFIG_KEYS:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"weather.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    result[key] = row[0]
+    except Exception:
+        logging.exception("get_weather_config failed, using defaults")
+    return result
+
+def save_weather_config(config_dict):
+    """Persist weather configuration. Validates lat/lon as floats when non-empty."""
+    cleaned = {}
+    for key in _WEATHER_CONFIG_KEYS:
+        val = str(config_dict.get(key, '')).strip()
+        if key in ('lat', 'lon') and val:
+            try:
+                float(val)
+            except ValueError:
+                raise ValueError(f"Invalid value for {key}: {val!r}. Must be a number.")
+        if key == 'units' and val not in ('F', 'C', ''):
+            raise ValueError(f"Invalid units: {val!r}. Must be 'F' or 'C'.")
+        cleaned[key] = val
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key, value in cleaned.items():
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f"weather.{key}", value))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_weather_config failed")
+        raise
+
+# ─── Traffic Demo Mode ────────────────────────────────────────────────────────
+
+# US cities with population > 1,000,000 (2024 Census estimates, city proper)
+_TRAFFIC_DEMO_CITIES_SEED = [
+    {'name': 'New York City', 'state': 'NY', 'lat': 40.7128, 'lon': -74.0060,  'population': 8258035},
+    {'name': 'Los Angeles',   'state': 'CA', 'lat': 34.0522, 'lon': -118.2437, 'population': 3898747},
+    {'name': 'Chicago',       'state': 'IL', 'lat': 41.8781, 'lon': -87.6298,  'population': 2696555},
+    {'name': 'Houston',       'state': 'TX', 'lat': 29.7604, 'lon': -95.3698,  'population': 2304580},
+    {'name': 'Phoenix',       'state': 'AZ', 'lat': 33.4484, 'lon': -112.0740, 'population': 1608139},
+    {'name': 'Philadelphia',  'state': 'PA', 'lat': 39.9526, 'lon': -75.1652,  'population': 1550542},
+    {'name': 'San Antonio',   'state': 'TX', 'lat': 29.4241, 'lon': -98.4936,  'population': 1434625},
+    {'name': 'San Diego',     'state': 'CA', 'lat': 32.7157, 'lon': -117.1611, 'population': 1386932},
+    {'name': 'Dallas',        'state': 'TX', 'lat': 32.7767, 'lon': -96.7970,  'population': 1304379},
+    {'name': 'San Jose',      'state': 'CA', 'lat': 37.3382, 'lon': -121.8863, 'population': 1013240},
+]
+
+_TRAFFIC_DEMO_CACHE_TTL = 120   # seconds — matches overlay_refresh_seconds in VIRTUAL_CHANNELS
+_TRAFFIC_DEMO_CACHE: dict = {}  # cache_key -> payload dict
+
+# Per-city highway/arterial names used to generate realistic demo incidents
+_CITY_HIGHWAYS: dict = {
+    'New York City': ['I-95', 'I-278', 'I-495', 'FDR Drive', 'Belt Pkwy', 'Cross Bronx Expwy'],
+    'Los Angeles':   ['I-5', 'I-10', 'I-405', 'US-101', 'SR-110', 'SR-60'],
+    'Chicago':       ['I-90', 'I-94', 'I-290', 'I-55', 'I-88', 'Lake Shore Dr'],
+    'Houston':       ['I-10', 'I-45', 'I-610', 'US-59', 'US-290', 'Beltway 8'],
+    'Phoenix':       ['I-10', 'I-17', 'SR-51', 'SR-101', 'US-60', 'Loop 202'],
+    'Philadelphia':  ['I-95', 'I-76', 'I-676', 'US-1', 'PA-309', 'Schuylkill Expwy'],
+    'San Antonio':   ['I-10', 'I-35', 'I-37', 'US-281', 'Loop 410', 'Loop 1604'],
+    'San Diego':     ['I-5', 'I-8', 'I-15', 'SR-94', 'SR-163', 'SR-125'],
+    'Dallas':        ['I-30', 'I-35E', 'I-635', 'US-75', 'SR-114', 'Loop 12'],
+    'San Jose':      ['I-280', 'I-880', 'SR-87', 'SR-101', 'US-101', 'SR-85'],
+}
+_CITY_HIGHWAYS_DEFAULT = ['I-10', 'I-20', 'I-40', 'US-1', 'State Hwy 1', 'Main Blvd']
+
+_INCIDENT_TYPES = [
+    ('Accident',            'red',    '⚠'),
+    ('Multi-vehicle crash', 'red',    '⚠'),
+    ('Stalled vehicle',     'yellow', '🚘'),
+    ('Road work',           'yellow', '🚧'),
+    ('Debris on road',      'yellow', '⚠'),
+    ('Slow traffic',        'green',  '🐢'),
+    ('Lane closure',        'yellow', '🚧'),
+    ('Emergency response',  'red',    '🚨'),
+]
+_DIRECTIONS = ['Northbound', 'Southbound', 'Eastbound', 'Westbound']
+
+
+def _generate_demo_incidents(city_name, rng, red_pct):
+    """Generate a deterministic list of realistic-looking demo traffic incidents.
+    The number and severity of incidents scales with the congestion level."""
+    highways = _CITY_HIGHWAYS.get(city_name, _CITY_HIGHWAYS_DEFAULT)
+    # Scale incident count: heavy congestion → more incidents
+    max_incidents = 3 + (red_pct // 15)   # 3–7 depending on red_pct
+    count = rng.randint(max(1, max_incidents - 2), max_incidents)
+
+    incidents = []
+    used_roads = set()
+    for _ in range(count):
+        road = rng.choice(highways)
+        direction = rng.choice(_DIRECTIONS)
+        inc_type, severity, icon = rng.choice(_INCIDENT_TYPES)
+        # Avoid exact duplicate road+direction pairs
+        key = (road, direction)
+        if key in used_roads and len(used_roads) < len(highways) * 4:
+            road = rng.choice([h for h in highways if h != road] or highways)
+            key = (road, direction)
+        used_roads.add(key)
+        incidents.append({
+            'title':     inc_type,
+            'severity':  severity,
+            'icon':      icon,
+            'road':      road,
+            'direction': direction,
+        })
+    return incidents
+
+
+def _init_traffic_demo_db(conn):
+    """Create and seed the traffic_demo_cities table (called from init_tuners_db)."""
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS traffic_demo_cities
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  state TEXT NOT NULL,
+                  lat REAL NOT NULL,
+                  lon REAL NOT NULL,
+                  population INTEGER DEFAULT 0,
+                  enabled INTEGER DEFAULT 1,
+                  weight INTEGER DEFAULT 1,
+                  created_at TEXT,
+                  updated_at TEXT)''')
+    conn.commit()
+    c.execute("SELECT COUNT(*) FROM traffic_demo_cities")
+    if c.fetchone()[0] == 0:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            c.execute(
+                "INSERT INTO traffic_demo_cities "
+                "(name, state, lat, lon, population, enabled, weight, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
+                (city['name'], city['state'], city['lat'], city['lon'],
+                 city['population'], now_iso, now_iso)
+            )
+        conn.commit()
+
+
+def get_traffic_demo_config():
+    """Return traffic demo mode configuration from settings table."""
+    defaults = {
+        'mode':             'admin_rotation',
+        'pack_size':        '10',
+        'pack':             '[]',
+        'rotation_seconds': '120',
+    }
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in defaults:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"traffic_demo.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[key] = row[0]
+    except Exception:
+        logging.exception("get_traffic_demo_config failed, using defaults")
+    return defaults
+
+
+def save_traffic_demo_config(cfg):
+    """Persist traffic demo configuration. Raises ValueError on invalid input."""
+    allowed_modes = ('admin_rotation', 'random_pack')
+    mode = cfg.get('mode', 'admin_rotation')
+    if mode not in allowed_modes:
+        raise ValueError(f"Invalid mode: {mode!r}. Must be one of {allowed_modes}.")
+    try:
+        pack_size = int(cfg.get('pack_size', 10))
+        if not (1 <= pack_size <= 50):
+            raise ValueError("pack_size must be between 1 and 50")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid pack_size: {exc}") from exc
+    try:
+        rotation_secs = int(cfg.get('rotation_seconds', 120))
+        if not (30 <= rotation_secs <= 3600):
+            raise ValueError("rotation_seconds must be between 30 and 3600")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid rotation_seconds: {exc}") from exc
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.mode', mode))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack_size', str(pack_size)))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.rotation_seconds', str(rotation_secs)))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_traffic_demo_config failed")
+        raise
+
+
+def get_traffic_demo_cities():
+    """Return all rows from traffic_demo_cities ordered by population desc."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT id, name, state, lat, lon, population, enabled, weight "
+                "FROM traffic_demo_cities ORDER BY population DESC"
+            )
+            rows = c.fetchall()
+        return [
+            {'id': r[0], 'name': r[1], 'state': r[2], 'lat': r[3], 'lon': r[4],
+             'population': r[5], 'enabled': bool(r[6]), 'weight': int(r[7] or 1)}
+            for r in rows
+        ]
+    except Exception:
+        logging.exception("get_traffic_demo_cities failed")
+        return []
+
+
+def save_traffic_demo_city(city_id, enabled, weight=1):
+    """Update enabled flag and weight for a single city row."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "UPDATE traffic_demo_cities SET enabled=?, weight=?, updated_at=? WHERE id=?",
+                (1 if enabled else 0, max(1, int(weight)), now_iso, int(city_id))
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_traffic_demo_city failed for id=%s", city_id)
+        raise
+
+
+def set_all_traffic_demo_cities_enabled(enabled):
+    """Enable or disable every city in one shot."""
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("UPDATE traffic_demo_cities SET enabled=?, updated_at=?",
+                      (1 if enabled else 0, now_iso))
+            conn.commit()
+    except Exception:
+        logging.exception("set_all_traffic_demo_cities_enabled failed")
+        raise
+
+
+def pick_random_traffic_demo_pack(pack_size=10):
+    """Randomly select pack_size enabled cities and persist as traffic_demo.pack.
+    Returns list of chosen city dicts."""
+    import random as _rand
+    cities = [c for c in get_traffic_demo_cities() if c['enabled']]
+    if not cities:
+        cities = get_traffic_demo_cities()
+    chosen = _rand.sample(cities, min(pack_size, len(cities)))
+    pack_ids = [c['id'] for c in chosen]
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('traffic_demo.pack', _json.dumps(pack_ids)))
+            conn.commit()
+    except Exception:
+        logging.exception("pick_random_traffic_demo_pack failed")
+    return chosen
+
+
+def _get_congestion_distribution(hour, is_weekend=False):
+    """Return (green_pct, yellow_pct, red_pct) based on local hour and day type.
+    Percentages always sum to 100."""
+    if is_weekend:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 9 <= hour < 12:
+            return 70, 20, 10
+        elif 12 <= hour < 15:
+            return 65, 25, 10
+        elif 17 <= hour < 20:
+            return 60, 28, 12
+        else:
+            return 82, 13, 5
+    else:
+        if 2 <= hour < 5:
+            return 90, 8, 2
+        elif 7 <= hour < 9:
+            return 50, 30, 20
+        elif 12 <= hour < 14:
+            return 65, 25, 10
+        elif 16 <= hour < 19:
+            return 45, 30, 25
+        elif 22 <= hour or hour < 1:
+            return 80, 15, 5
+        else:
+            return 75, 18, 7
+
+
+def _build_traffic_demo_payload():
+    """Build the demo traffic payload with deterministic city rotation and
+    simulated congestion segments.  Results are cached per rotation slot so
+    all viewers share the same snapshot."""
+    import hashlib
+    import random as _rnd
+
+    demo_cfg = get_traffic_demo_config()
+    mode = demo_cfg.get('mode', 'admin_rotation')
+    rotation_seconds = max(30, int(demo_cfg.get('rotation_seconds', 120)))
+
+    now_ts = time.time()
+    time_slot = int(now_ts // rotation_seconds)
+
+    all_cities = get_traffic_demo_cities()
+
+    # Determine the pool to rotate through
+    if mode == 'random_pack':
+        try:
+            pack_ids = _json.loads(demo_cfg.get('pack', '[]'))
+        except Exception:
+            pack_ids = []
+        if pack_ids:
+            id_set = {c['id'] for c in all_cities}
+            pack_ids = [pid for pid in pack_ids if pid in id_set]
+            cities_pool = [c for c in all_cities if c['id'] in pack_ids and c['enabled']]
+        else:
+            cities_pool = [c for c in all_cities if c['enabled']]
+    else:  # admin_rotation
+        cities_pool = [c for c in all_cities if c['enabled']]
+
+    if not cities_pool:
+        return {'no_cities': True}
+
+    # Build a weighted list for round-robin
+    weighted = []
+    for city in cities_pool:
+        w = max(1, city.get('weight', 1))
+        weighted.extend([city] * w)
+
+    city = weighted[time_slot % len(weighted)]
+
+    # Cache lookup
+    cache_key = f"demo:{city['id']}:{time_slot}"
+    cached = _TRAFFIC_DEMO_CACHE.get(cache_key)
+    if cached:
+        return cached
+
+    # Evict stale entries
+    for k in list(_TRAFFIC_DEMO_CACHE):
+        if k != cache_key:
+            _TRAFFIC_DEMO_CACHE.pop(k, None)
+
+    # Time-of-day congestion distribution
+    now_dt = datetime.now(timezone.utc)
+    hour = now_dt.hour
+    is_weekend = now_dt.weekday() >= 5
+    green_pct, yellow_pct, red_pct = _get_congestion_distribution(hour, is_weekend)
+
+    # Congestion level label
+    if red_pct >= 20:
+        congestion_level = 'Heavy'
+    elif red_pct >= 10 or yellow_pct >= 25:
+        congestion_level = 'Moderate'
+    else:
+        congestion_level = 'Light'
+
+    # Generate road segments deterministically using a seeded RNG
+    # MD5 is used purely for deterministic seeding (not for security).
+    # All viewers at the same time slot see the same road-color snapshot.
+    seed_hex = hashlib.md5(f"{city['id']}:{time_slot}".encode()).hexdigest()[:8]
+    rng = _rnd.Random(int(seed_hex, 16))
+
+    NUM_SEGMENTS = 24
+    colors = ['green'] * green_pct + ['yellow'] * yellow_pct + ['red'] * red_pct
+    segments = [{'id': f'seg_{i}', 'color': rng.choice(colors)}
+                for i in range(1, NUM_SEGMENTS + 1)]
+
+    # Actual percentages from generated segments
+    total = len(segments)
+    actual_green  = sum(1 for s in segments if s['color'] == 'green')
+    actual_yellow = sum(1 for s in segments if s['color'] == 'yellow')
+    actual_red    = sum(1 for s in segments if s['color'] == 'red')
+
+    # Generate deterministic demo incidents (scaled to congestion level)
+    incidents = _generate_demo_incidents(city['name'], rng, red_pct)
+
+    payload = {
+        'updated': now_dt.isoformat(),
+        'city': {
+            'id':    city['id'],
+            'name':  city['name'],
+            'state': city['state'],
+            'lat':   city['lat'],
+            'lon':   city['lon'],
+        },
+        'time_slot': time_slot,
+        'summary': {
+            'congestion_level': congestion_level,
+            'green_percent':    round(actual_green  * 100 / total),
+            'yellow_percent':   round(actual_yellow * 100 / total),
+            'red_percent':      round(actual_red    * 100 / total),
+            'incident_count':   len(incidents),
+        },
+        'incidents': incidents,
+        'segments':  segments,
+        'demo_mode': True,
+    }
+    _TRAFFIC_DEMO_CACHE[cache_key] = payload
+    return payload
+
+
+# ─── Road geometry (Overpass API) ────────────────────────────────────────────
+
+# Roads are cached per city (long TTL — road geometry rarely changes).
+_ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
+_ROADS_CACHE_TTL = 86400  # 24 hours in seconds
+_ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
+_OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
+
+
+def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
+    """Fetch major road geometry from the Overpass API (free, no API key).
+    Default radius is 80_467 m (50 miles) to match the zoom-10 map view.
+    Only motorway and trunk-class roads are fetched; at this scale primary/
+    secondary roads would return thousands of segments across the viewport.
+    Returns a GeoJSON FeatureCollection with LineString features for each road way.
+    On network failure returns an empty FeatureCollection."""
+    query = (
+        f"[out:json][timeout:60];"
+        f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
+        f"(around:{radius_m},{lat},{lon}););"
+        f"out body;>;out skel qt;"
+    )
+    try:
+        resp = requests.post(
+            "https://overpass-api.de/api/interpreter",
+            data={"data": query},
+            timeout=65,
+            headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+        return {"elements": []}
+
+
+def _overpass_to_geojson(raw: dict) -> dict:
+    """Convert Overpass JSON response to a GeoJSON FeatureCollection.
+    Only LineString features are produced (one per road way)."""
+    nodes: dict = {}
+    ways: list  = []
+    for el in raw.get("elements", []):
+        t = el.get("type")
+        if t == "node":
+            nodes[el["id"]] = (el["lon"], el["lat"])
+        elif t == "way":
+            ways.append(el)
+
+    features = []
+    for way in ways:
+        coords = [nodes[nid] for nid in way.get("nodes", []) if nid in nodes]
+        if len(coords) < 2:
+            continue
+        tags = way.get("tags", {})
+        features.append({
+            "type": "Feature",
+            "geometry": {"type": "LineString", "coordinates": coords},
+            "properties": {
+                "way_id":  way["id"],
+                "name":    tags.get("name", ""),
+                "highway": tags.get("highway", ""),
+            },
+        })
+    return {"type": "FeatureCollection", "features": features}
+
+
+def get_traffic_demo_roads(city_id: int) -> dict:
+    """Return cached road GeoJSON for a city, fetching from Overpass if not cached or stale."""
+    now_ts = time.time()
+    cached_at = _ROADS_CACHE_TIME.get(city_id, 0)
+    if city_id in _ROADS_CACHE and (now_ts - cached_at) < _ROADS_CACHE_TTL:
+        return _ROADS_CACHE[city_id]
+
+    # Look up city coordinates from DB
+    try:
+        cities = get_traffic_demo_cities()
+        city = next((c for c in cities if c["id"] == city_id), None)
+        if city is None:
+            return {"type": "FeatureCollection", "features": []}
+    except Exception:
+        logging.exception("get_traffic_demo_roads: city lookup failed for id=%s", city_id)
+        return {"type": "FeatureCollection", "features": []}
+
+    raw = _fetch_overpass_roads(city["lat"], city["lon"])
+    geojson = _overpass_to_geojson(raw)
+    _ROADS_CACHE[city_id] = geojson
+    _ROADS_CACHE_TIME[city_id] = now_ts
+    return geojson
+
+
+def _prewarm_roads_cache() -> None:
+    """Background thread: fetch road geometry for every enabled city so the
+    Overpass data is cached before any user rotates to that city.
+    Requests are staggered by 5 s to stay within Overpass fair-use limits."""
+    try:
+        cities = [c for c in get_traffic_demo_cities() if c.get("enabled")]
+    except Exception:
+        logging.exception("_prewarm_roads_cache: could not load city list")
+        return
+    for city in cities:
+        try:
+            get_traffic_demo_roads(city["id"])
+            logging.info("_prewarm_roads_cache: cached roads for %s", city["name"])
+        except Exception:
+            logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
+        time.sleep(_OVERPASS_PREWARM_STAGGER_S)
+
+
+
+def get_channel_music_file(tvg_id):
+    """Return the selected audio filename (basename only) for a virtual channel, or ''."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?",
+                      (f"overlay.{tvg_id}.music_file",))
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_channel_music_file failed")
+        return ''
+
+def save_channel_music_file(tvg_id, filename):
+    """Persist the selected audio filename for a virtual channel.
+    Pass '' to clear. Validates that the filename exists in AUDIO_UPLOAD_DIR."""
+    filename = str(filename).strip()
+    if filename:
+        safe = secure_filename(filename)
+        if safe != filename or not safe:
+            raise ValueError(f"Invalid audio filename: {filename!r}")
+        ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+        if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+            raise ValueError(f"Unsupported audio type: {ext!r}")
+        target = os.path.join(AUDIO_UPLOAD_DIR, safe)
+        if not os.path.isfile(target):
+            raise ValueError(f"Audio file not found: {safe!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      (f"overlay.{tvg_id}.music_file", filename))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_music_file failed")
+        raise
+
+def list_audio_files():
+    """Return a sorted list of uploaded audio filenames in AUDIO_UPLOAD_DIR."""
+    try:
+        os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+        return sorted(
+            f for f in os.listdir(AUDIO_UPLOAD_DIR)
+            if os.path.isfile(os.path.join(AUDIO_UPLOAD_DIR, f))
+            and '.' in f
+            and f.rsplit('.', 1)[-1].lower() in _ALLOWED_AUDIO_EXTENSIONS
+        )
+    except Exception:
+        logging.exception("list_audio_files failed")
+        return []
+
+# WMO weather code → (label, icon_key)
+# icon_key maps to SVG/emoji used in the weather template
+_WMO_MAP = {
+    0:  ('Sunny',           'sunny'),
+    1:  ('Mostly Clear',    'sunny'),
+    2:  ('Partly Cloudy',   'partly_cloudy'),
+    3:  ('Overcast',        'cloudy'),
+    45: ('Foggy',           'foggy'),
+    48: ('Icy Fog',         'foggy'),
+    51: ('Light Drizzle',   'drizzle'),
+    53: ('Drizzle',         'drizzle'),
+    55: ('Heavy Drizzle',   'drizzle'),
+    61: ('Light Rain',      'rain'),
+    63: ('Rain',            'rain'),
+    65: ('Heavy Rain',      'rain'),
+    71: ('Light Snow',      'snow'),
+    73: ('Snow',            'snow'),
+    75: ('Heavy Snow',      'snow'),
+    77: ('Snow Grains',     'snow'),
+    80: ('Showers',         'showers'),
+    81: ('Showers',         'showers'),
+    82: ('Heavy Showers',   'showers'),
+    85: ('Snow Showers',    'snow'),
+    86: ('Heavy Snow Shwr', 'snow'),
+    95: ('T-Storms',        'thunderstorm'),
+    96: ('T-Storms',        'thunderstorm'),
+    99: ('T-Storms',        'thunderstorm'),
+}
+
+def _wmo_label(code):
+    return _WMO_MAP.get(code, ('Unknown', 'cloudy'))[0]
+
+def _wmo_icon(code):
+    return _WMO_MAP.get(code, ('Unknown', 'cloudy'))[1]
+
+# Daytime icon keys that have a distinct night variant in the weather template
+_NIGHT_ICON_MAP = {
+    'sunny':         'partly_cloudy_night',
+    'partly_cloudy': 'partly_cloudy_night',
+    'cloudy':        'cloudy_night',
+}
+
+def _to_night_icon(day_icon):
+    """Return the night variant of a day icon key, or the original if no variant exists."""
+    return _NIGHT_ICON_MAP.get(day_icon, day_icon)
+
+_WIND_DIRS = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW']
+
+def _wind_dir(degrees):
+    try:
+        return _WIND_DIRS[round(float(degrees) / 22.5) % 16]
+    except Exception:
+        return ''
+
+def _fetch_open_meteo(lat, lon, units):
+    """Fetch current + hourly + daily weather from open-meteo. Returns dict or None on failure."""
+    temp_unit = 'fahrenheit' if units != 'C' else 'celsius'
+    wind_unit = 'mph' if units != 'C' else 'kmh'
+    url = (
+        "https://api.open-meteo.com/v1/forecast"
+        f"?latitude={lat}&longitude={lon}"
+        "&current=temperature_2m,apparent_temperature,relative_humidity_2m,"
+        "weather_code,wind_speed_10m,wind_direction_10m"
+        "&hourly=temperature_2m,weather_code"
+        "&daily=temperature_2m_max,temperature_2m_min,weather_code,sunrise,sunset"
+        f"&temperature_unit={temp_unit}&wind_speed_unit={wind_unit}"
+        "&forecast_days=5&timezone=auto"
+    )
+    try:
+        resp = requests.get(url, timeout=10, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        logging.exception("_fetch_open_meteo failed for lat=%s lon=%s", lat, lon)
+        return None
+
+def _build_weather_payload(cfg):
+    """Build the full weather API payload from open-meteo data or a stub when unconfigured."""
+    now_utc = datetime.now(timezone.utc)
+    updated_str = now_utc.isoformat()  # ISO 8601 UTC; browsers convert to local time
+    lat = cfg.get('lat', '')
+    lon = cfg.get('lon', '')
+    location_name = cfg.get('location_name') or 'Local Weather'
+    units = cfg.get('units') or 'F'
+    deg = '°F' if units != 'C' else '°C'
+
+    raw = None
+    if lat and lon:
+        raw = _fetch_open_meteo(lat, lon, units)
+
+    if raw:
+        cur = raw.get('current', {})
+        cur_vars = raw.get('current_units', {})
+        hourly = raw.get('hourly', {})
+        daily = raw.get('daily', {})
+
+        temp = cur.get('temperature_2m')
+        feels = cur.get('apparent_temperature')
+        humidity = cur.get('relative_humidity_2m')
+        wcode = cur.get('weather_code', 0)
+        wind_spd = cur.get('wind_speed_10m')
+        wind_deg = cur.get('wind_direction_10m', 0)
+        wind_str = f"{_wind_dir(wind_deg)} {round(wind_spd)} {cur_vars.get('wind_speed_10m','mph')}" if wind_spd is not None else ''
+
+        now_info = {
+            'temp': round(temp) if temp is not None else None,
+            'condition': _wmo_label(wcode),
+            'humidity': round(humidity) if humidity is not None else None,
+            'wind': wind_str,
+            'feels_like': round(feels) if feels is not None else None,
+            'icon': _wmo_icon(wcode),
+        }
+
+        # Today's forecast: morning=6-11, afternoon=12-17, evening=18-22
+        h_times = hourly.get('time', [])
+        h_temps = hourly.get('temperature_2m', [])
+        h_wcodes = hourly.get('weather_code', [])
+        today_str = now_utc.strftime('%Y-%m-%d')
+
+        def _period_avg(start_h, end_h):
+            temps, codes = [], []
+            for i, t in enumerate(h_times):
+                if t.startswith(today_str):
+                    try:
+                        h = int(t[11:13])
+                    except Exception:
+                        continue
+                    if start_h <= h < end_h:
+                        if i < len(h_temps) and h_temps[i] is not None:
+                            temps.append(h_temps[i])
+                        if i < len(h_wcodes) and h_wcodes[i] is not None:
+                            codes.append(h_wcodes[i])
+            avg_t = round(sum(temps) / len(temps)) if temps else None
+            dominant = max(set(codes), key=codes.count) if codes else 0
+            return avg_t, dominant
+
+        m_temp, m_code = _period_avg(6, 12)
+        a_temp, a_code = _period_avg(12, 18)
+        e_temp, e_code = _period_avg(18, 23)
+
+        today_forecast = [
+            {'label': 'MORNING',   'temp': m_temp, 'condition': _wmo_label(m_code), 'icon': _wmo_icon(m_code)},
+            {'label': 'AFTERNOON', 'temp': a_temp, 'condition': _wmo_label(a_code), 'icon': _wmo_icon(a_code)},
+            {'label': 'EVENING',   'temp': e_temp, 'condition': _wmo_label(e_code), 'icon': _to_night_icon(_wmo_icon(e_code))},
+        ]
+
+        # Extended: days 1–4 (skip today = index 0)
+        d_times  = daily.get('time', [])
+        d_maxes  = daily.get('temperature_2m_max', [])
+        d_mins   = daily.get('temperature_2m_min', [])
+        d_wcodes = daily.get('weather_code', [])
+        extended = []
+        for i in range(1, min(5, len(d_times))):
+            try:
+                dow = date.fromisoformat(d_times[i]).strftime('%a').upper()
+            except Exception:
+                dow = d_times[i][-5:]
+            hi  = round(d_maxes[i])  if i < len(d_maxes)  and d_maxes[i]  is not None else None
+            lo  = round(d_mins[i])   if i < len(d_mins)   and d_mins[i]   is not None else None
+            wc  = d_wcodes[i]        if i < len(d_wcodes)                              else 0
+            extended.append({'dow': dow, 'hi': hi, 'lo': lo,
+                              'condition': _wmo_label(wc), 'icon': _wmo_icon(wc)})
+
+        ticker = []
+        if wcode in (95, 96, 99):
+            ticker.append('Severe Thunderstorms Possible')
+        if wcode in (71, 73, 75, 77, 85, 86):
+            ticker.append('Winter Weather Advisory in Effect')
+
+        # backward-compat forecast list
+        compat_forecast = [{'label': d['dow'], 'hi': d['hi'], 'lo': d['lo'],
+                            'condition': d['condition']} for d in extended]
+
+        return {
+            'updated': updated_str,
+            'location': location_name,
+            'now': now_info,
+            'today': today_forecast,
+            'extended': extended,
+            'ticker': ticker,
+            'forecast': compat_forecast,
+        }
+
+    # Stub / demo data when no coordinates configured
+    return {
+        'updated': updated_str,
+        'location': location_name,
+        'now': {'temp': None, 'condition': 'Not Configured', 'humidity': None,
+                'wind': '', 'feels_like': None, 'icon': 'cloudy'},
+        'today': [
+            {'label': 'MORNING',   'temp': None, 'condition': '--', 'icon': 'cloudy'},
+            {'label': 'AFTERNOON', 'temp': None, 'condition': '--', 'icon': 'cloudy'},
+            {'label': 'EVENING',   'temp': None, 'condition': '--', 'icon': 'cloudy_night'},
+        ],
+        'extended': [],
+        'ticker': [],
+        'forecast': [],
+    }
+
+_RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
+
+def _strip_html_tags(text):
+    """Remove HTML tags from a string, returning plain text."""
+    return re.sub(r'<[^>]+>', '', text or '').strip()
+
+def _extract_rss_image(element):
+    """Extract the best image URL from an RSS <item> or Atom <entry> element.
+
+    Checks (in priority order):
+      1. <media:content medium="image"> or type starting with "image/"
+      2. <media:thumbnail>
+      3. <enclosure type="image/...">
+      4. First <img src="..."> found inside <description> or <content>
+    Returns empty string when no image is found.
+    """
+    _MEDIA_NS = 'http://search.yahoo.com/mrss/'
+
+    # 1. media:content
+    for mc in element.findall(f'{{{_MEDIA_NS}}}content'):
+        medium = mc.get('medium', '')
+        ctype  = mc.get('type', '')
+        url    = mc.get('url', '').strip()
+        if url and (medium == 'image' or ctype.startswith('image/')):
+            return url
+    # also accept any media:content with an image url if medium/type not set
+    for mc in element.findall(f'{{{_MEDIA_NS}}}content'):
+        url = mc.get('url', '').strip()
+        if url and re.search(r'\.(jpe?g|png|gif|webp)(\?|$)', url, re.IGNORECASE):
+            return url
+
+    # 2. media:thumbnail
+    mt = element.find(f'{{{_MEDIA_NS}}}thumbnail')
+    if mt is not None:
+        url = mt.get('url', '').strip()
+        if url:
+            return url
+
+    # 3. enclosure
+    enc = element.find('enclosure')
+    if enc is not None:
+        ctype = enc.get('type', '')
+        url   = enc.get('url', '').strip()
+        if url and ctype.startswith('image/'):
+            return url
+
+    # 4. First <img src> in description / content / summary
+    for tag_name in ('description', 'content', 'summary',
+                     '{http://www.w3.org/2005/Atom}summary',
+                     '{http://www.w3.org/2005/Atom}content'):
+        el = element.find(tag_name)
+        if el is not None:
+            text = el.text or ''
+            m = re.search(r'<img\s[^>]*src=["\']([^"\']+)["\']', text, re.IGNORECASE)
+            if m:
+                return m.group(1).strip()
+
+    return ''
+
+
+def fetch_rss_headlines(feed_url, max_items=20):
+    """Fetch a RSS 2.0 or Atom feed and return a list of headline dicts.
+
+    Each item: {'title': str, 'source': str, 'url': str, 'ts': ISO8601 str, 'image': str, 'summary': str}
+    Returns empty list on any error (non-throwing).
+    """
+    try:
+        resp = requests.get(feed_url, timeout=8, headers={'User-Agent': 'RetroIPTVGuide/1.0'})
+        resp.raise_for_status()
+        root = ET.fromstring(resp.content)
+    except Exception:
+        logging.exception("fetch_rss_headlines: failed to fetch or parse %r", feed_url)
+        return []
+
+    items = []
+    tag = root.tag.lower()
+
+    # Strip namespace for tag detection
+    local = root.tag.split('}')[-1].lower() if '}' in root.tag else tag
+
+    if local == 'feed':
+        # Atom feed
+        channel_title = ''
+        t = root.find('{http://www.w3.org/2005/Atom}title')
+        if t is not None:
+            channel_title = (t.text or '').strip()
+        for entry in root.findall('{http://www.w3.org/2005/Atom}entry')[:max_items]:
+            title_el = entry.find('{http://www.w3.org/2005/Atom}title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = entry.find('{http://www.w3.org/2005/Atom}link')
+            link = (link_el.get('href', '') if link_el is not None else '').strip()
+            ts_el = entry.find('{http://www.w3.org/2005/Atom}updated') or entry.find('{http://www.w3.org/2005/Atom}published')
+            ts = (ts_el.text or '').strip() if ts_el is not None else ''
+            summary_el = entry.find('{http://www.w3.org/2005/Atom}summary') or entry.find('{http://www.w3.org/2005/Atom}content')
+            summary = _strip_html_tags((summary_el.text or '') if summary_el is not None else '')
+            image = _extract_rss_image(entry)
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts, 'image': image, 'summary': summary})
+    else:
+        # RSS 2.0 / RSS 1.0
+        channel = root.find('channel') or root
+        channel_title = ''
+        ct = channel.find('title')
+        if ct is not None:
+            channel_title = (ct.text or '').strip()
+        for item in channel.findall('item')[:max_items]:
+            title_el = item.find('title')
+            title = (title_el.text or '').strip() if title_el is not None else ''
+            link_el = item.find('link')
+            link = (link_el.text or '').strip() if link_el is not None else ''
+            pub_el = item.find('pubDate')
+            ts = (pub_el.text or '').strip() if pub_el is not None else ''
+            desc_el = item.find('description')
+            summary = _strip_html_tags((desc_el.text or '') if desc_el is not None else '')
+            image = _extract_rss_image(item)
+            if title:
+                items.append({'title': title, 'source': channel_title, 'url': link, 'ts': ts, 'image': image, 'summary': summary})
+
+    return items
+
+def get_virtual_channel_order():
+    """Return the saved tvg_id order list, or None if not set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='virtual_channel.order'")
+            row = c.fetchone()
+            if row:
+                return _json.loads(row[0])
+    except Exception:
+        logging.exception("get_virtual_channel_order failed")
+    return None
+
+def save_virtual_channel_order(order):
+    """Persist virtual channel order.  order is a list of tvg_id strings."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.order', ?)",
+                      (_json.dumps(order),))
+            conn.commit()
+    except Exception:
+        logging.exception("save_virtual_channel_order failed")
+        raise
+
+def get_virtual_channels():
+    """Return the list of virtual channel definitions in the user-defined order."""
+    import copy
+    channels = copy.deepcopy(VIRTUAL_CHANNELS)
+    order = get_virtual_channel_order()
+    if order:
+        id_to_ch = {ch['tvg_id']: ch for ch in channels}
+        ordered = [id_to_ch[tvg_id] for tvg_id in order if tvg_id in id_to_ch]
+        # append any channels not present in the saved order (e.g. newly added)
+        seen = set(order)
+        ordered += [ch for ch in channels if ch['tvg_id'] not in seen]
+        return ordered
+    return channels
+
+def get_virtual_epg(grid_start, hours_span=6):
+    """Generate synthetic EPG entries for virtual channels spanning the grid window."""
+    epg = {}
+    grid_end = grid_start + timedelta(hours=hours_span)
+    programs_by_tvg_id = {
+        'virtual.news':    'News Now',
+        'virtual.weather': 'Local Weather',
+        'virtual.status':  'System Status',
+        'virtual.traffic': 'Traffic Now',
+    }
+    for tvg_id, title in programs_by_tvg_id.items():
+        slots = []
+        slot_start = grid_start
+        while slot_start < grid_end:
+            slot_stop = slot_start + timedelta(hours=1)
+            slots.append({'title': title, 'desc': '', 'start': slot_start, 'stop': slot_stop})
+            slot_start = slot_stop
+        epg[tvg_id] = slots
+    return epg
+
 # ------------------- Safe redirect helper -------------------
 def is_safe_url(target):
     """
@@ -959,6 +2191,105 @@ def set_tuner(name):
     return redirect(dest)
 
 
+@app.route('/virtual_channels', methods=['GET', 'POST'])
+@login_required
+def virtual_channels():
+    if current_user.username != 'admin':
+        log_event(current_user.username, "Unauthorized access attempt to /virtual_channels")
+        return redirect(url_for('guide'))
+
+    if request.method == 'POST':
+        action = request.form.get("action")
+
+        if action == "update_virtual_channels":
+            new_settings = {}
+            for ch in VIRTUAL_CHANNELS:
+                tvg_id = ch['tvg_id']
+                new_settings[tvg_id] = request.form.get(f"vc_{tvg_id}", "0") == "1"
+            try:
+                save_virtual_channel_settings(new_settings)
+                log_event(current_user.username, "Updated virtual channel settings")
+                flash("Virtual channel settings saved.", "success")
+            except Exception:
+                flash("Failed to save virtual channel settings.", "warning")
+
+        elif action == "update_virtual_channel_order":
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            raw_order = request.form.getlist('channel_order[]')
+            order = [tid for tid in raw_order if tid in valid_ids]
+            if set(order) == valid_ids:
+                try:
+                    save_virtual_channel_order(order)
+                    return ('', 204)
+                except Exception:
+                    return ('Failed to save channel order', 500)
+            return ('Invalid channel order', 400)
+
+        elif action == "update_channel_overlay_appearance":
+            tvg_id = request.form.get('tvg_id', '').strip()
+            valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+            if tvg_id not in valid_ids:
+                flash("Unknown virtual channel.", "warning")
+            else:
+                appearance = {
+                    'text_color': request.form.get('ch_text_color', '').strip(),
+                    'bg_color': request.form.get('ch_bg_color', '').strip(),
+                    'test_text': request.form.get('ch_test_text', '').strip(),
+                }
+                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
+                    appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
+                try:
+                    save_channel_overlay_appearance(tvg_id, appearance)
+                    if tvg_id == 'virtual.news':
+                        rss_urls = [request.form.get(f'ch_news_rss_url_{i}', '').strip()
+                                    for i in range(1, 7)]
+                        save_news_feed_urls(rss_urls)
+                    if tvg_id == 'virtual.weather':
+                        weather_cfg = {
+                            'lat':           request.form.get('ch_weather_lat', '').strip(),
+                            'lon':           request.form.get('ch_weather_lon', '').strip(),
+                            'location_name': request.form.get('ch_weather_location', '').strip(),
+                            'units':         request.form.get('ch_weather_units', 'F').strip(),
+                        }
+                        save_weather_config(weather_cfg)
+                    if tvg_id == 'virtual.traffic':
+                        demo_cfg = {
+                            'mode':             request.form.get('ch_traffic_demo_mode', 'admin_rotation').strip(),
+                            'pack_size':        request.form.get('ch_traffic_pack_size', '10').strip(),
+                            'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
+                        }
+                        save_traffic_demo_config(demo_cfg)
+                    music_file = request.form.get('ch_music_file', '').strip()
+                    save_channel_music_file(tvg_id, music_file)
+                    log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
+                    flash("Channel overlay settings saved.", "success")
+                except ValueError as exc:
+                    flash(str(exc), "warning")
+                except Exception:
+                    flash("Failed to save channel overlay settings.", "warning")
+
+    vc_settings = get_virtual_channel_settings()
+    overlay_appearance = get_overlay_appearance()
+    channel_appearances = get_all_channel_appearances()
+    audio_files = list_audio_files()
+    channel_music_files = {ch['tvg_id']: get_channel_music_file(ch['tvg_id'])
+                           for ch in VIRTUAL_CHANNELS}
+
+    return render_template(
+        "virtual_channels.html",
+        VIRTUAL_CHANNELS=get_virtual_channels(),
+        vc_settings=vc_settings,
+        overlay_appearance=overlay_appearance,
+        channel_appearances=channel_appearances,
+        news_feed_urls=get_news_feed_urls(),
+        weather_config=get_weather_config(),
+        traffic_demo_config=get_traffic_demo_config(),
+        traffic_demo_cities=get_traffic_demo_cities(),
+        audio_files=audio_files,
+        channel_music_files=channel_music_files,
+    )
+
+
 @app.route('/change_tuner', methods=['GET', 'POST'])
 @login_required
 def change_tuner():
@@ -1079,6 +2410,7 @@ def change_tuner():
                     log_event(current_user.username, f"Updated auto-refresh: enabled={enabled} interval={interval}")
                     flash("Auto-refresh settings updated.", "success")
 
+
     tuners = get_tuners()
     current_tuner = get_current_tuner()
 
@@ -1099,6 +2431,19 @@ def change_tuner():
     if current_tuner:
         last_auto_refresh = _get_setting_inline(f"last_auto_refresh:{current_tuner}", None)
 
+    # Build per-tuner sync info for the Configured Tuners table
+    tuner_sync_info = {}
+    for tname in tuners:
+        raw = _get_setting_inline(f"last_auto_refresh:{tname}", None)
+        if raw:
+            parts = raw.split('|', 2)  # format: "status|datetime[|detail]"
+            sync_status = parts[0] if parts else ''
+            sync_dt = parts[1] if len(parts) > 1 else ''
+        else:
+            sync_status = ''
+            sync_dt = ''
+        tuner_sync_info[tname] = {'status': sync_status, 'last_sync': sync_dt}
+
     return render_template(
         "change_tuner.html",
         tuners=tuners.keys(),
@@ -1107,8 +2452,11 @@ def change_tuner():
         TUNERS=tuners,
         auto_refresh_enabled=auto_refresh_enabled,
         auto_refresh_interval_hours=auto_refresh_interval_hours,
-        last_auto_refresh=last_auto_refresh
+        last_auto_refresh=last_auto_refresh,
+        tuner_sync_info=tuner_sync_info,
     )
+
+
 
 @app.route('/guide')
 @login_required
@@ -1143,10 +2491,17 @@ def guide():
     user_prefs = get_user_prefs(current_user.username)
     user_default_theme = user_prefs.get("default_theme") or None
 
+    virtual_ch = get_virtual_channels()
+    vc_settings = get_virtual_channel_settings()
+    virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch['tvg_id'], True)]
+    virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
+    all_channels = virtual_ch + cached_channels
+    all_epg = {**virtual_epg, **cached_epg}
+
     return render_template(
         'guide.html',
-        channels=cached_channels,
-        epg=cached_epg,
+        channels=all_channels,
+        epg=all_epg,
         now=now,
         grid_start=grid_start,
         hours_header=hours_header,
@@ -1156,6 +2511,12 @@ def guide():
         current_tuner=get_current_tuner(),
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
+        overlay_appearance=get_overlay_appearance(),
+        channel_appearances=get_all_channel_appearances(),
+        channel_music_files={
+                ch['tvg_id']: (f'/static/audio/{f}' if (f := get_channel_music_file(ch['tvg_id'])) else '')
+                for ch in virtual_ch
+            },
     )
 
 @app.route('/play_channel', methods=['POST'])
@@ -1414,6 +2775,296 @@ def api_channels():
             'source': ch.get('source')
         })
     return jsonify({'channels': out, 'timestamp': datetime.now(timezone.utc).isoformat()})
+
+@app.route('/api/news', methods=['GET'])
+@login_required
+def api_news():
+    """Return headlines from the configured RSS/Atom feeds.
+
+    The server computes ``feed_index`` from wall-clock time so all clients see
+    the same feed and cycling continues even when nobody is tuned in.
+    ``ms_until_next_feed`` tells the client exactly when to fetch the next feed.
+
+    * 6 feeds → 5 min each  (6 × 5 min = 30 min block)
+    * 3 feeds → 10 min each (3 × 10 min = 30 min block)
+    * 1 feed  → 30 min
+    * 0 feeds → 5 min fallback (no feed configured)
+    """
+    feeds = get_news_feed_urls()
+    feed_count = len(feeds)
+    refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
+    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
+    if feeds:
+        headlines = fetch_rss_headlines(feeds[feed_index])
+    else:
+        headlines = []
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "headlines": headlines,
+        "feed_count": feed_count,
+        "feed_index": feed_index,
+        "refresh_ms": refresh_ms,
+        "ms_until_next_feed": ms_until_next_feed,
+    })
+
+@app.route('/news.html')
+@login_required
+def news_page_compat():
+    """Redirect legacy .html URL to canonical /news route."""
+    return redirect(url_for('news_page'), 301)
+
+@app.route('/news')
+@login_required
+def news_page():
+    """Retro TV news overlay page."""
+    log_event(current_user.username, "Loaded news page")
+    return render_template('news.html')
+
+@app.route('/weather')
+@login_required
+def weather_page():
+    """Retro TV weather overlay page."""
+    log_event(current_user.username, "Loaded weather page")
+    return render_template('weather.html')
+
+@app.route('/traffic')
+@login_required
+def traffic_page():
+    """Retro TV traffic overlay page."""
+    log_event(current_user.username, "Loaded traffic page")
+    return render_template('traffic.html')
+
+@app.route('/status')
+@login_required
+def status_page():
+    """Retro TV system status overlay page."""
+    log_event(current_user.username, "Loaded status page")
+    return render_template('status.html')
+
+@app.route('/api/weather', methods=['GET'])
+@login_required
+def api_weather():
+    """Weather overlay data endpoint. Returns current conditions, today's forecast,
+    extended outlook, and breaking news ticker. Calls open-meteo when configured."""
+    cfg = get_weather_config()
+    payload = _build_weather_payload(cfg)
+    music_filename = get_channel_music_file('virtual.weather')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    # Wall clock aligned refresh: tell the client exactly how long until the
+    # next 5-minute boundary so all viewers refresh in sync.
+    _weather_interval = 300  # seconds
+    _now_ts = datetime.now(timezone.utc).timestamp()
+    payload['ms_until_next'] = int((_weather_interval - (_now_ts % _weather_interval)) * 1000)
+    return jsonify(payload)
+
+@app.route('/api/traffic', methods=['GET'])
+@login_required
+def api_traffic():
+    """Traffic overlay data endpoint — Demo Mode.
+    Returns simulated congestion data for a rotating U.S. city.
+    No external API or configuration required."""
+    payload = dict(_build_traffic_demo_payload())
+    music_filename = get_channel_music_file('virtual.traffic')
+    payload['music_file'] = f'/static/audio/{music_filename}' if music_filename else ''
+    _now_ts = time.time()
+    rotation_seconds = max(30, int(get_traffic_demo_config().get('rotation_seconds', 120)))
+    payload['ms_until_next'] = int(
+        (rotation_seconds - (_now_ts % rotation_seconds)) * 1000
+    )
+    return jsonify(payload)
+
+
+@app.route('/api/traffic/demo', methods=['GET'])
+@login_required
+def api_traffic_demo():
+    """Alias for /api/traffic — always returns demo mode payload."""
+    return api_traffic()
+
+
+@app.route('/api/traffic/demo/cities', methods=['GET'])
+@login_required
+def api_traffic_demo_cities():
+    """Return all cities from traffic_demo_cities table."""
+    return jsonify({'cities': get_traffic_demo_cities()})
+
+
+@app.route('/api/traffic/demo/cities/<int:city_id>', methods=['POST'])
+@login_required
+def api_traffic_demo_city_update(city_id):
+    """Update enabled/weight for a single city (admin action)."""
+    data = request.get_json(silent=True) or {}
+    enabled = bool(data.get('enabled', True))
+    weight  = max(1, int(data.get('weight', 1)))
+    try:
+        save_traffic_demo_city(city_id, enabled, weight)
+        return jsonify({'ok': True})
+    except Exception as exc:
+        return jsonify({'ok': False, 'error': str(exc)}), 500
+
+
+@app.route('/api/traffic/demo/enable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_enable_all():
+    """Enable all cities."""
+    set_all_traffic_demo_cities_enabled(True)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/disable_all', methods=['POST'])
+@login_required
+def api_traffic_demo_disable_all():
+    """Disable all cities."""
+    set_all_traffic_demo_cities_enabled(False)
+    return jsonify({'ok': True})
+
+
+@app.route('/api/traffic/demo/pick_random', methods=['POST'])
+@login_required
+def api_traffic_demo_pick_random():
+    """Randomly pick N cities and store as the rotation pack."""
+    data = request.get_json(silent=True) or {}
+    demo_cfg = get_traffic_demo_config()
+    n = int(data.get('pack_size', demo_cfg.get('pack_size', 10)))
+    chosen = pick_random_traffic_demo_pack(n)
+    return jsonify({'ok': True, 'cities': chosen})
+
+
+@app.route('/api/traffic/demo/roads/<int:city_id>', methods=['GET'])
+@login_required
+def api_traffic_demo_roads(city_id):
+    """Return GeoJSON road geometry for a city fetched from the free Overpass API.
+    Results are cached server-side per city (24h TTL).
+    No API key required — Overpass is a free public service."""
+    geojson = get_traffic_demo_roads(city_id)
+    return jsonify(geojson)
+
+@app.route('/api/virtual/status', methods=['GET'])
+@login_required
+def api_virtual_status():
+    """Return system status data for the virtual status channel overlay."""
+    _LOAD_WARN_THRESHOLD  = 2.0
+    _DISK_WARN_THRESHOLD  = 70
+    _DISK_ERROR_THRESHOLD = 85
+
+    uptime_seconds = int((datetime.now() - APP_START_TIME).total_seconds())
+    hours, rem = divmod(uptime_seconds, 3600)
+    minutes = rem // 60
+
+    # System load (Unix only; graceful fallback on Windows)
+    try:
+        load1, load5, load15 = os.getloadavg()
+        load_str = f"{load1:.2f}  {load5:.2f}  {load15:.2f}"
+        load_state = "warn" if load1 > _LOAD_WARN_THRESHOLD else "good"
+    except (AttributeError, OSError):
+        load_str = "N/A"
+        load_state = "good"
+
+    # Disk free on root (Unix) or current drive (Windows)
+    try:
+        st = os.statvfs('/')
+        disk_free_gb = (st.f_bavail * st.f_frsize) / (1024 ** 3)
+        disk_total_gb = (st.f_blocks * st.f_frsize) / (1024 ** 3)
+        disk_used_pct = int(100 * (1 - st.f_bavail / st.f_blocks)) if st.f_blocks else 0
+        disk_str = f"{disk_free_gb:.1f} GB free of {disk_total_gb:.1f} GB"
+        if disk_used_pct > _DISK_ERROR_THRESHOLD:
+            disk_state = "error"
+        elif disk_used_pct > _DISK_WARN_THRESHOLD:
+            disk_state = "warn"
+        else:
+            disk_state = "good"
+    except (AttributeError, OSError):
+        disk_str = "N/A"
+        disk_state = "good"
+        disk_used_pct = 0
+
+    # Channel count
+    try:
+        channel_count = len(cached_channels)
+    except Exception:
+        channel_count = 0
+
+    items = [
+        {"label": "App Status",     "value": "Running",                     "state": "good"},
+        {"label": "Version",        "value": APP_VERSION,                    "state": "good"},
+        {"label": "Uptime",         "value": f"{hours}h {minutes}m",        "state": "good"},
+        {"label": "Platform",       "value": platform.system() + " " + platform.release(), "state": "good"},
+        {"label": "Python",         "value": sys.version.split()[0],        "state": "good"},
+        {"label": "Load Avg",       "value": load_str,                      "state": load_state},
+        {"label": "Disk",           "value": disk_str,                      "state": disk_state},
+        {"label": "Channels",       "value": str(channel_count),            "state": "good"},
+    ]
+
+    return jsonify({
+        "updated": datetime.now(timezone.utc).isoformat(),
+        "app_version": APP_VERSION,
+        "uptime": f"{hours}h {minutes}m",
+        "uptime_seconds": uptime_seconds,
+        "overall_state": "good",
+        "items": items,
+        "disk_used_pct": disk_used_pct,
+        "ticker": [item["label"] + ": " + item["value"] for item in items],
+        "ms_until_next": 30000,
+    })
+
+# ─── Audio upload / management routes ────────────────────────────────────────
+
+@app.route('/api/audio/files', methods=['GET'])
+@login_required
+def api_audio_files():
+    """Return a JSON list of uploaded audio filenames."""
+    return jsonify({'files': list_audio_files()})
+
+@app.route('/api/audio/upload', methods=['POST'])
+@login_required
+def api_audio_upload():
+    """Upload an audio file to the audio directory."""
+    if 'audio_file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    f = request.files['audio_file']
+    if not f or not f.filename:
+        return jsonify({'error': 'No file selected.'}), 400
+    original_name = f.filename
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}'}), 400
+    os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
+    dest = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    f.save(dest)
+    log_event(current_user.username, f"Uploaded audio file: {safe_name}")
+    return jsonify({'ok': True, 'filename': safe_name}), 201
+
+@app.route('/api/audio/delete/<filename>', methods=['POST'])
+@login_required
+def api_audio_delete(filename):
+    """Delete an uploaded audio file."""
+    safe_name = secure_filename(filename)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_AUDIO_EXTENSIONS:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    target = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    # Verify it stays inside AUDIO_UPLOAD_DIR (prevent path traversal)
+    if os.path.abspath(target) != os.path.join(os.path.abspath(AUDIO_UPLOAD_DIR), safe_name):
+        return jsonify({'error': 'Invalid filename.'}), 400
+    if not os.path.isfile(target):
+        return jsonify({'error': 'File not found.'}), 404
+    os.remove(target)
+    log_event(current_user.username, f"Deleted audio file: {safe_name}")
+    return jsonify({'ok': True})
+
+@app.route('/api/overlay/settings', methods=['GET'])
+@login_required
+def api_overlay_settings():
+    """Return overlay appearance settings. Use ?channel=tvg_id for per-channel settings."""
+    channel = request.args.get('channel', '').strip()
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if channel and channel in valid_ids:
+        return jsonify(get_channel_overlay_appearance(channel))
+    return jsonify(get_overlay_appearance())
 
 @app.route('/api/play', methods=['POST'])
 @login_required
@@ -2211,6 +3862,10 @@ if __name__ == '__main__':
         current_tuner = list(tuners.keys())[0]
     # Use load_tuner_data so combined tuners are handled correctly at startup.
     cached_channels, cached_epg = load_tuner_data(current_tuner)
+
+    # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
+    # so the overlay is ready before any city rotation happens.
+    threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)

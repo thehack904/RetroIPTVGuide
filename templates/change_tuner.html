@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Change Tuner — IPTV Guide{% endblock %}
+{% block title %}Tuner Management — IPTV Guide{% endblock %}
 
 {% block page_styles %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/change_tuner.css') }}">
@@ -7,10 +7,6 @@
 
 {% block content %}
 <div class="container-change-tuner">
-  <header class="page-header">
-    <h1>Tuners</h1>
-    <p class="lead">Switch the active tuner, edit tuner sources, and manage tuners. Dangerous actions are separated below to avoid accidental deletion.</p>
-  </header>
 
   <!-- Flash Messages -->
   {% with messages = get_flashed_messages(with_categories=true) %}
@@ -26,83 +22,147 @@
     {% endif %}
   {% endwith %}
 
-  <main class="card-grid">
-    <!-- Active tuner + Auto-refresh combined -->
-    <section class="card card-primary" aria-labelledby="lbl-active-tuner">
-      <div class="card-head">
-        <h2 id="lbl-active-tuner">Active Tuner & Auto-refresh</h2>
-      </div>
-      <div class="card-body">
-        <form method="POST" class="compact-form" id="form-switch">
-          <input type="hidden" name="action" value="switch_tuner">
-          <label for="tuner">Select Active Tuner</label>
-          <select name="tuner" id="tuner" required>
-            {% for tuner in tuners %}
-            <option value="{{ tuner }}" {% if tuner == current_tuner %}selected{% endif %}>{{ tuner }}</option>
-            {% endfor %}
-          </select>
+  <header class="page-header">
+    <h1>Tuner Management</h1>
+    <p class="lead">Manage tuner sources, sync and configuration</p>
+  </header>
 
-          <div class="form-row form-row-inline">
-            <button type="submit" class="primary">Set Active Tuner</button>
-            <button type="button" class="secondary" id="btn-run-now" title="Run refresh now">Run Now</button>
-          </div>
-        </form>
+  <div class="tm-content">
 
-        <hr class="divider" aria-hidden="true">
-
-        <!-- Auto-refresh settings inline with active tuner -->
-        <form method="POST" class="compact-form" id="form-autorefresh">
-          <input type="hidden" name="action" value="update_auto_refresh">
-          <div class="row-inline">
-            <div class="col">
-              <label for="auto_refresh_enabled">Auto-refresh</label>
-              <select id="auto_refresh_enabled" name="auto_refresh_enabled" class="form-control">
-                <option value="0" {% if _ar_enabled in ['0','False','false'] %}selected{% endif %}>Off</option>
-                <option value="1" {% if _ar_enabled in ['1','True','true'] %}selected{% endif %}>On</option>
-              </select>
+      <!-- Active Tuner + Last Sync card -->
+      <section class="card card-primary" aria-labelledby="lbl-active-tuner">
+        <div class="card-head">
+          <h2 id="lbl-active-tuner">Active Tuner</h2>
+        </div>
+        <div class="card-body">
+          <div class="active-tuner-row">
+            <div class="active-tuner-controls">
+              <form method="POST" class="compact-form inline-form" id="form-switch">
+                <input type="hidden" name="action" value="switch_tuner">
+                <select name="tuner" id="tuner" required>
+                  {% for tuner in tuners %}
+                  <option value="{{ tuner }}" {% if tuner == current_tuner %}selected{% endif %}>{{ tuner }}</option>
+                  {% endfor %}
+                </select>
+                <button type="submit" class="primary">Set Active</button>
+                <button type="button" class="secondary" id="btn-run-now">Run Sync Now</button>
+              </form>
             </div>
-            <div class="col">
-              <label for="auto_refresh_interval">Interval (hours)</label>
-              <select id="auto_refresh_interval" name="auto_refresh_interval_hours" class="form-control">
-                <option value="" {% if not _ar_interval %}selected{% endif %}>Select interval</option>
-                <option value="2" {% if _ar_interval|string == '2' %}selected{% endif %}>Every 2 hours</option>
-                <option value="4" {% if _ar_interval|string == '4' %}selected{% endif %}>Every 4 hours</option>
-                <option value="6" {% if _ar_interval|string == '6' %}selected{% endif %}>Every 6 hours</option>
-                <option value="12" {% if _ar_interval|string == '12' %}selected{% endif %}>Every 12 hours</option>
-                <option value="24" {% if _ar_interval|string == '24' %}selected{% endif %}>Every 24 hours</option>
-              </select>
-            </div>
-          </div>
-
-          <div class="form-row form-row-inline" style="margin-top:10px;">
-            <button type="submit" class="primary">Save Auto-refresh</button>
-            <button type="button" class="btn-link" id="btn-view-last">View Last Run</button>
-          </div>
-
-          <div class="muted small" id="auto-refresh-meta" style="margin-top:10px;">
-            {% if last_auto_refresh is defined and last_auto_refresh %}
-              {% set parts = last_auto_refresh.split('|') %}
-              <strong>Last:</strong> {{ parts[1] if parts|length > 1 else last_auto_refresh }}
-              {% if parts[0] %}
-              &nbsp;•&nbsp;<em>{{ parts[0] }}</em>
+            <div class="last-sync-box">
+              <span class="last-sync-label">Last Sync</span>
+              {% if last_auto_refresh %}
+                {% set parts = last_auto_refresh.split('|') %}
+                {% if parts[0] == 'success' %}
+                <span class="sync-status sync-ok">&#10003; Success &mdash;</span>
+                {% else %}
+                <span class="sync-status sync-warn">&#9888; {{ parts[0]|title }} &mdash;</span>
+                {% endif %}
+                <span class="sync-dt">{{ parts[1] if parts|length > 1 else '' }}</span>
+              {% else %}
+                <span class="sync-status sync-none">No sync recorded</span>
               {% endif %}
-            {% else %}
-              No automatic refresh recorded yet.
-            {% endif %}
+            </div>
           </div>
-        </form>
-      </div>
-    </section>
 
-    <!-- Edit / Add Tuners: Update URLs, Add, Rename grouped (delete separated) -->
-    <section class="card" aria-labelledby="lbl-edit-tuners">
-      <div class="card-head">
-        <h2 id="lbl-edit-tuners">Edit / Add Tuners</h2>
-      </div>
-      <div class="card-body">
-        <div class="subgrid">
-          <!-- Update selected tuner URLs -->
-          <div>
+          <div class="auto-refresh-row">
+            <form method="POST" class="compact-form inline-form" id="form-autorefresh">
+              <input type="hidden" name="action" value="update_auto_refresh">
+              <label class="ar-label">Auto Refresh</label>
+              <select id="auto_refresh_enabled" name="auto_refresh_enabled" class="ar-select">
+                <option value="0" {% if auto_refresh_enabled in ['0','False','false'] %}selected{% endif %}>Off</option>
+                <option value="1" {% if auto_refresh_enabled in ['1','True','true'] %}selected{% endif %}>On</option>
+              </select>
+              <label class="ar-label">Interval</label>
+              <select id="auto_refresh_interval" name="auto_refresh_interval_hours" class="ar-select">
+                <option value="" {% if not auto_refresh_interval_hours %}selected{% endif %}>&#8212;</option>
+                <option value="2" {% if auto_refresh_interval_hours|string == '2' %}selected{% endif %}>2 hours</option>
+                <option value="4" {% if auto_refresh_interval_hours|string == '4' %}selected{% endif %}>4 hours</option>
+                <option value="6" {% if auto_refresh_interval_hours|string == '6' %}selected{% endif %}>6 hours</option>
+                <option value="12" {% if auto_refresh_interval_hours|string == '12' %}selected{% endif %}>12 hours</option>
+                <option value="24" {% if auto_refresh_interval_hours|string == '24' %}selected{% endif %}>24 hours</option>
+              </select>
+              <button type="submit" class="secondary small">Save</button>
+              {% if auto_refresh_interval_hours %}
+              <span class="muted small ar-next">&#9711; Next (Auto): {{ auto_refresh_interval_hours }} hours</span>
+              {% endif %}
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tabs: Add Tuner | Edit Tuner | Combined Tuners -->
+      <section class="card" aria-label="Tuner configuration tabs">
+        <div class="tab-nav" role="tablist">
+          <button class="tab-btn tab-btn-active" role="tab" aria-selected="true" data-tab="tab-add">Add Tuner</button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-tab="tab-edit">Edit Tuner</button>
+          <button class="tab-btn" role="tab" aria-selected="false" data-tab="tab-combined">Combined Tuners</button>
+        </div>
+
+        <!-- Tab: Add Tuner -->
+        <div class="tab-panel" id="tab-add">
+          <div class="card-body">
+            <form method="POST" class="compact-form" id="form-add-tuner">
+              <input type="hidden" name="action" value="add_tuner">
+              <input type="text" id="tuner_name" name="tuner_name" placeholder="New Tuner Name" required class="tuner-name-input">
+
+              <label class="mode-label">Tuner Mode</label>
+              <div class="mode-cards">
+                <label class="mode-card mode-card-selected" for="tuner_mode_standard">
+                  <input type="radio" id="tuner_mode_standard" name="tuner_mode" value="standard" checked hidden>
+                  <span class="mode-check">&#10003;</span>
+                  <span class="mode-title">Standard Playlist</span>
+                  <span class="mode-sub">XMLTV + M3U</span>
+                </label>
+                <label class="mode-card" for="tuner_mode_single_stream">
+                  <input type="radio" id="tuner_mode_single_stream" name="tuner_mode" value="single_stream" hidden>
+                  <span class="mode-check">&#9675;</span>
+                  <span class="mode-title">Single Stream</span>
+                  <span class="mode-sub">M3U Only</span>
+                </label>
+                <label class="mode-card" for="tuner_mode_combined">
+                  <input type="radio" id="tuner_mode_combined" name="tuner_mode" value="combined" hidden>
+                  <span class="mode-check">&#9651;</span>
+                  <span class="mode-title">Combined</span>
+                  <span class="mode-sub">Merge Multiple</span>
+                </label>
+              </div>
+
+              <!-- Standard mode fields -->
+              <div id="standard-fields">
+                <label for="xml_new">XMLTV URL</label>
+                <input type="text" id="xml_new" name="xml_url" placeholder="http://iptv.example.com/guide.xml">
+                <label for="m3u_new">M3U URL</label>
+                <input type="text" id="m3u_new" name="m3u_url" placeholder="http://iptv.example.com/playlist.m3u">
+              </div>
+
+              <!-- Single stream mode fields -->
+              <div id="stream-fields" style="display:none;">
+                <label for="m3u8_stream">M3U8 Stream URL</label>
+                <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
+              </div>
+
+              <!-- Combined mode fields -->
+              <div id="combined-fields" style="display:none;">
+                <label for="source_tuners">Source Tuners</label>
+                <select id="source_tuners" name="source_tuners" multiple size="4" style="min-height:80px;">
+                  {% for tuner in tuners %}
+                  <option value="{{ tuner }}">{{ tuner }}</option>
+                  {% endfor %}
+                </select>
+                <p class="muted small">Hold Ctrl/Cmd to select multiple tuners to merge.</p>
+              </div>
+
+              <div class="form-row form-row-inline" style="margin-top:14px;">
+                <button type="button" class="secondary" id="btn-validate">Validate</button>
+                <button type="submit" class="primary">Add Tuner</button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <!-- Tab: Edit Tuner -->
+        <div class="tab-panel" id="tab-edit" hidden>
+          <div class="card-body">
             <form method="POST" class="compact-form" id="form-update-urls">
               <input type="hidden" name="action" value="update_urls">
               <label for="tuner_update">Select Tuner</label>
@@ -113,124 +173,132 @@
                 {% endif %}
                 {% endfor %}
               </select>
-
-              <label for="xml_url">XML URL (.xml)</label>
+              <label for="xml_url">XMLTV URL (.xml)</label>
               <input type="text" name="xml_url" id="xml_url" placeholder="XML URL (.xml)" required>
-
               <label for="m3u_url">M3U URL (.m3u)</label>
               <input type="text" name="m3u_url" id="m3u_url" placeholder="M3U URL (.m3u)" required>
-
               <div class="form-row form-row-inline">
                 <button type="submit" class="primary">Update URLs</button>
-                <button type="button" class="btn-link" id="btn-validate" title="Check reachability">Validate</button>
               </div>
             </form>
-          </div>
 
-          <!-- Add new tuner & Rename -->
-          <div>
-            <form method="POST" class="compact-form" id="form-add-tuner">
-              <input type="hidden" name="action" value="add_tuner">
-              <label for="tuner_name">Add new tuner</label>
-              <input type="text" id="tuner_name" name="tuner_name" placeholder="New Tuner Name" required>
-
-              <!-- Mode selection -->
-              <div class="mode-selection" style="margin-top: 12px;">
-                <label style="display: block; margin-bottom: 8px;">Tuner Mode</label>
-                <div style="display: flex; gap: 16px; flex-wrap: wrap;">
-                  <label for="tuner_mode_standard" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
-                    <input type="radio" id="tuner_mode_standard" name="tuner_mode" value="standard" checked>
-                    Standard Playlist Mode
-                  </label>
-                  <label for="tuner_mode_single_stream" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
-                    <input type="radio" id="tuner_mode_single_stream" name="tuner_mode" value="single_stream">
-                    Single Stream Mode
-                  </label>
-                  <label for="tuner_mode_combined" style="display: flex; align-items: center; gap: 6px; font-weight: normal;">
-                    <input type="radio" id="tuner_mode_combined" name="tuner_mode" value="combined">
-                    Combined Tuner
-                  </label>
-                </div>
-                <p class="muted small" style="margin: 6px 0 0 0;">Standard mode requires both XML and M3U playlist URLs. Single stream mode is for a direct M3U8 stream URL. Combined mode merges channels and guide data from multiple existing tuners.</p>
-              </div>
-
-              <!-- Standard mode fields -->
-              <div id="standard-fields">
-                <label for="xml_new">XML URL</label>
-                <input type="text" id="xml_new" name="xml_url" placeholder="http://.../guide.xml">
-
-                <label for="m3u_new">M3U URL</label>
-                <input type="text" id="m3u_new" name="m3u_url" placeholder="http://.../playlist.m3u">
-              </div>
-
-              <!-- Single stream mode fields -->
-              <div id="stream-fields" style="display: none;">
-                <label for="m3u8_stream">M3U8 Stream URL</label>
-                <input type="text" id="m3u8_stream" name="m3u8_stream_url" placeholder="http://.../stream.m3u8">
-                <p class="muted small" style="margin: 6px 0 0 0;">Direct link to a single M3U8 stream. Channel name will be auto-generated from the tuner name.</p>
-              </div>
-
-              <!-- Combined mode fields -->
-              <div id="combined-fields" style="display: none;">
-                <label for="source_tuners">Source Tuners (hold Ctrl/Cmd to select multiple)</label>
-                <select id="source_tuners" name="source_tuners" multiple size="4" style="min-height: 80px;">
-                  {% for tuner in tuners %}
-                  <option value="{{ tuner }}">{{ tuner }}</option>
-                  {% endfor %}
-                </select>
-                <p class="muted small" style="margin: 6px 0 0 0;">Select two or more tuners to combine. Their channels and guide data will be merged into a single tuner.</p>
-              </div>
-
-              <button type="submit" class="primary">Add Tuner</button>
-            </form>
-
-            <hr class="divider" aria-hidden="true">
+            <hr class="divider">
 
             <form method="POST" class="compact-form" id="form-rename">
               <input type="hidden" name="action" value="rename_tuner">
-              <label for="tuner_rename">Rename tuner</label>
+              <label for="tuner_rename">Rename Tuner</label>
               <select name="tuner" id="tuner_rename" required>
                 {% for tuner in tuners %}
                 <option value="{{ tuner }}">{{ tuner }}</option>
                 {% endfor %}
               </select>
               <input type="text" name="new_name" placeholder="New Tuner Name" required>
-              <button type="submit" class="primary">Rename</button>
+              <div class="form-row form-row-inline" style="margin-top:8px;">
+                <button type="submit" class="primary">Rename</button>
+              </div>
             </form>
           </div>
         </div>
-      </div>
-    </section>
 
-    <!-- Danger Zone: Delete tuner separated to avoid mistakes -->
-    <section class="card card-danger" aria-labelledby="lbl-danger-zone">
-      <div class="card-head">
-        <h2 id="lbl-danger-zone">Danger Zone — Delete Tuner</h2>
-      </div>
-      <div class="card-body">
-        <form method="POST" class="compact-form" id="form-delete">
-          <input type="hidden" name="action" value="delete_tuner">
-          <label for="tuner_remove">Delete tuner (cannot undo)</label>
-          <select name="tuner" id="tuner_remove" required>
-            {% for tuner in tuners %}
-            {% if tuner != current_tuner %}
-            <option value="{{ tuner }}">{{ tuner }}</option>
-            {% endif %}
-            {% endfor %}
-          </select>
-
-          <label for="confirm_delete" class="confirm-label">Type the tuner name to confirm</label>
-          <input type="text" id="confirm_delete" placeholder="Type tuner name exactly to enable Delete">
-
-          <div class="form-row form-row-inline" style="margin-top:10px;">
-            <button type="submit" class="danger" id="btn-delete" disabled>Delete Tuner</button>
-            <div class="muted small" style="margin-left:8px;">This action cannot be undone.</div>
+        <!-- Tab: Combined Tuners -->
+        <div class="tab-panel" id="tab-combined" hidden>
+          <div class="card-body">
+            <p class="muted small" style="margin:0 0 10px;">A combined tuner merges channels and guide data from multiple existing tuners.</p>
+            <form method="POST" class="compact-form" id="form-add-combined">
+              <input type="hidden" name="action" value="add_tuner">
+              <input type="hidden" name="tuner_mode" value="combined">
+              <label for="combined_name">Combined Tuner Name</label>
+              <input type="text" id="combined_name" name="tuner_name" placeholder="e.g. All Tuners" required>
+              <label for="combined_sources">Source Tuners</label>
+              <select id="combined_sources" name="source_tuners" multiple size="5" style="min-height:90px;">
+                {% for tuner in tuners %}
+                <option value="{{ tuner }}">{{ tuner }}</option>
+                {% endfor %}
+              </select>
+              <p class="muted small">Hold Ctrl/Cmd to select two or more tuners.</p>
+              <div class="form-row form-row-inline" style="margin-top:8px;">
+                <button type="submit" class="primary">Create Combined Tuner</button>
+              </div>
+            </form>
           </div>
-        </form>
-      </div>
-    </section>
-  </main>
-</div>
+        </div>
+      </section>
+
+      <!-- Configured Tuners Table -->
+      <section class="card" aria-labelledby="lbl-configured-tuners">
+        <div class="card-head configured-tuners-head">
+          <h2 id="lbl-configured-tuners">Configured Tuners</h2>
+          <button type="button" class="icon-btn" id="btn-tuners-collapse" title="Toggle">&#8963;</button>
+        </div>
+        <div class="card-body" id="configured-tuners-body">
+          <table class="tuners-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Status</th>
+                <th>Last Sync</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for tname in tuners %}
+              {% set tinfo = TUNERS[tname] %}
+              {% set tsync = tuner_sync_info.get(tname, {}) %}
+              <tr class="{% if tname == current_tuner %}tuner-row-active{% endif %}">
+                <td class="tuner-name-cell">
+                  {% if tname == current_tuner %}<span class="active-indicator" title="Active">&#10003;</span>{% endif %}
+                  {{ tname }}
+                </td>
+                <td>
+                  {% if tinfo.tuner_type == 'combined' %}Combined
+                  {% elif tinfo.tuner_type == 'single_stream' %}Single Stream
+                  {% else %}Playlist{% endif %}
+                </td>
+                <td>
+                  {% if tsync.status == 'success' %}
+                    <span class="status-badge status-ok">&#9650; Healthy</span>
+                  {% elif tsync.status == 'failed' %}
+                    <span class="status-badge status-warn">&#9650; Warning</span>
+                  {% else %}
+                    <span class="status-badge status-none">&#8212;</span>
+                  {% endif %}
+                </td>
+                <td class="muted small">{{ tsync.last_sync or '&#8212;' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Danger Zone -->
+      <section class="card card-danger" aria-labelledby="lbl-danger-zone">
+        <div class="card-head">
+          <h2 id="lbl-danger-zone">Danger Zone &mdash; Delete Tuner</h2>
+        </div>
+        <div class="card-body">
+          <form method="POST" class="compact-form" id="form-delete">
+            <input type="hidden" name="action" value="delete_tuner">
+            <label for="tuner_remove">Delete tuner (cannot undo)</label>
+            <select name="tuner" id="tuner_remove" required>
+              {% for tuner in tuners %}
+              {% if tuner != current_tuner %}
+              <option value="{{ tuner }}">{{ tuner }}</option>
+              {% endif %}
+              {% endfor %}
+            </select>
+            <label for="confirm_delete" class="confirm-label">Type the tuner name to confirm</label>
+            <input type="text" id="confirm_delete" placeholder="Type tuner name exactly to enable Delete">
+            <div class="form-row form-row-inline" style="margin-top:10px;">
+              <button type="submit" class="danger" id="btn-delete" disabled>Delete Tuner</button>
+              <div class="muted small" style="margin-left:8px;">This action cannot be undone.</div>
+            </div>
+          </form>
+        </div>
+      </section>
+
+  </div><!-- /.tm-content -->
+</div><!-- /.container-change-tuner -->
 {% endblock %}
 
 {% block autoscroll_script %}{% endblock %}
@@ -240,166 +308,172 @@
 const tunerData = {{ TUNERS|tojson }};
 
 function populateUrls(tuner) {
-    if (tunerData && tunerData[tuner]) {
-        document.getElementById('xml_url').value = tunerData[tuner].xml || "";
-        document.getElementById('m3u_url').value = tunerData[tuner].m3u || "";
-    } else {
-        document.getElementById('xml_url').value = "";
-        document.getElementById('m3u_url').value = "";
-    }
+  if (tunerData && tunerData[tuner]) {
+    document.getElementById('xml_url').value = tunerData[tuner].xml || '';
+    document.getElementById('m3u_url').value = tunerData[tuner].m3u || '';
+  } else {
+    document.getElementById('xml_url').value = '';
+    document.getElementById('m3u_url').value = '';
+  }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
-    try { if (typeof setTheme === 'function') setTheme(localStorage.getItem('theme') || 'dark'); } catch(e){}
+document.addEventListener('DOMContentLoaded', () => {
+  try { if (typeof setTheme === 'function') setTheme(localStorage.getItem('theme') || 'dark'); } catch(e){}
 
-    var sel = document.getElementById('tuner_update');
-    if (sel) populateUrls(sel.value);
+  var sel = document.getElementById('tuner_update');
+  if (sel) populateUrls(sel.value);
 
-    // Flash message auto-dismiss and manual close
-    try {
-      const flashMessages = document.querySelectorAll('.flash-message');
-      if (flashMessages.length > 0) {
-        // Add close button handlers
+  // Flash message auto-dismiss and manual close
+  try {
+    const flashMessages = document.querySelectorAll('.flash-message');
+    flashMessages.forEach(msg => {
+      const closeBtn = msg.querySelector('.flash-close');
+      if (closeBtn) closeBtn.addEventListener('click', () => { msg.classList.add('fade-out'); setTimeout(() => msg.remove(), 500); });
+    });
+    if (flashMessages.length > 0) {
+      setTimeout(() => {
         flashMessages.forEach(msg => {
-          const closeBtn = msg.querySelector('.flash-close');
-          if (closeBtn) {
-            closeBtn.addEventListener('click', () => {
-              msg.classList.add('fade-out');
-              setTimeout(() => msg.remove(), 500);
-            });
-          }
+          if (msg.parentNode) { msg.classList.add('fade-out'); setTimeout(() => { if (msg.parentNode) msg.remove(); }, 500); }
         });
-
-        // Auto-dismiss after 8 seconds
-        setTimeout(() => {
-          flashMessages.forEach(msg => {
-            if (msg.parentNode) { // Check if still in DOM
-              msg.classList.add('fade-out');
-              setTimeout(() => {
-                if (msg.parentNode) msg.remove();
-              }, 500);
-            }
-          });
-        }, 8000);
-      }
-    } catch (e) {
-      // Flash messages will remain visible if auto-dismiss fails
-      console.error('Flash message initialization failed:', e);
+      }, 8000);
     }
+  } catch(e) {}
 
-    // Run Now (uses existing endpoint)
-    const runNow = document.getElementById('btn-run-now');
-    if (runNow) {
-      runNow.addEventListener('click', () => {
-        fetch('/api/auto_refresh/trigger', { method: 'POST', credentials: 'same-origin' })
-          .then(r => r.json().catch(()=>({ok:false})))
-          .then(j => {
-            if (j && j.ok) {
-              alert('Refresh started');
-            } else {
-              alert('Refresh request sent (if you have permission).');
-            }
-          }).catch(()=>alert('Refresh request failed.'));
+  // Tab switching helper (used for both inner card tabs and page-level tabs)
+  function initTabGroup(btnSelector, panelSelector, activeClass, dataKey) {
+    const btns = document.querySelectorAll(btnSelector);
+    const panels = document.querySelectorAll(panelSelector);
+    btns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const target = btn.dataset[dataKey];
+        btns.forEach(b => { b.classList.remove(activeClass); b.setAttribute('aria-selected', 'false'); });
+        panels.forEach(p => { p.hidden = true; });
+        btn.classList.add(activeClass);
+        btn.setAttribute('aria-selected', 'true');
+        const panel = document.getElementById(target);
+        if (panel) panel.hidden = false;
       });
-    }
+    });
+  }
 
-    // Validate URLs using HEAD
-    const validateBtn = document.getElementById('btn-validate');
-    if (validateBtn) {
-      validateBtn.addEventListener('click', () => {
-        const xml = document.getElementById('xml_url').value;
-        const m3u = document.getElementById('m3u_url').value;
-        const checks = [];
-        if (m3u) checks.push(fetch(m3u, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
-        if (xml) checks.push(fetch(xml, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
-        Promise.all(checks).then(results => {
-          const ok = results.length > 0 && results.every(Boolean);
-          alert(ok ? 'All URLs reachable (HEAD).' : 'One or more URLs not reachable.');
-        });
+  initTabGroup('.tab-btn', '.tab-panel', 'tab-btn-active', 'tab');
+
+  // Run Now
+  const runNow = document.getElementById('btn-run-now');
+  if (runNow) {
+    runNow.addEventListener('click', () => {
+      fetch('/api/auto_refresh/trigger', { method: 'POST', credentials: 'same-origin' })
+        .then(r => r.json().catch(()=>({ok:false})))
+        .then(j => { alert(j && j.ok ? 'Refresh started' : 'Refresh request sent.'); })
+        .catch(()=>alert('Refresh request failed.'));
+    });
+  }
+
+  // Validate URLs
+  const validateBtn = document.getElementById('btn-validate');
+  if (validateBtn) {
+    validateBtn.addEventListener('click', () => {
+      const xml = document.getElementById('xml_new') ? document.getElementById('xml_new').value : '';
+      const m3u = document.getElementById('m3u_new') ? document.getElementById('m3u_new').value : '';
+      const checks = [];
+      if (m3u) checks.push(fetch(m3u, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
+      if (xml) checks.push(fetch(xml, { method: 'HEAD' }).then(r => r.ok).catch(()=>false));
+      if (!checks.length) { alert('Enter at least one URL to validate.'); return; }
+      Promise.all(checks).then(results => {
+        alert(results.every(Boolean) ? 'All URLs reachable (HEAD).' : 'One or more URLs not reachable.');
       });
-    }
+    });
+  }
 
-    // Delete confirmation: enable delete button only when typed name matches selected tuner
-    const deleteSelect = document.getElementById('tuner_remove');
-    const confirmInput = document.getElementById('confirm_delete');
-    const deleteBtn = document.getElementById('btn-delete');
+  // Delete confirmation
+  const deleteSelect = document.getElementById('tuner_remove');
+  const confirmInput = document.getElementById('confirm_delete');
+  const deleteBtn = document.getElementById('btn-delete');
+  function updateDeleteState() {
+    const selected = deleteSelect && deleteSelect.value ? deleteSelect.value.trim() : '';
+    const typed = confirmInput && confirmInput.value ? confirmInput.value.trim() : '';
+    if (deleteBtn) deleteBtn.disabled = !(selected && typed && selected === typed);
+  }
+  if (deleteSelect && confirmInput) {
+    deleteSelect.addEventListener('change', () => { confirmInput.value = ''; updateDeleteState(); });
+    confirmInput.addEventListener('input', updateDeleteState);
+  }
 
-    function updateDeleteState() {
-      const selected = deleteSelect && deleteSelect.value ? deleteSelect.value.trim() : '';
-      const typed = confirmInput && confirmInput.value ? confirmInput.value.trim() : '';
-      if (selected && typed && selected === typed) {
-        deleteBtn.disabled = false;
-      } else {
-        deleteBtn.disabled = true;
-      }
-    }
-
-    if (deleteSelect && confirmInput) {
-      deleteSelect.addEventListener('change', () => {
-        confirmInput.value = '';
-        updateDeleteState();
-      });
-      confirmInput.addEventListener('input', updateDeleteState);
-    }
-
-    // Keep tuner_update / tuner_rename select in sync with initial loaded values
-    try {
-      const selUpdate = document.getElementById('tuner_update');
-      const selRename = document.getElementById('tuner_rename');
-      if (selUpdate && selRename) {
-        selRename.value = selUpdate.value;
-      }
-    } catch (e) {}
-
-    // Mode switching for Add Tuner form
-    try {
+  // Mode cards for Add Tuner
+  try {
     const standardFields = document.getElementById('standard-fields');
     const streamFields = document.getElementById('stream-fields');
     const combinedFields = document.getElementById('combined-fields');
     const xmlInput = document.getElementById('xml_new');
     const m3uInput = document.getElementById('m3u_new');
     const m3u8Input = document.getElementById('m3u8_stream');
-    const sourceTunersSelect = document.getElementById('source_tuners');
     const modeRadios = document.querySelectorAll('input[name="tuner_mode"]');
+    const modeCards = document.querySelectorAll('.mode-card');
+
+    function updateModeCards() {
+      modeCards.forEach(card => {
+        const radio = card.querySelector('input[type="radio"]');
+        const check = card.querySelector('.mode-check');
+        if (radio && radio.checked) {
+          card.classList.add('mode-card-selected');
+          if (check) check.textContent = '\u2713';
+        } else {
+          card.classList.remove('mode-card-selected');
+          if (check) {
+            const val = radio ? radio.value : '';
+            check.textContent = val === 'combined' ? '\u25B3' : '\u25CB';
+          }
+        }
+      });
+    }
 
     function updateFormMode() {
       const selectedMode = document.querySelector('input[name="tuner_mode"]:checked');
       const mode = selectedMode ? selectedMode.value : 'standard';
-
-      // Hide all field groups first
       standardFields.style.display = 'none';
       streamFields.style.display = 'none';
       combinedFields.style.display = 'none';
-
-      // Remove required from all optional inputs
       xmlInput.removeAttribute('required');
       m3uInput.removeAttribute('required');
-      m3u8Input.removeAttribute('required');
-
+      if (m3u8Input) m3u8Input.removeAttribute('required');
       if (mode === 'single_stream') {
         streamFields.style.display = 'block';
-        m3u8Input.setAttribute('required', 'required');
+        if (m3u8Input) m3u8Input.setAttribute('required','required');
       } else if (mode === 'combined') {
         combinedFields.style.display = 'block';
-        // source_tuners select is validated server-side; no HTML required attribute on multi-select
       } else {
-        // Standard mode (default)
         standardFields.style.display = 'block';
-        xmlInput.setAttribute('required', 'required');
-        m3uInput.setAttribute('required', 'required');
+        xmlInput.setAttribute('required','required');
+        m3uInput.setAttribute('required','required');
       }
+      updateModeCards();
     }
 
-    // Initialize mode on load
     updateFormMode();
-
-    // Handle mode change
-    modeRadios.forEach(radio => {
-      radio.addEventListener('change', updateFormMode);
+    modeRadios.forEach(r => r.addEventListener('change', updateFormMode));
+    modeCards.forEach(card => {
+      card.addEventListener('click', () => {
+        const radio = card.querySelector('input[type="radio"]');
+        if (radio) { radio.checked = true; updateFormMode(); }
+      });
     });
-  } catch (e) {
-    // Log error if mode switching setup fails - form will still submit with default standard mode
-    console.error('Mode switching initialization failed:', e);
+  } catch(e) { console.error('Mode card init failed:', e); }
+
+  // Keep tuner_update / tuner_rename in sync
+  try {
+    const selUpdate = document.getElementById('tuner_update');
+    const selRename = document.getElementById('tuner_rename');
+    if (selUpdate && selRename) selRename.value = selUpdate.value;
+  } catch(e) {}
+
+  // Configured Tuners collapse
+  const colBtn = document.getElementById('btn-tuners-collapse');
+  const colBody = document.getElementById('configured-tuners-body');
+  if (colBtn && colBody) {
+    colBtn.addEventListener('click', () => {
+      colBody.hidden = !colBody.hidden;
+      colBtn.textContent = colBody.hidden ? '\u2335' : '\u2303';
+    });
   }
 });
 </script>

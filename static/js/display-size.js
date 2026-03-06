@@ -88,6 +88,21 @@
   }
 
   function applyDisplaySize(size) {
+    // 'default' resets to initial state -- clears the stored preference entirely
+    if (size === 'default') {
+      try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+      _scale = 1.0;
+      document.documentElement.removeAttribute('data-display-size');
+      applyUiZoom(1.0);
+      // Also reset video player size/aspect ratio and channel-column width
+      if (typeof window.resetVideoSize === 'function') window.resetVideoSize();
+      try { window.dispatchEvent(new Event('resize')); } catch (e) { /* ignore */ }
+      try {
+        window.dispatchEvent(new CustomEvent('displaySize:applied', { detail: { size: 'default' } }));
+      } catch (e) { /* ignore */ }
+      return;
+    }
+
     var scale = ZOOM_PRESETS[size] || 1.0;
     _scale = scale;
 
