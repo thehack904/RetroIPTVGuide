@@ -175,11 +175,20 @@ sudo /home/iptv/iptv-server/retroiptv_rpi.sh uninstall --yes
 ---
 
 ## 📸 Screenshots
+### 📺 Guide Page - Weather
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Guide_w_Weather.png)
+
+### 📺 Guide Page - Traffic
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Guide_w_Traffic.png)
+
+### 📺 Virtual Channel - News
+![Guide Screenshot](docs/screenshots/Virtual_Channel-News.png)
+
+### 📺 Virtual Channel - Traffic (Simulated)
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Traffic-Simulated.png)
+
 ### 📺 Auto Scroll
 ![Auto Scroll](docs/screenshots/auto-scroll.gif)
-
-### 📺 Guide Page
-![Guide Screenshot](docs/screenshots/guide.png)
 
 ### 📺 Mobile
 ![Mobile](docs/screenshots/IMG_0001.jpg)
