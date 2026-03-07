@@ -7,14 +7,10 @@
 .diag-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color, #444); padding-bottom: 0; }
 .diag-tab-btn {
     padding: 0.5rem 1.1rem;
-    border: 2px solid var(--border-color, #555);
-    border-bottom: none;
-    background: var(--bg-secondary, #222);
-    color: var(--text-color, #eee);
-    border-radius: 4px 4px 0 0;
-    cursor: pointer; font-size: 0.9rem;
-    transition: background 0.12s;
-    position: relative; bottom: -2px;
+    border: 2px solid var(--border-color, #555); border-bottom: none;
+    background: var(--bg-secondary, #222); color: var(--text-color, #eee);
+    border-radius: 4px 4px 0 0; cursor: pointer; font-size: 0.9rem;
+    transition: background 0.12s; position: relative; bottom: -2px;
 }
 .diag-tab-btn:hover  { background: var(--accent-color, #0af); color: #000; }
 .diag-tab-btn.active { background: var(--accent-color, #0af); color: #000; font-weight: 700; border-color: var(--accent-color,#0af); }
@@ -73,6 +69,31 @@
 .sysinfo-table td { word-break: break-all; font-family: monospace; font-size: 0.82rem; }
 .si-section { color: var(--accent-color, #0af) !important; font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 0.6rem !important; font-family: sans-serif !important; }
 .support-checklist { font-size: 0.9rem; color: #ccc; line-height: 1.7; padding-left: 1.2rem; }
+/* Config tab */
+.cfg-section { margin-bottom: 1.2rem; }
+.cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.7rem; margin-top: 0.5rem; }
+.cfg-card { border: 1px solid #444; border-radius: 4px; padding: 0.75rem; background: #111; }
+.cfg-card .cc-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.3rem; }
+.cfg-card .cc-sub { font-size: 0.75rem; color: #888; }
+.cfg-card .cc-val { font-size: 0.78rem; font-family: monospace; color: #ccc; word-break: break-all; }
+.cfg-pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; margin-left: 0.4rem; }
+.pill-on  { background: #1a4a1a; color: #33ff66; border: 1px solid #33ff66; }
+.pill-off { background: #3a1a1a; color: #ff6666; border: 1px solid #ff6666; }
+.pill-warn { background: #3a2a00; color: #ffcc00; border: 1px solid #ffcc00; }
+.svc-row { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.45rem 0; border-bottom: 1px solid #222; font-size: 0.82rem; flex-wrap: wrap; }
+.svc-name { font-weight: 600; min-width: 160px; flex-shrink: 0; }
+.svc-url  { font-family: monospace; font-size: 0.76rem; color: #888; word-break: break-all; flex: 1 1 200px; }
+.svc-status { flex-shrink: 0; }
+.res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
+.res-card { border: 1px solid #333; border-radius: 3px; padding: 0.5rem 0.7rem; background: #0d0d0d; }
+.res-card .rv { font-size: 1.3rem; font-weight: 700; color: var(--accent-color,#0af); }
+.res-card .rl { font-size: 0.72rem; color: #888; }
+.pkg-ok  { color: #33ff66; }
+.pkg-err { color: #ff4444; font-weight: 700; }
+.user-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.user-table th { color: #777; font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid #333; text-align: left; }
+.user-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #1e1e1e; font-family: monospace; }
+/* Spinner */
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: var(--accent-color, #0af); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-left: 0.4rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 </style>
@@ -84,39 +105,43 @@
 
   <div class="diag-tabs" role="tablist">
     <button class="diag-tab-btn{% if active_tab == 'tuners' %} active{% endif %}" data-tab="tuners">&#x1F50C; Tuners</button>
-    <button class="diag-tab-btn{% if active_tab == 'logs' %} active{% endif %}"   data-tab="logs">&#x1F4C4; Logs</button>
-    <button class="diag-tab-btn{% if active_tab == 'health' %} active{% endif %}" data-tab="health">&#x2764;&#xFE0F; Health</button>
-    <button class="diag-tab-btn{% if active_tab == 'system' %} active{% endif %}" data-tab="system">&#x1F5A5; System</button>
+    <button class="diag-tab-btn{% if active_tab == 'config' %} active{% endif %}"  data-tab="config">&#x2699;&#xFE0F; Config</button>
+    <button class="diag-tab-btn{% if active_tab == 'logs' %} active{% endif %}"    data-tab="logs">&#x1F4C4; Logs</button>
+    <button class="diag-tab-btn{% if active_tab == 'health' %} active{% endif %}"  data-tab="health">&#x2764;&#xFE0F; Health</button>
+    <button class="diag-tab-btn{% if active_tab == 'system' %} active{% endif %}"  data-tab="system">&#x1F5A5; System</button>
     <button class="diag-tab-btn{% if active_tab == 'support' %} active{% endif %}" data-tab="support">&#x1F4E6; Support Bundle</button>
   </div>
 
   <!-- TUNERS TAB -->
   <div id="panel-tuners" class="diag-panel{% if active_tab == 'tuners' %} active{% endif %}">
-
     <div class="diag-box">
       <h3>Runtime Cache State <span id="cacheSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">
-        Live in-memory channel/EPG counts, active tuner, and auto-refresh status.
-        Use this to quickly verify how many channels are loaded after a tuner switch.
-      </p>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Live in-memory channel/EPG counts, active tuner, and auto-refresh status.</p>
       <button type="button" class="btn-action" id="btnLoadCache">&#x25BA; Load Cache State</button>
       <div id="cacheGrid" class="cache-grid" style="display:none"></div>
       <div id="cacheActiveInfo" style="margin-top:0.6rem;font-size:0.85rem;color:#aaa"></div>
       <div id="cacheSampleChannels" style="margin-top:0.6rem"></div>
       <div id="cacheRefreshStatus" style="margin-top:0.6rem"></div>
     </div>
-
     <div class="diag-box">
       <h3>Tuner URL Connectivity <span id="tunerSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">
-        Tests each tuner's M3U and XMLTV URLs <strong>from the server side</strong>.
-        Shows DNS resolution, HTTP status code, error messages, and response time.
-        This is the first thing to check when channels won't load or stream preview doesn't play.
-      </p>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Tests each tuner's M3U and XMLTV URLs <strong>from the server side</strong>. Shows DNS, HTTP status, errors, response time.</p>
       <button type="button" class="btn-action" id="btnTestTuners">&#x25BA; Test All Tuners (may take ~20s)</button>
       <div id="tunerList" class="tuner-list" style="margin-top:0.8rem"></div>
     </div>
+  </div>
 
+  <!-- CONFIG TAB -->
+  <div id="panel-config" class="diag-panel{% if active_tab == 'config' %} active{% endif %}">
+    <div class="diag-box">
+      <h3>Application Configuration <span id="cfgSpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">
+        User accounts, virtual channel setup, external service reachability (weather API, news RSS), and system resource usage.
+        This is the quickest way to diagnose why a virtual channel isn't showing data.
+      </p>
+      <button type="button" class="btn-action" id="btnLoadConfig">&#x25BA; Load Config Diagnostics</button>
+      <div id="cfgContent" style="margin-top:0.9rem"></div>
+    </div>
   </div>
 
   <!-- LOGS TAB -->
@@ -125,9 +150,7 @@
       <h3>Log Viewer</h3>
       <div class="log-controls">
         <label for="logKeySelect">Log file:</label>
-        <select id="logKeySelect">
-          {% for k in log_keys %}<option value="{{ k }}">{{ k }}</option>{% endfor %}
-        </select>
+        <select id="logKeySelect">{% for k in log_keys %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
         <label for="logNInput">Lines:</label>
         <input type="number" id="logNInput" value="200" min="10" max="2000" style="width:75px">
         <button type="button" class="btn-action" id="btnTailLog">Tail (last N)</button>
@@ -143,10 +166,7 @@
   <div id="panel-health" class="diag-panel{% if active_tab == 'health' %} active{% endif %}">
     <div class="diag-box">
       <h3>Health Checks <span id="healthSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">
-        Database paths &amp; connectivity, schema tables, disk space, write permissions,
-        file paths, symlink status, and runtime cache state.
-      </p>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Database connectivity, schema, disk space, file paths, symlinks, and runtime cache state.</p>
       <button type="button" class="btn-action" id="btnRunHealth">&#x25BA; Run All Checks</button>
       <div id="healthGrid" class="health-grid" style="margin-top:0.8rem"></div>
       <div id="healthExtras"></div>
@@ -158,11 +178,7 @@
     <div class="diag-box">
       <h3>System &amp; Runtime Info <span id="sysSpinner" class="spinner" style="display:none"></span></h3>
       <button type="button" class="btn-action" id="btnLoadSystem" style="margin-bottom:0.8rem">&#x25BA; Load Info</button>
-      <table class="sysinfo-table">
-        <tbody id="sysTableBody">
-          <tr><td colspan="2" style="color:#888">Click "Load Info" to fetch system data.</td></tr>
-        </tbody>
-      </table>
+      <table class="sysinfo-table"><tbody id="sysTableBody"><tr><td colspan="2" style="color:#888">Click "Load Info".</td></tr></tbody></table>
     </div>
   </div>
 
@@ -170,29 +186,22 @@
   <div id="panel-support" class="diag-panel{% if active_tab == 'support' %} active{% endif %}">
     <div class="diag-box">
       <h3>Support Bundle</h3>
-      <p style="color:#ccc;font-size:0.9rem;margin:0 0 0.4rem">
-        Download a ZIP of sanitised diagnostic data. Attach this to GitHub bug reports so
-        issues like <em>"stream won't play"</em> or <em>"config lost on restart"</em> can be diagnosed.
-      </p>
-      <p style="font-size:0.85rem;color:#888;margin:0 0 0.8rem">
-        All log content has passwords, tokens, and API keys automatically redacted before download.
-      </p>
+      <p style="color:#ccc;font-size:0.9rem;margin:0 0 0.4rem">Download a ZIP of sanitised diagnostic data. Attach to GitHub bug reports.</p>
+      <p style="font-size:0.85rem;color:#888;margin:0 0 0.8rem">Passwords, tokens, and API keys are automatically redacted.</p>
       <p style="color:#aaa;font-size:0.85rem;font-weight:600;margin:0 0 0.3rem">Included:</p>
       <ul class="support-checklist">
-        <li>Application log (<code>retroiptvguide.log</code>) + rotated copies</li>
+        <li>Application log + rotated copies (secrets redacted)</li>
         <li>Activity log</li>
-        <li>Health check results (<code>health.json</code>) — DB paths, disk, permissions</li>
-        <li>Per-tuner URL connectivity report (<code>tuners.json</code>) — DNS, HTTP status, error messages</li>
-        <li>Runtime cache state (<code>cache_state.json</code>) — channel count, EPG count, active tuner</li>
-        <li>System information (<code>system.json</code>) — OS, Python version, uptime, install mode</li>
+        <li><code>health.json</code> — DB paths, disk, permissions, file system</li>
+        <li><code>tuners.json</code> — per-tuner URL connectivity, DNS, HTTP errors</li>
+        <li><code>cache_state.json</code> — channel count, EPG count, active tuner</li>
+        <li><code>config.json</code> — user accounts, virtual channel config, external service probes, system resources</li>
+        <li><code>system.json</code> — OS, Python, uptime, install mode</li>
       </ul>
-      <p style="color:#888;font-size:0.82rem;margin:0.5rem 0 0.8rem">
-        <strong>NOT included:</strong> Full database contents, passwords, API keys, or arbitrary user files.
-      </p>
+      <p style="color:#888;font-size:0.82rem;margin:0.5rem 0 0.8rem"><strong>NOT included:</strong> Full database, passwords, API keys, or arbitrary files.</p>
       <a class="btn-action" href="{{ url_for('admin_diagnostics.diagnostics_support') }}">&#x2B07; Download Support Bundle</a>
     </div>
   </div>
-
 </div>
 {% endblock %}
 
@@ -223,6 +232,18 @@ function probeHtml(probe){
   }
   return '<span class="probe-err">&#x274C; '+esc(probe.error||'Unreachable')+'</span>'
     +(probe.resolved_ip?'<span class="probe-meta"> DNS&#x2192;'+esc(probe.resolved_ip)+'</span>':'');
+}
+function svcProbeHtml(svc){
+  if(svc.reachable===null || svc.reachable===undefined){
+    return '<span class="probe-meta">&#x2014; '+esc(svc.note||'not configured')+'</span>';
+  }
+  if(svc.reachable){
+    return '<span class="probe-ok">&#x2705; '+esc(svc.status_code||'OK')+'</span>'
+      +(svc.response_time_ms!=null?'<span class="probe-meta"> '+esc(svc.response_time_ms)+'ms</span>':'')
+      +(svc.resolved_ip?'<span class="probe-meta"> DNS&#x2192;'+esc(svc.resolved_ip)+'</span>':'');
+  }
+  return '<span class="probe-err">&#x274C; '+esc(svc.error||'Unreachable')+'</span>'
+    +(svc.resolved_ip?'<span class="probe-meta"> DNS&#x2192;'+esc(svc.resolved_ip)+'</span>':'');
 }
 
 /* ── Tabs ── */
@@ -271,39 +292,32 @@ document.getElementById('btnLoadCache').addEventListener('click',function(){
     if(d.error){ grid.innerHTML='<span class="st-fail">'+esc(d.error)+'</span>'; grid.style.display='block'; return; }
     grid.style.display='grid';
     var stats=[
-      ['channel_count','Channels in cache','Channels loaded from active tuner M3U'],
-      ['epg_channel_count','EPG channels','Channels with program guide data'],
-      ['epg_entry_count','EPG entries','Total program entries across all channels']
+      ['channel_count','Channels in cache'],
+      ['epg_channel_count','EPG channels'],
+      ['epg_entry_count','EPG entries']
     ];
     grid.innerHTML=stats.map(function(s){
       return '<div class="cache-stat"><div class="cs-val">'+esc(d[s[0]]!=null?d[s[0]]:'&#x2014;')+'</div><div class="cs-label">'+esc(s[1])+'</div></div>';
     }).join('');
-
-    var ai=document.getElementById('cacheActiveInfo');
-    ai.innerHTML='<b>Active tuner:</b> '+esc(d.active_tuner||'(none)')
+    document.getElementById('cacheActiveInfo').innerHTML='<b>Active tuner:</b> '+esc(d.active_tuner||'(none)')
       +(d.currently_playing?'&nbsp;&nbsp;<b>Now playing:</b> '+esc(d.currently_playing):'');
-
     var rfDiv=document.getElementById('cacheRefreshStatus');
-    var rfHtml='<h4>Auto-Refresh</h4><div style="font-size:0.83rem;color:#bbb">';
-    rfHtml+='Enabled: <b>'+(d.auto_refresh_enabled?'Yes':'No')+'</b>';
+    var rfHtml='<h4>Auto-Refresh</h4><div style="font-size:0.83rem;color:#bbb">Enabled: <b>'+(d.auto_refresh_enabled?'Yes':'No')+'</b>';
     if(d.auto_refresh_interval_hours) rfHtml+='&nbsp;&nbsp;Interval: <b>'+esc(d.auto_refresh_interval_hours)+' hrs</b>';
     rfHtml+='</div>';
     if(d.last_refresh_per_tuner&&Object.keys(d.last_refresh_per_tuner).length){
       rfHtml+='<div style="font-size:0.78rem;color:#888;margin-top:0.3rem;font-family:monospace">';
-      Object.keys(d.last_refresh_per_tuner).forEach(function(t){
-        rfHtml+='<div><b>'+esc(t)+':</b> '+esc(d.last_refresh_per_tuner[t])+'</div>';
-      });
+      Object.keys(d.last_refresh_per_tuner).forEach(function(t){ rfHtml+='<div><b>'+esc(t)+':</b> '+esc(d.last_refresh_per_tuner[t])+'</div>'; });
       rfHtml+='</div>';
     }
     rfDiv.innerHTML=rfHtml;
-
     var scDiv=document.getElementById('cacheSampleChannels');
     if(d.sample_channels&&d.sample_channels.length){
-      var h='<h4>Sample Channels (first 5 loaded)</h4><table class="fs-table"><tr><th>TVG-ID</th><th>Name</th><th>Stream URL</th></tr>';
+      var h='<h4>Sample Channels (first 5)</h4><table class="fs-table"><tr><th>TVG-ID</th><th>Name</th><th>Stream URL</th></tr>';
       d.sample_channels.forEach(function(ch){ h+='<tr><td>'+esc(ch.tvg_id)+'</td><td>'+esc(ch.name)+'</td><td>'+esc(ch.url)+'</td></tr>'; });
       scDiv.innerHTML=h+'</table>';
     } else {
-      scDiv.innerHTML='<div style="color:#888;font-size:0.83rem">No channels currently loaded in cache. Check the active tuner.</div>';
+      scDiv.innerHTML='<div style="color:#888;font-size:0.83rem">No channels loaded. Check the active tuner.</div>';
     }
   }).catch(function(e){ spin('cacheSpinner',false); console.error(e); });
 });
@@ -312,7 +326,7 @@ document.getElementById('btnLoadCache').addEventListener('click',function(){
 document.getElementById('btnTestTuners').addEventListener('click',function(){
   spin('tunerSpinner',true);
   var list=document.getElementById('tunerList');
-  list.innerHTML='<div style="color:#888;font-size:0.85rem">Testing tuner URLs from the server&#x2026; this may take up to 20 seconds per tuner.</div>';
+  list.innerHTML='<div style="color:#888;font-size:0.85rem">Testing tuner URLs from the server&#x2026;</div>';
   fetch('/admin/diagnostics/tuners',{credentials:'same-origin'}).then(function(r){return r.json();})
   .then(function(data){
     spin('tunerSpinner',false);
@@ -322,7 +336,6 @@ document.getElementById('btnTestTuners').addEventListener('click',function(){
       var overCls={'PASS':'st-pass','WARN':'st-warn','FAIL':'st-fail','INFO':'st-info'}[t.overall_status]||'';
       var activeBadge=t.is_active?'<span class="tc-badge active">&#x25CF; ACTIVE</span>':'';
       var typeBadge=t.tuner_type==='combined'?'<span class="tc-badge combined">COMBINED</span>':'';
-
       var rows='';
       if(t.tuner_type!=='combined'){
         var mp=t.m3u_probe||{};
@@ -333,12 +346,131 @@ document.getElementById('btnTestTuners').addEventListener('click',function(){
         rows+='<div style="font-size:0.82rem;color:#888;margin-top:0.3rem">Source tuners: '+esc((t.sources||[]).join(', ')||'(none)')+'</div>';
       }
       var rfStr=t.last_refresh&&t.last_refresh!=='never'?'<div style="font-size:0.76rem;color:#777;margin-top:0.3rem">Last refresh: '+esc(t.last_refresh)+'</div>':'';
-
       return '<div class="tuner-card'+(t.is_active?' active-tuner':'')+'"><div class="tc-header"><span class="tc-name">'+esc(t.name)+'</span>'+activeBadge+typeBadge+'<span class="'+overCls+'" style="margin-left:auto">'+esc(t.overall_status)+'</span></div>'+rows+rfStr+'</div>';
     }).join('');
   }).catch(function(e){
     spin('tunerSpinner',false);
-    document.getElementById('tunerList').innerHTML='<span class="st-fail">Request failed: '+esc(String(e))+'</span>';
+    document.getElementById('tunerList').innerHTML='<span class="st-fail">Failed: '+esc(String(e))+'</span>';
+  });
+});
+
+/* ── Config diagnostics ── */
+document.getElementById('btnLoadConfig').addEventListener('click',function(){
+  spin('cfgSpinner',true);
+  var cont=document.getElementById('cfgContent');
+  cont.innerHTML='<div style="color:#888;font-size:0.85rem">Loading&#x2026; (external service probes may take up to 15s)</div>';
+  fetch('/admin/diagnostics/config',{credentials:'same-origin'}).then(function(r){return r.json();})
+  .then(function(d){
+    spin('cfgSpinner',false);
+    var html='';
+
+    /* --- User Accounts --- */
+    var ua=d.user_accounts;
+    if(ua){
+      html+='<div class="diag-box"><h3>User Accounts '+statusBadge(ua.status)+'</h3>';
+      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(ua.detail)+'</p>';
+      if(ua.users&&ua.users.length){
+        html+='<table class="user-table"><tr><th>Username</th><th>Last Login</th><th>Assigned Tuner</th></tr>';
+        ua.users.forEach(function(u){
+          var never=u.last_login==='never';
+          html+='<tr><td>'+esc(u.username)+'</td>'
+            +'<td class="'+(never?'st-warn':'')+'">'+esc(u.last_login)+'</td>'
+            +'<td>'+esc(u.assigned_tuner)+'</td></tr>';
+        });
+        html+='</table>';
+      }
+      if(ua.remediation) html+='<div class="hc-fix">&#x1F4A1; '+esc(ua.remediation)+'</div>';
+      html+='</div>';
+    }
+
+    /* --- Virtual Channels --- */
+    var vc=d.virtual_channels;
+    if(vc){
+      html+='<div class="diag-box"><h3>Virtual Channel Configuration '+statusBadge(vc.status)+'</h3>';
+      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(vc.detail)+'</p>';
+      if(vc.channels&&vc.channels.length){
+        html+='<div class="cfg-grid">';
+        vc.channels.forEach(function(ch){
+          var pillCls=ch.enabled?'pill-on':'pill-off';
+          var pillTxt=ch.enabled?'ON':'OFF';
+          var issues=ch.config_issues||[];
+          var issHtml='';
+          if(ch.weather_config){
+            var wc=ch.weather_config;
+            issHtml+='<div class="cfg-val" style="margin-top:0.3rem;font-size:0.76rem;color:#888">'
+              +'Lat: '+esc(wc.lat)+' &nbsp;Lon: '+esc(wc.lon)
+              +'<br>Location: '+esc(wc.location_name)
+              +' &nbsp;Units: '+esc(wc.units)+'</div>';
+          }
+          if(ch.news_config&&ch.news_config.feed_urls){
+            issHtml+='<div style="font-size:0.76rem;color:#888;margin-top:0.3rem">'+ch.news_config.feed_urls.length+' RSS feed(s)</div>';
+          }
+          if(ch.traffic_config){
+            issHtml+='<div style="font-size:0.76rem;color:#888;margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
+          }
+          issues.forEach(function(iss){
+            issHtml+='<div style="font-size:0.75rem;margin-top:0.2rem;color:'+(ch.config_ok?'#888':'#ff9900')+'">'+esc(iss)+'</div>';
+          });
+          html+='<div class="cfg-card">'
+            +'<div class="cc-title">'+esc(ch.name)+'<span class="cfg-pill '+pillCls+'">'+pillTxt+'</span></div>'
+            +'<div class="cc-sub">'+esc(ch.tvg_id)+'</div>'
+            +issHtml
+            +'</div>';
+        });
+        html+='</div>';
+      }
+      if(vc.remediation) html+='<div class="hc-fix" style="margin-top:0.5rem">&#x1F4A1; '+esc(vc.remediation)+'</div>';
+      html+='</div>';
+    }
+
+    /* --- External Services --- */
+    var es=d.external_services;
+    if(es){
+      html+='<div class="diag-box"><h3>External Services '+statusBadge(es.status)+'</h3>';
+      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(es.detail)+'</p>';
+      if(es.services&&es.services.length){
+        es.services.forEach(function(svc){
+          html+='<div class="svc-row">'
+            +'<span class="svc-name">'+esc(svc.name)+'</span>'
+            +'<span class="svc-url">'+esc(svc.url)+'</span>'
+            +'<span class="svc-status">'+svcProbeHtml(svc)+'</span>'
+            +'</div>';
+        });
+      }
+      if(es.remediation) html+='<div class="hc-fix" style="margin-top:0.5rem">&#x1F4A1; '+esc(es.remediation)+'</div>';
+      html+='</div>';
+    }
+
+    /* --- System Resources --- */
+    var sr=d.system_resources;
+    if(sr){
+      html+='<div class="diag-box"><h3>System Resources '+statusBadge(sr.status)+'</h3>';
+      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(sr.detail)+'</p>';
+      html+='<div class="res-grid">';
+      var la=sr.load_avg;
+      if(la&&la['1min']!=null){
+        html+='<div class="res-card"><div class="rv">'+esc(la['1min'])+' / '+esc(la['5min'])+' / '+esc(la['15min'])+'</div><div class="rl">Load avg (1/5/15m)</div></div>';
+      }
+      if(sr.memory_rss_mb!=null) html+='<div class="res-card"><div class="rv">'+esc(sr.memory_rss_mb)+' MB</div><div class="rl">Process memory (RSS)</div></div>';
+      if(sr.open_fds!=null) html+='<div class="res-card"><div class="rv">'+esc(sr.open_fds)+'</div><div class="rl">Open file descriptors</div></div>';
+      if(sr.thread_count!=null) html+='<div class="res-card"><div class="rv">'+esc(sr.thread_count)+'</div><div class="rl">Active threads</div></div>';
+      html+='</div>';
+      if(sr.requirements_check&&sr.requirements_check.length){
+        html+='<h4>Python Requirements</h4><table class="fs-table"><tr><th>Package</th><th>Required</th><th>Installed</th></tr>';
+        sr.requirements_check.forEach(function(r){
+          if(r.error||r.note){ html+='<tr><td colspan="3" style="color:#888">'+esc(r.error||r.note)+'</td></tr>'; return; }
+          html+='<tr><td>'+esc(r.package)+'</td><td>'+esc(r.required)+'</td><td class="'+(r.ok?'pkg-ok':'pkg-err')+'">'+esc(r.installed)+'</td></tr>';
+        });
+        html+='</table>';
+      }
+      if(sr.remediation) html+='<div class="hc-fix" style="margin-top:0.5rem">&#x1F4A1; '+esc(sr.remediation)+'</div>';
+      html+='</div>';
+    }
+
+    cont.innerHTML=html||'<div style="color:#888">No config data returned.</div>';
+  }).catch(function(e){
+    spin('cfgSpinner',false);
+    document.getElementById('cfgContent').innerHTML='<span class="st-fail">Request failed: '+esc(String(e))+'</span>';
   });
 });
 
@@ -356,18 +488,15 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
       var c=data[key]; if(!c) return;
       var div=document.createElement('div'); div.className='health-card';
       var extra='';
-      if(c.path)           extra+='<div class="hc-extra">Path: '+esc(c.path)+'</div>';
+      if(c.path) extra+='<div class="hc-extra">Path: '+esc(c.path)+'</div>';
       if(c.size_bytes!=null) extra+='<div class="hc-extra">Size: '+esc(c.size_bytes)+' B</div>';
       if(c.tables_found&&c.tables_found.length) extra+='<div class="hc-extra">Tables: '+esc(c.tables_found.join(', '))+'</div>';
-      if(c.free_mb!=null)  extra+='<div class="hc-extra">Free: '+esc(c.free_mb)+' MB / '+esc(c.total_mb)+' MB</div>';
+      if(c.free_mb!=null) extra+='<div class="hc-extra">Free: '+esc(c.free_mb)+' MB / '+esc(c.total_mb)+' MB</div>';
       div.innerHTML='<h4>'+esc(key)+'</h4>'+statusBadge(c.status)+'<div class="hc-detail">'+esc(c.detail||'')+'</div>'+extra+(c.remediation?'<div class="hc-fix">&#x1F4A1; '+esc(c.remediation)+'</div>':'');
       grid.appendChild(div);
     });
-
     var extras=document.getElementById('healthExtras');
     var html='';
-
-    // File system details
     var fs=data.file_system;
     if(fs){
       html+='<div class="diag-box"><h3>File System &amp; DB Paths</h3>';
@@ -391,8 +520,6 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
       });
       html+='</div>';
     }
-
-    // Cache state
     var cs=data.cache_state;
     if(cs&&!cs.error){
       html+='<div class="diag-box"><h3>Runtime Cache State</h3><div class="cache-grid">';
@@ -401,7 +528,6 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
       });
       html+='</div><div style="font-size:0.83rem;color:#aaa;margin-top:0.5rem"><b>Active tuner:</b> '+esc(cs.active_tuner||'(none)')+'</div></div>';
     }
-
     extras.innerHTML=html;
   }).catch(function(e){
     spin('healthSpinner',false);

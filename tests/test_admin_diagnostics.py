@@ -567,3 +567,247 @@ class TestSystemInfo:
         from datetime import datetime
         result = get_system_info("v9.9.9", datetime.now(), "/tmp")
         assert result["app_version"] == "v9.9.9"
+
+
+# ---------------------------------------------------------------------------
+# Tests: app_config_diag utilities
+# ---------------------------------------------------------------------------
+
+class TestCheckUserAccounts:
+    def test_returns_user_list(self, isolated_db):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(app_module.DATABASE)
+        assert "users" in result
+        assert isinstance(result["users"], list)
+        usernames = [u["username"] for u in result["users"]]
+        assert "admin" in usernames
+        assert "regular" in usernames
+
+    def test_pass_status_with_users(self, isolated_db):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(app_module.DATABASE)
+        assert result["status"] == "PASS"
+
+    def test_no_passwords_exposed(self, isolated_db):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(app_module.DATABASE)
+        result_str = json.dumps(result)
+        assert "password" not in result_str.lower()
+        assert "adminpass" not in result_str
+        assert "regpass" not in result_str
+
+    def test_never_logged_in_tracked(self, isolated_db):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(app_module.DATABASE)
+        # Fresh test accounts have never logged in
+        assert len(result["never_logged_in"]) >= 1
+
+    def test_last_login_field_present(self, isolated_db):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(app_module.DATABASE)
+        for user in result["users"]:
+            assert "last_login" in user
+            assert "assigned_tuner" in user
+
+    def test_fail_on_bad_db(self, tmp_path):
+        from utils.app_config_diag import check_user_accounts
+        result = check_user_accounts(str(tmp_path / "no_schema.db"))
+        # SQLite creates a new empty file — query fails → FAIL status
+        assert result["status"] in ("FAIL", "WARN")
+
+
+class TestCheckVirtualChannels:
+    def test_returns_all_channels(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        assert "channels" in result
+        tvg_ids = [c["tvg_id"] for c in result["channels"]]
+        for expected in ("virtual.news", "virtual.weather", "virtual.status", "virtual.traffic"):
+            assert expected in tvg_ids
+
+    def test_status_is_valid(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        assert result["status"] in ("PASS", "WARN", "FAIL")
+
+    def test_weather_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        weather = next(c for c in result["channels"] if c["tvg_id"] == "virtual.weather")
+        assert "weather_config" in weather
+
+    def test_news_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        news = next(c for c in result["channels"] if c["tvg_id"] == "virtual.news")
+        assert "news_config" in news
+
+    def test_unconfigured_weather_warns(self, isolated_db):
+        """With no lat/lon set, weather channel should report a config issue."""
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        weather = next(c for c in result["channels"] if c["tvg_id"] == "virtual.weather")
+        # Fresh DB has no weather lat/lon
+        assert weather["config_ok"] is False
+        assert len(weather["config_issues"]) >= 1
+
+    def test_enabled_state_in_result(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        for ch in result["channels"]:
+            assert "enabled" in ch
+            assert isinstance(ch["enabled"], bool)
+
+
+class TestCheckExternalServices:
+    def test_returns_services_list(self, isolated_db):
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        assert "services" in result
+        assert isinstance(result["services"], list)
+
+    def test_unconfigured_weather_not_probed(self, isolated_db):
+        """With no lat/lon, weather API should be listed as not configured."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        weather = next((s for s in result["services"] if s["id"] == "weather_api"), None)
+        assert weather is not None
+        assert weather["reachable"] is None  # not configured
+
+    def test_unconfigured_news_not_probed(self, isolated_db):
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        news = next((s for s in result["services"] if "news_feed" in s["id"]), None)
+        assert news is not None
+        assert news["reachable"] is None
+
+    def test_status_field_present(self, isolated_db):
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        assert result["status"] in ("PASS", "WARN", "FAIL")
+
+    def test_no_secrets_in_response(self, isolated_db):
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        result_str = json.dumps(result)
+        for secret in ("api_key", "password", "token=", "Authorization"):
+            assert secret not in result_str
+
+
+class TestCheckSystemResources:
+    def test_returns_expected_keys(self):
+        from utils.app_config_diag import check_system_resources
+        result = check_system_resources()
+        for key in ("thread_count", "python_version", "python_executable",
+                    "packages", "requirements_check"):
+            assert key in result
+
+    def test_thread_count_positive(self):
+        from utils.app_config_diag import check_system_resources
+        result = check_system_resources()
+        assert isinstance(result["thread_count"], int)
+        assert result["thread_count"] >= 1
+
+    def test_python_version_matches(self):
+        from utils.app_config_diag import check_system_resources
+        import sys
+        result = check_system_resources()
+        assert sys.version in result["python_version"]
+
+    def test_packages_list_is_list(self):
+        from utils.app_config_diag import check_system_resources
+        result = check_system_resources()
+        assert isinstance(result["packages"], list)
+
+    def test_requirements_check_present(self):
+        from utils.app_config_diag import check_system_resources
+        result = check_system_resources()
+        assert isinstance(result["requirements_check"], list)
+
+    def test_status_valid(self):
+        from utils.app_config_diag import check_system_resources
+        result = check_system_resources()
+        assert result["status"] in ("PASS", "WARN", "FAIL")
+
+
+class TestRunConfigChecks:
+    def test_returns_all_sections(self, isolated_db):
+        from utils.app_config_diag import run_config_checks
+        result = run_config_checks(app_module.DATABASE, app_module.TUNER_DB)
+        for key in ("user_accounts", "virtual_channels", "external_services", "system_resources"):
+            assert key in result
+
+    def test_no_passwords_in_output(self, isolated_db):
+        from utils.app_config_diag import run_config_checks
+        result = run_config_checks(app_module.DATABASE, app_module.TUNER_DB)
+        result_str = json.dumps(result)
+        assert "adminpass" not in result_str
+        assert "regpass" not in result_str
+
+
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/config endpoint
+# ---------------------------------------------------------------------------
+
+class TestDiagnosticsConfigEndpoint:
+    def test_config_endpoint_admin_only(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/config")
+        assert resp.status_code == 403
+
+    def test_config_endpoint_returns_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        for key in ("user_accounts", "virtual_channels", "external_services", "system_resources"):
+            assert key in data
+
+    def test_config_endpoint_no_post(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/config")
+        assert resp.status_code == 405
+
+    def test_config_endpoint_no_passwords(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        assert b"adminpass" not in resp.data
+        assert b"regpass" not in resp.data
+
+    def test_config_user_accounts_structure(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        data = json.loads(resp.data)
+        ua = data["user_accounts"]
+        assert "users" in ua
+        assert "status" in ua
+        assert "detail" in ua
+
+    def test_config_virtual_channels_structure(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        data = json.loads(resp.data)
+        vc = data["virtual_channels"]
+        assert "channels" in vc
+        assert len(vc["channels"]) >= 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: support bundle now includes config.json
+# ---------------------------------------------------------------------------
+
+class TestSupportBundleWithConfig:
+    def test_support_bundle_includes_config_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        assert resp.status_code == 200
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "config.json" in zf.namelist()
+
+    def test_config_json_is_valid_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        cfg = json.loads(zf.read("config.json"))
+        assert "user_accounts" in cfg
+        assert "virtual_channels" in cfg

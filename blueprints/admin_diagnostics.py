@@ -90,7 +90,7 @@ def diagnostics_index():
     return render_template(
         "admin_diagnostics.html",
         log_keys=log_keys,
-        active_tab=request.args.get("tab", "logs"),
+        active_tab=request.args.get("tab", "tuners"),
     )
 
 
@@ -193,6 +193,22 @@ def diagnostics_cache():
     return jsonify(result)
 
 
+@admin_diagnostics_bp.route("/config", methods=["GET"])
+@login_required
+def diagnostics_config():
+    """Return application configuration diagnostics as JSON.
+
+    Covers: user accounts, virtual channel config, external service
+    reachability (weather API + news RSS), and system resource usage.
+    """
+    _require_admin()
+    from utils.app_config_diag import run_config_checks
+
+    _, db_path, tuner_db_path, _, _ = _get_config()
+    result = run_config_checks(db_path, tuner_db_path)
+    return jsonify(result)
+
+
 @admin_diagnostics_bp.route("/system", methods=["GET"])
 @login_required
 def diagnostics_system():
@@ -213,6 +229,7 @@ def diagnostics_support():
     from utils.health_checks import run_all_checks, check_tuner_connectivity, check_cache_state
     from utils.log_reading import build_support_bundle
     from utils.system_info import get_system_info
+    from utils.app_config_diag import run_config_checks
 
     data_dir, db_path, tuner_db_path, app_version, app_start_time = _get_config()
 
@@ -220,11 +237,16 @@ def diagnostics_support():
     system_data = get_system_info(app_version, app_start_time, data_dir)
     tuner_data = check_tuner_connectivity(tuner_db_path)
     cache_data = check_cache_state(tuner_db_path)
+    config_data = run_config_checks(db_path, tuner_db_path)
 
     try:
         zip_bytes = build_support_bundle(
             data_dir, health_data, system_data,
-            extra={"tuners.json": tuner_data, "cache_state.json": cache_data},
+            extra={
+                "tuners.json": tuner_data,
+                "cache_state.json": cache_data,
+                "config.json": config_data,
+            },
         )
     except Exception as exc:
         logger.exception("Failed to build support bundle: %s", exc)
