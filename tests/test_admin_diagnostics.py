@@ -318,6 +318,61 @@ class TestDiagnosticsSupport:
         all_content = b"".join(zf.read(n) for n in zf.namelist())
         assert b"hunter2" not in all_content
 
+    def test_support_zip_contains_index_html(self, client, isolated_db):
+        """Support bundle should include index.html for offline viewing."""
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "index.html" in zf.namelist()
+
+    def test_index_html_is_valid_html(self, client, isolated_db):
+        """index.html should start with a doctype and contain expected landmarks."""
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        html_content = zf.read("index.html").decode("utf-8")
+        assert html_content.startswith("<!DOCTYPE html>")
+        assert "<html" in html_content
+        assert "</html>" in html_content
+        assert "RetroIPTVGuide Support Bundle" in html_content
+
+    def test_index_html_embeds_health_data(self, client, isolated_db):
+        """index.html should contain embedded JSON data from health.json."""
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        html_content = zf.read("index.html").decode("utf-8")
+        # Viewer embeds the sections dict as a JS variable
+        assert "var SECTIONS=" in html_content
+        assert "health.json" in html_content
+
+    def test_index_html_has_no_external_network_references(self, client, isolated_db):
+        """index.html must be self-contained — no CDN or external resource links."""
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        html_content = zf.read("index.html").decode("utf-8")
+        for external in ("cdn.jsdelivr", "cdnjs.cloudflare", "fonts.googleapis",
+                         "unpkg.com", "ajax.googleapis"):
+            assert external not in html_content, (
+                f"index.html must not reference external resource: {external}"
+            )
+
+    def test_index_html_excludes_secrets_from_logs(self, client, isolated_db):
+        """Secrets in log files must not appear in the embedded viewer HTML."""
+        from utils.log_reading import ALLOWED_LOGS
+        path = ALLOWED_LOGS["app"]
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w") as fh:
+            fh.write("token=verysecrettoken\nnormal startup line\n")
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        html_content = zf.read("index.html").decode("utf-8")
+        assert "verysecrettoken" not in html_content
+        # Normal content should still be present
+        assert "normal startup line" in html_content
+
 
 # ---------------------------------------------------------------------------
 # Tests: utility functions (log_reading)
