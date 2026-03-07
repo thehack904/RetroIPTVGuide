@@ -770,6 +770,83 @@ class TestCheckExternalServices:
         result = app_config_diag.check_external_services(app_module.TUNER_DB)
         assert "overpass" in result["detail"].lower()
 
+    def test_runtime_429_overrides_probe_success(self, isolated_db, monkeypatch):
+        """Even when /api/status probes OK, a 429 in _OVERPASS_LAST_ERROR should
+        surface as reachable=False with status_code=429."""
+        from utils import app_config_diag
+
+        # _probe_service returns success (200 OK) — as if /api/status is fine
+        monkeypatch.setattr(app_config_diag, "_probe_service",
+                            lambda svc_id, name, url, timeout=8: {
+                                "id": svc_id,
+                                "name": name,
+                                "url": url,
+                                "reachable": True,
+                                "status_code": 200,
+                                "response_time_ms": 120,
+                                "error": None,
+                                "resolved_ip": "1.2.3.4",
+                                "note": "",
+                            })
+        # Inject a runtime 429 error (as would be set by _fetch_overpass_roads)
+        monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {
+            "status_code": 429,
+            "lat": 40.7128,
+            "lon": -74.006,
+            "ts": 1_000_000,
+            "message": "429 Client Error: Too Many Requests",
+        })
+
+        result = app_config_diag.check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None
+        assert overpass["reachable"] is False
+        assert overpass["status_code"] == 429
+        assert result["status"] == "FAIL"
+        assert "429" in (overpass["error"] or "")
+
+    def test_runtime_429_note_mentions_rate_limit(self, isolated_db, monkeypatch):
+        """A runtime 429 should include a helpful rate-limiting note."""
+        from utils import app_config_diag
+
+        monkeypatch.setattr(app_config_diag, "_probe_service",
+                            lambda svc_id, name, url, timeout=8: {
+                                "id": svc_id, "name": name, "url": url,
+                                "reachable": True, "status_code": 200,
+                                "response_time_ms": 100, "error": None,
+                                "resolved_ip": "1.2.3.4", "note": "",
+                            })
+        monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {
+            "status_code": 429,
+            "lat": 33.4484, "lon": -112.074,
+            "ts": 1_000_000,
+            "message": "429 Client Error: Too Many Requests",
+        })
+
+        result = app_config_diag.check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None
+        assert "rate" in overpass.get("note", "").lower()
+
+    def test_no_last_error_uses_probe_result(self, isolated_db, monkeypatch):
+        """When _OVERPASS_LAST_ERROR is empty, the probe result is used as-is."""
+        from utils import app_config_diag
+
+        monkeypatch.setattr(app_config_diag, "_probe_service",
+                            lambda svc_id, name, url, timeout=8: {
+                                "id": svc_id, "name": name, "url": url,
+                                "reachable": True, "status_code": 200,
+                                "response_time_ms": 100, "error": None,
+                                "resolved_ip": "1.2.3.4", "note": "",
+                            })
+        monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {})
+
+        result = app_config_diag.check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None
+        assert overpass["reachable"] is True
+        assert overpass["status_code"] == 200
+
 
 class TestCheckSystemResources:
     def test_returns_expected_keys(self):

@@ -199,10 +199,15 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     - Each configured news RSS feed
     - Overpass API status (if the traffic virtual channel is enabled)
 
-    The Overpass API probe uses ``/api/status`` (a lightweight plain-text
-    endpoint) rather than executing a full road-geometry query.  This detects
-    connectivity problems (DNS failures, 5xx errors, gateway timeouts) that
-    would cause ``_fetch_overpass_roads`` to fail at runtime.
+    The Overpass API probe has two layers:
+    1. A live connectivity check against ``/api/status`` (lightweight, no
+       query payload) to detect DNS failures, 5xx errors, and gateway timeouts.
+    2. A runtime-error check against ``app._OVERPASS_LAST_ERROR``, which is
+       populated by ``_fetch_overpass_roads`` whenever an HTTP error (including
+       429 Too Many Requests and 504 Gateway Timeout) occurs on the actual
+       ``/api/interpreter`` endpoint.  ``/api/status`` may return 200 OK even
+       while ``/api/interpreter`` is rate-limiting, so this second layer is
+       needed to surface 429 errors in the health panel.
 
     Returns per-service results with HTTP status, response time, error messages.
     """
@@ -290,6 +295,43 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
             "Used by the Traffic virtual channel to fetch road geometry. "
             "A failure here explains empty or missing road overlays."
         )
+
+        # Layer 2: check for runtime errors recorded by _fetch_overpass_roads.
+        # /api/status can return 200 OK while /api/interpreter is rate-limiting
+        # (429 Too Many Requests), so we also surface any error that was
+        # recorded since the last successful road-geometry fetch.
+        try:
+            import app as _app_module  # noqa: PLC0415
+            last_err: dict = getattr(_app_module, "_OVERPASS_LAST_ERROR", {})
+        except Exception:  # noqa: BLE001
+            last_err = {}
+
+        if last_err:
+            status_code = last_err.get("status_code")
+            message = last_err.get("message", "unknown error")
+            lat_err = last_err.get("lat")
+            lon_err = last_err.get("lon")
+            # Override the probe result: the server may be reachable via
+            # /api/status but the actual road-query endpoint is failing.
+            svc["reachable"] = False
+            svc["status_code"] = status_code
+            svc["error"] = (
+                f"Runtime error on /api/interpreter "
+                f"(lat={lat_err}, lon={lon_err}): {message}"
+            )
+            if status_code == 429:
+                svc["note"] = (
+                    "Overpass API is rate-limiting road-geometry requests "
+                    "(429 Too Many Requests). Reduce the number of enabled "
+                    "traffic cities or increase the pre-warm stagger interval."
+                )
+            elif status_code == 504:
+                svc["note"] = (
+                    "Overpass API gateway timed out (504). The server is "
+                    "temporarily overloaded; road overlays will be empty until "
+                    "the next successful fetch."
+                )
+
         services.append(svc)
     else:
         services.append({

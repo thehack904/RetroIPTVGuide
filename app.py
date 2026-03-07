@@ -1377,6 +1377,14 @@ _ROADS_CACHE_TTL = 86400  # 24 hours in seconds
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
 _OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
 
+# Most-recent Overpass API error recorded at runtime. Populated by
+# _fetch_overpass_roads on any HTTP error (including 429 rate-limit and
+# 504 gateway timeout) and cleared after a successful fetch. Exposed to
+# the Admin Diagnostics external-services check so that rate-limiting
+# failures are visible in the health panel even though the /api/status
+# probe may return 200 OK.
+_OVERPASS_LAST_ERROR: dict = {}  # keys: status_code, lat, lon, ts, message
+
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
     """Fetch major road geometry from the Overpass API (free, no API key).
@@ -1384,7 +1392,10 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     Only motorway and trunk-class roads are fetched; at this scale primary/
     secondary roads would return thousands of segments across the viewport.
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
-    On network failure returns an empty FeatureCollection."""
+    On any HTTP error (including 429 Too Many Requests and 504 Gateway Timeout)
+    records the failure in _OVERPASS_LAST_ERROR for the Admin Diagnostics health
+    check and returns an empty FeatureCollection."""
+    global _OVERPASS_LAST_ERROR  # noqa: PLW0603
     query = (
         f"[out:json][timeout:60];"
         f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
@@ -1399,9 +1410,37 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
             headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
         )
         resp.raise_for_status()
+        # Successful fetch — clear any previously recorded error so that the
+        # diagnostics check reflects the current (healthy) state.
+        _OVERPASS_LAST_ERROR = {}
         return resp.json()
+    except requests.exceptions.HTTPError as exc:
+        status_code = exc.response.status_code if exc.response is not None else None
+        if status_code == 429:
+            logging.warning(
+                "_fetch_overpass_roads rate-limited (429 Too Many Requests) "
+                "for lat=%s lon=%s — road overlay will be empty until rate limit lifts",
+                lat, lon,
+            )
+        else:
+            logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+        _OVERPASS_LAST_ERROR = {
+            "status_code": status_code,
+            "lat": lat,
+            "lon": lon,
+            "ts": time.time(),
+            "message": str(exc),
+        }
+        return {"elements": []}
     except Exception:
         logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+        _OVERPASS_LAST_ERROR = {
+            "status_code": None,
+            "lat": lat,
+            "lon": lon,
+            "ts": time.time(),
+            "message": "network or timeout error",
+        }
         return {"elements": []}
 
 

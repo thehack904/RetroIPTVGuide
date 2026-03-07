@@ -31,6 +31,7 @@ def isolated_db(tmp_path, monkeypatch):
     monkeypatch.setattr(app_module, "_TRAFFIC_DEMO_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE_TIME", {})
+    monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {})
     init_db()
     init_tuners_db()
     from app import add_user
@@ -711,3 +712,95 @@ class TestApiTrafficDemoRoads:
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
         assert data['type'] == 'FeatureCollection'
         assert data['features'] == []
+
+
+# ─── _OVERPASS_LAST_ERROR tracking ───────────────────────────────────────────
+
+class TestOverpassLastError:
+    """Verify that _fetch_overpass_roads populates and clears _OVERPASS_LAST_ERROR."""
+
+    def _make_http_error_response(self, status_code):
+        """Build a minimal mock response that raises an HTTPError."""
+        import requests as _req
+
+        class _MockResp:
+            def __init__(self, code):
+                self.status_code = code
+
+            def raise_for_status(self):
+                raise _req.exceptions.HTTPError(
+                    f"{self.status_code} Error", response=self
+                )
+
+            def json(self):
+                return {}
+
+        return _MockResp(status_code)
+
+    def test_429_populates_last_error(self, monkeypatch):
+        """A 429 from requests.post should record the error in _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        resp = self._make_http_error_response(429)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(40.7128, -74.006)
+
+        err = app_module._OVERPASS_LAST_ERROR
+        assert err, "_OVERPASS_LAST_ERROR should be non-empty after 429"
+        assert err["status_code"] == 429
+        assert err["lat"] == 40.7128
+        assert err["lon"] == -74.006
+        assert "ts" in err
+
+    def test_504_populates_last_error(self, monkeypatch):
+        """A 504 from requests.post should record the error in _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        resp = self._make_http_error_response(504)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(33.4484, -112.074)
+
+        err = app_module._OVERPASS_LAST_ERROR
+        assert err["status_code"] == 504
+
+    def test_success_clears_last_error(self, monkeypatch):
+        """A successful fetch should clear _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        # Seed an error first
+        monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {
+            "status_code": 429, "lat": 40.7128, "lon": -74.006,
+            "ts": 0, "message": "stale",
+        })
+
+        class _OkResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"elements": []}
+
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: _OkResp())
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(40.7128, -74.006)
+
+        assert app_module._OVERPASS_LAST_ERROR == {}, \
+            "_OVERPASS_LAST_ERROR should be cleared after a successful fetch"
+
+    def test_429_returns_empty_elements(self, monkeypatch):
+        """A 429 should return {'elements': []} so callers get an empty GeoJSON."""
+        import requests as _req
+
+        resp = self._make_http_error_response(429)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        result = _fetch_overpass_roads(40.7128, -74.006)
+        assert result == {"elements": []}
