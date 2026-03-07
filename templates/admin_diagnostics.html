@@ -3,129 +3,178 @@
 
 {% block page_styles %}
 <style>
+/* ── Per-page CSS variables — dark-first defaults ──────────────────────── */
+.diag-container {
+  --dc-text:       #eee;
+  --dc-muted:      #888;
+  --dc-muted2:     #bbb;
+  --dc-subtle:     #666;
+  --dc-label:      #aaa;
+  --dc-border:     #444;
+  --dc-border-faint: #2a2a2a;
+  --dc-bg-panel:   #1a1a1a;
+  --dc-bg-btn:     #222;
+  --dc-bg-card:    #111;
+  --dc-bg-deep:    #0d0d0d;
+  --dc-bg-input:   #0d0d0d;
+  --dc-input-text: #ddd;
+  --dc-accent:     #0af;
+  --dc-log-bg:     #060606;
+  --dc-log-text:   #aaffaa;
+  --dc-code-bg:    #050505;
+  --dc-code-text:  #88cc88;
+  color: var(--dc-text);
+}
+/* Light-theme overrides */
+body.light .diag-container,
+body.retroiptv .diag-container,
+body.retro-magazine .diag-container {
+  --dc-text:       #111;
+  --dc-muted:      #555;
+  --dc-muted2:     #444;
+  --dc-subtle:     #555;
+  --dc-label:      #444;
+  --dc-border:     #bbb;
+  --dc-border-faint: #ddd;
+  --dc-bg-panel:   #f5f5f5;
+  --dc-bg-btn:     #e8e8e8;
+  --dc-bg-card:    #fff;
+  --dc-bg-deep:    #f0f0f0;
+  --dc-bg-input:   #fff;
+  --dc-input-text: #111;
+  --dc-log-bg:     #f4f4f4;
+  --dc-log-text:   #1a3a1a;
+  --dc-code-bg:    #f8f8f8;
+  --dc-code-text:  #335533;
+}
+body.light .diag-container         { --dc-accent: #0066bb; }
+body.retroiptv .diag-container     { --dc-accent: #2e9e9a; }
+body.retro-magazine .diag-container { --dc-accent: #bb0000; }
+
+/* ── Layout ─────────────────────────────────────────────────────────────── */
 .diag-container { max-width: 1200px; margin: 2rem auto; padding: 0 1rem; }
-.diag-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 2px solid var(--border-color, #444); padding-bottom: 0; }
+.diag-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-bottom: 1.5rem; border-bottom: 2px solid var(--dc-border); padding-bottom: 0; }
 .diag-tab-btn {
     padding: 0.5rem 1.1rem;
-    border: 2px solid var(--border-color, #555); border-bottom: none;
-    background: var(--bg-secondary, #222); color: var(--text-color, #eee);
+    border: 2px solid var(--dc-border); border-bottom: none;
+    background: var(--dc-bg-btn); color: var(--dc-text);
     border-radius: 4px 4px 0 0; cursor: pointer; font-size: 0.9rem;
     transition: background 0.12s; position: relative; bottom: -2px;
 }
-.diag-tab-btn:hover  { background: var(--accent-color, #0af); color: #000; }
-.diag-tab-btn.active { background: var(--accent-color, #0af); color: #000; font-weight: 700; border-color: var(--accent-color,#0af); }
+.diag-tab-btn:hover  { background: var(--dc-accent); color: #000; }
+.diag-tab-btn.active { background: var(--dc-accent); color: #000; font-weight: 700; border-color: var(--dc-accent); }
 .diag-panel { display: none; }
 .diag-panel.active { display: block; }
-.diag-box { background: var(--bg-secondary, #1a1a1a); border: 1px solid var(--border-color, #444); border-radius: 4px; padding: 1.1rem; margin-bottom: 1.1rem; }
-.diag-box h3 { margin: 0 0 0.8rem; font-size: 1.05rem; border-bottom: 1px solid var(--border-color,#444); padding-bottom: 0.5rem; }
-.diag-box h4 { margin: 0.8rem 0 0.4rem; font-size: 0.95rem; color: var(--accent-color,#0af); }
-.btn-action { display: inline-block; padding: 0.4rem 1rem; background: var(--accent-color, #0af); color: #000; font-weight: 700; border: none; border-radius: 3px; cursor: pointer; text-decoration: none; font-size: 0.88rem; margin-right: 0.4rem; }
+.diag-box { background: var(--dc-bg-panel); border: 1px solid var(--dc-border); border-radius: 4px; padding: 1.1rem; margin-bottom: 1.1rem; }
+.diag-box h3 { margin: 0 0 0.8rem; font-size: 1.05rem; border-bottom: 1px solid var(--dc-border); padding-bottom: 0.5rem; color: var(--dc-text); }
+.diag-box h4 { margin: 0.8rem 0 0.4rem; font-size: 0.95rem; color: var(--dc-accent); }
+.btn-action { display: inline-block; padding: 0.4rem 1rem; background: var(--dc-accent); color: #000; font-weight: 700; border: none; border-radius: 3px; cursor: pointer; text-decoration: none; font-size: 0.88rem; margin-right: 0.4rem; }
 .btn-action:hover { opacity: 0.85; }
-.btn-action.secondary { background: #444; color: #eee; }
-.btn-action.secondary:hover { background: #555; }
+.btn-action.secondary { background: var(--dc-bg-card); color: var(--dc-muted2); border: 1px solid var(--dc-border); }
+.btn-action.secondary:hover { opacity: 0.85; }
 .st-pass { color: #33ff66; font-weight: 700; }
 .st-warn { color: #ffcc00; font-weight: 700; }
 .st-fail { color: #ff4444; font-weight: 700; }
 .st-info { color: #77ccff; font-weight: 700; }
 .st-ok   { color: #33ff66; }
 .log-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.6rem; }
-.log-controls select, .log-controls input[type=number] { padding: 0.3rem 0.5rem; border-radius: 3px; border: 1px solid #555; background: #111; color: #eee; font-size: 0.88rem; }
-#logOutput { background: #060606; color: #aaffaa; border: 1px solid #333; border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; max-height: 65vh; overflow-y: auto; min-height: 200px; }
-.log-meta  { color: #777; font-size: 0.76rem; margin-bottom: 0.3rem; }
+.log-controls select, .log-controls input[type=number] { padding: 0.3rem 0.5rem; border-radius: 3px; border: 1px solid var(--dc-border); background: var(--dc-bg-card); color: var(--dc-input-text); font-size: 0.88rem; }
+#logOutput { background: var(--dc-log-bg); color: var(--dc-log-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; max-height: 65vh; overflow-y: auto; min-height: 200px; }
+.log-meta  { color: var(--dc-muted); font-size: 0.76rem; margin-bottom: 0.3rem; }
 .log-error { color: #ff6b6b; font-style: italic; }
 .health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 0.8rem; }
-.health-card { border: 1px solid #444; border-radius: 4px; padding: 0.8rem; background: #111; }
-.health-card h4 { margin: 0 0 0.35rem; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em; color: #999; }
-.hc-detail { font-size: 0.8rem; color: #ccc; margin-top: 0.25rem; word-break: break-all; }
-.hc-extra  { font-size: 0.76rem; color: #888; margin-top: 0.2rem; font-family: monospace; word-break: break-all; }
+.health-card { border: 1px solid var(--dc-border); border-radius: 4px; padding: 0.8rem; background: var(--dc-bg-card); }
+.health-card h4 { margin: 0 0 0.35rem; text-transform: uppercase; font-size: 0.8rem; letter-spacing: 0.05em; color: var(--dc-muted); }
+.hc-detail { font-size: 0.8rem; color: var(--dc-muted2); margin-top: 0.25rem; word-break: break-all; }
+.hc-extra  { font-size: 0.76rem; color: var(--dc-muted); margin-top: 0.2rem; font-family: monospace; word-break: break-all; }
 .hc-fix    { font-size: 0.76rem; color: #ff9900; margin-top: 0.25rem; font-style: italic; }
 .tuner-list { display: flex; flex-direction: column; gap: 0.8rem; }
-.tuner-card { border: 1px solid #444; border-radius: 4px; padding: 0.9rem; background: #111; }
-.tuner-card.active-tuner { border-color: var(--accent-color, #0af); }
+.tuner-card { border: 1px solid var(--dc-border); border-radius: 4px; padding: 0.9rem; background: var(--dc-bg-card); }
+.tuner-card.active-tuner { border-color: var(--dc-accent); }
 .tc-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
 .tc-name { font-size: 1rem; font-weight: 700; }
 .tc-badge { font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 20px; border: 1px solid currentColor; font-weight: 600; }
-.tc-badge.active   { color: var(--accent-color,#0af); }
-.tc-badge.combined { color: #aaa; }
+.tc-badge.active   { color: var(--dc-accent); }
+.tc-badge.combined { color: var(--dc-label); }
 .probe-row { display: flex; align-items: flex-start; gap: 0.5rem; margin-top: 0.35rem; font-size: 0.82rem; flex-wrap: wrap; }
-.probe-label { color: #888; min-width: 45px; flex-shrink: 0; }
-.probe-url   { font-family: monospace; font-size: 0.76rem; word-break: break-all; color: #ccc; flex: 1 1 200px; }
+.probe-label { color: var(--dc-muted); min-width: 45px; flex-shrink: 0; }
+.probe-url   { font-family: monospace; font-size: 0.76rem; word-break: break-all; color: var(--dc-muted2); flex: 1 1 200px; }
 .probe-ok    { color: #33ff66; }
 .probe-err   { color: #ff4444; }
-.probe-meta  { color: #888; font-size: 0.72rem; }
+.probe-meta  { color: var(--dc-muted); font-size: 0.72rem; }
 .fs-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.fs-table th, .fs-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #2a2a2a; text-align: left; }
-.fs-table th { color: #777; font-weight: normal; font-size: 0.75rem; text-transform: uppercase; }
+.fs-table th, .fs-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--dc-border-faint); text-align: left; }
+.fs-table th { color: var(--dc-muted); font-weight: normal; font-size: 0.75rem; text-transform: uppercase; }
 .fs-table td { font-family: monospace; word-break: break-all; }
-.fs-sym  { color: #0af; }
+.fs-sym  { color: var(--dc-accent); }
 .fs-dir  { color: #ffcc00; }
 .cache-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.7rem; margin-top: 0.5rem; }
-.cache-stat { border: 1px solid #333; border-radius: 3px; padding: 0.6rem 0.8rem; background: #0d0d0d; }
-.cache-stat .cs-val { font-size: 1.4rem; font-weight: 700; color: var(--accent-color,#0af); }
-.cache-stat .cs-label { font-size: 0.75rem; color: #888; margin-top: 0.1rem; }
+.cache-stat { border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.6rem 0.8rem; background: var(--dc-bg-deep); }
+.cache-stat .cs-val { font-size: 1.4rem; font-weight: 700; color: var(--dc-accent); }
+.cache-stat .cs-label { font-size: 0.75rem; color: var(--dc-muted); margin-top: 0.1rem; }
 .sysinfo-table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-.sysinfo-table td, .sysinfo-table th { padding: 0.4rem 0.6rem; border-bottom: 1px solid #2a2a2a; text-align: left; }
-.sysinfo-table th { color: #777; font-weight: normal; width: 38%; font-size: 0.82rem; }
+.sysinfo-table td, .sysinfo-table th { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--dc-border-faint); text-align: left; }
+.sysinfo-table th { color: var(--dc-muted); font-weight: normal; width: 38%; font-size: 0.82rem; }
 .sysinfo-table td { word-break: break-all; font-family: monospace; font-size: 0.82rem; }
-.si-section { color: var(--accent-color, #0af) !important; font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 0.6rem !important; font-family: sans-serif !important; }
-.support-checklist { font-size: 0.9rem; color: #ccc; line-height: 1.7; padding-left: 1.2rem; }
+.si-section { color: var(--dc-accent) !important; font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 0.6rem !important; font-family: sans-serif !important; }
+.support-checklist { font-size: 0.9rem; color: var(--dc-muted2); line-height: 1.7; padding-left: 1.2rem; }
 .support-checklist label { cursor: pointer; display: flex; align-items: baseline; gap: 0.4rem; }
-.support-checklist input[type="checkbox"] { accent-color: #0af; flex-shrink: 0; }
+.support-checklist input[type="checkbox"] { accent-color: var(--dc-accent); flex-shrink: 0; }
 /* Config tab */
 .cfg-section { margin-bottom: 1.2rem; }
 .cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.7rem; margin-top: 0.5rem; }
-.cfg-card { border: 1px solid #444; border-radius: 4px; padding: 0.75rem; background: #111; }
+.cfg-card { border: 1px solid var(--dc-border); border-radius: 4px; padding: 0.75rem; background: var(--dc-bg-card); }
 .cfg-card .cc-title { font-size: 0.85rem; font-weight: 700; margin-bottom: 0.3rem; }
-.cfg-card .cc-sub { font-size: 0.75rem; color: #888; }
-.cfg-card .cc-val { font-size: 0.78rem; font-family: monospace; color: #ccc; word-break: break-all; }
+.cfg-card .cc-sub { font-size: 0.75rem; color: var(--dc-muted); }
+.cfg-card .cc-val { font-size: 0.78rem; font-family: monospace; color: var(--dc-muted2); word-break: break-all; }
 .cfg-pill { display: inline-block; padding: 0.1rem 0.5rem; border-radius: 20px; font-size: 0.7rem; font-weight: 700; margin-left: 0.4rem; }
 .pill-on  { background: #1a4a1a; color: #33ff66; border: 1px solid #33ff66; }
 .pill-off { background: #3a1a1a; color: #ff6666; border: 1px solid #ff6666; }
 .pill-warn { background: #3a2a00; color: #ffcc00; border: 1px solid #ffcc00; }
-.svc-row { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.45rem 0; border-bottom: 1px solid #222; font-size: 0.82rem; flex-wrap: wrap; }
+.svc-row { display: flex; align-items: flex-start; gap: 0.5rem; padding: 0.45rem 0; border-bottom: 1px solid var(--dc-border-faint); font-size: 0.82rem; flex-wrap: wrap; }
 .svc-name { font-weight: 600; min-width: 160px; flex-shrink: 0; }
-.svc-url  { font-family: monospace; font-size: 0.76rem; color: #888; word-break: break-all; flex: 1 1 200px; }
+.svc-url  { font-family: monospace; font-size: 0.76rem; color: var(--dc-muted); word-break: break-all; flex: 1 1 200px; }
 .svc-status { flex-shrink: 0; }
 .res-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 0.6rem; margin-top: 0.5rem; }
-.res-card { border: 1px solid #333; border-radius: 3px; padding: 0.5rem 0.7rem; background: #0d0d0d; }
-.res-card .rv { font-size: 1.3rem; font-weight: 700; color: var(--accent-color,#0af); }
-.res-card .rl { font-size: 0.72rem; color: #888; }
+.res-card { border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.5rem 0.7rem; background: var(--dc-bg-deep); }
+.res-card .rv { font-size: 1.3rem; font-weight: 700; color: var(--dc-accent); }
+.res-card .rl { font-size: 0.72rem; color: var(--dc-muted); }
 .pkg-ok  { color: #33ff66; }
 .pkg-err { color: #ff4444; font-weight: 700; }
 .user-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
-.user-table th { color: #777; font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid #333; text-align: left; }
-.user-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid #1e1e1e; font-family: monospace; }
+.user-table th { color: var(--dc-muted); font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--dc-border); text-align: left; }
+.user-table td { padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--dc-border-faint); font-family: monospace; }
 /* Spinner */
-.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: var(--accent-color, #0af); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-left: 0.4rem; }
+.spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid var(--dc-muted); border-top-color: var(--dc-accent); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-left: 0.4rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
 /* Startup events */
 .startup-event-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-.startup-event-table th { color: #777; font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid #333; text-align: left; }
-.startup-event-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #1e1e1e; font-family: monospace; vertical-align: top; }
+.startup-event-table th { color: var(--dc-muted); font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--dc-border); text-align: left; }
+.startup-event-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid var(--dc-border-faint); font-family: monospace; vertical-align: top; }
 .startup-event-table td.ev-detail { white-space: pre-wrap; word-break: break-all; max-width: 600px; }
-.sev-info { color: #aaa; }
+.sev-info { color: var(--dc-label); }
 .sev-warn { color: #ffcc00; }
 .sev-error { color: #ff4444; font-weight: 700; }
 .sev-critical { color: #ff0000; font-weight: 700; background: #1a0000; }
 /* Parse trace */
 .ptrace-section { margin-bottom: 1rem; }
-.ptrace-section h4 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--accent-color, #0af); }
+.ptrace-section h4 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--dc-accent); }
 .ptrace-kv { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.82rem; margin-bottom: 0.25rem; }
-.ptrace-kv .pk { color: #777; min-width: 140px; flex-shrink: 0; }
-.ptrace-kv .pv { font-family: monospace; color: #ccc; word-break: break-all; }
+.ptrace-kv .pk { color: var(--dc-muted); min-width: 140px; flex-shrink: 0; }
+.ptrace-kv .pv { font-family: monospace; color: var(--dc-muted2); word-break: break-all; }
 .ptrace-issue { font-size: 0.82rem; color: #ff4444; margin-top: 0.25rem; padding: 0.3rem 0.5rem; background: #1a0000; border-radius: 3px; }
 .ptrace-warn  { font-size: 0.82rem; color: #ffcc00; margin-top: 0.25rem; padding: 0.3rem 0.5rem; background: #1a1400; border-radius: 3px; }
 .ptrace-ok    { font-size: 0.82rem; color: #33ff66; margin-top: 0.25rem; }
-.content-sample-pre { background: #050505; color: #88cc88; border: 1px solid #2a2a2a; border-radius: 3px; padding: 0.5rem; font-size: 0.72rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; margin-top: 0.4rem; }
+.content-sample-pre { background: var(--dc-code-bg); color: var(--dc-code-text); border: 1px solid var(--dc-border-faint); border-radius: 3px; padding: 0.5rem; font-size: 0.72rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; margin-top: 0.4rem; }
 .ch-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
-.ch-table th { color: #666; font-weight: normal; text-transform: uppercase; font-size: 0.68rem; padding: 0.25rem 0.4rem; border-bottom: 1px solid #2a2a2a; }
-.ch-table td { padding: 0.25rem 0.4rem; border-bottom: 1px solid #1a1a1a; font-family: monospace; word-break: break-all; }
+.ch-table th { color: var(--dc-subtle); font-weight: normal; text-transform: uppercase; font-size: 0.68rem; padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--dc-border-faint); }
+.ch-table td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--dc-border-faint); font-family: monospace; word-break: break-all; }
 /* Issue draft tab */
-.issue-desc-area { width: 100%; min-height: 80px; background: #0d0d0d; color: #ddd; border: 1px solid #444; border-radius: 3px; padding: 0.5rem; font-size: 0.88rem; font-family: inherit; resize: vertical; box-sizing: border-box; margin-bottom: 0.6rem; }
+.issue-desc-area { width: 100%; min-height: 80px; background: var(--dc-bg-input); color: var(--dc-input-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.5rem; font-size: 0.88rem; font-family: inherit; resize: vertical; box-sizing: border-box; margin-bottom: 0.6rem; }
 .issue-title-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
-.issue-title-label { color: #aaa; font-size: 0.85rem; white-space: nowrap; }
-.issue-title-input { flex: 1; min-width: 200px; padding: 0.35rem 0.6rem; background: #0d0d0d; color: #ddd; border: 1px solid #444; border-radius: 3px; font-size: 0.88rem; }
-.issue-markdown-pre { background: #060606; color: #aaddaa; border: 1px solid #333; border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.76rem; white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow-y: auto; min-height: 120px; margin-bottom: 0.7rem; }
+.issue-title-label { color: var(--dc-label); font-size: 0.85rem; white-space: nowrap; }
+.issue-title-input { flex: 1; min-width: 200px; padding: 0.35rem 0.6rem; background: var(--dc-bg-input); color: var(--dc-input-text); border: 1px solid var(--dc-border); border-radius: 3px; font-size: 0.88rem; }
+.issue-markdown-pre { background: var(--dc-log-bg); color: var(--dc-log-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.76rem; white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow-y: auto; min-height: 120px; margin-bottom: 0.7rem; }
 .issue-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
 .btn-action.copied { background: #1a6a1a; color: #aaffaa; }
 </style>
@@ -149,22 +198,22 @@
   <div id="panel-tuners" class="diag-panel{% if active_tab == 'tuners' %} active{% endif %}">
     <div class="diag-box">
       <h3>Runtime Cache State <span id="cacheSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Live in-memory channel/EPG counts, active tuner, and auto-refresh status.</p>
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.6rem">Live in-memory channel/EPG counts, active tuner, and auto-refresh status.</p>
       <button type="button" class="btn-action" id="btnLoadCache">&#x25BA; Load Cache State</button>
       <div id="cacheGrid" class="cache-grid" style="display:none"></div>
-      <div id="cacheActiveInfo" style="margin-top:0.6rem;font-size:0.85rem;color:#aaa"></div>
+      <div id="cacheActiveInfo" style="margin-top:0.6rem;font-size:0.85rem;color:var(--dc-label)"></div>
       <div id="cacheSampleChannels" style="margin-top:0.6rem"></div>
       <div id="cacheRefreshStatus" style="margin-top:0.6rem"></div>
     </div>
     <div class="diag-box">
       <h3>Tuner URL Connectivity <span id="tunerSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Tests each tuner's M3U and XMLTV URLs <strong>from the server side</strong>. Shows DNS, HTTP status, errors, response time.</p>
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.6rem">Tests each tuner's M3U and XMLTV URLs <strong>from the server side</strong>. Shows DNS, HTTP status, errors, response time.</p>
       <button type="button" class="btn-action" id="btnTestTuners">&#x25BA; Test All Tuners (may take ~20s)</button>
       <div id="tunerList" class="tuner-list" style="margin-top:0.8rem"></div>
     </div>
     <div class="diag-box">
       <h3>&#x1F50E; Tuner Data Parse Trace <span id="parseSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.5rem">
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.5rem">
         Performs a <strong>live fetch and parse</strong> of a tuner's M3U and XMLTV feeds directly from the server.
         Shows exactly what data was received, detected problems, channel quality, EPG coverage, and raw content samples.
         Use this when the guide shows nothing or EPG data is missing.
@@ -175,7 +224,7 @@
           <option value="">— select —</option>
         </select>
         <button type="button" class="btn-action" id="btnParseTrace">&#x25BA; Run Parse Trace</button>
-        <span style="font-size:0.78rem;color:#888">(may take 15–30s depending on feed size)</span>
+        <span style="font-size:0.78rem;color:var(--dc-muted)">(may take 15–30s depending on feed size)</span>
       </div>
       <div id="parseTraceOutput"></div>
     </div>
@@ -185,7 +234,7 @@
   <div id="panel-config" class="diag-panel{% if active_tab == 'config' %} active{% endif %}">
     <div class="diag-box">
       <h3>Application Configuration <span id="cfgSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.6rem">
         User accounts, virtual channel setup, external service reachability (weather API, news RSS), and system resource usage.
         This is the quickest way to diagnose why a virtual channel isn't showing data.
       </p>
@@ -198,7 +247,7 @@
   <div id="panel-logs" class="diag-panel{% if active_tab == 'logs' %} active{% endif %}">
     <div class="diag-box">
       <h3>Startup Event Log <span id="startupSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.5rem">
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.5rem">
         Events captured during <code>python app.py</code> startup — <strong>before Flask was running</strong>.
         Shows Python version, data directory resolution, DB init, import errors, and tuner cache load.
         If users can't reach the admin panel at all, check <code>/startup-status</code> (no login required)
@@ -219,7 +268,7 @@
         <a id="btnDownloadLog" href="#" class="btn-action secondary">&#x2B07; Download</a>
       </div>
       <div class="log-meta" id="logMeta"></div>
-      <pre id="logOutput"><span style="color:#888">Select a log file and click Tail or Full Log.</span></pre>
+      <pre id="logOutput"><span style="color:var(--dc-muted)">Select a log file and click Tail or Full Log.</span></pre>
     </div>
   </div>
 
@@ -227,7 +276,7 @@
   <div id="panel-health" class="diag-panel{% if active_tab == 'health' %} active{% endif %}">
     <div class="diag-box">
       <h3>Health Checks <span id="healthSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#888;font-size:0.85rem;margin:0 0 0.6rem">Database connectivity, schema, disk space, file paths, symlinks, and runtime cache state.</p>
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.6rem">Database connectivity, schema, disk space, file paths, symlinks, and runtime cache state.</p>
       <button type="button" class="btn-action" id="btnRunHealth">&#x25BA; Run All Checks</button>
       <div id="healthGrid" class="health-grid" style="margin-top:0.8rem"></div>
       <div id="healthExtras"></div>
@@ -239,7 +288,7 @@
     <div class="diag-box">
       <h3>System &amp; Runtime Info <span id="sysSpinner" class="spinner" style="display:none"></span></h3>
       <button type="button" class="btn-action" id="btnLoadSystem" style="margin-bottom:0.8rem">&#x25BA; Load Info</button>
-      <table class="sysinfo-table"><tbody id="sysTableBody"><tr><td colspan="2" style="color:#888">Click "Load Info".</td></tr></tbody></table>
+      <table class="sysinfo-table"><tbody id="sysTableBody"><tr><td colspan="2" style="color:var(--dc-muted)">Click "Load Info".</td></tr></tbody></table>
     </div>
   </div>
 
@@ -247,27 +296,27 @@
   <div id="panel-support" class="diag-panel{% if active_tab == 'support' %} active{% endif %}">
     <div class="diag-box">
       <h3>Support Bundle</h3>
-      <p style="color:#ccc;font-size:0.9rem;margin:0 0 0.4rem">Download a ZIP of sanitised diagnostic data. Attach to GitHub bug reports.</p>
-      <p style="font-size:0.85rem;color:#888;margin:0 0 0.8rem">Passwords, tokens, and API keys are automatically redacted.</p>
+      <p style="color:var(--dc-muted2);font-size:0.9rem;margin:0 0 0.4rem">Download a ZIP of sanitised diagnostic data. Attach to GitHub bug reports.</p>
+      <p style="font-size:0.85rem;color:var(--dc-muted);margin:0 0 0.8rem">Passwords, tokens, and API keys are automatically redacted.</p>
 
       <form id="supportBundleForm" method="post" action="{{ url_for('admin_diagnostics.diagnostics_support') }}">
-        <p style="color:#aaa;font-size:0.85rem;font-weight:600;margin:0 0 0.3rem">
+        <p style="color:var(--dc-label);font-size:0.85rem;font-weight:600;margin:0 0 0.3rem">
           Select files to include:
-          <button type="button" id="sbSelectAll" style="margin-left:0.6rem;background:none;border:1px solid #555;color:#aaa;font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">All</button>
-          <button type="button" id="sbSelectNone" style="background:none;border:1px solid #555;color:#aaa;font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">None</button>
+          <button type="button" id="sbSelectAll" style="margin-left:0.6rem;background:none;border:1px solid var(--dc-border);color:var(--dc-label);font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">All</button>
+          <button type="button" id="sbSelectNone" style="background:none;border:1px solid var(--dc-border);color:var(--dc-label);font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">None</button>
         </p>
         <ul class="support-checklist" style="list-style:none;padding-left:0">
-          <li><label><input type="checkbox" name="include[]" value="logs/app" checked> Application log + rotated copies <span style="color:#666;font-size:0.8em">(secrets redacted)</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="logs/app" checked> Application log + rotated copies <span style="color:var(--dc-subtle);font-size:0.8em">(secrets redacted)</span></label></li>
           <li><label><input type="checkbox" name="include[]" value="logs/activity" checked> Activity log</label></li>
           <li><label><input type="checkbox" name="include[]" value="logs/startup" checked> Startup log</label></li>
-          <li><label><input type="checkbox" name="include[]" value="startup.json" checked> <code>startup.json</code> <span style="color:#666;font-size:0.8em">— startup events, import errors, DB init results, cache load</span></label></li>
-          <li><label><input type="checkbox" name="include[]" value="health.json" checked> <code>health.json</code> <span style="color:#666;font-size:0.8em">— DB paths, disk, permissions, file system</span></label></li>
-          <li><label><input type="checkbox" name="include[]" value="tuners.json" checked> <code>tuners.json</code> <span style="color:#666;font-size:0.8em">— per-tuner URL connectivity, DNS, HTTP errors</span></label></li>
-          <li><label><input type="checkbox" name="include[]" value="cache_state.json" checked> <code>cache_state.json</code> <span style="color:#666;font-size:0.8em">— channel count, EPG count, active tuner</span></label></li>
-          <li><label><input type="checkbox" name="include[]" value="config.json" checked> <code>config.json</code> <span style="color:#666;font-size:0.8em">— user accounts, virtual channel config, external service probes, system resources</span></label></li>
-          <li><label><input type="checkbox" name="include[]" value="system.json" checked> <code>system.json</code> <span style="color:#666;font-size:0.8em">— OS, Python, uptime, install mode</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="startup.json" checked> <code>startup.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— startup events, import errors, DB init results, cache load</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="health.json" checked> <code>health.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— DB paths, disk, permissions, file system</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="tuners.json" checked> <code>tuners.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— per-tuner URL connectivity, DNS, HTTP errors</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="cache_state.json" checked> <code>cache_state.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— channel count, EPG count, active tuner</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="config.json" checked> <code>config.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— user accounts, virtual channel config, external service probes, system resources</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="system.json" checked> <code>system.json</code> <span style="color:var(--dc-subtle);font-size:0.8em">— OS, Python, uptime, install mode</span></label></li>
         </ul>
-        <p style="color:#888;font-size:0.82rem;margin:0.5rem 0 0.8rem">
+        <p style="color:var(--dc-muted);font-size:0.82rem;margin:0.5rem 0 0.8rem">
           <strong>NOT included:</strong> Full database, passwords, API keys, or arbitrary files.
           A browser-readable <code>index.html</code> viewer is always added to the ZIP.
         </p>
@@ -292,13 +341,13 @@
   <div id="panel-issue" class="diag-panel{% if active_tab == 'issue' %} active{% endif %}">
     <div class="diag-box">
       <h3>&#x1F41B; Report Issue <span id="issueSpinner" class="spinner" style="display:none"></span></h3>
-      <p style="color:#ccc;font-size:0.9rem;margin:0 0 0.6rem">
+      <p style="color:var(--dc-muted2);font-size:0.9rem;margin:0 0 0.6rem">
         Generates a pre-filled GitHub issue with a snapshot of your system, health checks, tuner state,
         startup events, and recent error logs. No passwords or API keys are included.
       </p>
 
-      <label for="issueDescArea" style="display:block;color:#aaa;font-size:0.85rem;margin-bottom:0.3rem">
-        Describe your problem <span style="color:#666">(optional — you can also fill this in on GitHub)</span>
+      <label for="issueDescArea" style="display:block;color:var(--dc-label);font-size:0.85rem;margin-bottom:0.3rem">
+        Describe your problem <span style="color:var(--dc-subtle)">(optional — you can also fill this in on GitHub)</span>
       </label>
       <textarea id="issueDescArea" class="issue-desc-area"
         placeholder="e.g. The guide shows no channels after I added my IPTV tuner. The parse trace shows 0 channels loaded."></textarea>
@@ -311,7 +360,7 @@
       </div>
 
       <div id="issueOutput" style="display:none">
-        <p style="color:#888;font-size:0.82rem;margin:0 0 0.4rem">
+        <p style="color:var(--dc-muted);font-size:0.82rem;margin:0 0 0.4rem">
           Preview &mdash; review before submitting. You can edit the body directly on GitHub.
         </p>
         <pre id="issueMarkdownPre" class="issue-markdown-pre"><!-- generated --></pre>
@@ -320,10 +369,10 @@
           <a id="btnOpenGithub" href="#" target="_blank" rel="noopener noreferrer" class="btn-action secondary">
             &#x1F517; Open on GitHub
           </a>
-          <span id="issueCopyNote" style="font-size:0.78rem;color:#888;display:none">
+          <span id="issueCopyNote" style="font-size:0.78rem;color:var(--dc-muted);display:none">
             &nbsp;&#x2714; Copied!
           </span>
-          <span style="font-size:0.78rem;color:#666;margin-left:auto">
+          <span style="font-size:0.78rem;color:var(--dc-subtle);margin-left:auto">
             If the GitHub link doesn't open the body automatically (URL too long), use Copy and paste manually.
           </span>
         </div>
@@ -396,7 +445,7 @@ function renderLog(d){
   document.getElementById('logMeta').textContent='Log: '+d.key+'  |  '+(d.count||0)+' lines';
 }
 function fetchLog(url){
-  document.getElementById('logOutput').innerHTML='<span style="color:#888">Loading&#x2026;</span>';
+  document.getElementById('logOutput').innerHTML='<span style="color:var(--dc-muted)">Loading&#x2026;</span>';
   fetch(url,{credentials:'same-origin'}).then(function(r){return r.json();}).then(renderLog)
     .catch(function(e){ document.getElementById('logOutput').innerHTML='<span class="log-error">Failed: '+esc(String(e))+'</span>'; });
 }
@@ -431,11 +480,11 @@ document.getElementById('btnLoadCache').addEventListener('click',function(){
     document.getElementById('cacheActiveInfo').innerHTML='<b>Active tuner:</b> '+esc(d.active_tuner||'(none)')
       +(d.currently_playing?'&nbsp;&nbsp;<b>Now playing:</b> '+esc(d.currently_playing):'');
     var rfDiv=document.getElementById('cacheRefreshStatus');
-    var rfHtml='<h4>Auto-Refresh</h4><div style="font-size:0.83rem;color:#bbb">Enabled: <b>'+(d.auto_refresh_enabled?'Yes':'No')+'</b>';
+    var rfHtml='<h4>Auto-Refresh</h4><div style="font-size:0.83rem;color:var(--dc-muted2)">Enabled: <b>'+(d.auto_refresh_enabled?'Yes':'No')+'</b>';
     if(d.auto_refresh_interval_hours) rfHtml+='&nbsp;&nbsp;Interval: <b>'+esc(d.auto_refresh_interval_hours)+' hrs</b>';
     rfHtml+='</div>';
     if(d.last_refresh_per_tuner&&Object.keys(d.last_refresh_per_tuner).length){
-      rfHtml+='<div style="font-size:0.78rem;color:#888;margin-top:0.3rem;font-family:monospace">';
+      rfHtml+='<div style="font-size:0.78rem;color:var(--dc-muted);margin-top:0.3rem;font-family:monospace">';
       Object.keys(d.last_refresh_per_tuner).forEach(function(t){ rfHtml+='<div><b>'+esc(t)+':</b> '+esc(d.last_refresh_per_tuner[t])+'</div>'; });
       rfHtml+='</div>';
     }
@@ -446,7 +495,7 @@ document.getElementById('btnLoadCache').addEventListener('click',function(){
       d.sample_channels.forEach(function(ch){ h+='<tr><td>'+esc(ch.tvg_id)+'</td><td>'+esc(ch.name)+'</td><td>'+esc(ch.url)+'</td></tr>'; });
       scDiv.innerHTML=h+'</table>';
     } else {
-      scDiv.innerHTML='<div style="color:#888;font-size:0.83rem">No channels loaded. Check the active tuner.</div>';
+      scDiv.innerHTML='<div style="color:var(--dc-muted);font-size:0.83rem">No channels loaded. Check the active tuner.</div>';
     }
   }).catch(function(e){ spin('cacheSpinner',false); console.error(e); });
 });
@@ -455,12 +504,12 @@ document.getElementById('btnLoadCache').addEventListener('click',function(){
 document.getElementById('btnTestTuners').addEventListener('click',function(){
   spin('tunerSpinner',true);
   var list=document.getElementById('tunerList');
-  list.innerHTML='<div style="color:#888;font-size:0.85rem">Testing tuner URLs from the server&#x2026;</div>';
+  list.innerHTML='<div style="color:var(--dc-muted);font-size:0.85rem">Testing tuner URLs from the server&#x2026;</div>';
   fetch('/admin/diagnostics/tuners',{credentials:'same-origin'}).then(function(r){return r.json();})
   .then(function(data){
     spin('tunerSpinner',false);
     if(!Array.isArray(data)){ list.innerHTML='<span class="st-fail">Unexpected response.</span>'; return; }
-    if(!data.length){ list.innerHTML='<div style="color:#888">No tuners configured.</div>'; return; }
+    if(!data.length){ list.innerHTML='<div style="color:var(--dc-muted)">No tuners configured.</div>'; return; }
     list.innerHTML=data.map(function(t){
       var overCls={'PASS':'st-pass','WARN':'st-warn','FAIL':'st-fail','INFO':'st-info'}[t.overall_status]||'';
       var activeBadge=t.is_active?'<span class="tc-badge active">&#x25CF; ACTIVE</span>':'';
@@ -472,9 +521,9 @@ document.getElementById('btnTestTuners').addEventListener('click',function(){
         var xp=t.xml_probe||{};
         rows+='<div class="probe-row"><span class="probe-label">XML:</span><span class="probe-url">'+esc(t.xml_url||'(none)')+'</span><span>'+probeHtml(xp)+(xp.note?'<span class="probe-meta"> '+esc(xp.note)+'</span>':'')+'</span></div>';
       } else {
-        rows+='<div style="font-size:0.82rem;color:#888;margin-top:0.3rem">Source tuners: '+esc((t.sources||[]).join(', ')||'(none)')+'</div>';
+        rows+='<div style="font-size:0.82rem;color:var(--dc-muted);margin-top:0.3rem">Source tuners: '+esc((t.sources||[]).join(', ')||'(none)')+'</div>';
       }
-      var rfStr=t.last_refresh&&t.last_refresh!=='never'?'<div style="font-size:0.76rem;color:#777;margin-top:0.3rem">Last refresh: '+esc(t.last_refresh)+'</div>':'';
+      var rfStr=t.last_refresh&&t.last_refresh!=='never'?'<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Last refresh: '+esc(t.last_refresh)+'</div>':'';
       return '<div class="tuner-card'+(t.is_active?' active-tuner':'')+'"><div class="tc-header"><span class="tc-name">'+esc(t.name)+'</span>'+activeBadge+typeBadge+'<span class="'+overCls+'" style="margin-left:auto">'+esc(t.overall_status)+'</span></div>'+rows+rfStr+'</div>';
     }).join('');
   }).catch(function(e){
@@ -487,7 +536,7 @@ document.getElementById('btnTestTuners').addEventListener('click',function(){
 document.getElementById('btnLoadConfig').addEventListener('click',function(){
   spin('cfgSpinner',true);
   var cont=document.getElementById('cfgContent');
-  cont.innerHTML='<div style="color:#888;font-size:0.85rem">Loading&#x2026; (external service probes may take up to 15s)</div>';
+  cont.innerHTML='<div style="color:var(--dc-muted);font-size:0.85rem">Loading&#x2026; (external service probes may take up to 15s)</div>';
   fetch('/admin/diagnostics/config',{credentials:'same-origin'}).then(function(r){return r.json();})
   .then(function(d){
     spin('cfgSpinner',false);
@@ -497,7 +546,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
     var ua=d.user_accounts;
     if(ua){
       html+='<div class="diag-box"><h3>User Accounts '+statusBadge(ua.status)+'</h3>';
-      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(ua.detail)+'</p>';
+      html+='<p style="font-size:0.85rem;color:var(--dc-muted2);margin:0 0 0.5rem">'+esc(ua.detail)+'</p>';
       if(ua.users&&ua.users.length){
         html+='<table class="user-table"><tr><th>Username</th><th>Last Login</th><th>Assigned Tuner</th></tr>';
         ua.users.forEach(function(u){
@@ -516,7 +565,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
     var vc=d.virtual_channels;
     if(vc){
       html+='<div class="diag-box"><h3>Virtual Channel Configuration '+statusBadge(vc.status)+'</h3>';
-      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(vc.detail)+'</p>';
+      html+='<p style="font-size:0.85rem;color:var(--dc-muted2);margin:0 0 0.5rem">'+esc(vc.detail)+'</p>';
       if(vc.channels&&vc.channels.length){
         html+='<div class="cfg-grid">';
         vc.channels.forEach(function(ch){
@@ -526,16 +575,16 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
           var issHtml='';
           if(ch.weather_config){
             var wc=ch.weather_config;
-            issHtml+='<div class="cfg-val" style="margin-top:0.3rem;font-size:0.76rem;color:#888">'
+            issHtml+='<div class="cfg-val" style="margin-top:0.3rem;font-size:0.76rem;color:var(--dc-muted)">'
               +'Lat: '+esc(wc.lat)+' &nbsp;Lon: '+esc(wc.lon)
               +'<br>Location: '+esc(wc.location_name)
               +' &nbsp;Units: '+esc(wc.units)+'</div>';
           }
           if(ch.news_config&&ch.news_config.feed_urls){
-            issHtml+='<div style="font-size:0.76rem;color:#888;margin-top:0.3rem">'+ch.news_config.feed_urls.length+' RSS feed(s)</div>';
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'+ch.news_config.feed_urls.length+' RSS feed(s)</div>';
           }
           if(ch.traffic_config){
-            issHtml+='<div style="font-size:0.76rem;color:#888;margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
           }
           issues.forEach(function(iss){
             issHtml+='<div style="font-size:0.75rem;margin-top:0.2rem;color:'+(ch.config_ok?'#888':'#ff9900')+'">'+esc(iss)+'</div>';
@@ -556,7 +605,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
     var es=d.external_services;
     if(es){
       html+='<div class="diag-box"><h3>External Services '+statusBadge(es.status)+'</h3>';
-      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(es.detail)+'</p>';
+      html+='<p style="font-size:0.85rem;color:var(--dc-muted2);margin:0 0 0.5rem">'+esc(es.detail)+'</p>';
       if(es.services&&es.services.length){
         es.services.forEach(function(svc){
           html+='<div class="svc-row">'
@@ -574,7 +623,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
     var sr=d.system_resources;
     if(sr){
       html+='<div class="diag-box"><h3>System Resources '+statusBadge(sr.status)+'</h3>';
-      html+='<p style="font-size:0.85rem;color:#bbb;margin:0 0 0.5rem">'+esc(sr.detail)+'</p>';
+      html+='<p style="font-size:0.85rem;color:var(--dc-muted2);margin:0 0 0.5rem">'+esc(sr.detail)+'</p>';
       html+='<div class="res-grid">';
       var la=sr.load_avg;
       if(la&&la['1min']!=null){
@@ -587,7 +636,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
       if(sr.requirements_check&&sr.requirements_check.length){
         html+='<h4>Python Requirements</h4><table class="fs-table"><tr><th>Package</th><th>Required</th><th>Installed</th></tr>';
         sr.requirements_check.forEach(function(r){
-          if(r.error||r.note){ html+='<tr><td colspan="3" style="color:#888">'+esc(r.error||r.note)+'</td></tr>'; return; }
+          if(r.error||r.note){ html+='<tr><td colspan="3" style="color:var(--dc-muted)">'+esc(r.error||r.note)+'</td></tr>'; return; }
           html+='<tr><td>'+esc(r.package)+'</td><td>'+esc(r.required)+'</td><td class="'+(r.ok?'pkg-ok':'pkg-err')+'">'+esc(r.installed)+'</td></tr>';
         });
         html+='</table>';
@@ -596,7 +645,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
       html+='</div>';
     }
 
-    cont.innerHTML=html||'<div style="color:#888">No config data returned.</div>';
+    cont.innerHTML=html||'<div style="color:var(--dc-muted)">No config data returned.</div>';
   }).catch(function(e){
     spin('cfgSpinner',false);
     document.getElementById('cfgContent').innerHTML='<span class="st-fail">Request failed: '+esc(String(e))+'</span>';
@@ -637,7 +686,7 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
       html+='</table>';
       [['DATA_DIR',fs.data_dir],['Logs Dir',fs.logs_dir],['App Working Dir',fs.app_working_dir]].forEach(function(p){
         var d=p[1]; if(!d) return;
-        html+='<h4>'+esc(p[0])+' <span style="font-weight:normal;color:#888;font-size:0.8rem">'+esc(d.path)+'</span>'+(!d.exists?'<span class="st-fail"> (not found)</span>':'')+'</h4>';
+        html+='<h4>'+esc(p[0])+' <span style="font-weight:normal;color:var(--dc-muted);font-size:0.8rem">'+esc(d.path)+'</span>'+(!d.exists?'<span class="st-fail"> (not found)</span>':'')+'</h4>';
         if(d.listing&&d.listing.length){
           html+='<table class="fs-table"><tr><th>Name</th><th>Type</th><th>Size</th><th>Symlink Target</th></tr>';
           d.listing.forEach(function(e){
@@ -655,7 +704,7 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
       [['channel_count','Channels in cache'],['epg_channel_count','EPG channels'],['epg_entry_count','EPG entries']].forEach(function(s){
         html+='<div class="cache-stat"><div class="cs-val">'+esc(cs[s[0]]!=null?cs[s[0]]:'&#x2014;')+'</div><div class="cs-label">'+esc(s[1])+'</div></div>';
       });
-      html+='</div><div style="font-size:0.83rem;color:#aaa;margin-top:0.5rem"><b>Active tuner:</b> '+esc(cs.active_tuner||'(none)')+'</div></div>';
+      html+='</div><div style="font-size:0.83rem;color:var(--dc-label);margin-top:0.5rem"><b>Active tuner:</b> '+esc(cs.active_tuner||'(none)')+'</div></div>';
     }
     extras.innerHTML=html;
   }).catch(function(e){
@@ -668,7 +717,7 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
 document.getElementById('btnLoadSystem').addEventListener('click',function(){
   spin('sysSpinner',true);
   var tbody=document.getElementById('sysTableBody');
-  tbody.innerHTML='<tr><td colspan="2" style="color:#888">Loading&#x2026;</td></tr>';
+  tbody.innerHTML='<tr><td colspan="2" style="color:var(--dc-muted)">Loading&#x2026;</td></tr>';
   fetch('/admin/diagnostics/system',{credentials:'same-origin'}).then(function(r){return r.json();})
   .then(function(d){
     spin('sysSpinner',false);
@@ -691,7 +740,7 @@ document.getElementById('btnLoadSystem').addEventListener('click',function(){
 document.getElementById('btnLoadStartup').addEventListener('click',function(){
   spin('startupSpinner',true);
   var out=document.getElementById('startupOutput');
-  out.innerHTML='<div style="color:#888;font-size:0.85rem">Loading&#x2026;</div>';
+  out.innerHTML='<div style="color:var(--dc-muted);font-size:0.85rem">Loading&#x2026;</div>';
   fetch('/admin/diagnostics/startup',{credentials:'same-origin'}).then(function(r){return r.json();})
   .then(function(d){
     spin('startupSpinner',false);
@@ -716,7 +765,7 @@ document.getElementById('btnLoadStartup').addEventListener('click',function(){
       });
       html+='</table>';
     } else {
-      html+='<div style="color:#888;font-size:0.85rem">No startup events recorded. The app may have been loaded by a WSGI server (not <code>python app.py</code>).</div>';
+      html+='<div style="color:var(--dc-muted);font-size:0.85rem">No startup events recorded. The app may have been loaded by a WSGI server (not <code>python app.py</code>).</div>';
     }
     out.innerHTML=html;
   }).catch(function(e){
@@ -746,7 +795,7 @@ document.getElementById('btnParseTrace').addEventListener('click',function(){
   if(!name){ alert('Please select a tuner.'); return; }
   spin('parseSpinner',true);
   var out=document.getElementById('parseTraceOutput');
-  out.innerHTML='<div style="color:#888;font-size:0.85rem">Fetching and parsing tuner data&#x2026; this may take 15–30 seconds.</div>';
+  out.innerHTML='<div style="color:var(--dc-muted);font-size:0.85rem">Fetching and parsing tuner data&#x2026; this may take 15–30 seconds.</div>';
   fetch('/admin/diagnostics/tuner-parse?name='+encodeURIComponent(name),{credentials:'same-origin'})
   .then(function(r){return r.json();})
   .then(function(d){
@@ -798,7 +847,7 @@ function renderParseTrace(d){
         html+='<div class="ptrace-kv"><span class="pk">Unmatched M3U IDs</span><span class="pv st-warn">'+esc(cov.unmatched_m3u.slice(0,8).join(', '))+(cov.unmatched_m3u.length>8?' …':'')+'</span></div>';
       }
     } else {
-      html+='<div style="color:#888;font-size:0.83rem">Coverage check not available (one or both feeds failed to load).</div>';
+      html+='<div style="color:var(--dc-muted);font-size:0.83rem">Coverage check not available (one or both feeds failed to load).</div>';
     }
     cov.issues&&cov.issues.forEach(function(i){ html+='<div class="ptrace-issue">&#x274C; '+esc(i)+'</div>'; });
     html+='</div>';
@@ -808,7 +857,7 @@ function renderParseTrace(d){
 }
 
 function renderFeedTrace(label, t, kind){
-  if(!t) return '<div class="ptrace-section"><h4>'+esc(label)+'</h4><div style="color:#888;font-size:0.83rem">Not available.</div></div>';
+  if(!t) return '<div class="ptrace-section"><h4>'+esc(label)+'</h4><div style="color:var(--dc-muted);font-size:0.83rem">Not available.</div></div>';
   var html='<div class="ptrace-section"><h4>'+esc(label)+'</h4>';
 
   t.issues&&t.issues.forEach(function(i){ html+='<div class="ptrace-issue">&#x274C; '+esc(i)+'</div>'; });
@@ -832,7 +881,7 @@ function renderFeedTrace(label, t, kind){
   }
 
   if(t.content_sample){
-    html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Raw content sample (first 2 KB)</summary>';
+    html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin:0.3rem 0">Raw content sample (first 2 KB)</summary>';
     html+='<div class="content-sample-pre">'+t.content_sample+'</div></details>';
   }
 
@@ -852,7 +901,7 @@ function renderFeedTrace(label, t, kind){
         if(q.group_count>0) html+='<div class="ptrace-kv"><span class="pk">Groups</span><span class="pv">'+esc(q.group_count)+' ('+esc((q.groups_sample||[]).slice(0,5).join(', '))+(q.group_count>5?'…':'')+')</span></div>';
       }
       if(p.channels&&p.channels.length){
-        html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Sample channels (first '+p.channels.length+')</summary>';
+        html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin:0.3rem 0">Sample channels (first '+p.channels.length+')</summary>';
         html+='<table class="ch-table"><tr><th>Name</th><th>tvg-id</th><th>Group</th><th>URL (truncated)</th></tr>';
         p.channels.forEach(function(ch){
           html+='<tr><td>'+esc(ch.name)+'</td><td>'+esc(ch.tvg_id||'—')+'</td><td>'+esc(ch.group||'—')+'</td><td>'+esc((ch.url||'').slice(0,60))+'</td></tr>';
@@ -867,7 +916,7 @@ function renderFeedTrace(label, t, kind){
         html+='<div class="ptrace-kv"><span class="pk">Programmes</span><span class="pv">'+esc(p.programme_count)+'</span></div>';
         if(p.earliest_programme) html+='<div class="ptrace-kv"><span class="pk">Programme range</span><span class="pv">'+esc(p.earliest_programme)+' → '+esc(p.latest_programme)+'</span></div>';
         if(p.channels_sample&&p.channels_sample.length){
-          html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Sample EPG channel IDs (first '+p.channels_sample.length+')</summary>';
+          html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin:0.3rem 0">Sample EPG channel IDs (first '+p.channels_sample.length+')</summary>';
           html+='<table class="ch-table"><tr><th>id</th><th>display-name</th></tr>';
           p.channels_sample.forEach(function(c){ html+='<tr><td>'+esc(c.id)+'</td><td>'+esc(c.display_name||'—')+'</td></tr>'; });
           html+='</table></details>';
