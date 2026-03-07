@@ -1299,3 +1299,298 @@ class TestCacheEndpointAllTuners:
         data = json.loads(resp.data)
         assert "all_tuners" in data
         assert isinstance(data["all_tuners"], list)
+
+
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/issue-draft endpoint
+# ---------------------------------------------------------------------------
+
+class TestIssueDraftEndpoint:
+    def test_requires_admin(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 403
+
+    def test_unauthenticated_redirects(self, client):
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code in (302, 401)
+
+    def test_no_post_method(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 405
+
+    def test_returns_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 200
+        assert "application/json" in resp.content_type
+
+    def test_response_structure(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "suggested_title" in data
+        assert "body_markdown" in data
+        assert "github_new_url" in data
+        assert "generated_at" in data
+        assert "error_count" in data
+        assert "warn_count" in data
+
+    def test_body_markdown_contains_environment_section(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        body = data["body_markdown"]
+        assert "## Environment" in body
+        assert "## Health Check Summary" in body
+        assert "## Tuner Status" in body
+        assert "## Startup Events" in body
+        assert "## Steps to Reproduce" in body
+
+    def test_body_markdown_contains_app_version(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        body = data["body_markdown"]
+        # App version should appear in the environment table
+        assert "App Version" in body
+
+    def test_suggested_title_is_non_empty_string(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        title = data["suggested_title"]
+        assert isinstance(title, str)
+        assert len(title.strip()) > 0
+
+    def test_github_new_url_points_to_correct_repo(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        assert "github.com/thehack904/RetroIPTVGuide/issues/new" in data["github_new_url"]
+
+    def test_github_new_url_contains_title_and_body_params(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        url = data["github_new_url"]
+        assert "title=" in url
+        assert "body=" in url
+
+    def test_user_description_included_in_body(self, client, isolated_db):
+        login(client)
+        description = "Channels not loading after restart"
+        resp = client.get(
+            "/admin/diagnostics/issue-draft?description=" + description.replace(" ", "+")
+        )
+        data = json.loads(resp.data)
+        assert description in data["body_markdown"]
+
+    def test_description_param_optional(self, client, isolated_db):
+        """Endpoint works fine without a description param."""
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["body_markdown"]  # non-empty
+
+    def test_error_warn_counts_are_integers(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        data = json.loads(resp.data)
+        assert isinstance(data["error_count"], int)
+        assert isinstance(data["warn_count"], int)
+
+    def test_report_issue_tab_in_diagnostics_page(self, client, isolated_db):
+        """The main diagnostics page must include the Report Issue tab button."""
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        assert b"Report Issue" in resp.data
+        assert b"panel-issue" in resp.data
+
+
+# ---------------------------------------------------------------------------
+# Tests: utils.issue_draft module (unit tests)
+# ---------------------------------------------------------------------------
+
+class TestIssueDraftUtil:
+    """Unit tests for utils.issue_draft — no HTTP, no Flask."""
+
+    def _minimal_build(self, **overrides):
+        from utils.issue_draft import build_issue_draft
+        kwargs = dict(
+            system_data={
+                "app_version": "v4.8.0",
+                "install_mode": "docker",
+                "python_version": "3.11.2",
+                "os_info": "Linux-6.1.0",
+                "os_name": "Linux",
+                "architecture": "x86_64",
+                "hostname": "testhost",
+                "uptime": "0d 1h 2m 3s",
+            },
+            health_data={
+                "db": {"status": "PASS", "detail": "OK", "remediation": ""},
+                "disk_space": {"status": "WARN", "detail": "Low disk", "remediation": "Free space"},
+            },
+            tuner_data=[
+                {"name": "mytuner", "overall_status": "PASS",
+                 "m3u_probe": {"reachable": True}, "xml_probe": {"reachable": True}},
+            ],
+            cache_data={"active_tuner": "mytuner", "channel_count": 500,
+                        "epg_channel_count": 200, "epg_entry_count": 5000},
+            startup_data={"status": "ok", "error_count": 0, "errors": [], "events": []},
+            config_data={},
+            recent_log_lines=["2026-03-07 INFO startup ok",
+                               "2026-03-07 ERROR something failed"],
+            user_description="",
+        )
+        kwargs.update(overrides)
+        return build_issue_draft(**kwargs)
+
+    def test_returns_required_keys(self):
+        result = self._minimal_build()
+        for key in ("suggested_title", "body_markdown", "generated_at", "error_count", "warn_count"):
+            assert key in result, f"Missing key: {key}"
+
+    def test_warn_count_reflects_health_data(self):
+        result = self._minimal_build()
+        assert result["warn_count"] == 1
+        assert result["error_count"] == 0
+
+    def test_fail_count_reflects_health_data(self):
+        from utils.issue_draft import build_issue_draft
+        result = self._minimal_build(
+            health_data={
+                "db":    {"status": "FAIL", "detail": "DB gone", "remediation": "restart"},
+                "schema":{"status": "FAIL", "detail": "tables missing", "remediation": ""},
+            }
+        )
+        assert result["error_count"] == 2
+
+    def test_user_description_in_body(self):
+        result = self._minimal_build(user_description="My guide is empty")
+        assert "My guide is empty" in result["body_markdown"]
+
+    def test_body_contains_sections(self):
+        body = self._minimal_build()["body_markdown"]
+        for section in (
+            "## Description",
+            "## Environment",
+            "## Health Check Summary",
+            "## Tuner Status",
+            "## Startup Events",
+            "## Steps to Reproduce",
+            "## Expected Behavior",
+            "## Actual Behavior",
+        ):
+            assert section in body, f"Missing section: {section}"
+
+    def test_body_contains_system_info(self):
+        body = self._minimal_build()["body_markdown"]
+        assert "v4.8.0" in body
+        assert "docker" in body
+        assert "testhost" in body
+
+    def test_health_warn_surfaces_in_body(self):
+        body = self._minimal_build()["body_markdown"]
+        assert "Low disk" in body
+
+    def test_health_fail_surfaces_in_body(self):
+        from utils.issue_draft import build_issue_draft
+        result = self._minimal_build(
+            health_data={"db": {"status": "FAIL", "detail": "DB gone", "remediation": ""}}
+        )
+        assert "DB gone" in result["body_markdown"]
+
+    def test_startup_error_surfaces_in_body(self):
+        result = self._minimal_build(
+            startup_data={
+                "status": "failed",
+                "error_count": 1,
+                "errors": [{"category": "db_init", "ts": "2026-03-07T00:00:00", "detail": "DB crash"}],
+                "events": [],
+            }
+        )
+        assert "DB crash" in result["body_markdown"]
+
+    def test_startup_error_drives_title(self):
+        result = self._minimal_build(
+            startup_data={
+                "status": "failed",
+                "error_count": 1,
+                "errors": [{"category": "import_error", "ts": "", "detail": "No module named x"}],
+                "events": [],
+            }
+        )
+        assert "import_error" in result["suggested_title"].lower() or "startup" in result["suggested_title"].lower()
+
+    def test_health_fail_drives_title(self):
+        result = self._minimal_build(
+            startup_data={"status": "ok", "error_count": 0, "errors": [], "events": []},
+            health_data={"db": {"status": "FAIL", "detail": "gone", "remediation": ""}},
+        )
+        assert "db" in result["suggested_title"].lower() or "health" in result["suggested_title"].lower()
+
+    def test_log_errors_surface_in_body(self):
+        body = self._minimal_build()["body_markdown"]
+        assert "something failed" in body
+
+    def test_log_info_not_included(self):
+        body = self._minimal_build()["body_markdown"]
+        # The INFO line should NOT appear in the log error section
+        # (but may appear in other sections)
+        # We verify by checking the log error block specifically
+        assert "startup ok" not in body or body.count("startup ok") == 0
+
+    def test_tuner_fail_surfaces_in_body(self):
+        result = self._minimal_build(
+            tuner_data=[{
+                "name": "badtuner",
+                "overall_status": "FAIL",
+                "m3u_probe": {"error": "Connection refused"},
+                "xml_probe": {"error": "DNS lookup failed"},
+            }]
+        )
+        body = result["body_markdown"]
+        assert "badtuner" in body
+        assert "Connection refused" in body
+
+    def test_config_problem_surfaces_in_body(self):
+        result = self._minimal_build(
+            config_data={
+                "user_accounts": {"status": "WARN", "detail": "No users", "remediation": "Add user"},
+            }
+        )
+        body = result["body_markdown"]
+        assert "No users" in body
+
+    def test_generate_title_fallback(self):
+        """With no errors, title should mention app version."""
+        result = self._minimal_build()
+        title = result["suggested_title"]
+        assert "v4.8.0" in title or "Issue report" in title
+
+    def test_body_is_string(self):
+        result = self._minimal_build()
+        assert isinstance(result["body_markdown"], str)
+        assert len(result["body_markdown"]) > 100
+
+    def test_empty_inputs_do_not_crash(self):
+        """All-empty inputs should still produce a valid (if sparse) draft."""
+        from utils.issue_draft import build_issue_draft
+        result = build_issue_draft(
+            system_data={},
+            health_data={},
+            tuner_data=[],
+            cache_data={},
+            startup_data={},
+            config_data={},
+            recent_log_lines=[],
+            user_description="",
+        )
+        assert isinstance(result["body_markdown"], str)
+        assert isinstance(result["suggested_title"], str)

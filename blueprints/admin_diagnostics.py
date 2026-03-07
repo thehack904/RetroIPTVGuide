@@ -7,6 +7,7 @@ Routes (ALL GET, admin-only, login required):
   GET  /admin/diagnostics/logs/download   – download log file  (?key=…)
   GET  /admin/diagnostics/health          – health checks JSON
   GET  /admin/diagnostics/system          – system info JSON
+  GET  /admin/diagnostics/issue-draft     – pre-formatted GitHub issue draft JSON
   GET  /admin/diagnostics/support         – download support bundle (ZIP)
 
 Security:
@@ -86,11 +87,13 @@ def diagnostics_index():
     """Main diagnostics page with tabs."""
     _require_admin()
     from utils.log_reading import ALLOWED_LOGS
+    from utils.issue_draft import GITHUB_ISSUES_URL
     log_keys = list(ALLOWED_LOGS.keys())
     return render_template(
         "admin_diagnostics.html",
         log_keys=log_keys,
         active_tab=request.args.get("tab", "tuners"),
+        github_issues_url=GITHUB_ISSUES_URL,
     )
 
 
@@ -251,6 +254,63 @@ def diagnostics_system():
     data_dir, _, _, app_version, app_start_time = _get_config()
     info = get_system_info(app_version, app_start_time, data_dir)
     return jsonify(info)
+
+
+@admin_diagnostics_bp.route("/issue-draft", methods=["GET"])
+@login_required
+def diagnostics_issue_draft():
+    """Build a pre-formatted GitHub issue draft from all current diagnostics.
+
+    Query params:
+        description – optional free-text problem description (URL-encoded)
+
+    Returns JSON:
+        suggested_title – auto-generated issue title
+        body_markdown   – full GitHub issue body (Markdown)
+        github_new_url  – URL to open a pre-filled GitHub new issue
+        generated_at    – ISO-8601 timestamp
+        error_count     – number of FAIL health checks
+        warn_count      – number of WARN health checks
+    """
+    _require_admin()
+    import urllib.parse
+    from utils.health_checks import run_all_checks, check_tuner_connectivity, check_cache_state
+    from utils.system_info import get_system_info
+    from utils.app_config_diag import run_config_checks
+    from utils.startup_diag import get_startup_summary
+    from utils.log_reading import tail_log
+    from utils.issue_draft import build_issue_draft, GITHUB_ISSUES_URL
+
+    user_description = request.args.get("description", "").strip()
+
+    data_dir, db_path, tuner_db_path, app_version, app_start_time = _get_config()
+
+    health_data = run_all_checks(data_dir, db_path, tuner_db_path)
+    system_data = get_system_info(app_version, app_start_time, data_dir)
+    tuner_data = check_tuner_connectivity(tuner_db_path)
+    cache_data = check_cache_state(tuner_db_path)
+    config_data = run_config_checks(db_path, tuner_db_path)
+    startup_data = get_startup_summary()
+    log_lines, _ = tail_log("app", n=200)
+
+    draft = build_issue_draft(
+        system_data=system_data,
+        health_data=health_data,
+        tuner_data=tuner_data if isinstance(tuner_data, list) else [],
+        cache_data=cache_data if isinstance(cache_data, dict) else {},
+        startup_data=startup_data if isinstance(startup_data, dict) else {},
+        config_data=config_data if isinstance(config_data, dict) else {},
+        recent_log_lines=log_lines,
+        user_description=user_description,
+    )
+
+    # Build the GitHub "new issue" URL with pre-filled title + body.
+    # We URL-encode the full body; browsers and GitHub handle long URLs fine.
+    title_enc = urllib.parse.quote(draft["suggested_title"])
+    body_enc = urllib.parse.quote(draft["body_markdown"])
+    draft["github_new_url"] = f"{GITHUB_ISSUES_URL}?title={title_enc}&body={body_enc}"
+
+    return jsonify(draft)
 
 
 @admin_diagnostics_bp.route("/support", methods=["GET"])
