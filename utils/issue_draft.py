@@ -3,7 +3,21 @@
 Aggregates output from every existing diagnostic utility and renders a
 pre-filled GitHub issue body in Markdown.  The draft gives the project
 maintainer exactly the information needed to reproduce and diagnose the
-reported problem — without exposing secrets.
+reported problem — without exposing secrets or network-topology details.
+
+Sanitization
+------------
+All text written into the issue body is passed through
+``utils.draft_sanitizer.sanitize_text``, which:
+
+* Replaces IP addresses (private **and** public) with ``[IP-REDACTED]``
+* Replaces the server hostname with ``[HOSTNAME]``
+* Strips URL credentials (``user:pass@``) → ``[CREDENTIALS]@``
+* Abbreviates home-directory paths (``/home/user/…`` → ``~/…``)
+* Redacts secret key=value patterns (token=, password=, api_key=, …)
+
+The admin Diagnostics panel itself is **not** affected — only the text
+that ends up in the exported issue body is sanitized.
 
 Public API
 ----------
@@ -17,6 +31,8 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List
+
+from utils.draft_sanitizer import sanitize_hostname, sanitize_text
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -157,6 +173,16 @@ def _format_body(
 ) -> str:
     lines: List[str] = []
 
+    # Extract the server hostname once so it can be stripped from every
+    # text value in the body.
+    server_hostname: str = (
+        system_data.get("hostname", "") if isinstance(system_data, dict) else ""
+    ) or ""
+
+    def _s(value: Any) -> str:
+        """Sanitize *value* and return a safe string."""
+        return sanitize_text(value, server_hostname=server_hostname)
+
     # ── Description ──────────────────────────────────────────────────────────
     desc = user_description.strip() if user_description else ""
     lines += [
@@ -179,12 +205,13 @@ def _format_body(
         ("python_version", "Python"),
         ("os_info",        "OS"),
         ("architecture",   "Architecture"),
-        ("hostname",       "Hostname"),
         ("uptime",         "Uptime"),
     ]
     for key, label in env_fields:
         val = system_data.get(key, "—") if isinstance(system_data, dict) else "—"
-        lines.append(f"| {label} | `{val}` |")
+        lines.append(f"| {label} | `{_s(val)}` |")
+    # Hostname is always replaced — never expose the actual machine name
+    lines.append(f"| Hostname | `{sanitize_hostname(server_hostname)}` |")
     lines.append("")
 
     # ── Health Check Summary ─────────────────────────────────────────────────
@@ -199,21 +226,21 @@ def _format_body(
             lines.append("### ❌ FAIL")
             for c in fails:
                 name = c.get("name") or c.get("check") or "unknown"
-                detail = c.get("detail", "")
+                detail = _s(c.get("detail", ""))
                 lines.append(f"- **{name}**: {detail}")
             lines.append("")
         if warns:
             lines.append("### ⚠️ WARN")
             for c in warns:
                 name = c.get("name") or c.get("check") or "unknown"
-                detail = c.get("detail", "")
+                detail = _s(c.get("detail", ""))
                 lines.append(f"- **{name}**: {detail}")
     lines.append("")
 
     # ── Tuner & Cache Status ─────────────────────────────────────────────────
     lines += ["## Tuner Status", ""]
     if isinstance(cache_data, dict):
-        lines.append(f"- **Active Tuner**: {cache_data.get('active_tuner', '(none)')}")
+        lines.append(f"- **Active Tuner**: {_s(cache_data.get('active_tuner', '(none)'))}")
         lines.append(f"- **Channels in cache**: {cache_data.get('channel_count', '?')}")
         lines.append(f"- **EPG channels**: {cache_data.get('epg_channel_count', '?')}")
         lines.append(f"- **EPG entries**: {cache_data.get('epg_entry_count', '?')}")
@@ -229,8 +256,9 @@ def _format_body(
             for t in problem_tuners:
                 st = t.get("overall_status", "?")
                 name = t.get("name", "?")
-                m3u_err = (t.get("m3u_probe") or {}).get("error", "")
-                xml_err = (t.get("xml_probe") or {}).get("error", "")
+                # Sanitize error messages — they may contain resolved IPs
+                m3u_err = _s((t.get("m3u_probe") or {}).get("error", ""))
+                xml_err = _s((t.get("xml_probe") or {}).get("error", ""))
                 parts = []
                 if m3u_err:
                     parts.append(f"M3U: {m3u_err}")
@@ -251,7 +279,8 @@ def _format_body(
             lines.append("### Startup Errors")
             lines.append("```")
             for e in startup_errors[:10]:
-                lines.append(f"[{e.get('category', '?')}] {e.get('ts', '')}  {e.get('detail', '')}")
+                detail = _s(e.get("detail", ""))
+                lines.append(f"[{e.get('category', '?')}] {e.get('ts', '')}  {detail}")
             if len(startup_errors) > 10:
                 lines.append(f"... and {len(startup_errors) - 10} more")
             lines.append("```")
@@ -262,7 +291,7 @@ def _format_body(
     lines.append("")
 
     # ── Configuration Issues ─────────────────────────────────────────────────
-    config_problems = _extract_config_problems(config_data)
+    config_problems = _extract_config_problems(config_data, sanitize=_s)
     if config_problems:
         lines += ["## Configuration Issues", ""]
         for section, items in config_problems.items():
@@ -279,7 +308,7 @@ def _format_body(
     ]
     if error_lines:
         lines.append("```")
-        lines.extend(error_lines[-30:])
+        lines.extend(_s(ln) for ln in error_lines[-30:])
         lines.append("```")
     else:
         lines.append("No WARN/ERROR lines found in recent log.")
@@ -303,12 +332,28 @@ def _format_body(
         "",
         f"*Auto-generated by RetroIPTVGuide Diagnostics — "
         f"{datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}*",
+        "*Sensitive fields (IP addresses, hostname, credentials, home paths) "
+        "have been automatically redacted.*",
     ]
     return "\n".join(lines)
 
 
-def _extract_config_problems(config_data: Any) -> Dict[str, List[str]]:
-    """Extract FAIL/WARN items from the ``run_config_checks`` result."""
+def _extract_config_problems(
+    config_data: Any,
+    sanitize=None,
+) -> Dict[str, List[str]]:
+    """Extract FAIL/WARN items from the ``run_config_checks`` result.
+
+    Parameters
+    ----------
+    config_data:
+        Raw output of ``utils.app_config_diag.run_config_checks``.
+    sanitize:
+        Optional callable applied to each detail/remediation string before
+        it is stored.  Defaults to identity (no sanitization).
+    """
+    if sanitize is None:
+        sanitize = lambda x: x  # noqa: E731
     problems: Dict[str, List[str]] = {}
     if not isinstance(config_data, dict):
         return problems
@@ -318,8 +363,8 @@ def _extract_config_problems(config_data: Any) -> Dict[str, List[str]]:
         status = section_val.get("status")
         if status in ("FAIL", "WARN"):
             items: List[str] = []
-            detail = section_val.get("detail", "")
-            remediation = section_val.get("remediation", "")
+            detail = sanitize(section_val.get("detail", ""))
+            remediation = sanitize(section_val.get("remediation", ""))
             if detail:
                 items.append(detail)
             if remediation:

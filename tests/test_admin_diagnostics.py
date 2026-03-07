@@ -1493,7 +1493,9 @@ class TestIssueDraftUtil:
         body = self._minimal_build()["body_markdown"]
         assert "v4.8.0" in body
         assert "docker" in body
-        assert "testhost" in body
+        # Hostname is always sanitized in the issue body
+        assert "testhost" not in body
+        assert "[HOSTNAME]" in body
 
     def test_health_warn_surfaces_in_body(self):
         body = self._minimal_build()["body_markdown"]
@@ -1594,3 +1596,322 @@ class TestIssueDraftUtil:
         )
         assert isinstance(result["body_markdown"], str)
         assert isinstance(result["suggested_title"], str)
+
+
+# ---------------------------------------------------------------------------
+# Tests: utils.draft_sanitizer (unit tests)
+# ---------------------------------------------------------------------------
+
+class TestDraftSanitizer:
+    """Unit tests for utils.draft_sanitizer — no HTTP, no Flask."""
+
+    def setup_method(self):
+        from utils.draft_sanitizer import sanitize_text, sanitize_hostname
+        self.sanitize_text = sanitize_text
+        self.sanitize_hostname = sanitize_hostname
+
+    # ── IPv4 redaction ────────────────────────────────────────────────────
+
+    def test_private_ipv4_class_a_redacted(self):
+        assert "[IP-REDACTED]" in self.sanitize_text("server at 10.0.1.50 timed out")
+
+    def test_private_ipv4_class_b_redacted(self):
+        assert "[IP-REDACTED]" in self.sanitize_text("host 172.16.0.1 not reachable")
+
+    def test_private_ipv4_class_c_redacted(self):
+        assert "[IP-REDACTED]" in self.sanitize_text("resolved to 192.168.1.100")
+
+    def test_loopback_ipv4_redacted(self):
+        assert "[IP-REDACTED]" in self.sanitize_text("connecting to 127.0.0.1")
+
+    def test_public_ipv4_redacted(self):
+        assert "[IP-REDACTED]" in self.sanitize_text("server at 203.0.113.55")
+
+    def test_multiple_ipv4_all_redacted(self):
+        result = self.sanitize_text("from 192.168.1.1 to 10.0.0.2")
+        assert "192.168.1.1" not in result
+        assert "10.0.0.2" not in result
+        assert result.count("[IP-REDACTED]") == 2
+
+    def test_version_string_not_redacted(self):
+        """3.11.2 should NOT be treated as an IP address."""
+        result = self.sanitize_text("Python 3.11.2 installed")
+        assert "[IP-REDACTED]" not in result
+        assert "3.11.2" in result
+
+    def test_os_version_not_redacted(self):
+        """6.1.0 (kernel version) should not be redacted."""
+        result = self.sanitize_text("Linux 6.1.0-26-amd64")
+        assert "[IP-REDACTED]" not in result
+
+    # ── IPv6 redaction ────────────────────────────────────────────────────
+
+    def test_ipv6_loopback_redacted(self):
+        result = self.sanitize_text("connected from ::1 port 5000")
+        assert "::1" not in result or "[IP-REDACTED]" in result
+
+    def test_ipv6_full_address_redacted(self):
+        result = self.sanitize_text("addr 2001:db8:85a3::8a2e:370:7334")
+        # Every segment of the address must be gone
+        assert "2001:db8:85a3" not in result
+        assert "8a2e" not in result
+
+    # ── Hostname redaction ────────────────────────────────────────────────
+
+    def test_sanitize_hostname_always_returns_placeholder(self):
+        assert self.sanitize_hostname("myserver") == "[HOSTNAME]"
+        assert self.sanitize_hostname("server01.company.local") == "[HOSTNAME]"
+        assert self.sanitize_hostname("") == "[HOSTNAME]"
+
+    def test_hostname_redacted_in_text(self):
+        result = self.sanitize_text("running on myserver", server_hostname="myserver")
+        assert "myserver" not in result
+        assert "[HOSTNAME]" in result
+
+    def test_hostname_case_insensitive(self):
+        result = self.sanitize_text("MYSERVER is running", server_hostname="myserver")
+        assert "MYSERVER" not in result
+
+    def test_empty_hostname_no_crash(self):
+        """Empty hostname should not cause errors or spurious replacements."""
+        result = self.sanitize_text("some log text", server_hostname="")
+        assert result == "some log text"
+
+    def test_hostname_not_partial_match(self):
+        """'server1' should not be redacted when hostname is 'server'."""
+        result = self.sanitize_text("server1 is up", server_hostname="server")
+        assert "server1" in result
+
+    # ── URL credential redaction ─────────────────────────────────────────
+
+    def test_url_credentials_redacted(self):
+        result = self.sanitize_text("http://admin:secret@iptv.provider.com/playlist.m3u")
+        assert "admin:secret" not in result
+        assert "[CREDENTIALS]" in result
+
+    def test_url_credentials_https(self):
+        result = self.sanitize_text("https://user123:MyP@ss!@cdn.example.com/feed.xml")
+        assert "user123" not in result
+        assert "[CREDENTIALS]" in result
+
+    def test_url_without_credentials_unchanged(self):
+        result = self.sanitize_text("http://iptv.provider.com/playlist.m3u")
+        assert "http://iptv.provider.com/playlist.m3u" in result
+
+    # ── Home path redaction ───────────────────────────────────────────────
+
+    def test_unix_home_path_redacted(self):
+        result = self.sanitize_text("data at /home/alice/retroiptv/data")
+        assert "/home/alice" not in result
+        assert "~" in result
+
+    def test_unix_users_path_redacted(self):
+        result = self.sanitize_text("/Users/Bob/Library/retroiptv")
+        assert "/Users/Bob" not in result
+        assert "~" in result
+
+    def test_windows_home_path_redacted(self):
+        result = self.sanitize_text(r"C:\Users\Alice\AppData\retroiptv")
+        assert "Alice" not in result
+
+    def test_non_home_path_kept(self):
+        result = self.sanitize_text("/opt/retroiptv/data")
+        assert "/opt/retroiptv/data" in result
+
+    # ── Secret key=value redaction ────────────────────────────────────────
+
+    def test_token_redacted(self):
+        result = self.sanitize_text("token=abc123secret")
+        assert "abc123secret" not in result
+        assert "***" in result
+
+    def test_password_redacted(self):
+        result = self.sanitize_text("password=Hunter2!")
+        assert "Hunter2!" not in result
+
+    def test_api_key_redacted(self):
+        result = self.sanitize_text("api_key=sk-live-xyz")
+        assert "sk-live-xyz" not in result
+
+    # ── Non-string input ──────────────────────────────────────────────────
+
+    def test_integer_input(self):
+        result = self.sanitize_text(42)
+        assert result == "42"
+
+    def test_none_input(self):
+        result = self.sanitize_text(None)
+        assert result == "None"
+
+    def test_dict_input(self):
+        result = self.sanitize_text({"key": "val"})
+        assert isinstance(result, str)
+
+    # ── Combined ─────────────────────────────────────────────────────────
+
+    def test_combined_ip_and_hostname(self):
+        text = "Connection timed out after 8s (server at 192.168.1.100 did not respond)"
+        result = self.sanitize_text(text, server_hostname="192.168.1.100")
+        assert "192.168.1.100" not in result
+
+    def test_combined_credentials_and_ip(self):
+        text = "http://user:pass@192.168.1.5/m3u failed"
+        result = self.sanitize_text(text)
+        assert "pass" not in result
+        assert "192.168.1.5" not in result
+
+
+# ---------------------------------------------------------------------------
+# Tests: sanitization applied in issue draft body
+# ---------------------------------------------------------------------------
+
+class TestIssueDraftSanitization:
+    """Verify that sensitive data is not present in the generated body."""
+
+    def _build_with_sensitive_data(self, **overrides):
+        from utils.issue_draft import build_issue_draft
+        kwargs = dict(
+            system_data={
+                "app_version": "v4.8.0",
+                "install_mode": "docker",
+                "python_version": "3.11.2",
+                "os_info": "Linux-6.1.0",
+                "os_name": "Linux",
+                "architecture": "x86_64",
+                "hostname": "internalserver01",
+                "uptime": "1d 2h 3m 4s",
+            },
+            health_data={
+                "db": {
+                    "status": "FAIL",
+                    "detail": "DB at /home/alice/retroiptv/data/users.db is missing",
+                    "remediation": "Restart the app on internalserver01",
+                },
+            },
+            tuner_data=[{
+                "name": "My IPTV",
+                "overall_status": "FAIL",
+                "m3u_probe": {"error": "Connection timed out after 8s (server at 192.168.1.100 did not respond)"},
+                "xml_probe": {"error": "DNS resolution failed for 'iptv.lan': [Errno -5] No address"},
+            }],
+            cache_data={"active_tuner": "My IPTV", "channel_count": 0,
+                        "epg_channel_count": 0, "epg_entry_count": 0},
+            startup_data={
+                "status": "failed",
+                "error_count": 1,
+                "errors": [{"category": "db_init", "ts": "2026-03-07T00:00:00",
+                             "detail": "DB at /home/alice/data/users.db not found on internalserver01"}],
+                "events": [],
+            },
+            config_data={
+                "user_accounts": {
+                    "status": "WARN",
+                    "detail": "Path /home/alice/retroiptv visible",
+                    "remediation": "Check internalserver01 permissions",
+                },
+            },
+            recent_log_lines=[
+                "2026-03-07 ERROR connection to 10.0.1.50 failed",
+                "2026-03-07 WARNING timeout contacting http://user:pass@192.168.2.1/feed",
+                "2026-03-07 INFO startup ok on internalserver01",
+            ],
+            user_description="",
+        )
+        kwargs.update(overrides)
+        return build_issue_draft(**kwargs)
+
+    # ── Hostname never exposed ────────────────────────────────────────────
+
+    def test_real_hostname_not_in_body(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "internalserver01" not in body
+
+    def test_hostname_placeholder_in_body(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "[HOSTNAME]" in body
+
+    # ── IP addresses ─────────────────────────────────────────────────────
+
+    def test_private_ip_not_in_health_detail(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "192.168.1.100" not in body
+
+    def test_private_ip_not_in_log_lines(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "10.0.1.50" not in body
+
+    def test_ip_placeholder_present(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "[IP-REDACTED]" in body
+
+    # ── URL credentials ───────────────────────────────────────────────────
+
+    def test_url_password_not_in_log_lines(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "user:pass" not in body
+
+    def test_credentials_placeholder_present(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "[CREDENTIALS]" in body
+
+    # ── Home paths ────────────────────────────────────────────────────────
+
+    def test_home_path_not_in_health_detail(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "/home/alice" not in body
+
+    def test_home_path_not_in_startup_errors(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "/home/alice/data" not in body
+
+    def test_home_path_not_in_config_issues(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "/home/alice/retroiptv" not in body
+
+    # ── Safe data is preserved ────────────────────────────────────────────
+
+    def test_app_version_preserved(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "v4.8.0" in body
+
+    def test_python_version_not_mistaken_for_ip(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        # 3.11.2 is a version string — must NOT be replaced by [IP-REDACTED]
+        assert "3.11.2" in body
+
+    def test_os_info_preserved(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "Linux" in body
+
+    def test_install_mode_preserved(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "docker" in body
+
+    def test_tuner_name_preserved(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "My IPTV" in body
+
+    def test_sanitization_notice_in_footer(self):
+        body = self._build_with_sensitive_data()["body_markdown"]
+        assert "redacted" in body.lower()
+
+    # ── Endpoint returns sanitized body ───────────────────────────────────
+
+    def test_issue_draft_endpoint_body_sanitized(self, client, isolated_db):
+        """End-to-end: the endpoint's body_markdown must not contain IPs."""
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name,xml,m3u,tuner_type)"
+                " VALUES (?,?,?,?)",
+                ("sanitize_test", "http://192.168.55.1/guide.xml",
+                 "http://192.168.55.1/playlist.m3u", "standard"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/issue-draft")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        # The tuner probe may fail with "server at 192.168.55.1 did not respond"
+        # That IP must be redacted in the body.
+        assert "192.168.55.1" not in data["body_markdown"]
