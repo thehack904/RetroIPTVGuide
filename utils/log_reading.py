@@ -194,7 +194,12 @@ def get_log_download_data(log_key: str) -> Tuple[bytes | None, str]:
         return None, f"Could not read log: {exc}"
 
 
-def build_support_bundle(data_dir: str, health_data: dict, system_data: dict) -> bytes:
+def build_support_bundle(
+    data_dir: str,
+    health_data: dict,
+    system_data: dict,
+    extra: dict | None = None,
+) -> bytes:
     """Create an in-memory ZIP support bundle.
 
     The bundle contains:
@@ -202,9 +207,10 @@ def build_support_bundle(data_dir: str, health_data: dict, system_data: dict) ->
     - activity.log (+ available rotated copies)
     - health.json
     - system.json
+    - Any additional JSON files passed via ``extra`` (e.g. tuners.json)
 
-    Nothing outside the strict ``ALLOWED_LOGS`` allowlist is included.
-    Secrets are redacted from log files.
+    Nothing outside the strict ``ALLOWED_LOGS`` allowlist is included for
+    log files.  Secrets are redacted from log files.
 
     Parameters
     ----------
@@ -214,11 +220,9 @@ def build_support_bundle(data_dir: str, health_data: dict, system_data: dict) ->
         The dict returned by ``utils.health_checks.run_all_checks()``.
     system_data:
         The dict returned by ``utils.system_info.get_system_info()``.
-
-    Returns
-    -------
-    bytes
-        Raw ZIP file content suitable for streaming to the browser.
+    extra:
+        Optional mapping of ``filename → data`` for additional JSON files to
+        include in the bundle root (e.g. ``{"tuners.json": {...}}``).
     """
     import json
 
@@ -229,6 +233,10 @@ def build_support_bundle(data_dir: str, health_data: dict, system_data: dict) ->
 
         # --- system.json ---
         zf.writestr("system.json", json.dumps(system_data, indent=2, default=str))
+
+        # --- extra JSON files (tuners.json, cache_state.json, …) ---
+        for fname, fdata in (extra or {}).items():
+            zf.writestr(fname, json.dumps(fdata, indent=2, default=str))
 
         # --- log files ---
         log_dir = os.path.join(data_dir, "logs")

@@ -390,8 +390,157 @@ class TestHealthChecks:
     def test_run_all_checks_returns_all_keys(self, isolated_db):
         from utils.health_checks import run_all_checks
         result = run_all_checks(app_module.DATA_DIR, app_module.DATABASE, app_module.TUNER_DB)
-        for key in ("db", "schema", "tuners", "xmltv", "disk_space", "write_permissions"):
+        for key in ("db", "schema", "tuners", "xmltv", "disk_space", "write_permissions",
+                    "file_system", "cache_state"):
             assert key in result
+
+    def test_check_db_includes_path_and_size(self, isolated_db):
+        from utils.health_checks import check_db
+        result = check_db(app_module.DATABASE)
+        assert "path" in result
+        assert "size_bytes" in result
+        assert result["exists"] is True
+
+    def test_check_schema_includes_table_list(self, isolated_db):
+        from utils.health_checks import check_schema
+        result = check_schema(app_module.DATABASE)
+        assert "tables_found" in result
+        assert "users" in result["tables_found"]
+
+    def test_check_file_system_returns_db_paths(self, isolated_db):
+        from utils.health_checks import check_file_system
+        result = check_file_system(app_module.DATABASE, app_module.TUNER_DB, app_module.DATA_DIR)
+        assert "users_db" in result
+        assert "tuners_db" in result
+        assert result["users_db"]["exists"] is True
+        assert result["tuners_db"]["exists"] is True
+        assert "data_dir" in result
+        assert "logs_dir" in result
+        assert "app_working_dir" in result
+
+    def test_check_file_system_symlink_detection(self, isolated_db, tmp_path):
+        """Symlink targets should be reported (critical for Docker volume debugging)."""
+        from utils.health_checks import check_file_system
+        # Create a symlink pointing to the real DB
+        link_path = str(tmp_path / "link_users.db")
+        os.symlink(app_module.DATABASE, link_path)
+        result = check_file_system(link_path, app_module.TUNER_DB, app_module.DATA_DIR)
+        assert result["users_db"]["is_symlink"] is True
+        assert result["users_db"]["symlink_target"] is not None
+
+    def test_check_cache_state_returns_expected_keys(self, isolated_db):
+        from utils.health_checks import check_cache_state
+        result = check_cache_state(app_module.TUNER_DB)
+        for key in ("active_tuner", "channel_count", "epg_channel_count",
+                    "epg_entry_count", "sample_channels"):
+            assert key in result
+
+    def test_check_cache_state_channel_count_is_int(self, isolated_db):
+        from utils.health_checks import check_cache_state
+        result = check_cache_state(app_module.TUNER_DB)
+        assert isinstance(result["channel_count"], int)
+
+    def test_check_tuner_connectivity_returns_list(self, isolated_db):
+        from utils.health_checks import check_tuner_connectivity
+        result = check_tuner_connectivity(app_module.TUNER_DB)
+        assert isinstance(result, list)
+
+    def test_check_tuner_connectivity_structure(self, isolated_db):
+        from utils.health_checks import check_tuner_connectivity
+        result = check_tuner_connectivity(app_module.TUNER_DB)
+        for tuner in result:
+            assert "name" in tuner
+            assert "overall_status" in tuner
+            assert tuner["overall_status"] in ("PASS", "WARN", "FAIL", "INFO")
+
+
+# ---------------------------------------------------------------------------
+# Tests: new endpoints (tuners, cache)
+# ---------------------------------------------------------------------------
+
+class TestDiagnosticsTunersEndpoint:
+    def test_tuners_endpoint_admin_only(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/tuners")
+        assert resp.status_code == 403
+
+    def test_tuners_endpoint_returns_list(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/tuners")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert isinstance(data, list)
+
+    def test_tuners_endpoint_no_post(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/tuners")
+        assert resp.status_code == 405
+
+
+class TestDiagnosticsCacheEndpoint:
+    def test_cache_endpoint_admin_only(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/cache")
+        assert resp.status_code == 403
+
+    def test_cache_endpoint_returns_expected_keys(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/cache")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        for key in ("active_tuner", "channel_count", "epg_channel_count",
+                    "epg_entry_count", "sample_channels"):
+            assert key in data
+
+    def test_cache_endpoint_no_post(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/cache")
+        assert resp.status_code == 405
+
+
+class TestDiagnosticsHealthEnhanced:
+    def test_health_includes_file_system(self, client):
+        login(client)
+        resp = client.get("/admin/diagnostics/health")
+        data = json.loads(resp.data)
+        assert "file_system" in data
+        assert "users_db" in data["file_system"]
+        assert "tuners_db" in data["file_system"]
+
+    def test_health_includes_cache_state(self, client):
+        login(client)
+        resp = client.get("/admin/diagnostics/health")
+        data = json.loads(resp.data)
+        assert "cache_state" in data
+        assert "channel_count" in data["cache_state"]
+
+    def test_health_db_includes_path(self, client):
+        login(client)
+        resp = client.get("/admin/diagnostics/health")
+        data = json.loads(resp.data)
+        assert "path" in data["db"]
+        assert data["db"]["path"]  # not empty
+
+
+class TestSupportBundleEnhanced:
+    def test_support_zip_includes_tuners_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "tuners.json" in zf.namelist()
+
+    def test_support_zip_includes_cache_state(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "cache_state.json" in zf.namelist()
+
+    def test_support_tuners_json_is_valid(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        tuners = json.loads(zf.read("tuners.json"))
+        assert isinstance(tuners, list)
 
 
 # ---------------------------------------------------------------------------

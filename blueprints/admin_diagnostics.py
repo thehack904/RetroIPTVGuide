@@ -169,6 +169,30 @@ def diagnostics_health():
     return jsonify(result)
 
 
+@admin_diagnostics_bp.route("/tuners", methods=["GET"])
+@login_required
+def diagnostics_tuners():
+    """Deep per-tuner connectivity check: URL probes, DNS, HTTP status, channel count."""
+    _require_admin()
+    from utils.health_checks import check_tuner_connectivity
+
+    _, _, tuner_db_path, _, _ = _get_config()
+    result = check_tuner_connectivity(tuner_db_path)
+    return jsonify(result)
+
+
+@admin_diagnostics_bp.route("/cache", methods=["GET"])
+@login_required
+def diagnostics_cache():
+    """Return runtime cache / EPG state (active tuner, channel count, sample channels)."""
+    _require_admin()
+    from utils.health_checks import check_cache_state
+
+    _, _, tuner_db_path, _, _ = _get_config()
+    result = check_cache_state(tuner_db_path)
+    return jsonify(result)
+
+
 @admin_diagnostics_bp.route("/system", methods=["GET"])
 @login_required
 def diagnostics_system():
@@ -186,7 +210,7 @@ def diagnostics_system():
 def diagnostics_support():
     """Generate and download a support bundle ZIP."""
     _require_admin()
-    from utils.health_checks import run_all_checks
+    from utils.health_checks import run_all_checks, check_tuner_connectivity, check_cache_state
     from utils.log_reading import build_support_bundle
     from utils.system_info import get_system_info
 
@@ -194,9 +218,14 @@ def diagnostics_support():
 
     health_data = run_all_checks(data_dir, db_path, tuner_db_path)
     system_data = get_system_info(app_version, app_start_time, data_dir)
+    tuner_data = check_tuner_connectivity(tuner_db_path)
+    cache_data = check_cache_state(tuner_db_path)
 
     try:
-        zip_bytes = build_support_bundle(data_dir, health_data, system_data)
+        zip_bytes = build_support_bundle(
+            data_dir, health_data, system_data,
+            extra={"tuners.json": tuner_data, "cache_state.json": cache_data},
+        )
     except Exception as exc:
         logger.exception("Failed to build support bundle: %s", exc)
         abort(500)
