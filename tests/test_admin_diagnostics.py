@@ -1915,3 +1915,335 @@ class TestIssueDraftSanitization:
         # The tuner probe may fail with "server at 192.168.55.1 did not respond"
         # That IP must be redacted in the body.
         assert "192.168.55.1" not in data["body_markdown"]
+
+
+# ===========================================================================
+# Tests: utils.dependency_check
+# ===========================================================================
+
+class TestDependencyCheck:
+    """Unit tests for the external binary + Python package checker."""
+
+    def test_check_external_binaries_returns_expected_keys(self):
+        from utils.dependency_check import check_external_binaries
+        result = check_external_binaries()
+        assert "status" in result
+        assert "binaries" in result
+        assert isinstance(result["binaries"], list)
+
+    def test_check_external_binaries_status_is_valid(self):
+        from utils.dependency_check import check_external_binaries
+        result = check_external_binaries()
+        assert result["status"] in ("PASS", "WARN", "FAIL")
+
+    def test_check_external_binaries_each_has_required_fields(self):
+        from utils.dependency_check import check_external_binaries
+        for entry in check_external_binaries()["binaries"]:
+            assert "name" in entry
+            assert "found" in entry
+            assert "severity" in entry
+            assert isinstance(entry["found"], bool)
+
+    def test_check_external_binaries_python_itself_not_listed(self):
+        """The binaries list should not include python — it's checked separately."""
+        from utils.dependency_check import check_external_binaries
+        names = [e["name"] for e in check_external_binaries()["binaries"]]
+        assert "python" not in names
+
+    def test_check_python_packages_returns_expected_keys(self):
+        from utils.dependency_check import check_python_packages
+        result = check_python_packages()
+        assert "status" in result
+        assert "packages" in result
+        assert "python_version" in result
+        assert "python_executable" in result
+
+    def test_check_python_packages_status_is_valid(self):
+        from utils.dependency_check import check_python_packages
+        assert check_python_packages()["status"] in ("PASS", "WARN", "FAIL")
+
+    def test_check_python_packages_flask_installed(self):
+        from utils.dependency_check import check_python_packages
+        packages = check_python_packages()["packages"]
+        flask_entries = [p for p in packages if p["package"].lower() == "flask"]
+        assert flask_entries, "Flask should be found in installed packages"
+        assert flask_entries[0]["ok"] is True
+
+    def test_dependencies_endpoint_accessible(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/dependencies")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "external_binaries" in data
+        assert "python_packages" in data
+
+    def test_dependencies_endpoint_requires_admin(self, client, isolated_db):
+        resp = client.get("/admin/diagnostics/dependencies")
+        assert resp.status_code in (302, 401, 403)
+
+
+# ===========================================================================
+# Tests: utils.conflict_detector
+# ===========================================================================
+
+class TestConflictDetector:
+    """Unit tests for the channel conflict detection utility."""
+
+    def _make_channels(self, entries):
+        """Inject a list of channel dicts into the app module's cache."""
+        import app as app_module
+        app_module.cached_channels = entries
+
+    def setup_method(self):
+        """Reset cached_channels before each test."""
+        import app as app_module
+        app_module.cached_channels = []
+
+    def teardown_method(self):
+        """Clean up cached_channels after each test."""
+        import app as app_module
+        app_module.cached_channels = []
+
+    def test_no_channels_returns_pass(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([])
+        result = detect_channel_conflicts()
+        assert result["status"] == "PASS"
+        assert result["channel_count"] == 0
+
+    def test_unique_channels_returns_pass(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "CNN", "tvg_id": "cnn.us", "url": "http://stream1.com/cnn"},
+            {"name": "BBC", "tvg_id": "bbc.uk", "url": "http://stream1.com/bbc"},
+        ])
+        result = detect_channel_conflicts()
+        assert result["status"] == "PASS"
+        assert result["duplicate_names"] == []
+        assert result["duplicate_tvg_ids"] == []
+        assert result["duplicate_urls"] == []
+
+    def test_duplicate_name_detected(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "CNN", "tvg_id": "cnn.us.1", "url": "http://a.com/1"},
+            {"name": "cnn", "tvg_id": "cnn.us.2", "url": "http://a.com/2"},
+        ])
+        result = detect_channel_conflicts()
+        assert result["status"] == "WARN"
+        assert len(result["duplicate_names"]) == 1
+        assert result["duplicate_names"][0]["count"] == 2
+
+    def test_duplicate_tvg_id_detected(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "CNN HD", "tvg_id": "cnn.us", "url": "http://a.com/1"},
+            {"name": "CNN SD", "tvg_id": "cnn.us", "url": "http://a.com/2"},
+        ])
+        result = detect_channel_conflicts()
+        assert result["status"] == "WARN"
+        assert len(result["duplicate_tvg_ids"]) == 1
+        assert result["duplicate_tvg_ids"][0]["tvg_id"] == "cnn.us"
+
+    def test_duplicate_url_detected(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "Channel A", "tvg_id": "a.tv", "url": "http://same.com/stream"},
+            {"name": "Channel B", "tvg_id": "b.tv", "url": "http://same.com/stream"},
+        ])
+        result = detect_channel_conflicts()
+        assert result["status"] == "WARN"
+        assert len(result["duplicate_urls"]) == 1
+
+    def test_missing_tvg_id_not_grouped(self):
+        """Empty TVG-IDs should not be grouped as a conflict."""
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "A", "tvg_id": "", "url": "http://a.com/1"},
+            {"name": "B", "tvg_id": "", "url": "http://b.com/2"},
+        ])
+        result = detect_channel_conflicts()
+        assert result["duplicate_tvg_ids"] == []
+
+    def test_result_has_channel_count(self):
+        from utils.conflict_detector import detect_channel_conflicts
+        self._make_channels([
+            {"name": "X", "tvg_id": "x.tv", "url": "http://x.com/s"},
+            {"name": "Y", "tvg_id": "y.tv", "url": "http://y.com/s"},
+            {"name": "Z", "tvg_id": "z.tv", "url": "http://z.com/s"},
+        ])
+        assert detect_channel_conflicts()["channel_count"] == 3
+
+    def test_conflicts_endpoint_accessible(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/conflicts")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "status" in data
+        assert "channel_count" in data
+
+    def test_conflicts_endpoint_requires_admin(self, client, isolated_db):
+        resp = client.get("/admin/diagnostics/conflicts")
+        assert resp.status_code in (302, 401, 403)
+
+
+# ===========================================================================
+# Tests: utils.security_diag
+# ===========================================================================
+
+class TestSecurityDiag:
+    """Unit tests for the security diagnostics module."""
+
+    def test_strong_secret_key_passes(self):
+        import os
+        import sqlite3
+        import tempfile
+        from utils.security_diag import run_security_checks
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.execute(
+                    "CREATE TABLE users (username TEXT, password TEXT)"
+                )
+                conn.execute(
+                    "INSERT INTO users VALUES ('admin', 'scrypt:abc123')"
+                )
+            result = run_security_checks(
+                db_path=db_path,
+                secret_key="a" * 32 + "!@#$%^&*ABCDEF1234",
+                debug_mode=False,
+                bind_host="127.0.0.1",
+            )
+            sk_check = next(c for c in result["checks"] if c["name"] == "secret_key")
+            assert sk_check["status"] == "PASS"
+        finally:
+            os.unlink(db_path)
+
+    def test_empty_secret_key_fails(self):
+        from utils.security_diag import _check_secret_key
+        result = _check_secret_key("")
+        assert result["status"] == "FAIL"
+
+    def test_short_secret_key_warns(self):
+        from utils.security_diag import _check_secret_key
+        result = _check_secret_key("short")
+        assert result["status"] in ("WARN", "FAIL")
+
+    def test_known_default_secret_fails(self):
+        from utils.security_diag import _check_secret_key
+        for val in ["dev", "secret", "changeme", "flask"]:
+            assert _check_secret_key(val)["status"] == "FAIL", f"Expected FAIL for {val!r}"
+
+    def test_debug_mode_on_fails(self):
+        from utils.security_diag import _check_debug_mode
+        assert _check_debug_mode(True)["status"] == "FAIL"
+
+    def test_debug_mode_off_passes(self):
+        from utils.security_diag import _check_debug_mode
+        assert _check_debug_mode(False)["status"] == "PASS"
+
+    def test_bind_all_interfaces_warns(self):
+        from utils.security_diag import _check_bind_address
+        assert _check_bind_address("0.0.0.0")["status"] == "WARN"
+        assert _check_bind_address("::")["status"] == "WARN"
+
+    def test_bind_loopback_passes(self):
+        from utils.security_diag import _check_bind_address
+        assert _check_bind_address("127.0.0.1")["status"] == "PASS"
+        assert _check_bind_address("localhost")["status"] == "PASS"
+
+    def test_scrypt_hash_passes(self):
+        import os
+        import sqlite3
+        import tempfile
+        from utils.security_diag import _check_admin_password_hash
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("CREATE TABLE users (username TEXT, password TEXT)")
+                conn.execute("INSERT INTO users VALUES ('admin', 'scrypt:32768:8:1$...hash...')")
+            result = _check_admin_password_hash(db_path)
+            assert result["status"] == "PASS"
+        finally:
+            os.unlink(db_path)
+
+    def test_md5_hash_fails(self):
+        import os
+        import sqlite3
+        import tempfile
+        from utils.security_diag import _check_admin_password_hash
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("CREATE TABLE users (username TEXT, password TEXT)")
+                # MD5 hex hash
+                conn.execute("INSERT INTO users VALUES ('admin', 'ab56b4d92b40713acc5af89985d4b786')")
+            result = _check_admin_password_hash(db_path)
+            assert result["status"] == "FAIL"
+        finally:
+            os.unlink(db_path)
+
+    def test_run_security_checks_returns_expected_keys(self):
+        import os
+        import sqlite3
+        import tempfile
+        from utils.security_diag import run_security_checks
+        fd, db_path = tempfile.mkstemp(suffix=".db")
+        os.close(fd)
+        try:
+            with sqlite3.connect(db_path) as conn:
+                conn.execute("CREATE TABLE users (username TEXT, password TEXT)")
+                conn.execute("INSERT INTO users VALUES ('admin', 'pbkdf2:sha256:...hash...')")
+            result = run_security_checks(
+                db_path=db_path,
+                secret_key="x" * 40,
+                debug_mode=False,
+                bind_host="0.0.0.0",
+            )
+            assert "status" in result
+            assert "checks" in result
+            assert "detail" in result
+            assert isinstance(result["checks"], list)
+            assert len(result["checks"]) == 4  # sk, pw, debug, bind
+        finally:
+            os.unlink(db_path)
+
+    def test_security_endpoint_accessible(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/security")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "status" in data
+        assert "checks" in data
+
+    def test_security_endpoint_requires_admin(self, client, isolated_db):
+        resp = client.get("/admin/diagnostics/security")
+        assert resp.status_code in (302, 401, 403)
+
+    def test_security_in_config_endpoint(self, client, isolated_db):
+        """The /config endpoint should now include security check results."""
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "security" in data
+
+    def test_dependencies_in_config_endpoint(self, client, isolated_db):
+        """The /config endpoint should include dependency check results."""
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "external_binaries" in data
+        assert "python_packages" in data
+
+    def test_conflicts_in_config_endpoint(self, client, isolated_db):
+        """The /config endpoint should include channel conflict results."""
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "channel_conflicts" in data

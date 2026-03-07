@@ -1,12 +1,13 @@
 """Application-level configuration diagnostics for the RetroIPTVGuide Admin UI.
 
-Four check functions that expose the information most useful for diagnosing
+Five check functions that expose the information most useful for diagnosing
 real-world user issues:
 
 check_user_accounts()      – user list with last-logins and assigned tuners
 check_virtual_channels()   – per-channel enabled state + configuration gaps
 check_external_services()  – live reachability probes for weather API and news feeds
 check_system_resources()   – load, memory, open files, installed Python packages
+run_config_checks()        – aggregate runner (includes dependency + security checks)
 """
 
 from __future__ import annotations
@@ -458,9 +459,33 @@ def check_system_resources() -> Dict[str, Any]:
 
 def run_config_checks(db_path: str, tuner_db_path: str) -> Dict[str, Any]:
     """Run all application-config diagnostics and return a combined dict."""
+    from utils.dependency_check import check_external_binaries, check_python_packages
+    from utils.conflict_detector import detect_channel_conflicts
+    from utils.security_diag import run_security_checks
+
+    # Gather Flask runtime context for the security check
+    try:
+        import app as _app_module  # noqa: PLC0415
+        secret_key: str = _app_module.app.config.get("SECRET_KEY", "") or ""
+        debug_mode: bool = bool(_app_module.app.config.get("DEBUG", False))
+        bind_host: str = _app_module.app.config.get("SERVER_BIND_HOST", "0.0.0.0")
+    except Exception:  # noqa: BLE001
+        secret_key = ""
+        debug_mode = False
+        bind_host = "0.0.0.0"
+
     return {
         "user_accounts": check_user_accounts(db_path),
         "virtual_channels": check_virtual_channels(tuner_db_path),
         "external_services": check_external_services(tuner_db_path),
         "system_resources": check_system_resources(),
+        "external_binaries": check_external_binaries(),
+        "python_packages": check_python_packages(),
+        "channel_conflicts": detect_channel_conflicts(),
+        "security": run_security_checks(
+            db_path=db_path,
+            secret_key=secret_key,
+            debug_mode=debug_mode,
+            bind_host=bind_host,
+        ),
     }

@@ -9,6 +9,9 @@ Routes (ALL GET, admin-only, login required):
   GET  /admin/diagnostics/system          – system info JSON
   GET  /admin/diagnostics/issue-draft     – pre-formatted GitHub issue draft JSON
   GET  /admin/diagnostics/support         – download support bundle (ZIP)
+  GET  /admin/diagnostics/dependencies    – external binary + Python package checks JSON
+  GET  /admin/diagnostics/conflicts       – channel conflict detector JSON
+  GET  /admin/diagnostics/security        – security configuration checks JSON
 
 Security:
   * Admin-only via ``current_user.username == 'admin'`` check.
@@ -311,6 +314,61 @@ def diagnostics_issue_draft():
     draft["github_new_url"] = f"{GITHUB_ISSUES_URL}?title={title_enc}&body={body_enc}"
 
     return jsonify(draft)
+
+
+@admin_diagnostics_bp.route("/dependencies", methods=["GET"])
+@login_required
+def diagnostics_dependencies():
+    """Return external binary and Python package dependency checks as JSON."""
+    _require_admin()
+    from utils.dependency_check import check_external_binaries, check_python_packages
+
+    return jsonify({
+        "external_binaries": check_external_binaries(),
+        "python_packages": check_python_packages(),
+    })
+
+
+@admin_diagnostics_bp.route("/conflicts", methods=["GET"])
+@login_required
+def diagnostics_conflicts():
+    """Return channel conflict detection results as JSON.
+
+    Scans the live in-memory channel cache for duplicate names, TVG-IDs,
+    and stream URLs.
+    """
+    _require_admin()
+    from utils.conflict_detector import detect_channel_conflicts
+
+    return jsonify(detect_channel_conflicts())
+
+
+@admin_diagnostics_bp.route("/security", methods=["GET"])
+@login_required
+def diagnostics_security():
+    """Return security configuration check results as JSON.
+
+    Checks SECRET_KEY strength, admin password hash algorithm,
+    Flask debug mode, and server bind address.
+    """
+    _require_admin()
+    from utils.security_diag import run_security_checks
+
+    _, db_path, _, _, _ = _get_config()
+
+    import app as _app_module  # noqa: PLC0415
+    secret_key: str = _app_module.app.config.get("SECRET_KEY", "") or ""
+    debug_mode: bool = bool(_app_module.app.config.get("DEBUG", False))
+    bind_host: str = _app_module.app.config.get("SERVER_BIND_HOST", "0.0.0.0")
+
+    return jsonify(
+        run_security_checks(
+            db_path=db_path,
+            secret_key=secret_key,
+            debug_mode=debug_mode,
+            bind_host=bind_host,
+        )
+    )
 
 
 @admin_diagnostics_bp.route("/support", methods=["GET"])
