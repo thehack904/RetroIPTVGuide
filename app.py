@@ -1284,7 +1284,9 @@ def _build_traffic_demo_payload():
 _ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
 _ROADS_CACHE_TTL = 86400  # 24 hours in seconds
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
-_OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
+_OVERPASS_PREWARM_STAGGER_S = 12  # seconds between per-city Overpass requests at startup
+_OVERPASS_MAX_RETRIES = 3         # retry attempts on 429 / transient errors
+_OVERPASS_RETRY_BACKOFF_S = 10    # initial back-off in seconds (doubles each retry)
 
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
@@ -1293,25 +1295,50 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     Only motorway and trunk-class roads are fetched; at this scale primary/
     secondary roads would return thousands of segments across the viewport.
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
-    On network failure returns an empty FeatureCollection."""
+    Retries up to _OVERPASS_MAX_RETRIES times on 429 / transient errors,
+    honouring the Retry-After response header when present.
+    On permanent failure returns an empty FeatureCollection."""
     query = (
         f"[out:json][timeout:60];"
         f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
         f"(around:{radius_m},{lat},{lon}););"
         f"out body;>;out skel qt;"
     )
-    try:
-        resp = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            timeout=65,
-            headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
-        return {"elements": []}
+    backoff = _OVERPASS_RETRY_BACKOFF_S
+    for attempt in range(_OVERPASS_MAX_RETRIES + 1):
+        try:
+            resp = requests.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": query},
+                timeout=65,
+                headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
+            )
+            if resp.status_code == 429 and attempt < _OVERPASS_MAX_RETRIES:
+                wait = int(resp.headers.get("Retry-After", backoff))
+                logging.warning(
+                    "_fetch_overpass_roads: 429 rate-limited (attempt %d/%d),"
+                    " sleeping %ds before retry",
+                    attempt + 1, _OVERPASS_MAX_RETRIES, wait,
+                )
+                time.sleep(wait)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            if attempt < _OVERPASS_MAX_RETRIES:
+                logging.warning(
+                    "_fetch_overpass_roads: transient error (attempt %d/%d),"
+                    " retrying in %ds",
+                    attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                )
+                time.sleep(backoff)
+                backoff *= 2
+            else:
+                logging.exception(
+                    "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
+                )
+    return {"elements": []}
 
 
 def _overpass_to_geojson(raw: dict) -> dict:

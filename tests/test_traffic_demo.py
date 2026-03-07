@@ -2,8 +2,10 @@
 import json
 import os
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests as req_lib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -16,6 +18,7 @@ from app import (
     _get_congestion_distribution, _build_traffic_demo_payload,
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
+    _fetch_overpass_roads,
 )
 
 
@@ -711,3 +714,70 @@ class TestApiTrafficDemoRoads:
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
         assert data['type'] == 'FeatureCollection'
         assert data['features'] == []
+
+
+# ─── _fetch_overpass_roads retry / rate-limit handling ───────────────────────
+
+class TestFetchOverpassRoadsRetry:
+    """Test that _fetch_overpass_roads retries on 429 and respects Retry-After."""
+
+    _GOOD_RESPONSE = {"elements": [{"type": "node", "id": 1, "lat": 41.88, "lon": -87.63}]}
+
+    def _make_response(self, status_code: int, json_body=None, headers=None):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = headers or {}
+        if status_code >= 400:
+            mock_resp.raise_for_status.side_effect = req_lib.exceptions.HTTPError(
+                f"{status_code} error"
+            )
+        else:
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.json.return_value = json_body or self._GOOD_RESPONSE
+        return mock_resp
+
+    def test_success_on_first_attempt(self, monkeypatch):
+        mock_post = MagicMock(return_value=self._make_response(200, self._GOOD_RESPONSE))
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 1
+
+    def test_retries_on_429_and_eventually_succeeds(self, monkeypatch):
+        """First two calls return 429; third succeeds."""
+        responses = [
+            self._make_response(429),
+            self._make_response(429),
+            self._make_response(200, self._GOOD_RESPONSE),
+        ]
+        mock_post = MagicMock(side_effect=responses)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 3
+        assert mock_sleep.call_count == 2  # slept twice before the successful call
+
+    def test_respects_retry_after_header(self, monkeypatch):
+        """Retry-After header value must be used as the sleep duration."""
+        rate_limited = self._make_response(429, headers={"Retry-After": "30"})
+        success = self._make_response(200, self._GOOD_RESPONSE)
+        mock_post = MagicMock(side_effect=[rate_limited, success])
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        _fetch_overpass_roads(41.88, -87.63)
+        mock_sleep.assert_called_once_with(30)
+
+    def test_exhausted_retries_return_empty(self, monkeypatch):
+        """All attempts return 429 - function must return empty elements dict."""
+        mock_post = MagicMock(return_value=self._make_response(429))
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == {"elements": []}
+        # Should have attempted _OVERPASS_MAX_RETRIES + 1 total calls
+        assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
