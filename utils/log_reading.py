@@ -67,6 +67,7 @@ def configure_allowed_logs(data_dir: str) -> None:
     log_dir = os.path.join(data_dir, "logs")
     ALLOWED_LOGS["app"] = os.path.join(log_dir, "retroiptvguide.log")
     ALLOWED_LOGS["activity"] = os.path.join(log_dir, "activity.log")
+    ALLOWED_LOGS["startup"] = os.path.join(log_dir, "startup.log")
 
 
 def _resolve_log_path(log_key: str) -> str | None:

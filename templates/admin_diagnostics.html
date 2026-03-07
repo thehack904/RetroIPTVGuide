@@ -96,6 +96,28 @@
 /* Spinner */
 .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid #555; border-top-color: var(--accent-color, #0af); border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-left: 0.4rem; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Startup events */
+.startup-event-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+.startup-event-table th { color: #777; font-weight: normal; text-transform: uppercase; font-size: 0.72rem; padding: 0.3rem 0.5rem; border-bottom: 1px solid #333; text-align: left; }
+.startup-event-table td { padding: 0.3rem 0.5rem; border-bottom: 1px solid #1e1e1e; font-family: monospace; vertical-align: top; }
+.startup-event-table td.ev-detail { white-space: pre-wrap; word-break: break-all; max-width: 600px; }
+.sev-info { color: #aaa; }
+.sev-warn { color: #ffcc00; }
+.sev-error { color: #ff4444; font-weight: 700; }
+.sev-critical { color: #ff0000; font-weight: 700; background: #1a0000; }
+/* Parse trace */
+.ptrace-section { margin-bottom: 1rem; }
+.ptrace-section h4 { margin: 0 0 0.4rem; font-size: 0.9rem; color: var(--accent-color, #0af); }
+.ptrace-kv { display: flex; gap: 0.5rem; flex-wrap: wrap; font-size: 0.82rem; margin-bottom: 0.25rem; }
+.ptrace-kv .pk { color: #777; min-width: 140px; flex-shrink: 0; }
+.ptrace-kv .pv { font-family: monospace; color: #ccc; word-break: break-all; }
+.ptrace-issue { font-size: 0.82rem; color: #ff4444; margin-top: 0.25rem; padding: 0.3rem 0.5rem; background: #1a0000; border-radius: 3px; }
+.ptrace-warn  { font-size: 0.82rem; color: #ffcc00; margin-top: 0.25rem; padding: 0.3rem 0.5rem; background: #1a1400; border-radius: 3px; }
+.ptrace-ok    { font-size: 0.82rem; color: #33ff66; margin-top: 0.25rem; }
+.content-sample-pre { background: #050505; color: #88cc88; border: 1px solid #2a2a2a; border-radius: 3px; padding: 0.5rem; font-size: 0.72rem; font-family: monospace; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; margin-top: 0.4rem; }
+.ch-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+.ch-table th { color: #666; font-weight: normal; text-transform: uppercase; font-size: 0.68rem; padding: 0.25rem 0.4rem; border-bottom: 1px solid #2a2a2a; }
+.ch-table td { padding: 0.25rem 0.4rem; border-bottom: 1px solid #1a1a1a; font-family: monospace; word-break: break-all; }
 </style>
 {% endblock %}
 
@@ -129,6 +151,23 @@
       <button type="button" class="btn-action" id="btnTestTuners">&#x25BA; Test All Tuners (may take ~20s)</button>
       <div id="tunerList" class="tuner-list" style="margin-top:0.8rem"></div>
     </div>
+    <div class="diag-box">
+      <h3>&#x1F50E; Tuner Data Parse Trace <span id="parseSpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.5rem">
+        Performs a <strong>live fetch and parse</strong> of a tuner's M3U and XMLTV feeds directly from the server.
+        Shows exactly what data was received, detected problems, channel quality, EPG coverage, and raw content samples.
+        Use this when the guide shows nothing or EPG data is missing.
+      </p>
+      <div class="log-controls" style="margin-bottom:0.6rem">
+        <label for="parseTunerSelect">Tuner:</label>
+        <select id="parseTunerSelect">
+          <option value="">— select —</option>
+        </select>
+        <button type="button" class="btn-action" id="btnParseTrace">&#x25BA; Run Parse Trace</button>
+        <span style="font-size:0.78rem;color:#888">(may take 15–30s depending on feed size)</span>
+      </div>
+      <div id="parseTraceOutput"></div>
+    </div>
   </div>
 
   <!-- CONFIG TAB -->
@@ -147,7 +186,18 @@
   <!-- LOGS TAB -->
   <div id="panel-logs" class="diag-panel{% if active_tab == 'logs' %} active{% endif %}">
     <div class="diag-box">
-      <h3>Log Viewer</h3>
+      <h3>Startup Event Log <span id="startupSpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:#888;font-size:0.85rem;margin:0 0 0.5rem">
+        Events captured during <code>python app.py</code> startup — <strong>before Flask was running</strong>.
+        Shows Python version, data directory resolution, DB init, import errors, and tuner cache load.
+        If users can't reach the admin panel at all, check <code>/startup-status</code> (no login required)
+        for a minimal error summary.
+      </p>
+      <button type="button" class="btn-action" id="btnLoadStartup">&#x25BA; Load Startup Events</button>
+      <div id="startupOutput" style="margin-top:0.7rem"></div>
+    </div>
+    <div class="diag-box">
+      <h3>Log File Viewer</h3>
       <div class="log-controls">
         <label for="logKeySelect">Log file:</label>
         <select id="logKeySelect">{% for k in log_keys %}<option value="{{ k }}">{{ k }}</option>{% endfor %}</select>
@@ -192,6 +242,7 @@
       <ul class="support-checklist">
         <li>Application log + rotated copies (secrets redacted)</li>
         <li>Activity log</li>
+        <li><code>startup.json</code> — startup events, import errors, DB init results, cache load</li>
         <li><code>health.json</code> — DB paths, disk, permissions, file system</li>
         <li><code>tuners.json</code> — per-tuner URL connectivity, DNS, HTTP errors</li>
         <li><code>cache_state.json</code> — channel count, EPG count, active tuner</li>
@@ -557,6 +608,197 @@ document.getElementById('btnLoadSystem').addEventListener('click',function(){
     document.getElementById('sysTableBody').innerHTML='<tr><td colspan="2" class="st-fail">Failed: '+esc(String(e))+'</td></tr>';
   });
 });
+
+/* ── Startup Events ── */
+document.getElementById('btnLoadStartup').addEventListener('click',function(){
+  spin('startupSpinner',true);
+  var out=document.getElementById('startupOutput');
+  out.innerHTML='<div style="color:#888;font-size:0.85rem">Loading&#x2026;</div>';
+  fetch('/admin/diagnostics/startup',{credentials:'same-origin'}).then(function(r){return r.json();})
+  .then(function(d){
+    spin('startupSpinner',false);
+    var statusCls={'ok':'st-pass','ok_with_errors':'st-warn','in_progress':'st-info','failed':'st-fail'}[d.status]||'';
+    var html='<div style="margin-bottom:0.6rem">';
+    html+='Status: <span class="'+statusCls+'">'+esc(d.status||'?')+'</span>';
+    if(d.finished_at) html+=' &nbsp; Finished: '+esc(d.finished_at);
+    html+=' &nbsp; Events: '+esc(d.event_count)+' &nbsp; Errors: <span class="sev-error">'+esc(d.error_count)+'</span>';
+    html+='</div>';
+    if(d.errors&&d.errors.length){
+      html+='<div class="diag-box" style="background:#0d0000;border-color:#880000;margin-bottom:0.8rem"><h4 style="color:#ff6666">&#x274C; Startup Errors ('+d.errors.length+')</h4>';
+      d.errors.forEach(function(e){
+        html+='<div class="ptrace-issue"><b>['+esc(e.category)+']</b> '+esc(e.ts)+'<br><pre style="margin:0.2rem 0 0;white-space:pre-wrap;word-break:break-all;font-size:0.78rem">'+esc(e.detail)+'</pre></div>';
+      });
+      html+='</div>';
+    }
+    if(d.events&&d.events.length){
+      html+='<table class="startup-event-table"><tr><th>Time</th><th>Level</th><th>Category</th><th>Detail</th></tr>';
+      d.events.forEach(function(e){
+        var cls={'info':'sev-info','warn':'sev-warn','error':'sev-error','critical':'sev-critical'}[e.level]||'sev-info';
+        html+='<tr><td>'+esc(e.ts)+'</td><td class="'+cls+'">'+esc(e.level.toUpperCase())+'</td><td>'+esc(e.category)+'</td><td class="ev-detail">'+esc(e.detail)+'</td></tr>';
+      });
+      html+='</table>';
+    } else {
+      html+='<div style="color:#888;font-size:0.85rem">No startup events recorded. The app may have been loaded by a WSGI server (not <code>python app.py</code>).</div>';
+    }
+    out.innerHTML=html;
+  }).catch(function(e){
+    spin('startupSpinner',false);
+    document.getElementById('startupOutput').innerHTML='<span class="st-fail">Request failed: '+esc(String(e))+'</span>';
+  });
+});
+
+/* ── Parse Trace ── */
+// Populate tuner select from cache endpoint on load
+(function loadTunerNames(){
+  fetch('/admin/diagnostics/cache',{credentials:'same-origin'}).then(function(r){return r.json();})
+  .then(function(d){
+    var sel=document.getElementById('parseTunerSelect');
+    if(d.all_tuners&&d.all_tuners.length){
+      d.all_tuners.forEach(function(t){
+        var opt=document.createElement('option'); opt.value=t; opt.textContent=t; sel.appendChild(opt);
+      });
+    } else if(d.active_tuner){
+      var opt=document.createElement('option'); opt.value=d.active_tuner; opt.textContent=d.active_tuner; sel.appendChild(opt);
+    }
+  }).catch(function(){});
+})();
+
+document.getElementById('btnParseTrace').addEventListener('click',function(){
+  var name=document.getElementById('parseTunerSelect').value;
+  if(!name){ alert('Please select a tuner.'); return; }
+  spin('parseSpinner',true);
+  var out=document.getElementById('parseTraceOutput');
+  out.innerHTML='<div style="color:#888;font-size:0.85rem">Fetching and parsing tuner data&#x2026; this may take 15–30 seconds.</div>';
+  fetch('/admin/diagnostics/tuner-parse?name='+encodeURIComponent(name),{credentials:'same-origin'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    spin('parseSpinner',false);
+    if(d.error){ out.innerHTML='<span class="st-fail">'+esc(d.error)+'</span>'; return; }
+    out.innerHTML=renderParseTrace(d);
+  }).catch(function(e){
+    spin('parseSpinner',false);
+    out.innerHTML='<span class="st-fail">Request failed: '+esc(String(e))+'</span>';
+  });
+});
+
+function renderParseTrace(d){
+  var html='';
+
+  /* Issues & Warnings banner */
+  if(d.issues&&d.issues.length){
+    html+='<div style="margin-bottom:0.6rem">';
+    d.issues.forEach(function(iss){ html+='<div class="ptrace-issue">&#x274C; '+esc(iss)+'</div>'; });
+    html+='</div>';
+  }
+  if(d.warnings&&d.warnings.length){
+    html+='<div style="margin-bottom:0.6rem">';
+    d.warnings.forEach(function(w){ html+='<div class="ptrace-warn">&#x26A0;&#xFE0F; '+esc(w)+'</div>'; });
+    html+='</div>';
+  }
+  if(!d.issues||!d.issues.length){
+    html+='<div class="ptrace-ok">&#x2705; No issues detected.</div>';
+  }
+
+  /* M3U */
+  html+=renderFeedTrace('M3U Playlist', d.m3u, 'm3u');
+
+  /* XMLTV */
+  html+=renderFeedTrace('XMLTV / EPG', d.xmltv, 'xmltv');
+
+  /* EPG Coverage */
+  if(d.epg_coverage){
+    var cov=d.epg_coverage;
+    html+='<div class="ptrace-section"><h4>EPG Coverage</h4>';
+    if(cov.match_pct!=null){
+      var pct=cov.match_pct;
+      var pctCls=pct===0?'st-fail':pct<50?'st-warn':'st-pass';
+      html+='<div class="ptrace-kv"><span class="pk">Match rate</span><span class="pv '+pctCls+'">'+pct+'% of M3U tvg-ids matched in XMLTV</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">M3U channels</span><span class="pv">'+esc(cov.m3u_channel_count)+'</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">XMLTV channels</span><span class="pv">'+esc(cov.xmltv_channel_count)+'</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">Matched IDs</span><span class="pv">'+esc(cov.match_count)+'</span></div>';
+      if(cov.unmatched_m3u&&cov.unmatched_m3u.length){
+        html+='<div class="ptrace-kv"><span class="pk">Unmatched M3U IDs</span><span class="pv st-warn">'+esc(cov.unmatched_m3u.slice(0,8).join(', '))+(cov.unmatched_m3u.length>8?' …':'')+'</span></div>';
+      }
+    } else {
+      html+='<div style="color:#888;font-size:0.83rem">Coverage check not available (one or both feeds failed to load).</div>';
+    }
+    cov.issues&&cov.issues.forEach(function(i){ html+='<div class="ptrace-issue">&#x274C; '+esc(i)+'</div>'; });
+    html+='</div>';
+  }
+
+  return html;
+}
+
+function renderFeedTrace(label, t, kind){
+  if(!t) return '<div class="ptrace-section"><h4>'+esc(label)+'</h4><div style="color:#888;font-size:0.83rem">Not available.</div></div>';
+  var html='<div class="ptrace-section"><h4>'+esc(label)+'</h4>';
+
+  t.issues&&t.issues.forEach(function(i){ html+='<div class="ptrace-issue">&#x274C; '+esc(i)+'</div>'; });
+
+  var dns=t.dns;
+  if(dns){
+    html+='<div class="ptrace-kv"><span class="pk">DNS</span><span class="pv">'+(dns.error?'<span class="st-fail">'+esc(dns.error)+'</span>':'<span class="st-pass">'+esc(dns.resolved_ip)+'</span>')+'</span></span></div>';
+  }
+
+  var f=t.fetch;
+  if(f){
+    if(f.ok){
+      html+='<div class="ptrace-kv"><span class="pk">HTTP status</span><span class="pv st-pass">'+esc(f.status_code)+'</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">Response time</span><span class="pv">'+esc(f.response_time_ms)+'ms</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">Content-Type</span><span class="pv">'+esc(f.content_type||'(none)')+'</span></div>';
+      if(f.content_length) html+='<div class="ptrace-kv"><span class="pk">Content-Length</span><span class="pv">'+esc(f.content_length)+' bytes</span></div>';
+      if(f.truncated) html+='<div class="ptrace-warn">&#x26A0;&#xFE0F; Response truncated at 5 MB — file is very large.</div>';
+    } else {
+      html+='<div class="ptrace-issue">&#x274C; Fetch failed: '+esc(f.error||'unknown error')+'</div>';
+    }
+  }
+
+  if(t.content_sample){
+    html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Raw content sample (first 2 KB)</summary>';
+    html+='<div class="content-sample-pre">'+t.content_sample+'</div></details>';
+  }
+
+  var p=t.parse;
+  if(p){
+    p.issues&&p.issues.forEach(function(i){ html+='<div class="ptrace-issue">&#x274C; '+esc(i)+'</div>'; });
+    p.warnings&&p.warnings.forEach(function(w){ html+='<div class="ptrace-warn">&#x26A0;&#xFE0F; '+esc(w)+'</div>'; });
+
+    if(kind==='m3u'){
+      html+='<div class="ptrace-kv"><span class="pk">#EXTM3U header</span><span class="pv">'+(p.has_extm3u_header?'<span class="st-pass">&#x2705; Yes</span>':'<span class="st-warn">&#x26A0; No</span>')+'</span></div>';
+      html+='<div class="ptrace-kv"><span class="pk">Channels found</span><span class="pv">'+esc(p.channel_count)+'</span></div>';
+      var q=p.quality;
+      if(q){
+        if(q.no_url_count>0) html+='<div class="ptrace-kv"><span class="pk">No stream URL</span><span class="pv st-fail">'+esc(q.no_url_count)+' channels</span></div>';
+        if(q.no_tvg_id_count>0) html+='<div class="ptrace-kv"><span class="pk">No tvg-id</span><span class="pv st-warn">'+esc(q.no_tvg_id_count)+' channels</span></div>';
+        if(q.duplicate_tvg_id_count>0) html+='<div class="ptrace-kv"><span class="pk">Duplicate tvg-ids</span><span class="pv st-warn">'+esc(q.duplicate_tvg_id_count)+' ('+esc((q.duplicate_tvg_id_examples||[]).slice(0,3).join(', '))+')</span></div>';
+        if(q.group_count>0) html+='<div class="ptrace-kv"><span class="pk">Groups</span><span class="pv">'+esc(q.group_count)+' ('+esc((q.groups_sample||[]).slice(0,5).join(', '))+(q.group_count>5?'…':'')+')</span></div>';
+      }
+      if(p.channels&&p.channels.length){
+        html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Sample channels (first '+p.channels.length+')</summary>';
+        html+='<table class="ch-table"><tr><th>Name</th><th>tvg-id</th><th>Group</th><th>URL (truncated)</th></tr>';
+        p.channels.forEach(function(ch){
+          html+='<tr><td>'+esc(ch.name)+'</td><td>'+esc(ch.tvg_id||'—')+'</td><td>'+esc(ch.group||'—')+'</td><td>'+esc((ch.url||'').slice(0,60))+'</td></tr>';
+        });
+        html+='</table></details>';
+      }
+    } else if(kind==='xmltv'){
+      html+='<div class="ptrace-kv"><span class="pk">Valid XML</span><span class="pv">'+(p.valid_xml?'<span class="st-pass">&#x2705; Yes</span>':'<span class="st-fail">&#x274C; No</span>')+'</span></div>';
+      if(p.valid_xml){
+        html+='<div class="ptrace-kv"><span class="pk">Valid XMLTV</span><span class="pv">'+(p.valid_xmltv?'<span class="st-pass">&#x2705; Yes</span>':'<span class="st-warn">&#x26A0; Root is &lt;'+esc(p.root_tag||'?')+'&gt;</span>')+'</span></div>';
+        html+='<div class="ptrace-kv"><span class="pk">Channels</span><span class="pv">'+esc(p.channel_count)+'</span></div>';
+        html+='<div class="ptrace-kv"><span class="pk">Programmes</span><span class="pv">'+esc(p.programme_count)+'</span></div>';
+        if(p.earliest_programme) html+='<div class="ptrace-kv"><span class="pk">Programme range</span><span class="pv">'+esc(p.earliest_programme)+' → '+esc(p.latest_programme)+'</span></div>';
+        if(p.channels_sample&&p.channels_sample.length){
+          html+='<details><summary style="cursor:pointer;font-size:0.82rem;color:#888;margin:0.3rem 0">Sample EPG channel IDs (first '+p.channels_sample.length+')</summary>';
+          html+='<table class="ch-table"><tr><th>id</th><th>display-name</th></tr>';
+          p.channels_sample.forEach(function(c){ html+='<tr><td>'+esc(c.id)+'</td><td>'+esc(c.display_name||'—')+'</td></tr>'; });
+          html+='</table></details>';
+        }
+      }
+    }
+  }
+  return html+'</div>';
+}
 
 })();
 </script>

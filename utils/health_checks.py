@@ -504,6 +504,15 @@ def check_cache_state(tuner_db_path: str) -> Dict[str, Any]:
         epg_channel_count = len(epg)
         epg_entry_count = sum(len(v) for v in epg.values())
 
+        # All configured tuner names (for UI selects)
+        all_tuners: List[str] = []
+        try:
+            with sqlite3.connect(tuner_db_path, timeout=5) as conn:
+                cur = conn.execute("SELECT name FROM tuners ORDER BY name")
+                all_tuners = [row[0] for row in cur.fetchall()]
+        except Exception:
+            pass
+
         return {
             "active_tuner": active_tuner,
             "channel_count": len(channels),
@@ -514,6 +523,7 @@ def check_cache_state(tuner_db_path: str) -> Dict[str, Any]:
             "auto_refresh_enabled": refresh_enabled,
             "auto_refresh_interval_hours": refresh_interval,
             "last_refresh_per_tuner": last_refresh_info,
+            "all_tuners": all_tuners,
         }
 
     except Exception as exc:  # noqa: BLE001

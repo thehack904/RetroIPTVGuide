@@ -43,6 +43,7 @@ def isolated_db(tmp_path, monkeypatch):
         {
             "app":      os.path.join(data_dir, "logs", "retroiptvguide.log"),
             "activity": os.path.join(data_dir, "logs", "activity.log"),
+            "startup":  os.path.join(data_dir, "logs", "startup.log"),
         },
     )
 
@@ -811,3 +812,403 @@ class TestSupportBundleWithConfig:
         cfg = json.loads(zf.read("config.json"))
         assert "user_accounts" in cfg
         assert "virtual_channels" in cfg
+
+
+# ---------------------------------------------------------------------------
+# Tests: startup_diag utilities
+# ---------------------------------------------------------------------------
+
+class TestStartupDiag:
+    def test_record_and_retrieve_events(self):
+        from utils import startup_diag
+        # Reset state for test isolation
+        with startup_diag._LOCK:
+            startup_diag._events.clear()
+            startup_diag._startup_success = None
+            startup_diag._startup_finished_at = None
+
+        startup_diag.record_startup_event("info", "test_cat", "test detail")
+        events = startup_diag.get_startup_events()
+        assert any(e["category"] == "test_cat" for e in events)
+
+    def test_summary_structure(self):
+        from utils import startup_diag
+        summary = startup_diag.get_startup_summary()
+        for key in ("status", "finished_at", "event_count", "error_count",
+                    "warning_count", "events", "errors"):
+            assert key in summary
+
+    def test_error_count_increments(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._events.clear()
+        startup_diag.record_startup_event("error", "db_init", "test error")
+        summary = startup_diag.get_startup_summary()
+        assert summary["error_count"] >= 1
+
+    def test_finalise_sets_success(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._startup_success = None
+        startup_diag.finalise_startup(success=True)
+        summary = startup_diag.get_startup_summary()
+        assert summary["status"] in ("ok", "ok_with_errors")
+
+    def test_finalise_failed_status(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._startup_success = None
+            startup_diag._events.clear()
+        startup_diag.finalise_startup(success=False)
+        summary = startup_diag.get_startup_summary()
+        assert summary["status"] == "failed"
+
+    def test_record_environment_adds_python_event(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._events.clear()
+        startup_diag.record_environment()
+        cats = [e["category"] for e in startup_diag.get_startup_events()]
+        assert "python" in cats
+
+    def test_record_import_error(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._events.clear()
+        try:
+            import no_such_module_xyz
+        except ImportError as exc:
+            startup_diag.record_import_error("no_such_module_xyz", exc)
+        errors = [e for e in startup_diag.get_startup_events()
+                  if e["level"] == "error" and e["category"] == "import_error"]
+        assert len(errors) >= 1
+        assert "no_such_module_xyz" in errors[0]["detail"]
+
+    def test_ring_buffer_cap(self):
+        from utils import startup_diag
+        with startup_diag._LOCK:
+            startup_diag._events.clear()
+        for i in range(startup_diag._MAX_EVENTS + 50):
+            startup_diag.record_startup_event("info", "flood", str(i))
+        assert len(startup_diag.get_startup_events()) <= startup_diag._MAX_EVENTS
+
+    def test_configure_startup_log_creates_file(self, tmp_path):
+        from utils import startup_diag
+        startup_diag.configure_startup_log(str(tmp_path))
+        startup_diag.record_startup_event("info", "log_test", "should be on disk")
+        log_file = tmp_path / "logs" / "startup.log"
+        assert log_file.exists()
+        assert "log_test" in log_file.read_text()
+
+
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/startup endpoint
+# ---------------------------------------------------------------------------
+
+class TestDiagnosticsStartupEndpoint:
+    def test_startup_endpoint_admin_only(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/startup")
+        assert resp.status_code == 403
+
+    def test_startup_endpoint_returns_json(self, client):
+        login(client)
+        resp = client.get("/admin/diagnostics/startup")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        for key in ("status", "event_count", "error_count", "events"):
+            assert key in data
+
+    def test_startup_endpoint_no_post(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/startup")
+        assert resp.status_code == 405
+
+
+# ---------------------------------------------------------------------------
+# Tests: public /startup-status endpoint
+# ---------------------------------------------------------------------------
+
+class TestPublicStartupStatus:
+    def test_accessible_without_login(self, client):
+        """Public endpoint must work even if the user is not logged in."""
+        resp = client.get("/startup-status")
+        assert resp.status_code == 200
+
+    def test_returns_minimal_json(self, client):
+        resp = client.get("/startup-status")
+        data = json.loads(resp.data)
+        assert "app" in data
+        assert "version" in data
+        assert "status" in data
+        assert "error_count" in data
+
+    def test_no_log_content_exposed(self, client):
+        """Public endpoint must not reveal log line details."""
+        resp = client.get("/startup-status")
+        data = json.loads(resp.data)
+        assert "events" not in data
+        assert "errors" not in data  # only error_categories, not full error details
+
+    def test_no_paths_exposed(self, client):
+        resp = client.get("/startup-status")
+        raw = resp.data.decode()
+        # Should not contain filesystem paths
+        assert "/var/lib" not in raw
+        assert "C:\\Program" not in raw
+
+
+# ---------------------------------------------------------------------------
+# Tests: tuner_diag utilities
+# ---------------------------------------------------------------------------
+
+class TestTunerDiag:
+    def test_parse_tuner_unknown_name(self, isolated_db):
+        from utils.tuner_diag import parse_tuner_with_trace
+        result = parse_tuner_with_trace("nonexistent_tuner", app_module.TUNER_DB)
+        assert "error" in result
+        assert result["m3u"] is None
+
+    def test_parse_tuner_empty_urls(self, isolated_db):
+        """A tuner with no URLs should return descriptive not-configured issues."""
+        from utils.tuner_diag import parse_tuner_with_trace
+        import sqlite3
+        # Create a tuner with empty URLs
+        with sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, xml, m3u, tuner_type)"
+                " VALUES (?, ?, ?, ?)",
+                ("empty_tuner", "", "", "standard"),
+            )
+            conn.commit()
+        result = parse_tuner_with_trace("empty_tuner", app_module.TUNER_DB)
+        assert result["tuner_name"] == "empty_tuner"
+        assert result["m3u"] is not None
+        # Should report not-configured issue
+        m3u_issues = result["m3u"].get("issues", [])
+        assert len(m3u_issues) >= 1
+
+    def test_analyse_m3u_text_valid(self):
+        from utils.tuner_diag import _analyse_m3u_text
+        m3u_text = (
+            "#EXTM3U\n"
+            '#EXTINF:-1 tvg-id="ch1" tvg-logo="" group-title="News",CNN\n'
+            "http://example.com/cnn.m3u8\n"
+            '#EXTINF:-1 tvg-id="ch2" tvg-logo="" group-title="Sports",ESPN\n'
+            "http://example.com/espn.m3u8\n"
+        )
+        result = _analyse_m3u_text(m3u_text)
+        assert result["has_extm3u_header"] is True
+        assert result["has_extinf_tags"] is True
+        assert result["channel_count"] == 2
+        assert result["quality"]["no_url_count"] == 0
+
+    def test_analyse_m3u_text_empty(self):
+        from utils.tuner_diag import _analyse_m3u_text
+        result = _analyse_m3u_text("")
+        assert result["channel_count"] == 0
+        assert len(result["issues"]) >= 1
+
+    def test_analyse_m3u_text_no_header_warn(self):
+        from utils.tuner_diag import _analyse_m3u_text
+        m3u_text = (
+            '#EXTINF:-1 tvg-id="ch1",Channel 1\n'
+            "http://example.com/ch1.m3u8\n"
+        )
+        result = _analyse_m3u_text(m3u_text)
+        assert any("EXTM3U" in w for w in result["warnings"])
+
+    def test_analyse_m3u_text_duplicate_tvg_ids(self):
+        from utils.tuner_diag import _analyse_m3u_text
+        m3u_text = (
+            "#EXTM3U\n"
+            '#EXTINF:-1 tvg-id="dup_id",Channel A\n'
+            "http://example.com/a.m3u8\n"
+            '#EXTINF:-1 tvg-id="dup_id",Channel B\n'
+            "http://example.com/b.m3u8\n"
+        )
+        result = _analyse_m3u_text(m3u_text)
+        assert result["quality"]["duplicate_tvg_id_count"] >= 1
+
+    def test_analyse_xmltv_valid(self):
+        from utils.tuner_diag import _analyse_xmltv_bytes
+        xmltv = (
+            b'<?xml version="1.0" encoding="UTF-8"?>'
+            b'<tv><channel id="ch1"><display-name>CNN</display-name></channel>'
+            b'<programme channel="ch1" start="20260101120000 +0000" stop="20260101130000 +0000">'
+            b'<title>News Hour</title></programme></tv>'
+        )
+        result = _analyse_xmltv_bytes(xmltv)
+        assert result["valid_xml"] is True
+        assert result["valid_xmltv"] is True
+        assert result["channel_count"] == 1
+        assert result["programme_count"] == 1
+
+    def test_analyse_xmltv_invalid_xml(self):
+        from utils.tuner_diag import _analyse_xmltv_bytes
+        result = _analyse_xmltv_bytes(b"this is not xml")
+        assert result["valid_xml"] is False
+        assert len(result["issues"]) >= 1
+
+    def test_analyse_xmltv_html_response(self):
+        from utils.tuner_diag import _analyse_xmltv_bytes
+        result = _analyse_xmltv_bytes(b"<!DOCTYPE html><html><body>Login required</body></html>")
+        assert len(result["issues"]) >= 1
+        assert any("HTML" in i for i in result["issues"])
+
+    def test_analyse_xmltv_empty(self):
+        from utils.tuner_diag import _analyse_xmltv_bytes
+        result = _analyse_xmltv_bytes(b"")
+        assert len(result["issues"]) >= 1
+
+    def test_epg_coverage_no_match(self):
+        from utils.tuner_diag import _compute_epg_coverage
+        m3u_trace = {
+            "parse": {
+                "channels": [
+                    {"tvg_id": "abc", "name": "ABC", "url": "http://x.com/a.m3u8", "logo": "", "group": ""},
+                ],
+                "channel_count": 1,
+            }
+        }
+        xmltv_trace = {
+            "fetch": {"ok": False, "raw_bytes": b""},
+            "parse": {
+                "channels_sample": [{"id": "xyz", "display_name": "XYZ"}],
+            },
+        }
+        result = _compute_epg_coverage(m3u_trace, xmltv_trace)
+        assert result["match_pct"] == 0 or result["match_pct"] is None
+
+    def test_epg_coverage_full_match(self):
+        from utils.tuner_diag import _compute_epg_coverage
+        xmltv_xml = (
+            b'<?xml version="1.0"?><tv>'
+            b'<channel id="ch1"><display-name>CNN</display-name></channel>'
+            b'</tv>'
+        )
+        m3u_trace = {
+            "parse": {
+                "channels": [{"tvg_id": "ch1", "name": "CNN", "url": "http://x.com/cnn.m3u8", "logo": "", "group": ""}],
+                "channel_count": 1,
+            }
+        }
+        xmltv_trace = {
+            "fetch": {"ok": True, "raw_bytes": xmltv_xml},
+            "parse": {"channels_sample": [{"id": "ch1", "display_name": "CNN"}]},
+        }
+        result = _compute_epg_coverage(m3u_trace, xmltv_trace)
+        assert result["match_pct"] == 100
+        assert result["match_count"] == 1
+
+    def test_safe_content_sample_escapes_html(self):
+        from utils.tuner_diag import _safe_content_sample
+        raw = b"<script>alert('xss')</script>"
+        sample = _safe_content_sample(raw)
+        assert "<script>" not in sample
+        assert "&lt;script&gt;" in sample
+
+
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/tuner-parse endpoint
+# ---------------------------------------------------------------------------
+
+class TestDiagnosticsTunerParseEndpoint:
+    def test_requires_admin(self, client):
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/tuner-parse?name=test")
+        assert resp.status_code == 403
+
+    def test_missing_name_param(self, client):
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-parse")
+        assert resp.status_code == 400
+
+    def test_unknown_tuner_returns_error(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-parse?name=doesnotexist")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "error" in data
+
+    def test_no_post_method(self, client):
+        login(client)
+        resp = client.post("/admin/diagnostics/tuner-parse")
+        assert resp.status_code == 405
+
+    def test_empty_tuner_returns_trace_structure(self, client, isolated_db):
+        """A tuner with no URLs should still return a full trace dict."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, xml, m3u, tuner_type)"
+                " VALUES (?, ?, ?, ?)",
+                ("diag_test_tuner", "", "", "standard"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-parse?name=diag_test_tuner")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "tuner_name" in data
+        assert "issues" in data
+        assert "m3u" in data
+        assert "xmltv" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: ALLOWED_LOGS now includes 'startup'
+# ---------------------------------------------------------------------------
+
+class TestStartupLogAllowlist:
+    def test_startup_in_allowed_logs(self, isolated_db):
+        from utils import log_reading
+        from utils.log_reading import configure_allowed_logs
+        configure_allowed_logs(app_module.DATA_DIR)
+        assert "startup" in log_reading.ALLOWED_LOGS
+
+    def test_startup_log_accessible_via_tail_endpoint(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/logs/tail?key=startup&n=50")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "lines" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: support bundle now includes startup.json
+# ---------------------------------------------------------------------------
+
+class TestSupportBundleWithStartup:
+    def test_support_bundle_includes_startup_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        assert resp.status_code == 200
+        import zipfile
+        import io
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "startup.json" in zf.namelist()
+
+    def test_startup_json_is_valid_json(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        import zipfile
+        import io
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        data = json.loads(zf.read("startup.json"))
+        assert "status" in data
+        assert "events" in data
+
+
+# ---------------------------------------------------------------------------
+# Tests: cache endpoint now includes all_tuners
+# ---------------------------------------------------------------------------
+
+class TestCacheEndpointAllTuners:
+    def test_cache_endpoint_includes_all_tuners(self, client, isolated_db):
+        login(client)
+        resp = client.get("/admin/diagnostics/cache")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "all_tuners" in data
+        assert isinstance(data["all_tuners"], list)

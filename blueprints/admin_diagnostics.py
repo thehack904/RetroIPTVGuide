@@ -209,6 +209,38 @@ def diagnostics_config():
     return jsonify(result)
 
 
+@admin_diagnostics_bp.route("/startup", methods=["GET"])
+@login_required
+def diagnostics_startup():
+    """Return full startup event log (admin-only).
+
+    Unlike the public /startup-status endpoint, this returns the complete
+    event list including error details and tracebacks.
+    """
+    _require_admin()
+    from utils.startup_diag import get_startup_summary
+    return jsonify(get_startup_summary())
+
+
+@admin_diagnostics_bp.route("/tuner-parse", methods=["GET"])
+@login_required
+def diagnostics_tuner_parse():
+    """Run a live parse-trace for a named tuner and return structured JSON.
+
+    Query params:
+        name   – tuner name (required)
+    """
+    _require_admin()
+    name = request.args.get("name", "").strip()
+    if not name:
+        return jsonify({"error": "Missing 'name' query parameter"}), 400
+
+    from utils.tuner_diag import parse_tuner_with_trace
+    _, _, tuner_db_path, _, _ = _get_config()
+    result = parse_tuner_with_trace(name, tuner_db_path)
+    return jsonify(result)
+
+
 @admin_diagnostics_bp.route("/system", methods=["GET"])
 @login_required
 def diagnostics_system():
@@ -230,6 +262,7 @@ def diagnostics_support():
     from utils.log_reading import build_support_bundle
     from utils.system_info import get_system_info
     from utils.app_config_diag import run_config_checks
+    from utils.startup_diag import get_startup_summary
 
     data_dir, db_path, tuner_db_path, app_version, app_start_time = _get_config()
 
@@ -238,6 +271,7 @@ def diagnostics_support():
     tuner_data = check_tuner_connectivity(tuner_db_path)
     cache_data = check_cache_state(tuner_db_path)
     config_data = run_config_checks(db_path, tuner_db_path)
+    startup_data = get_startup_summary()
 
     try:
         zip_bytes = build_support_bundle(
@@ -246,6 +280,7 @@ def diagnostics_support():
                 "tuners.json": tuner_data,
                 "cache_state.json": cache_data,
                 "config.json": config_data,
+                "startup.json": startup_data,
             },
         )
     except Exception as exc:

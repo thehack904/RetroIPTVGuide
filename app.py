@@ -75,6 +75,21 @@ for _subdir in ("logs", "db", "xmltv", "support"):
 from utils.logging_setup import configure_logging as _configure_logging
 _configure_logging(DATA_DIR)
 
+# ------------------- Startup Diagnostics -------------------
+# Initialised right after logging so startup errors are captured
+# even if later imports fail or the DB can't be opened.
+from utils.startup_diag import (
+    configure_startup_log as _configure_startup_log,
+    record_environment as _record_environment,
+    record_startup_event as _record_startup_event,
+    record_import_error as _record_import_error,
+    record_db_init as _record_db_init,
+)
+_configure_startup_log(DATA_DIR)
+_record_environment()
+_record_startup_event("info", "data_dir", DATA_DIR)
+_record_startup_event("info", "app_version", APP_VERSION)
+
 # ------------------- Config -------------------
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # replace with a fixed key in production
@@ -106,6 +121,30 @@ app.config["DIAG_DATABASE"] = DATABASE
 app.config["DIAG_TUNER_DB"] = TUNER_DB
 
 app.register_blueprint(admin_diagnostics_bp)
+
+# ------------------- Public startup-status endpoint -------------------
+@app.route('/startup-status')
+def startup_status_public():
+    """Public (no login required) endpoint for pre-login diagnostics.
+
+    Returns minimal JSON describing whether the app started successfully and
+    any critical errors that occurred during startup.  Deliberately limited —
+    no log content, no paths, no secrets.  Useful when the admin panel itself
+    cannot be reached.
+    """
+    from utils.startup_diag import get_startup_summary
+    summary = get_startup_summary()
+    # Return only fields safe for unauthenticated callers
+    return jsonify({
+        "app": "RetroIPTVGuide",
+        "version": APP_VERSION,
+        "status": summary["status"],
+        "finished_at": summary["finished_at"],
+        "error_count": summary["error_count"],
+        "warning_count": summary["warning_count"],
+        # Surface error categories (no detail text) so the caller knows where to look
+        "error_categories": list({e["category"] for e in summary["errors"]}),
+    })
 
 # ------------------- Activity Log -------------------
 LOG_PATH = os.path.join(DATA_DIR, "logs", "activity.log")
@@ -3906,9 +3945,22 @@ def api_health():
 
 
 if __name__ == '__main__':
-    init_db()
+    from utils.startup_diag import finalise_startup as _finalise_startup
+    try:
+        init_db()
+        _record_db_init("users.db", DATABASE, success=True)
+    except Exception as _dberr:
+        _record_db_init("users.db", DATABASE, success=False, error=str(_dberr))
+        raise
+
     add_user('admin', 'strongpassword123')
-    init_tuners_db()
+
+    try:
+        init_tuners_db()
+        _record_db_init("tuners.db", TUNER_DB, success=True)
+    except Exception as _dberr:
+        _record_db_init("tuners.db", TUNER_DB, success=False, error=str(_dberr))
+        raise
 
     # make sure there’s at least one tuner in the DB
     ensure_default_tuner()
@@ -3921,9 +3973,15 @@ if __name__ == '__main__':
     # Use load_tuner_data so combined tuners are handled correctly at startup.
     cached_channels, cached_epg = load_tuner_data(current_tuner)
 
+    _record_startup_event("info", "cache_load",
+                          f"Loaded {len(cached_channels)} channel(s) from tuner '{current_tuner}'")
+
     # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
     # so the overlay is ready before any city rotation happens.
     threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
+
+    # Mark startup complete before handing off to Flask
+    _finalise_startup(success=True)
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
