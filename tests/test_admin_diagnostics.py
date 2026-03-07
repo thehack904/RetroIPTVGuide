@@ -694,6 +694,82 @@ class TestCheckExternalServices:
         for secret in ("api_key", "password", "token=", "Authorization"):
             assert secret not in result_str
 
+    def test_overpass_api_included_when_traffic_enabled(self, isolated_db):
+        """Overpass API should appear in services when traffic channel is enabled (default)."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None, "Overpass API entry should be present"
+        assert "overpass" in overpass["url"].lower()
+        assert overpass["name"] != ""
+
+    def test_overpass_api_not_probed_when_traffic_disabled(self, isolated_db):
+        """When traffic channel is disabled, Overpass API should be listed but not probed."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "0"),
+            )
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None
+        assert overpass["reachable"] is None  # not probed
+
+    def test_overpass_504_reported_as_fail(self, isolated_db, monkeypatch):
+        """A 504 from Overpass should surface as a FAIL in the services list."""
+        import requests as _req
+        from utils import app_config_diag
+
+        class _FakeResp:
+            status_code = 504
+            def raise_for_status(self):
+                raise _req.exceptions.HTTPError("504 Gateway Timeout", response=self)
+
+        def _fake_head(url, *args, **kwargs):
+            if "overpass" in url:
+                return _FakeResp()
+            raise _req.exceptions.ConnectionError("unexpected URL in test")
+
+        monkeypatch.setattr(_req, "head", _fake_head)
+        monkeypatch.setattr(app_config_diag, "_probe_service",
+                            lambda svc_id, name, url, timeout=8: {
+                                "id": svc_id,
+                                "name": name,
+                                "url": url,
+                                "reachable": False,
+                                "status_code": 504,
+                                "response_time_ms": 1000,
+                                "error": "HTTP 504",
+                                "resolved_ip": None,
+                            })
+        result = app_config_diag.check_external_services(app_module.TUNER_DB)
+        overpass = next((s for s in result["services"] if s["id"] == "overpass_api"), None)
+        assert overpass is not None
+        assert overpass["reachable"] is False
+        assert overpass["status_code"] == 504
+        # Overall status should be FAIL because Overpass is unreachable
+        assert result["status"] == "FAIL"
+
+    def test_overpass_fail_appears_in_failing_list(self, isolated_db, monkeypatch):
+        """An unreachable Overpass service should appear in the detail string."""
+        from utils import app_config_diag
+
+        monkeypatch.setattr(app_config_diag, "_probe_service",
+                            lambda svc_id, name, url, timeout=8: {
+                                "id": svc_id,
+                                "name": name,
+                                "url": url,
+                                "reachable": False,
+                                "status_code": 504,
+                                "response_time_ms": 1000,
+                                "error": "HTTP 504",
+                                "resolved_ip": None,
+                            })
+        result = app_config_diag.check_external_services(app_module.TUNER_DB)
+        assert "overpass" in result["detail"].lower()
+
 
 class TestCheckSystemResources:
     def test_returns_expected_keys(self):

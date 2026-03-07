@@ -197,6 +197,13 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     Tests:
     - Open-Meteo weather API (if lat/lon configured)
     - Each configured news RSS feed
+    - Overpass API status (if the traffic virtual channel is enabled)
+
+    The Overpass API probe uses ``/api/status`` (a lightweight plain-text
+    endpoint) rather than executing a full road-geometry query.  This detects
+    connectivity problems (DNS failures, 5xx errors, gateway timeouts) that
+    would cause ``_fetch_overpass_roads`` to fail at runtime.
+
     Returns per-service results with HTTP status, response time, error messages.
     """
     import requests as _req  # noqa: PLC0415
@@ -265,6 +272,35 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
             "response_time_ms": None,
             "error": None,
             "note": "Configure a news RSS feed URL to enable this check.",
+        })
+
+    # --- Overpass API (used by the Traffic virtual channel road overlay) ---
+    # Only probe when the traffic channel is enabled; the check uses the
+    # /api/status endpoint (plain-text, no query payload) so it is cheap and
+    # does not consume Overpass fair-use quota.
+    traffic_enabled = settings.get("virtual_channel.virtual.traffic.enabled", "1") == "1"
+    if traffic_enabled:
+        svc = _probe_service(
+            "overpass_api",
+            "Overpass API (traffic road overlay)",
+            "https://overpass-api.de/api/status",
+            timeout=10,
+        )
+        svc["note"] = (
+            "Used by the Traffic virtual channel to fetch road geometry. "
+            "A failure here explains empty or missing road overlays."
+        )
+        services.append(svc)
+    else:
+        services.append({
+            "id": "overpass_api",
+            "name": "Overpass API (traffic road overlay)",
+            "url": "https://overpass-api.de/api/status",
+            "reachable": None,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": None,
+            "note": "Traffic virtual channel is disabled — Overpass API not probed.",
         })
 
     failing = [s["name"] for s in services if s.get("reachable") is False]
