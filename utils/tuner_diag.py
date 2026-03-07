@@ -55,7 +55,13 @@ def parse_tuner_with_trace(tuner_name: str, tuner_db_path: str) -> Dict[str, Any
     xmltv_trace = _trace_xmltv(xml_url) if xml_url else _not_configured("XMLTV URL not set")
 
     # Cross-check: which M3U tvg-ids appear in the EPG and which don't
+    # NOTE: _compute_epg_coverage reads raw_bytes from xmltv_trace before we strip it.
     coverage = _compute_epg_coverage(m3u_trace, xmltv_trace)
+
+    # Strip raw_bytes (bytes objects) from fetch dicts — bytes are not JSON-serialisable
+    # and would cause jsonify() to fail with a 500 HTML error response.
+    _strip_raw_bytes(m3u_trace)
+    _strip_raw_bytes(xmltv_trace)
 
     issues = _collect_issues(m3u_trace, xmltv_trace, coverage)
     warnings = _collect_warnings(m3u_trace, xmltv_trace, coverage)
@@ -488,6 +494,21 @@ def _collect_warnings(m3u_trace: Dict, xmltv_trace: Dict, coverage: Dict) -> Lis
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+def _strip_raw_bytes(trace: Optional[Dict[str, Any]]) -> None:
+    """Remove ``raw_bytes`` from a trace dict's ``fetch`` sub-dict in-place.
+
+    ``raw_bytes`` is a ``bytes`` object used internally for parsing but is not
+    JSON-serialisable.  It must be removed before the trace is passed to
+    ``flask.jsonify()``, otherwise jsonify raises a TypeError and Flask returns
+    an HTML 500 error page — which the browser then sees as
+    "SyntaxError: Unexpected token '<'".
+    """
+    if not trace:
+        return
+    fetch = trace.get("fetch")
+    if isinstance(fetch, dict):
+        fetch.pop("raw_bytes", None)
 
 def _load_tuner_config(tuner_name: str, tuner_db_path: str) -> Dict[str, Any]:
     """Read a single tuner row from the DB."""

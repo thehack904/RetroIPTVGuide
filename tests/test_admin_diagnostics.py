@@ -969,6 +969,52 @@ class TestTunerDiag:
         assert "error" in result
         assert result["m3u"] is None
 
+    def test_parse_tuner_result_is_json_serialisable(self, isolated_db):
+        """Result must be JSON-serialisable so jsonify() doesn't return an HTML 500.
+
+        Previously raw_bytes (bytes) leaked into the fetch dict and caused
+        'SyntaxError: Unexpected token <' in the browser because jsonify
+        raised TypeError and Flask returned an HTML error page.
+        """
+        import json
+        import sqlite3
+        from utils.tuner_diag import parse_tuner_with_trace
+
+        # Create a tuner with empty URLs (no real HTTP needed)
+        with sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, xml, m3u, tuner_type)"
+                " VALUES (?, ?, ?, ?)",
+                ("serial_test_tuner", "", "", "standard"),
+            )
+            conn.commit()
+        result = parse_tuner_with_trace("serial_test_tuner", app_module.TUNER_DB)
+        # Should not raise TypeError
+        serialised = json.dumps(result)
+        assert len(serialised) > 0
+
+    def test_strip_raw_bytes_removes_field(self):
+        """_strip_raw_bytes must remove raw_bytes from the fetch sub-dict."""
+        from utils.tuner_diag import _strip_raw_bytes
+        trace = {
+            "url": "http://example.com",
+            "fetch": {"ok": True, "raw_bytes": b"binary data", "status_code": 200},
+            "issues": [],
+        }
+        _strip_raw_bytes(trace)
+        assert "raw_bytes" not in trace["fetch"]
+        # Other keys must be preserved
+        assert trace["fetch"]["ok"] is True
+        assert trace["fetch"]["status_code"] == 200
+
+    def test_strip_raw_bytes_none_trace_is_safe(self):
+        from utils.tuner_diag import _strip_raw_bytes
+        _strip_raw_bytes(None)  # must not raise
+
+    def test_strip_raw_bytes_missing_fetch_is_safe(self):
+        from utils.tuner_diag import _strip_raw_bytes
+        _strip_raw_bytes({"url": "", "issues": []})  # must not raise
+
     def test_parse_tuner_empty_urls(self, isolated_db):
         """A tuner with no URLs should return descriptive not-configured issues."""
         from utils.tuner_diag import parse_tuner_with_trace
@@ -1154,6 +1200,47 @@ class TestDiagnosticsTunerParseEndpoint:
         assert "issues" in data
         assert "m3u" in data
         assert "xmltv" in data
+
+    def test_response_content_type_is_json_not_html(self, client, isolated_db):
+        """Endpoint must return application/json, not text/html.
+
+        The original bug: raw_bytes (bytes) was left in the fetch dict,
+        jsonify() raised TypeError, Flask returned an HTML 500 error page,
+        and the browser got 'SyntaxError: Unexpected token <'.
+        """
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, xml, m3u, tuner_type)"
+                " VALUES (?, ?, ?, ?)",
+                ("json_type_tuner", "", "", "standard"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-parse?name=json_type_tuner")
+        assert resp.status_code == 200
+        # Must be JSON, not an HTML error page
+        assert "application/json" in resp.content_type
+        # Must be parseable as JSON without raising
+        data = json.loads(resp.data)
+        assert isinstance(data, dict)
+
+    def test_no_raw_bytes_in_response(self, client, isolated_db):
+        """raw_bytes must never appear as a JSON key in the response."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, xml, m3u, tuner_type)"
+                " VALUES (?, ?, ?, ?)",
+                ("bytescheck_tuner", "", "", "standard"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-parse?name=bytescheck_tuner")
+        assert resp.status_code == 200
+        raw_text = resp.data.decode()
+        # The key "raw_bytes" must not appear as a JSON property
+        assert '"raw_bytes"' not in raw_text
 
 
 # ---------------------------------------------------------------------------
