@@ -371,18 +371,33 @@ def diagnostics_security():
     )
 
 
-@admin_diagnostics_bp.route("/support", methods=["GET"])
+@admin_diagnostics_bp.route("/support", methods=["GET", "POST"])
 @login_required
 def diagnostics_support():
-    """Generate and download a support bundle ZIP."""
+    """Generate and download a support bundle ZIP.
+
+    GET  → include all sections (backwards-compatible).
+    POST → honour ``include[]`` form values; only listed sections are bundled.
+    """
     _require_admin()
     from utils.health_checks import run_all_checks, check_tuner_connectivity, check_cache_state
-    from utils.log_reading import build_support_bundle
+    from utils.log_reading import build_support_bundle, ALLOWED_LOGS
     from utils.system_info import get_system_info
     from utils.app_config_diag import run_config_checks
     from utils.startup_diag import get_startup_summary
 
     data_dir, db_path, tuner_db_path, app_version, app_start_time = _get_config()
+
+    # Parse include set from POST body; None means "all" for GET requests.
+    include: "set[str] | None" = None
+    if request.method == "POST":
+        raw = request.form.getlist("include[]")
+        # Validate each value against the known allowlist to prevent injection.
+        _allowed_bundle_keys = {
+            "health.json", "system.json", "tuners.json",
+            "cache_state.json", "config.json", "startup.json",
+        } | {f"logs/{k}" for k in ALLOWED_LOGS}
+        include = {v for v in raw if v in _allowed_bundle_keys}
 
     health_data = run_all_checks(data_dir, db_path, tuner_db_path)
     system_data = get_system_info(app_version, app_start_time, data_dir)
@@ -400,6 +415,7 @@ def diagnostics_support():
                 "config.json": config_data,
                 "startup.json": startup_data,
             },
+            include=include,
         )
     except Exception as exc:
         logger.exception("Failed to build support bundle: %s", exc)

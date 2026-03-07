@@ -331,6 +331,7 @@ def build_support_bundle(
     health_data: dict,
     system_data: dict,
     extra: "dict | None" = None,
+    include: "set[str] | None" = None,
 ) -> bytes:
     """Create an in-memory ZIP support bundle.
 
@@ -356,33 +357,54 @@ def build_support_bundle(
     extra:
         Optional mapping of ``filename → data`` for additional JSON files to
         include in the bundle root (e.g. ``{"tuners.json": {...}}``).
+    include:
+        Optional set of file/section keys to include.  Each key is either a
+        JSON filename (e.g. ``"health.json"``) or a log key (``"logs/app"``,
+        ``"logs/activity"``, ``"logs/startup"``).  When ``None`` (default) all
+        available sections and log files are included, preserving the original
+        behaviour.  Passing an empty set produces a bundle with only
+        ``index.html``.
     """
     import json
     from datetime import datetime, timezone
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
+    def _should_include(key: str) -> bool:
+        """Return True when *key* should be included."""
+        return include is None or key in include
+
     # Build sections dict for the viewer (order matters for display)
-    sections: Dict[str, object] = {"health.json": health_data, "system.json": system_data}
+    sections: Dict[str, object] = {}
+    if _should_include("health.json"):
+        sections["health.json"] = health_data
+    if _should_include("system.json"):
+        sections["system.json"] = system_data
     for fname, fdata in (extra or {}).items():
-        sections[fname] = fdata
+        if _should_include(fname):
+            sections[fname] = fdata
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         # --- health.json ---
-        zf.writestr("health.json", json.dumps(health_data, indent=2, default=str))
+        if _should_include("health.json"):
+            zf.writestr("health.json", json.dumps(health_data, indent=2, default=str))
 
         # --- system.json ---
-        zf.writestr("system.json", json.dumps(system_data, indent=2, default=str))
+        if _should_include("system.json"):
+            zf.writestr("system.json", json.dumps(system_data, indent=2, default=str))
 
         # --- extra JSON files (tuners.json, cache_state.json, …) ---
         for fname, fdata in (extra or {}).items():
-            zf.writestr(fname, json.dumps(fdata, indent=2, default=str))
+            if _should_include(fname):
+                zf.writestr(fname, json.dumps(fdata, indent=2, default=str))
 
         # --- log files ---
         # Collect plain-text versions for the HTML viewer while writing to ZIP.
         log_texts: Dict[str, str] = {}
-        for _key, base_path in ALLOWED_LOGS.items():
+        for log_key, base_path in ALLOWED_LOGS.items():
+            if not _should_include(f"logs/{log_key}"):
+                continue
             # Include the base log and any rotated copies (.1, .2 …)
             candidates = [base_path] + sorted(
                 _glob.glob(f"{base_path}.*")

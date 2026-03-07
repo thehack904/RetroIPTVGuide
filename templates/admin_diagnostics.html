@@ -69,6 +69,8 @@
 .sysinfo-table td { word-break: break-all; font-family: monospace; font-size: 0.82rem; }
 .si-section { color: var(--accent-color, #0af) !important; font-size: 0.72rem !important; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 0.6rem !important; font-family: sans-serif !important; }
 .support-checklist { font-size: 0.9rem; color: #ccc; line-height: 1.7; padding-left: 1.2rem; }
+.support-checklist label { cursor: pointer; display: flex; align-items: baseline; gap: 0.4rem; }
+.support-checklist input[type="checkbox"] { accent-color: #0af; flex-shrink: 0; }
 /* Config tab */
 .cfg-section { margin-bottom: 1.2rem; }
 .cfg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.7rem; margin-top: 0.5rem; }
@@ -247,19 +249,42 @@
       <h3>Support Bundle</h3>
       <p style="color:#ccc;font-size:0.9rem;margin:0 0 0.4rem">Download a ZIP of sanitised diagnostic data. Attach to GitHub bug reports.</p>
       <p style="font-size:0.85rem;color:#888;margin:0 0 0.8rem">Passwords, tokens, and API keys are automatically redacted.</p>
-      <p style="color:#aaa;font-size:0.85rem;font-weight:600;margin:0 0 0.3rem">Included:</p>
-      <ul class="support-checklist">
-        <li>Application log + rotated copies (secrets redacted)</li>
-        <li>Activity log</li>
-        <li><code>startup.json</code> — startup events, import errors, DB init results, cache load</li>
-        <li><code>health.json</code> — DB paths, disk, permissions, file system</li>
-        <li><code>tuners.json</code> — per-tuner URL connectivity, DNS, HTTP errors</li>
-        <li><code>cache_state.json</code> — channel count, EPG count, active tuner</li>
-        <li><code>config.json</code> — user accounts, virtual channel config, external service probes, system resources</li>
-        <li><code>system.json</code> — OS, Python, uptime, install mode</li>
-      </ul>
-      <p style="color:#888;font-size:0.82rem;margin:0.5rem 0 0.8rem"><strong>NOT included:</strong> Full database, passwords, API keys, or arbitrary files.</p>
-      <a class="btn-action" href="{{ url_for('admin_diagnostics.diagnostics_support') }}">&#x2B07; Download Support Bundle</a>
+
+      <form id="supportBundleForm" method="post" action="{{ url_for('admin_diagnostics.diagnostics_support') }}">
+        <p style="color:#aaa;font-size:0.85rem;font-weight:600;margin:0 0 0.3rem">
+          Select files to include:
+          <button type="button" id="sbSelectAll" style="margin-left:0.6rem;background:none;border:1px solid #555;color:#aaa;font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">All</button>
+          <button type="button" id="sbSelectNone" style="background:none;border:1px solid #555;color:#aaa;font-size:0.75rem;padding:1px 7px;border-radius:3px;cursor:pointer">None</button>
+        </p>
+        <ul class="support-checklist" style="list-style:none;padding-left:0">
+          <li><label><input type="checkbox" name="include[]" value="logs/app" checked> Application log + rotated copies <span style="color:#666;font-size:0.8em">(secrets redacted)</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="logs/activity" checked> Activity log</label></li>
+          <li><label><input type="checkbox" name="include[]" value="logs/startup" checked> Startup log</label></li>
+          <li><label><input type="checkbox" name="include[]" value="startup.json" checked> <code>startup.json</code> <span style="color:#666;font-size:0.8em">— startup events, import errors, DB init results, cache load</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="health.json" checked> <code>health.json</code> <span style="color:#666;font-size:0.8em">— DB paths, disk, permissions, file system</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="tuners.json" checked> <code>tuners.json</code> <span style="color:#666;font-size:0.8em">— per-tuner URL connectivity, DNS, HTTP errors</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="cache_state.json" checked> <code>cache_state.json</code> <span style="color:#666;font-size:0.8em">— channel count, EPG count, active tuner</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="config.json" checked> <code>config.json</code> <span style="color:#666;font-size:0.8em">— user accounts, virtual channel config, external service probes, system resources</span></label></li>
+          <li><label><input type="checkbox" name="include[]" value="system.json" checked> <code>system.json</code> <span style="color:#666;font-size:0.8em">— OS, Python, uptime, install mode</span></label></li>
+        </ul>
+        <p style="color:#888;font-size:0.82rem;margin:0.5rem 0 0.8rem">
+          <strong>NOT included:</strong> Full database, passwords, API keys, or arbitrary files.
+          A browser-readable <code>index.html</code> viewer is always added to the ZIP.
+        </p>
+        <button type="submit" class="btn-action">&#x2B07; Download Support Bundle</button>
+      </form>
+
+      <script>
+        (function () {
+          var form = document.getElementById('supportBundleForm');
+          document.getElementById('sbSelectAll').addEventListener('click', function () {
+            form.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = true; });
+          });
+          document.getElementById('sbSelectNone').addEventListener('click', function () {
+            form.querySelectorAll('input[type="checkbox"]').forEach(function (cb) { cb.checked = false; });
+          });
+        })();
+      </script>
     </div>
   </div>
 

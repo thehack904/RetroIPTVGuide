@@ -1496,8 +1496,105 @@ class TestSupportBundleWithStartup:
 
 
 # ---------------------------------------------------------------------------
-# Tests: cache endpoint now includes all_tuners
+# Tests: selectable support bundle (POST with include[] form values)
 # ---------------------------------------------------------------------------
+
+class TestSelectableSupportBundle:
+    """Verify that POSTing include[] to /support honours the selection."""
+
+    def _get_names(self, client, include_values):
+        """POST to /support with the given include[] values and return ZIP namelist."""
+        from urllib.parse import urlencode
+        body = urlencode([("include[]", v) for v in include_values])
+        resp = client.post(
+            "/admin/diagnostics/support",
+            data=body,
+            content_type="application/x-www-form-urlencoded",
+        )
+        assert resp.status_code == 200
+        assert "application/zip" in resp.content_type
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        return zf.namelist()
+
+    def test_get_still_includes_all(self, client, isolated_db):
+        """GET (no body) must still include every section — backwards compat."""
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        names = zipfile.ZipFile(io.BytesIO(resp.data)).namelist()
+        for expected in ("health.json", "system.json", "config.json",
+                         "startup.json", "index.html"):
+            assert expected in names
+
+    def test_post_only_selected_section_included(self, client, isolated_db):
+        """Posting only health.json should produce a bundle with just that file."""
+        login(client)
+        names = self._get_names(client, ["health.json"])
+        assert "health.json" in names
+        assert "system.json" not in names
+        assert "config.json" not in names
+        assert "startup.json" not in names
+        # index.html is always present regardless of selection
+        assert "index.html" in names
+
+    def test_post_multiple_sections(self, client, isolated_db):
+        """Two selected sections should both appear; others should not."""
+        login(client)
+        names = self._get_names(client, ["health.json", "system.json"])
+        assert "health.json" in names
+        assert "system.json" in names
+        assert "config.json" not in names
+
+    def test_post_deselected_section_absent(self, client, isolated_db):
+        """config.json must be absent when not listed in include[]."""
+        login(client)
+        names = self._get_names(client, ["health.json", "startup.json"])
+        assert "config.json" not in names
+        assert "tuners.json" not in names
+
+    def test_post_empty_selection_produces_index_only(self, client, isolated_db):
+        """An empty include[] list should yield a bundle containing only index.html."""
+        login(client)
+        names = self._get_names(client, [])
+        assert names == ["index.html"]
+
+    def test_post_unknown_include_value_ignored(self, client, isolated_db):
+        """Unknown/injected values in include[] must be silently ignored."""
+        login(client)
+        names = self._get_names(client, ["health.json", "../../etc/passwd"])
+        assert "health.json" in names
+        # The injected path must never appear
+        assert not any(".." in n for n in names)
+
+    def test_build_support_bundle_include_param(self):
+        """Unit-test build_support_bundle include= parameter directly."""
+        from utils.log_reading import build_support_bundle
+        health = {"db": "ok", "status": "PASS"}
+        system = {"v": "1"}
+        extra = {"config.json": {"x": 1}, "tuners.json": {"t": 2}}
+        # Only request health.json
+        zb = build_support_bundle("/tmp", health, system, extra,
+                                  include={"health.json"})
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        names = zf.namelist()
+        assert "health.json" in names
+        assert "system.json" not in names
+        assert "config.json" not in names
+        assert "index.html" in names
+
+    def test_build_support_bundle_none_includes_all(self):
+        """include=None (default) must include every JSON section."""
+        from utils.log_reading import build_support_bundle
+        health = {"db": "ok"}
+        system = {"v": "1"}
+        extra = {"config.json": {}, "startup.json": {}}
+        zb = build_support_bundle("/tmp", health, system, extra, include=None)
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        names = zf.namelist()
+        for expected in ("health.json", "system.json", "config.json",
+                         "startup.json", "index.html"):
+            assert expected in names
+
+
 
 class TestCacheEndpointAllTuners:
     def test_cache_endpoint_includes_all_tuners(self, client, isolated_db):
