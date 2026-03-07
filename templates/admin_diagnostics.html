@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% block title %}Admin Diagnostics — RetroIPTVGuide{% endblock %}
+
+{% block page_styles %}
+<style>
+/* ── Diagnostics page styles ─────────────────────────────────────────────── */
+.diag-container { max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+
+/* Tab bar */
+.diag-tabs { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.diag-tab-btn {
+    padding: 0.5rem 1.25rem;
+    border: 2px solid var(--border-color, #555);
+    background: var(--bg-secondary, #222);
+    color: var(--text-color, #eee);
+    border-radius: 4px 4px 0 0;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background 0.15s;
+}
+.diag-tab-btn:hover   { background: var(--accent-color, #0af); color: #000; }
+.diag-tab-btn.active  { background: var(--accent-color, #0af); color: #000; font-weight: 600; }
+
+/* Panels */
+.diag-panel { display: none; }
+.diag-panel.active { display: block; }
+
+.diag-box {
+    background: var(--bg-secondary, #1a1a1a);
+    border: 1px solid var(--border-color, #444);
+    border-radius: 4px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+}
+.diag-box h3 { margin-top: 0; font-size: 1.1rem; }
+
+/* Log viewer */
+.log-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 0.75rem; }
+.log-controls select, .log-controls input { padding: 0.35rem 0.6rem; border-radius: 3px; border: 1px solid #555; background: #111; color: #eee; }
+.log-controls button { padding: 0.35rem 0.9rem; border-radius: 3px; border: none; cursor: pointer; background: var(--accent-color, #0af); color: #000; font-weight: 600; }
+.log-controls button:hover { opacity: 0.85; }
+#logOutput {
+    background: #0b0b0b;
+    color: #aaffaa;
+    border: 1px solid #333;
+    border-radius: 3px;
+    padding: 0.75rem;
+    font-family: 'Courier New', monospace;
+    font-size: 0.8rem;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 60vh;
+    overflow-y: auto;
+    min-height: 200px;
+}
+.log-error { color: #ff6b6b; font-style: italic; }
+.log-meta  { color: #888; font-size: 0.78rem; margin-bottom: 0.4rem; }
+
+/* Health checks */
+.health-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+.health-card {
+    border: 1px solid #444;
+    border-radius: 4px;
+    padding: 0.9rem;
+    background: #111;
+}
+.health-card h4 { margin: 0 0 0.4rem; text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.05em; }
+.health-card .status { font-weight: 700; font-size: 1rem; }
+.health-card .detail { font-size: 0.82rem; color: #bbb; margin-top: 0.3rem; }
+.health-card .remediation { font-size: 0.78rem; color: #ff9900; margin-top: 0.3rem; font-style: italic; }
+.status-PASS { color: #33ff66; }
+.status-WARN { color: #ffcc00; }
+.status-FAIL { color: #ff4444; }
+
+/* System Info */
+.sysinfo-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.sysinfo-table td, .sysinfo-table th { padding: 0.45rem 0.7rem; border-bottom: 1px solid #333; text-align: left; }
+.sysinfo-table th { color: #888; font-weight: normal; width: 35%; }
+.sysinfo-table td { word-break: break-all; }
+.sysinfo-section { color: var(--accent-color, #0af); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; padding-top: 0.75rem !important; }
+
+/* Support bundle */
+.support-info { font-size: 0.9rem; color: #bbb; line-height: 1.6; }
+.support-info ul { margin: 0.5rem 0; padding-left: 1.5rem; }
+.btn-download {
+    display: inline-block;
+    margin-top: 1rem;
+    padding: 0.6rem 1.4rem;
+    background: var(--accent-color, #0af);
+    color: #000;
+    font-weight: 700;
+    border-radius: 4px;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+}
+.btn-download:hover { opacity: 0.85; }
+
+/* Spinner */
+.spinner {
+    display: inline-block;
+    width: 16px; height: 16px;
+    border: 2px solid #555;
+    border-top-color: var(--accent-color, #0af);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-left: 0.4rem;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="diag-container">
+    <h2>🔍 Admin Diagnostics</h2>
+
+    <!-- Tab buttons -->
+    <div class="diag-tabs" role="tablist">
+        <button class="diag-tab-btn{% if active_tab == 'logs' %} active{% endif %}"
+                role="tab" aria-controls="panel-logs" data-tab="logs">Logs</button>
+        <button class="diag-tab-btn{% if active_tab == 'health' %} active{% endif %}"
+                role="tab" aria-controls="panel-health" data-tab="health">Health</button>
+        <button class="diag-tab-btn{% if active_tab == 'system' %} active{% endif %}"
+                role="tab" aria-controls="panel-system" data-tab="system">System Info</button>
+        <button class="diag-tab-btn{% if active_tab == 'support' %} active{% endif %}"
+                role="tab" aria-controls="panel-support" data-tab="support">Support Bundle</button>
+    </div>
+
+    <!-- ─── Logs panel ──────────────────────────────────────────────────────── -->
+    <div id="panel-logs" class="diag-panel{% if active_tab == 'logs' %} active{% endif %}" role="tabpanel">
+        <div class="diag-box">
+            <h3>Log Viewer</h3>
+            <div class="log-controls">
+                <label for="logKeySelect">Log:</label>
+                <select id="logKeySelect">
+                    {% for k in log_keys %}
+                    <option value="{{ k }}">{{ k }}</option>
+                    {% endfor %}
+                </select>
+
+                <label for="logNInput">Lines:</label>
+                <input type="number" id="logNInput" value="200" min="10" max="2000" style="width:80px">
+
+                <button type="button" id="btnTailLog">Tail (last N)</button>
+                <button type="button" id="btnFullLog">Full Log</button>
+                <a id="btnDownloadLog" href="#" class="btn-download" style="font-size:0.85rem;padding:0.35rem 0.9rem;">⬇ Download</a>
+            </div>
+            <div class="log-meta" id="logMeta"></div>
+            <pre id="logOutput"><span style="color:#888">Select a log and click Tail or Full Log.</span></pre>
+        </div>
+    </div>
+
+    <!-- ─── Health panel ────────────────────────────────────────────────────── -->
+    <div id="panel-health" class="diag-panel{% if active_tab == 'health' %} active{% endif %}" role="tabpanel">
+        <div class="diag-box">
+            <h3>Health Checks <span id="healthSpinner" class="spinner" style="display:none"></span></h3>
+            <button type="button" class="btn-download" id="btnRunHealth" style="margin-bottom:1rem">▶ Run Checks</button>
+            <div id="healthGrid" class="health-grid"></div>
+        </div>
+    </div>
+
+    <!-- ─── System Info panel ───────────────────────────────────────────────── -->
+    <div id="panel-system" class="diag-panel{% if active_tab == 'system' %} active{% endif %}" role="tabpanel">
+        <div class="diag-box">
+            <h3>System Info <span id="sysSpinner" class="spinner" style="display:none"></span></h3>
+            <button type="button" class="btn-download" id="btnLoadSystem" style="margin-bottom:1rem">▶ Load Info</button>
+            <table class="sysinfo-table" id="sysTable">
+                <tbody id="sysTableBody">
+                    <tr><td colspan="2" style="color:#888">Click "Load Info" to fetch system data.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ─── Support Bundle panel ────────────────────────────────────────────── -->
+    <div id="panel-support" class="diag-panel{% if active_tab == 'support' %} active{% endif %}" role="tabpanel">
+        <div class="diag-box">
+            <h3>Support Bundle</h3>
+            <div class="support-info">
+                <p>Generate a ZIP archive containing sanitised diagnostic data for sharing with support.</p>
+                <p><strong>Included:</strong></p>
+                <ul>
+                    <li>Application log files (secrets redacted)</li>
+                    <li>Activity log</li>
+                    <li>Health check results (health.json)</li>
+                    <li>System information (system.json)</li>
+                </ul>
+                <p><strong>NOT included:</strong> Full database contents, passwords, API keys, arbitrary files.</p>
+            </div>
+            <a class="btn-download" href="{{ url_for('admin_diagnostics.diagnostics_support') }}">⬇ Download Support Bundle</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+(function () {
+    "use strict";
+
+    // ── Tab switching ────────────────────────────────────────────────────────
+    document.querySelectorAll('.diag-tab-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.diag-tab-btn').forEach(function (b) { b.classList.remove('active'); });
+            document.querySelectorAll('.diag-panel').forEach(function (p) { p.classList.remove('active'); });
+            btn.classList.add('active');
+            var panelId = 'panel-' + btn.dataset.tab;
+            var panel = document.getElementById(panelId);
+            if (panel) panel.classList.add('active');
+        });
+    });
+
+    // ── Log viewer ───────────────────────────────────────────────────────────
+    var logOutput = document.getElementById('logOutput');
+    var logMeta   = document.getElementById('logMeta');
+
+    function getLogKey() { return document.getElementById('logKeySelect').value; }
+    function getLogN()   { return parseInt(document.getElementById('logNInput').value, 10) || 200; }
+
+    function renderLog(data) {
+        if (data.error) {
+            logOutput.innerHTML = '<span class="log-error">Error: ' + escHtml(data.error) + '</span>';
+        } else {
+            logOutput.textContent = data.lines.join('\n');
+        }
+        logMeta.textContent = 'Key: ' + data.key + '  |  Lines returned: ' + (data.count || 0);
+    }
+
+    function fetchLog(url) {
+        logOutput.innerHTML = '<span style="color:#888">Loading… <span class="spinner"></span></span>';
+        fetch(url, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(renderLog)
+            .catch(function (e) {
+                logOutput.innerHTML = '<span class="log-error">Request failed: ' + escHtml(String(e)) + '</span>';
+            });
+    }
+
+    document.getElementById('btnTailLog').addEventListener('click', function () {
+        fetchLog('/admin/diagnostics/logs/tail?key=' + encodeURIComponent(getLogKey()) + '&n=' + getLogN());
+    });
+    document.getElementById('btnFullLog').addEventListener('click', function () {
+        fetchLog('/admin/diagnostics/logs?key=' + encodeURIComponent(getLogKey()) + '&n=' + getLogN());
+    });
+
+    // Update download link whenever key changes
+    function updateDownloadLink() {
+        var link = document.getElementById('btnDownloadLog');
+        link.href = '/admin/diagnostics/logs/download?key=' + encodeURIComponent(getLogKey());
+    }
+    document.getElementById('logKeySelect').addEventListener('change', updateDownloadLink);
+    updateDownloadLink();
+
+    // ── Health checks ────────────────────────────────────────────────────────
+    var healthGrid    = document.getElementById('healthGrid');
+    var healthSpinner = document.getElementById('healthSpinner');
+
+    document.getElementById('btnRunHealth').addEventListener('click', function () {
+        healthGrid.innerHTML = '';
+        healthSpinner.style.display = 'inline-block';
+        fetch('/admin/diagnostics/health', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                healthSpinner.style.display = 'none';
+                Object.keys(data).forEach(function (checkKey) {
+                    var check = data[checkKey];
+                    var card = document.createElement('div');
+                    card.className = 'health-card';
+                    var remediation = check.remediation
+                        ? '<div class="remediation">💡 ' + escHtml(check.remediation) + '</div>'
+                        : '';
+                    card.innerHTML =
+                        '<h4>' + escHtml(checkKey) + '</h4>' +
+                        '<div class="status status-' + escHtml(check.status) + '">' +
+                            statusIcon(check.status) + ' ' + escHtml(check.status) +
+                        '</div>' +
+                        '<div class="detail">' + escHtml(check.detail) + '</div>' +
+                        remediation;
+                    healthGrid.appendChild(card);
+                });
+            })
+            .catch(function (e) {
+                healthSpinner.style.display = 'none';
+                healthGrid.innerHTML = '<span style="color:#ff4444">Failed to load health data: ' + escHtml(String(e)) + '</span>';
+            });
+    });
+
+    function statusIcon(s) {
+        if (s === 'PASS') return '✅';
+        if (s === 'WARN') return '⚠️';
+        return '❌';
+    }
+
+    // ── System Info ──────────────────────────────────────────────────────────
+    var sysTableBody = document.getElementById('sysTableBody');
+    var sysSpinner   = document.getElementById('sysSpinner');
+
+    document.getElementById('btnLoadSystem').addEventListener('click', function () {
+        sysTableBody.innerHTML = '<tr><td colspan="2" style="color:#888">Loading…</td></tr>';
+        sysSpinner.style.display = 'inline-block';
+        fetch('/admin/diagnostics/system', { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                sysSpinner.style.display = 'none';
+                var rows = '';
+                var simple_keys = ['app_version','python_version','os_info','os_name','os_release',
+                                   'architecture','hostname','uptime','data_dir','install_mode'];
+                rows += '<tr><td class="sysinfo-section" colspan="2">Application</td></tr>';
+                simple_keys.forEach(function (k) {
+                    if (data[k] !== undefined) {
+                        rows += '<tr><th>' + escHtml(k) + '</th><td>' + escHtml(String(data[k])) + '</td></tr>';
+                    }
+                });
+                if (data.safe_env && Object.keys(data.safe_env).length > 0) {
+                    rows += '<tr><td class="sysinfo-section" colspan="2">Environment (safe subset)</td></tr>';
+                    Object.keys(data.safe_env).forEach(function (k) {
+                        rows += '<tr><th>' + escHtml(k) + '</th><td>' + escHtml(String(data.safe_env[k])) + '</td></tr>';
+                    });
+                }
+                sysTableBody.innerHTML = rows;
+            })
+            .catch(function (e) {
+                sysSpinner.style.display = 'none';
+                sysTableBody.innerHTML = '<tr><td colspan="2" style="color:#ff4444">Failed: ' + escHtml(String(e)) + '</td></tr>';
+            });
+    });
+
+    // ── Utility ──────────────────────────────────────────────────────────────
+    function escHtml(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+})();
+</script>
+{% endblock %}

@@ -34,6 +34,40 @@ except Exception as e:
 
 APP_START_TIME = datetime.now()
 
+# ------------------- Canonical Data Directory -------------------
+# Priority: 1) RETROIPTV_DATA_DIR env var  2) OS default  3) ./config fallback
+def _resolve_data_dir() -> str:
+    env_val = os.environ.get("RETROIPTV_DATA_DIR", "").strip()
+    if env_val:
+        return env_val
+    if sys.platform == "win32":
+        prog_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        return os.path.join(prog_data, "RetroIPTVGuide")
+    # Linux / macOS: try the system path only when we can actually write to it
+    system_path = "/var/lib/retroiptvguide"
+    try:
+        os.makedirs(system_path, exist_ok=True)
+        # Verify writability with a probe
+        probe = os.path.join(system_path, ".write_probe")
+        with open(probe, "w") as _fh:
+            _fh.write("ok")
+        os.unlink(probe)
+        return system_path
+    except (PermissionError, OSError):
+        pass
+    # Fallback: portable ./config directory next to app.py
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
+
+DATA_DIR = _resolve_data_dir()
+
+# Ensure required subdirectories exist
+for _subdir in ("logs", "db", "xmltv", "support"):
+    os.makedirs(os.path.join(DATA_DIR, _subdir), exist_ok=True)
+
+# ------------------- Logging Setup -------------------
+from utils.logging_setup import configure_logging as _configure_logging
+_configure_logging(DATA_DIR)
+
 # ------------------- Config -------------------
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # replace with a fixed key in production
@@ -49,8 +83,25 @@ login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
 
+# ------------------- Diagnostics Blueprint -------------------
+from utils.log_reading import configure_allowed_logs as _configure_allowed_logs
+_configure_allowed_logs(DATA_DIR)
+
+from blueprints.admin_diagnostics import admin_diagnostics_bp
+
+# Inject runtime config into the app so the blueprint can access it
+app.config["DIAG_DATA_DIR"] = DATA_DIR
+app.config["DIAG_APP_VERSION"] = APP_VERSION
+app.config["DIAG_APP_START_TIME"] = APP_START_TIME
+# DATABASE and TUNER_DB may be overridden in tests; blueprint reads them lazily
+# via a lambda so they pick up any monkeypatch changes made after import.
+app.config["DIAG_DATABASE"] = DATABASE
+app.config["DIAG_TUNER_DB"] = TUNER_DB
+
+app.register_blueprint(admin_diagnostics_bp)
+
 # ------------------- Activity Log -------------------
-LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "activity.log")
+LOG_PATH = os.path.join(DATA_DIR, "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")

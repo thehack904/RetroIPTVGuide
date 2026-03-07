@@ -27,6 +27,7 @@
               </li>
               <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a>
               <a href="{{ url_for('view_logs') }}">Logs</a>
+              <a href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a>
               <li><a href="{{ url_for('about') }}">About</a></li>
               {% endif %}
               <li class="submenu">
@@ -142,6 +143,7 @@
           </li>
           <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('view_logs') }}">Logs</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
           {% endif %}
           <li class="mobile-submenu" role="none">
