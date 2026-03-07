@@ -20,6 +20,7 @@ from app import (
     get_traffic_demo_roads, _overpass_to_geojson,
     _fetch_overpass_roads,
     _load_roads_from_disk, _save_roads_to_disk,
+    _city_slug, _generate_basemap_png, _prewarm_basemaps,
 )
 
 
@@ -834,3 +835,159 @@ class TestFetchOverpassRoadsRetry:
         assert result == {"elements": []}
         # Should have attempted _OVERPASS_MAX_RETRIES + 1 total calls
         assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
+
+
+# ─── Basemap PNG generation ────────────────────────────────────────────────────
+
+class TestCitySlug:
+    """_city_slug must mirror the JS citySlug() function in traffic.html."""
+
+    @pytest.mark.parametrize("name,expected", [
+        ("New York City",  "newyorkcity"),
+        ("Los Angeles",    "losangeles"),
+        ("Chicago",        "chicago"),
+        ("San Jose",       "sanjose"),
+        ("San Antonio",    "sanantonio"),
+        ("Philadelphia",   "philadelphia"),
+    ])
+    def test_known_cities(self, name, expected):
+        assert _city_slug(name) == expected
+
+    def test_lowercase(self):
+        assert _city_slug("DALLAS") == "dallas"
+
+    def test_removes_spaces(self):
+        assert _city_slug("San Diego") == "sandiego"
+
+    def test_removes_special_chars(self):
+        assert _city_slug("St. Louis") == "stlouis"
+
+    def test_empty_string(self):
+        assert _city_slug("") == ""
+
+
+class TestGenerateBasemapPng:
+    """_generate_basemap_png writes a PNG file; tiles provided via mock."""
+
+    def _make_tile_response(self, colour=(100, 149, 237)):
+        """Create a fake 256x256 tile response in memory."""
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), colour)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_creates_png_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        img = _I.open(out)
+        assert img.size == (app_module._BASEMAP_W, app_module._BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_returns_false_when_all_tiles_fail(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(side_effect=Exception("network error"))
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "fail.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_atomic_write_no_partial_file_on_failure(self, monkeypatch, tmp_path):
+        """If generation fails the destination path must not be created."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("err")))
+        out = str(tmp_path / "atomic.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        assert not os.path.isfile(out)
+        # Temp file must also be cleaned up
+        assert not os.path.isfile(out + ".tmp")
+
+
+class TestPrewarmBasemaps:
+    """_prewarm_basemaps generates a file for each seed city that lacks one."""
+
+    def _make_tile_response(self):
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), (80, 120, 200))
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_generates_png_per_city(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing basemap for {city['name']}"
+
+    def test_skips_existing_files(self, monkeypatch, tmp_path):
+        """Pre-existing PNGs must not trigger tile downloads."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        # Pre-create all PNG files
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            (tmp_path / f"{slug}.png").write_bytes(b"dummy")
+
+        _prewarm_basemaps()
+        # No tiles should have been fetched
+        mock_get.assert_not_called()
+
+    def test_noop_without_pillow(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+        mock_get.assert_not_called()

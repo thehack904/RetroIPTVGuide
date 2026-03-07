@@ -32,6 +32,17 @@ except Exception as e:
     # Log the import failure so we can see why it failed when the app starts
     logging.exception("Failed to import vlc_control: %s", e)
 
+# Pillow is used to stitch OSM map tiles into the static basemap PNGs for the
+# traffic demo.  It is optional — without it the browser falls back to Leaflet.
+try:
+    from PIL import Image as _PilImage
+    import io as _io
+    import math as _math
+    _PILLOW_AVAILABLE = True
+except ImportError:
+    _PILLOW_AVAILABLE = False
+    logging.info("Pillow not installed — traffic demo will use Leaflet basemaps")
+
 APP_START_TIME = datetime.now()
 
 # ------------------- Config -------------------
@@ -1468,6 +1479,133 @@ def _prewarm_roads_cache() -> None:
             logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
         time.sleep(_OVERPASS_PREWARM_STAGGER_S)
 
+
+# ─── Static basemap PNGs (OSM tile stitching) ─────────────────────────────────
+
+_BASEMAP_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'static', 'maps', 'traffic_demo')
+_BASEMAP_ZOOM = 10       # OSM zoom level — matches traffic.html BASEMAP_ZOOM
+_BASEMAP_W    = 1280     # output width  — matches traffic.html BASEMAP_W
+_BASEMAP_H    = 720      # output height — matches traffic.html BASEMAP_H
+_TILE_SIZE    = 256      # standard OSM tile size in pixels
+_OSM_TILE_UA  = "RetroIPTVGuide/1.0 (traffic demo basemap; see github.com/thehack904/RetroIPTVGuide)"
+
+
+def _city_slug(name: str) -> str:
+    """Convert a city name to the lowercase alphanumeric slug used for PNG filenames.
+    Must match the JavaScript citySlug() function in traffic.html."""
+    return ''.join(c for c in name.lower() if c.isalnum())
+
+
+def _generate_basemap_png(lat: float, lon: float, out_path: str) -> bool:
+    """Stitch OSM tiles into a _BASEMAP_W x _BASEMAP_H PNG centred on lat/lon.
+
+    Returns True on success, False if Pillow is unavailable or all tiles fail.
+    The file is written atomically (temp file → rename) so a half-written PNG
+    is never served to the browser.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    zoom = _BASEMAP_ZOOM
+    n    = 2 ** zoom
+
+    # Fractional tile coordinates for the centre point
+    cx_f = (lon + 180.0) / 360.0 * n
+    lat_rad = _math.radians(lat)
+    cy_f = (1.0 - _math.asinh(_math.tan(lat_rad)) / _math.pi) / 2.0 * n
+
+    cx_tile = int(cx_f)
+    cy_tile = int(cy_f)
+    off_x   = (cx_f - cx_tile) * _TILE_SIZE   # pixel offset within centre tile
+    off_y   = (cy_f - cy_tile) * _TILE_SIZE
+
+    # Number of extra tiles needed on each side of the centre tile
+    half_w = _BASEMAP_W / 2
+    half_h = _BASEMAP_H / 2
+    tiles_left  = _math.ceil((half_w - (_TILE_SIZE - off_x)) / _TILE_SIZE) + 1
+    tiles_right = _math.ceil((half_w - off_x)               / _TILE_SIZE) + 1
+    tiles_up    = _math.ceil((half_h - (_TILE_SIZE - off_y)) / _TILE_SIZE) + 1
+    tiles_down  = _math.ceil((half_h - off_y)               / _TILE_SIZE) + 1
+
+    x0 = cx_tile - tiles_left
+    y0 = cy_tile - tiles_up
+    x1 = cx_tile + tiles_right
+    y1 = cy_tile + tiles_down
+    cols = x1 - x0 + 1
+    rows = y1 - y0 + 1
+
+    canvas = _PilImage.new("RGB", (cols * _TILE_SIZE, rows * _TILE_SIZE))
+    sess   = requests.Session()
+    sess.headers.update({"User-Agent": _OSM_TILE_UA})
+    any_ok = False
+
+    for row_i, ty in enumerate(range(y0, y1 + 1)):
+        for col_i, tx in enumerate(range(x0, x1 + 1)):
+            tx_c = max(0, min(n - 1, tx))
+            ty_c = max(0, min(n - 1, ty))
+            url  = f"https://tile.openstreetmap.org/{zoom}/{tx_c}/{ty_c}.png"
+            for attempt in range(3):
+                try:
+                    resp = sess.get(url, timeout=15)
+                    resp.raise_for_status()
+                    tile = _PilImage.open(_io.BytesIO(resp.content)).convert("RGB")
+                    canvas.paste(tile, (col_i * _TILE_SIZE, row_i * _TILE_SIZE))
+                    any_ok = True
+                    time.sleep(0.15)   # respect OSM tile server fair-use policy
+                    break
+                except Exception:
+                    if attempt < 2:
+                        time.sleep(2 ** attempt)
+                    else:
+                        logging.warning("_generate_basemap_png: tile %s/%s failed", tx_c, ty_c)
+
+    if not any_ok:
+        return False
+
+    # Crop to exact output size, centred on the requested coordinates
+    centre_x = (cx_tile - x0) * _TILE_SIZE + off_x
+    centre_y = (cy_tile - y0) * _TILE_SIZE + off_y
+    left   = int(centre_x - half_w)
+    top    = int(centre_y - half_h)
+    cropped = canvas.crop((left, top, left + _BASEMAP_W, top + _BASEMAP_H))
+
+    # Write atomically
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    cropped.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
+def _prewarm_basemaps() -> None:
+    """Background thread: generate missing basemap PNGs for all seed cities.
+
+    Runs once at startup.  Already-present files are skipped so the roads
+    and basemap pre-warm threads don't conflict on subsequent restarts.
+    Requests are staggered to stay within OSM tile-server fair-use limits.
+    """
+    if not _PILLOW_AVAILABLE:
+        logging.info("_prewarm_basemaps: Pillow not available, skipping basemap generation")
+        return
+
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    for city in _TRAFFIC_DEMO_CITIES_SEED:
+        slug     = _city_slug(city['name'])
+        out_path = os.path.join(_BASEMAP_DIR, f"{slug}.png")
+        if os.path.isfile(out_path):
+            logging.debug("_prewarm_basemaps: %s already exists, skipping", slug)
+            continue
+        logging.info("_prewarm_basemaps: generating basemap for %s …", city['name'])
+        try:
+            ok = _generate_basemap_png(city['lat'], city['lon'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved %s.png", slug)
+            else:
+                logging.warning("_prewarm_basemaps: could not generate basemap for %s", city['name'])
+        except Exception:
+            logging.exception("_prewarm_basemaps: exception for %s", city['name'])
+        time.sleep(1)
 
 
 def get_channel_music_file(tvg_id):
@@ -4071,6 +4209,10 @@ if __name__ == '__main__':
     # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
     # so the overlay is ready before any city rotation happens.
     threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
+
+    # Generate missing static basemap PNGs (OSM tile mosaics) for all seed
+    # cities so the traffic demo never serves 404s for the basemap images.
+    threading.Thread(target=_prewarm_basemaps, daemon=True, name="basemaps-prewarm").start()
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
