@@ -42,6 +42,7 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
@@ -1282,11 +1283,47 @@ def _build_traffic_demo_payload():
 
 # Roads are cached per city (long TTL — road geometry rarely changes).
 _ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
-_ROADS_CACHE_TTL = 86400  # 24 hours in seconds
+_ROADS_CACHE_TTL = 86400  # 24 hours — in-memory hot cache
+_ROADS_DISK_TTL  = 2_592_000  # 30 days — disk cache; road geometry barely changes
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
 _OVERPASS_PREWARM_STAGGER_S = 12  # seconds between per-city Overpass requests at startup
 _OVERPASS_MAX_RETRIES = 3         # retry attempts on 429 / transient errors
 _OVERPASS_RETRY_BACKOFF_S = 10    # initial back-off in seconds (doubles each retry)
+
+
+def _roads_cache_path(city_id: int) -> str:
+    """Return the absolute path of the on-disk cache file for a given city."""
+    return os.path.join(ROADS_CACHE_DIR, f"city_{city_id}.json")
+
+
+def _load_roads_from_disk(city_id: int) -> dict | None:
+    """Load GeoJSON from disk cache if the file exists and is not stale.
+    Returns the GeoJSON dict on success, None if missing or expired."""
+    path = _roads_cache_path(city_id)
+    try:
+        if not os.path.isfile(path):
+            return None
+        age = time.time() - os.path.getmtime(path)
+        if age > _ROADS_DISK_TTL:
+            return None
+        with open(path, "r", encoding="utf-8") as fh:
+            return _json.load(fh)
+    except Exception:
+        logging.warning("_load_roads_from_disk: failed to read cache for city_id=%s", city_id,
+                        exc_info=True)
+        return None
+
+
+def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
+    """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
+    path = _roads_cache_path(city_id)
+    try:
+        os.makedirs(ROADS_CACHE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(geojson, fh)
+    except Exception:
+        logging.warning("_save_roads_to_disk: failed to write cache for city_id=%s", city_id,
+                        exc_info=True)
 
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
@@ -1372,13 +1409,29 @@ def _overpass_to_geojson(raw: dict) -> dict:
 
 
 def get_traffic_demo_roads(city_id: int) -> dict:
-    """Return cached road GeoJSON for a city, fetching from Overpass if not cached or stale."""
+    """Return cached road GeoJSON for a city, fetching from Overpass only when needed.
+
+    Lookup order:
+      1. In-memory cache  (hot, 24 h TTL)
+      2. Disk cache       (persistent across restarts, 30 day TTL)
+      3. Overpass API     (network call — only when no valid cached copy exists)
+
+    After a successful Overpass fetch the result is saved to disk so that
+    subsequent app restarts never need to call the API for already-fetched cities.
+    """
     now_ts = time.time()
     cached_at = _ROADS_CACHE_TIME.get(city_id, 0)
     if city_id in _ROADS_CACHE and (now_ts - cached_at) < _ROADS_CACHE_TTL:
         return _ROADS_CACHE[city_id]
 
-    # Look up city coordinates from DB
+    # 2. Try disk cache before making a network call
+    disk_geojson = _load_roads_from_disk(city_id)
+    if disk_geojson is not None:
+        _ROADS_CACHE[city_id] = disk_geojson
+        _ROADS_CACHE_TIME[city_id] = now_ts
+        return disk_geojson
+
+    # 3. Look up city coordinates from DB, then call Overpass
     try:
         cities = get_traffic_demo_cities()
         city = next((c for c in cities if c["id"] == city_id), None)
@@ -1392,6 +1445,9 @@ def get_traffic_demo_roads(city_id: int) -> dict:
     geojson = _overpass_to_geojson(raw)
     _ROADS_CACHE[city_id] = geojson
     _ROADS_CACHE_TIME[city_id] = now_ts
+    # Persist to disk so future restarts skip the Overpass call
+    if geojson["features"]:
+        _save_roads_to_disk(city_id, geojson)
     return geojson
 
 

@@ -19,6 +19,7 @@ from app import (
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
     _fetch_overpass_roads,
+    _load_roads_from_disk, _save_roads_to_disk,
 )
 
 
@@ -28,8 +29,10 @@ from app import (
 def isolated_db(tmp_path, monkeypatch):
     users_db  = str(tmp_path / "users_test.db")
     tuners_db = str(tmp_path / "tuners_test.db")
-    monkeypatch.setattr(app_module, "DATABASE",  users_db)
-    monkeypatch.setattr(app_module, "TUNER_DB",  tuners_db)
+    roads_dir = str(tmp_path / "roads_cache")
+    monkeypatch.setattr(app_module, "DATABASE",       users_db)
+    monkeypatch.setattr(app_module, "TUNER_DB",       tuners_db)
+    monkeypatch.setattr(app_module, "ROADS_CACHE_DIR", roads_dir)
     # Also clear the module-level caches between tests
     monkeypatch.setattr(app_module, "_TRAFFIC_DEMO_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE", {})
@@ -651,6 +654,56 @@ class TestGetTrafficDemoRoads:
         result = get_traffic_demo_roads(99999)
         assert result['type'] == 'FeatureCollection'
         assert result['features'] == []
+
+    def test_result_is_saved_to_disk(self, monkeypatch, tmp_path):
+        roads_dir = str(tmp_path / "roads_save_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert os.path.isfile(cache_file), "GeoJSON should be persisted to disk after fetch"
+
+    def test_disk_cache_used_on_restart(self, monkeypatch, tmp_path):
+        """After data is saved to disk, clearing the in-memory cache simulates a restart.
+        The next call must load from disk without hitting the Overpass API."""
+        roads_dir = str(tmp_path / "roads_restart_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        fetch_count = {'calls': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            fetch_count['calls'] += 1
+            return self._minimal_overpass()
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+
+        # First call: populates disk cache
+        get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1
+
+        # Simulate restart by clearing the in-memory cache
+        app_module._ROADS_CACHE.clear()
+        app_module._ROADS_CACHE_TIME.clear()
+
+        # Second call: should load from disk, NOT call Overpass
+        result = get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1, "Overpass should not be called again when disk cache exists"
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) >= 1
+
+    def test_empty_response_not_saved_to_disk(self, monkeypatch, tmp_path):
+        """An empty Overpass response must not be persisted so the next startup retries."""
+        roads_dir = str(tmp_path / "roads_empty_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert not os.path.isfile(cache_file), "Empty GeoJSON must not be persisted to disk"
 
 
 # ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────

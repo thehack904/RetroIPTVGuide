@@ -20,6 +20,9 @@ ENV/
 *.sqlite3
 db/*.db
 
+# Road geometry disk cache (populated at runtime by the Overpass fetch)
+data/roads_cache/
+
 # Logs
 *.log
 
