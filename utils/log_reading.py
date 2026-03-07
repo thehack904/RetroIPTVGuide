@@ -235,7 +235,7 @@ def build_support_bundle(data_dir: str, health_data: dict, system_data: dict) ->
         for _key, base_path in ALLOWED_LOGS.items():
             # Include the base log and any rotated copies (.1, .2 …)
             candidates = [base_path] + sorted(
-                _glob.glob(base_path + ".*")
+                _glob.glob(f"{base_path}.*")
             )
             for candidate in candidates:
                 if not os.path.isfile(candidate):

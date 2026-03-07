@@ -42,7 +42,7 @@ def _detect_install_mode() -> str:
     # Windows service: no terminal attached, running as Windows service
     if sys.platform == "win32":
         try:
-            import ctypes  # type: ignore[import]
+            import ctypes  # type: ignore[import]  # noqa: PLC0415
             return "windows-service" if ctypes.windll.kernel32.GetConsoleWindow() == 0 else "windows-manual"
         except Exception:
             return "windows"

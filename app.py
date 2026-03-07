@@ -62,7 +62,14 @@ DATA_DIR = _resolve_data_dir()
 
 # Ensure required subdirectories exist
 for _subdir in ("logs", "db", "xmltv", "support"):
-    os.makedirs(os.path.join(DATA_DIR, _subdir), exist_ok=True)
+    _subdir_path = os.path.join(DATA_DIR, _subdir)
+    try:
+        os.makedirs(_subdir_path, exist_ok=True)
+    except (PermissionError, OSError) as _mkdir_err:
+        print(
+            f"[RetroIPTVGuide] WARNING: could not create directory {_subdir_path!r}: {_mkdir_err}",
+            file=sys.stderr,
+        )
 
 # ------------------- Logging Setup -------------------
 from utils.logging_setup import configure_logging as _configure_logging
