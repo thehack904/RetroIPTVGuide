@@ -83,7 +83,7 @@ _COMPATIBLE_TYPES: Dict[str, bool] = {
 # Unrecognised mode values (e.g. ?mode=custom) fall back to body classification
 # and are shown as an informational signal only.
 _MODE_TYPE_MAP: Dict[str, str] = {
-    "segmenter":  "HLS Segmenter",
+    "segmenter": "HLS Segmenter",
     "hls-direct": "HLS Direct",
 }
 
@@ -268,10 +268,19 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
             )
 
     if _mode_override:
-        stream_type  = _MODE_TYPE_MAP[_mode_override]
-        confidence   = "high"
-        description  = _MODE_DESCRIPTIONS[_mode_override]
-        tips         = list(_MODE_TIPS[_mode_override])
+        stream_type = _MODE_TYPE_MAP[_mode_override]
+        confidence = "high"
+        description = _MODE_DESCRIPTIONS[_mode_override]
+        tips = list(_MODE_TIPS[_mode_override])
+        # Always run body-content classification too — the user needs to see both.
+        # Not all servers use ?mode=; for those that do, transparency about what the
+        # body actually contains helps with debugging mismatches.
+        body_type, _, _, _ = _classify(url_lower, ct, raw, signals)
+        if body_type != stream_type:
+            signals.append(
+                f"Body content analysis suggests '{body_type}' — "
+                f"mode={_mode_override!r} URL parameter takes precedence."
+            )
     else:
         stream_type, confidence, description, tips = _classify(
             url_lower, ct, raw, signals
@@ -635,14 +644,38 @@ _MAX_CHANNELS = 300
 _MAX_URL_LOOKAHEAD = 4
 
 
+def _mode_hint_from_url(url: str) -> str:
+    """Return the recognised ``mode=`` value from *url*'s query string, or ``""`` if none.
+
+    Only values present in :data:`_MODE_TYPE_MAP` are returned; unrecognised
+    mode values (or URLs without a query string) return ``""``.
+    """
+    if "?" not in url:
+        return ""
+    from urllib.parse import parse_qs  # noqa: PLC0415
+    qs = url.split("?", 1)[1]
+    params = parse_qs(qs, keep_blank_values=True)
+    mode = (params.get("mode") or params.get("MODE") or [""])[0].lower()
+    return mode if mode in _MODE_TYPE_MAP else ""
+
+
 def _parse_m3u_channels(text: str) -> List[Dict[str, Any]]:
     """Parse an IPTV M3U playlist text and return a list of channel dicts.
 
     Each dict has keys:
-        ``name``   – display name from the ``#EXTINF`` comma-suffix
-        ``url``    – stream URL that follows the ``#EXTINF`` line
-        ``group``  – value of ``group-title`` attribute, or ``""``
-        ``tvg_id`` – value of ``tvg-id`` attribute, or ``""``
+        ``name``             – display name from the ``#EXTINF`` comma-suffix
+        ``url``              – stream URL that follows the ``#EXTINF`` line
+        ``group``            – value of ``group-title`` attribute, or ``""``
+        ``tvg_id``           – value of ``tvg-id`` attribute, or ``""``
+        ``stream_type_hint`` – stream type string derived from a recognised
+                               ``?mode=`` parameter in *url* (e.g.
+                               ``"HLS Segmenter"``), or ``""`` when no
+                               recognised mode is present.  Callers that need
+                               to probe the actual type should call
+                               :func:`detect_stream_type` on the channel URL.
+        ``compatible_hint``  – ``True`` / ``False`` / ``None`` matching
+                               :data:`_COMPATIBLE_TYPES` for
+                               ``stream_type_hint``, or ``None`` when no hint.
 
     Returns at most :data:`_MAX_CHANNELS` entries.  If the playlist contains
     more, the caller should surface that via ``channel_count`` (the total
@@ -675,7 +708,20 @@ def _parse_m3u_channels(text: str) -> List[Dict[str, Any]]:
                 url = candidate
                 break
 
-        channels.append({"name": name, "url": url, "group": group, "tvg_id": tvg_id})
+        # Pre-classify using the URL's ?mode= parameter when recognised.
+        # Channels without a mode= hint require an actual probe to determine type.
+        mode = _mode_hint_from_url(url)
+        stream_type_hint = _MODE_TYPE_MAP.get(mode, "")
+        compatible_hint: Optional[bool] = _COMPATIBLE_TYPES.get(stream_type_hint) if stream_type_hint else None
+
+        channels.append({
+            "name": name,
+            "url": url,
+            "group": group,
+            "tvg_id": tvg_id,
+            "stream_type_hint": stream_type_hint,
+            "compatible_hint": compatible_hint,
+        })
 
         if len(channels) >= _MAX_CHANNELS:
             break

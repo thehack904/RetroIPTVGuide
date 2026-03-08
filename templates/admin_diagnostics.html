@@ -1259,6 +1259,17 @@ function fallbackCopy(text){
       }
     });
 
+    /* Build a type-hint suffix from stream_type_hint / compatible_hint fields.
+       Channels whose URL contains a recognised ?mode= parameter are pre-labelled
+       so users can see compatibility at a glance before testing. */
+    function channelHint(ch){
+      if(!ch.stream_type_hint) return '';
+      var icon = ch.compatible_hint === true ? '\u2705' :    /* ✅ */
+                 ch.compatible_hint === false ? '\u26a0\ufe0f' : /* ⚠️ */
+                 '\uD83D\uDCA1';                               /* 💡 */
+      return ' \u2014 ' + icon + ' ' + ch.stream_type_hint;
+    }
+
     var html = '';
     var groupNames = Object.keys(groups).sort();
 
@@ -1267,7 +1278,7 @@ function fallbackCopy(text){
         html += '<optgroup label="'+esc(g)+'">';
         groups[g].forEach(function(ch, idx){
           var label = ch.name || ('Channel ' + (idx + 1));
-          html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+          html += '<option value="'+esc(ch.url)+'">'+esc(label)+channelHint(ch)+'</option>';
         });
         html += '</optgroup>';
       });
@@ -1275,14 +1286,14 @@ function fallbackCopy(text){
         html += '<optgroup label="(no group)">';
         ungrouped.forEach(function(ch, idx){
           var label = ch.name || ('Channel ' + (idx + 1));
-          html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+          html += '<option value="'+esc(ch.url)+'">'+esc(label)+channelHint(ch)+'</option>';
         });
         html += '</optgroup>';
       }
     } else {
       channels.forEach(function(ch, idx){
         var label = ch.name || ('Channel ' + (idx + 1));
-        html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+        html += '<option value="'+esc(ch.url)+'">'+esc(label)+channelHint(ch)+'</option>';
       });
     }
 

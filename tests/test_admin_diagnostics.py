@@ -3428,3 +3428,140 @@ class TestStreamDetectQueryStringSignals:
             "HLS Direct must be False in _COMPATIBLE_TYPES — master playlists "
             "do not play reliably in RetroIPTVGuide"
         )
+
+
+# ===========================================================================
+# Tests: M3U channel list pre-classification + body-mismatch signal
+# ===========================================================================
+
+class TestStreamDetectModeHintParsing:
+    """Verify that _mode_hint_from_url and _parse_m3u_channels correctly
+    pre-classify channels from their URL mode= parameters."""
+
+    def test_mode_hint_segmenter(self):
+        """_mode_hint_from_url returns 'segmenter' for ?mode=segmenter."""
+        from utils.stream_detect import _mode_hint_from_url
+        assert _mode_hint_from_url("http://iptv.lan/ch.m3u8?mode=segmenter") == "segmenter"
+
+    def test_mode_hint_hls_direct(self):
+        """_mode_hint_from_url returns 'hls-direct' for ?mode=hls-direct."""
+        from utils.stream_detect import _mode_hint_from_url
+        assert _mode_hint_from_url("http://iptv.lan/ch.m3u8?mode=hls-direct") == "hls-direct"
+
+    def test_mode_hint_no_query_string(self):
+        """_mode_hint_from_url returns '' for URLs without a query string."""
+        from utils.stream_detect import _mode_hint_from_url
+        assert _mode_hint_from_url("http://iptv.lan/ch.m3u8") == ""
+
+    def test_mode_hint_unrecognised_mode(self):
+        """_mode_hint_from_url returns '' for unrecognised mode values."""
+        from utils.stream_detect import _mode_hint_from_url
+        assert _mode_hint_from_url("http://iptv.lan/ch.m3u8?mode=custom") == ""
+
+    def test_parse_m3u_channels_adds_stream_type_hint(self):
+        """_parse_m3u_channels adds stream_type_hint from channel URL mode= param."""
+        from utils.stream_detect import _parse_m3u_channels
+        m3u = (
+            "#EXTM3U\n"
+            "#EXTINF:-1 tvg-id=\"ch1\" group-title=\"Test\",Channel 1 (MPEG)\n"
+            "http://iptv.lan:8409/iptv/channel/1.ts\n"
+            "#EXTINF:-1 tvg-id=\"ch2\" group-title=\"Test\",Channel 2 (HLS Direct)\n"
+            "http://iptv.lan:8409/iptv/channel/2.m3u8?mode=hls-direct\n"
+            "#EXTINF:-1 tvg-id=\"ch3\" group-title=\"Test\",Channel 3 (HLS Segmenter)\n"
+            "http://iptv.lan:8409/iptv/channel/3.m3u8?mode=segmenter\n"
+        )
+        channels = _parse_m3u_channels(m3u)
+        assert len(channels) == 3
+
+        ch1, ch2, ch3 = channels
+        # MPEG-TS channel — no recognised mode param → no hint
+        assert ch1["stream_type_hint"] == "", f"Expected no hint for ch1, got {ch1['stream_type_hint']!r}"
+        assert ch1["compatible_hint"] is None
+
+        # HLS Direct channel
+        assert ch2["stream_type_hint"] == "HLS Direct"
+        assert ch2["compatible_hint"] is False, "HLS Direct must be incompatible"
+
+        # HLS Segmenter channel
+        assert ch3["stream_type_hint"] == "HLS Segmenter"
+        assert ch3["compatible_hint"] is True, "HLS Segmenter must be compatible"
+
+    def test_parse_m3u_channels_no_mode_no_hint(self):
+        """Channels without ?mode= have empty stream_type_hint and None compatible_hint."""
+        from utils.stream_detect import _parse_m3u_channels
+        m3u = (
+            "#EXTM3U\n"
+            "#EXTINF:-1,Plain Stream\n"
+            "http://server.example.com/live.m3u8\n"
+        )
+        channels = _parse_m3u_channels(m3u)
+        assert len(channels) == 1
+        assert channels[0]["stream_type_hint"] == ""
+        assert channels[0]["compatible_hint"] is None
+
+    def test_body_mismatch_signal_when_mode_overrides(self):
+        """When mode= override differs from body classification, a mismatch signal is added."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        # mode=segmenter but body is a master playlist (HLS Direct) — they differ
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://iptv.lan/low.m3u8\n"
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/vnd.apple.mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://iptv.lan:8409/iptv/channel/2.m3u8?mode=segmenter")
+        # mode= wins
+        assert r["stream_type"] == "HLS Segmenter"
+        # A mismatch signal should be present because body says HLS Direct
+        signal_text = " ".join(r["signals"]).lower()
+        assert "body content" in signal_text or "hls direct" in signal_text or "takes precedence" in signal_text, (
+            f"Expected a body-mismatch signal in signals: {r['signals']}"
+        )
+
+    def test_body_disagrees_with_hls_direct_mode_result_still_hls_direct(self):
+        """When body says HLS Segmenter but mode=hls-direct, result is HLS Direct (incompatible)."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        # Body is a media playlist (body classification: HLS Segmenter), but
+        # mode=hls-direct overrides to HLS Direct (incompatible).
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/vnd.apple.mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://iptv.lan:8409/ch.m3u8?mode=hls-direct")
+        # mode= override wins even though body body looks like HLS Segmenter
+        assert r["stream_type"] == "HLS Direct"
+        assert r["compatible"] is False
+
+    def test_no_mode_param_uses_body_only(self):
+        """Without ?mode=, classification is purely body-content based."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/vnd.apple.mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "server.example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://server.example.com/live.m3u8")
+        # Body is a media playlist → HLS Segmenter
+        assert r["stream_type"] == "HLS Segmenter"
+        assert r["compatible"] is True
+        # No mode override signal present
+        signal_text = " ".join(r["signals"]).lower()
+        assert "mode=" not in signal_text
