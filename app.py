@@ -1490,6 +1490,15 @@ _BASEMAP_H    = 720      # output height — matches traffic.html BASEMAP_H
 _TILE_SIZE    = 256      # standard OSM tile size in pixels
 _OSM_TILE_UA  = "RetroIPTVGuide/1.0 (traffic demo basemap; see github.com/thehack904/RetroIPTVGuide)"
 
+# Tile server templates tried in order.  Multiple mirrors improve reliability
+# from cloud/datacenter hosts where tile.openstreetmap.org may rate-limit.
+_TILE_SERVERS = [
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://b.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://c.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+]
+
 
 def _city_slug(name: str) -> str:
     """Convert a city name to the lowercase alphanumeric slug used for PNG filenames.
@@ -1539,26 +1548,34 @@ def _generate_basemap_png(lat: float, lon: float, out_path: str) -> bool:
     sess   = requests.Session()
     sess.headers.update({"User-Agent": _OSM_TILE_UA})
     any_ok = False
+    server_idx = 0  # round-robin across tile servers to spread load
 
     for row_i, ty in enumerate(range(y0, y1 + 1)):
         for col_i, tx in enumerate(range(x0, x1 + 1)):
             tx_c = max(0, min(n - 1, tx))
             ty_c = max(0, min(n - 1, ty))
-            url  = f"https://tile.openstreetmap.org/{zoom}/{tx_c}/{ty_c}.png"
-            for attempt in range(3):
+            fetched = False
+            for attempt in range(len(_TILE_SERVERS) * 2):
+                srv = _TILE_SERVERS[server_idx % len(_TILE_SERVERS)]
+                url = srv.format(z=zoom, x=tx_c, y=ty_c)
                 try:
                     resp = sess.get(url, timeout=15)
                     resp.raise_for_status()
                     tile = _PilImage.open(_io.BytesIO(resp.content)).convert("RGB")
                     canvas.paste(tile, (col_i * _TILE_SIZE, row_i * _TILE_SIZE))
                     any_ok = True
-                    time.sleep(0.15)   # respect OSM tile server fair-use policy
+                    fetched = True
+                    time.sleep(0.15)   # respect tile server fair-use policy
                     break
-                except Exception:
-                    if attempt < 2:
-                        time.sleep(2 ** attempt)
-                    else:
-                        logging.warning("_generate_basemap_png: tile %s/%s failed", tx_c, ty_c)
+                except Exception as exc:
+                    logging.debug("_generate_basemap_png: %s tile %s/%s attempt %s failed: %s",
+                                  srv, tx_c, ty_c, attempt + 1, exc)
+                    server_idx += 1    # try next server on next attempt
+                    if attempt < len(_TILE_SERVERS) * 2 - 1:
+                        time.sleep(min(2 ** (attempt % len(_TILE_SERVERS)), 30))
+            if not fetched:
+                logging.warning("_generate_basemap_png: all servers failed for tile %s/%s", tx_c, ty_c)
+            server_idx += 1  # distribute load across servers
 
     if not any_ok:
         return False

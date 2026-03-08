@@ -21,6 +21,7 @@ from app import (
     _fetch_overpass_roads,
     _load_roads_from_disk, _save_roads_to_disk,
     _city_slug, _generate_basemap_png, _prewarm_basemaps,
+    _TILE_SERVERS,
 )
 
 
@@ -924,6 +925,28 @@ class TestGenerateBasemapPng:
         ok = _generate_basemap_png(37.33, -121.88, out)
         assert ok is False
         assert not os.path.isfile(out)
+
+    def test_falls_back_to_secondary_tile_server(self, monkeypatch, tmp_path):
+        """If the first tile server fails, the function tries the next server."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+
+        primary_url = _TILE_SERVERS[0].split("{")[0]  # e.g. "https://tile.openstreetmap.org/"
+        good_resp   = self._make_tile_response()
+
+        # When monkeypatching a class method the Session instance is passed as
+        # the first positional argument, followed by the URL.
+        def selective_get(_session, url, **kwargs):
+            if primary_url in url:
+                raise Exception("primary server blocked")
+            return good_resp
+
+        monkeypatch.setattr(app_module.requests.Session, "get", selective_get)
+
+        out = str(tmp_path / "fallback.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
 
     def test_atomic_write_no_partial_file_on_failure(self, monkeypatch, tmp_path):
         """If generation fails the destination path must not be created."""
