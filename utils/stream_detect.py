@@ -57,6 +57,19 @@ _UA = "RetroIPTVGuide-StreamProbe/1.0"
 # Public API
 # ---------------------------------------------------------------------------
 
+# Compatibility mapping: stream types that are known to work (True) or not
+# work (False) with RetroIPTVGuide's HLS.js-based player.  Types not listed
+# here return None (unknown / neutral) from detect_stream_type().
+_COMPATIBLE_TYPES: Dict[str, bool] = {
+    "HLS Direct":    True,
+    "HLS Segmenter": True,
+    "MPEG-TS":          False,
+    "MPEG-TS (likely)": False,
+    "MPEG-TS segment":  False,
+    "DASH":  False,
+    "RTMP":  False,
+}
+
 def detect_stream_type(url: str) -> Dict[str, Any]:
     """Probe *url* and return a stream-type detection result.
 
@@ -107,6 +120,7 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
         "stream_type": "Unknown",
         "confidence": "none",
         "description": "Could not determine the stream type.",
+        "compatible": None,   # True = works in RetroIPTVGuide, False = needs proxy/unsupported, None = unknown
         "tips": [],
         "fetch": None,
         "dns": None,
@@ -125,6 +139,7 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     if scheme in ("rtmp", "rtmps", "rtmpe", "rtmpt", "rtmpte"):
         result["stream_type"] = "RTMP"
         result["confidence"] = "high"
+        result["compatible"] = False
         result["description"] = (
             "RTMP (Real-Time Messaging Protocol) stream.  "
             "Most web browsers cannot play RTMP directly.  "
@@ -193,6 +208,12 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     result["description"] = description
     result["tips"] = tips
     result["signals"] = signals
+
+    # Derive compatibility with RetroIPTVGuide (HLS.js-based player).
+    # True  → works out of the box
+    # False → requires proxy / unsupported (shows warning-colour tips in the UI)
+    # None  → unknown / neutral (e.g. channel list, undetermined)
+    result["compatible"] = _COMPATIBLE_TYPES.get(stream_type, None)
 
     # ── M3U channel list: attach parsed channel data for the dropdown UI ──
     if stream_type == "M3U Channel List":

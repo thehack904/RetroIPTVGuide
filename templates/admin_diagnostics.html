@@ -195,7 +195,18 @@ body.retro-magazine .sd-conf-high   { background:rgba(0,100,30,0.12);  color:#00
 body.retro-magazine .sd-conf-medium { background:rgba(100,60,0,0.12);  color:#5a3000; border-color:#5a3000; }
 body.retro-magazine .sd-conf-low    { background:rgba(130,60,0,0.12);  color:#662f00; border-color:#662f00; }
 body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#700000; border-color:#700000; }
+/* Tip cards: base style (neutral/info) */
 .sd-tip { background:var(--dc-bg-deep); border-left:3px solid var(--dc-accent); padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
+/* Compatible stream — green/teal accent, e.g. "works with RetroIPTVGuide" */
+.sd-tip-ok { background:rgba(0,200,80,0.07); border-left:3px solid #00c850; color:inherit; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
+/* Incompatible stream — amber/orange accent, e.g. "cannot play MPEG-TS" */
+.sd-tip-warn { background:rgba(255,140,0,0.10); border-left:3px solid #ff8c00; color:inherit; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
+body.light .sd-tip-ok   { background:rgba(0,140,50,0.08);  border-left-color:#006622; }
+body.light .sd-tip-warn { background:rgba(180,80,0,0.08);  border-left-color:#8a4400; }
+body.retroiptv .sd-tip-ok   { background:rgba(0,100,60,0.10); border-left-color:#005a33; }
+body.retroiptv .sd-tip-warn { background:rgba(160,70,0,0.10); border-left-color:#7a3500; }
+body.retro-magazine .sd-tip-ok   { background:rgba(0,80,20,0.10);  border-left-color:#005a00; }
+body.retro-magazine .sd-tip-warn { background:rgba(130,50,0,0.10); border-left-color:#662f00; }
 </style>
 {% endblock %}
 
@@ -1195,11 +1206,21 @@ function fallbackCopy(text){
     return '❓';
   }
 
-  /* Render tips list into a container element */
-  function renderTips(containerEl, tips){
+  /* Render tips list into a container element.
+     compatible: true  → green ok class (HLS, works in RetroIPTVGuide)
+                 false → amber warn class (MPEG-TS, RTMP, DASH — needs proxy)
+                 null/undefined → default neutral accent class */
+  function renderTips(containerEl, tips, compatible){
     if(tips && tips.length){
+      var cls = compatible === true  ? 'sd-tip-ok'
+              : compatible === false ? 'sd-tip-warn'
+              : 'sd-tip';
+      /* For incompatible streams swap the bulb emoji for a warning sign */
+      var icon = compatible === false ? '&#x26A0;&#xFE0F;'  /* ⚠️ warning */
+               : compatible === true  ? '&#x2705;'          /* ✅ check mark */
+               : '&#x1F4A1;';                               /* 💡 lightbulb */
       containerEl.innerHTML = tips.map(function(t){
-        return '<div class="sd-tip">&#x1F4A1; '+esc(t)+'</div>';
+        return '<div class="'+cls+'">'+icon+' '+esc(t)+'</div>';
       }).join('');
     } else {
       containerEl.innerHTML = '';
@@ -1298,7 +1319,7 @@ function fallbackCopy(text){
       document.getElementById('streamDesc').textContent = d.description || '';
 
       /* Tips */
-      renderTips(document.getElementById('streamTips'), d.tips);
+      renderTips(document.getElementById('streamTips'), d.tips, d.compatible);
 
       /* Channel dropdown (M3U channel list only) */
       populateChannelDropdown(d.channels || [], d.channel_count || 0);
@@ -1450,7 +1471,7 @@ function fallbackCopy(text){
       cb.textContent = confLabel(d.confidence);
 
       document.getElementById('chanDesc').textContent = d.description || '';
-      renderTips(document.getElementById('chanTips'), d.tips);
+      renderTips(document.getElementById('chanTips'), d.tips, d.compatible);
 
       chanRes.style.display = 'block';
     })

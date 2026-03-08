@@ -3166,3 +3166,153 @@ class TestTunerSourcesEndpoint:
         assert "btnDetectTuner" in html
         assert "streamSourceTunerRow" in html
         assert "streamSourceUrlRow" in html
+
+
+# ===========================================================================
+# Tests: compatible field and tip color scheme
+# ===========================================================================
+
+class TestStreamDetectCompatibleField:
+    """Verify the 'compatible' field is set correctly for each stream type
+    so the UI can render incompatibility tips in amber rather than green."""
+
+    def test_hls_direct_is_compatible(self):
+        """HLS Direct → compatible = True."""
+        from utils.stream_detect import detect_stream_type
+        result = detect_stream_type("rtmp://fake")  # won't be HLS
+        # Use _classify directly for HLS Direct
+        from utils.stream_detect import _classify
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
+        signals = []
+        st, conf, desc, tips = _classify(
+            "http://example.com/master.m3u8",
+            "application/vnd.apple.mpegurl", body, signals
+        )
+        assert st == "HLS Direct"
+        # Verify via detect_stream_type result dict that compatible is set
+        from unittest.mock import patch, MagicMock
+        import utils.stream_detect as sd
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/vnd.apple.mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/master.m3u8")
+        assert r["stream_type"] == "HLS Direct"
+        assert r["compatible"] is True
+
+    def test_hls_segmenter_is_compatible(self):
+        """HLS Segmenter → compatible = True."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/vnd.apple.mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/live.m3u8")
+        assert r["stream_type"] == "HLS Segmenter"
+        assert r["compatible"] is True
+
+    def test_mpeg_ts_is_not_compatible(self):
+        """MPEG-TS → compatible = False (cannot play in HLS.js)."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        raw = bytearray(188 * 6)
+        for i in range(6):
+            raw[i * 188] = 0x47
+        body = bytes(raw)
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "video/mp2t",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/stream")
+        assert "mpeg-ts" in r["stream_type"].lower()
+        assert r["compatible"] is False
+
+    def test_rtmp_is_not_compatible(self):
+        """RTMP → compatible = False (not supported by HLS.js)."""
+        from utils.stream_detect import detect_stream_type
+        r = detect_stream_type("rtmp://example.com/live/stream")
+        assert r["stream_type"] == "RTMP"
+        assert r["compatible"] is False
+
+    def test_dash_is_not_compatible(self):
+        """DASH → compatible = False."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        body = b'<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011"></MPD>'
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/dash+xml",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/manifest.mpd")
+        assert r["stream_type"] == "DASH"
+        assert r["compatible"] is False
+
+    def test_m3u_channel_list_compatible_is_none(self):
+        """M3U Channel List → compatible = None (neutral, it's a list not a stream)."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        body = (
+            b'#EXTM3U\n'
+            b'#EXTINF:-1 tvg-id="ch1" group-title="News",Channel 1\n'
+            b'http://example.com/ch1.m3u8\n'
+        )
+        fake_fetch = {
+            "ok": True, "status_code": 200,
+            "content_type": "application/x-mpegurl",
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/channels.m3u")
+        assert r["stream_type"] == "M3U Channel List"
+        assert r["compatible"] is None
+
+    def test_compatible_field_present_in_result_keys(self):
+        """The 'compatible' key is always present in the result dict."""
+        from utils.stream_detect import detect_stream_type
+        r = detect_stream_type("")
+        assert "compatible" in r
+
+    def test_rtmp_endpoint_returns_compatible_false(self, client, isolated_db):
+        """Stream-detect endpoint includes compatible=false for RTMP."""
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "rtmp://example.com/live/stream"},
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["compatible"] is False
+
+    def test_tip_css_classes_in_template(self, client, isolated_db):
+        """The template contains the CSS classes for warn and ok tips."""
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "sd-tip-warn" in html
+        assert "sd-tip-ok" in html
