@@ -70,6 +70,49 @@ _COMPATIBLE_TYPES: Dict[str, bool] = {
     "RTMP":  False,
 }
 
+# URL ?mode= parameter overrides -------------------------------------------------
+# Some IPTV servers (e.g. ErsatzTV) expose an explicit delivery-mode selector via
+# a URL query parameter.  When a *recognised* mode is present we trust it as
+# authoritative and bypass body-content classification, because the mode name
+# directly identifies what the server is delivering:
+#
+#   ?mode=segmenter  – server re-encodes + segments → HLS media playlist (works)
+#   ?mode=hls-direct – server passes raw source HLS through → does NOT play in
+#                      RetroIPTVGuide (spins without playing)
+#
+# Unrecognised mode values (e.g. ?mode=custom) fall back to body classification
+# and are shown as an informational signal only.
+_MODE_TYPE_MAP: Dict[str, str] = {
+    "segmenter":  "HLS Segmenter",
+    "hls-direct": "HLS Direct",
+}
+
+_MODE_DESCRIPTIONS: Dict[str, str] = {
+    "segmenter": (
+        "HLS Segmenter delivery mode confirmed via ?mode=segmenter URL parameter.  "
+        "The server re-encodes and segments the live stream into short .ts chunks.  "
+        "This is the recommended delivery mode for RetroIPTVGuide."
+    ),
+    "hls-direct": (
+        "HLS Direct delivery mode confirmed via ?mode=hls-direct URL parameter.  "
+        "The server passes the source HLS stream through without re-encoding.  "
+        "This delivery mode does not play reliably in RetroIPTVGuide — "
+        "the video player will spin without ever starting."
+    ),
+}
+
+_MODE_TIPS: Dict[str, List[str]] = {
+    "segmenter": [
+        "This stream type is compatible with RetroIPTVGuide.",
+        "The ?mode=segmenter parameter tells the server to re-transcode and segment the stream.",
+    ],
+    "hls-direct": [
+        "RetroIPTVGuide will spin without playing this stream — "
+        "switch to ?mode=segmenter if your server supports it.",
+        "HLS Direct (raw passthrough) streams are not compatible with RetroIPTVGuide's HLS.js player.",
+    ],
+}
+
 def detect_stream_type(url: str) -> Dict[str, Any]:
     """Probe *url* and return a stream-type detection result.
 
@@ -199,25 +242,40 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     url_lower = url.lower().split("?")[0]  # path without query string
     signals: List[str] = []
 
-    # ── URL query-string signals ───────────────────────────────────────────
-    # The query string may carry server-side mode hints (e.g. ?mode=hls-direct).
-    # These are NOT stream format indicators — the body content determines the
-    # actual stream type — but they are useful context shown to the user.
+    # ── URL query-string mode detection ───────────────────────────────────
+    # Some IPTV servers advertise their delivery mode via ?mode= in the URL.
+    # When a recognised mode value is present (see _MODE_TYPE_MAP), we treat it
+    # as authoritative and skip body-content classification — the server operator
+    # knows their own delivery mode better than we can infer from ~256 KB of body.
+    # Unrecognised mode values are shown as an informational signal only.
+    _mode_override: Optional[str] = None
     _qs = url.split("?", 1)[1] if "?" in url else ""
     if _qs:
         from urllib.parse import parse_qs
         _qs_params = parse_qs(_qs, keep_blank_values=True)
         _mode = (_qs_params.get("mode") or _qs_params.get("MODE") or [""])[0].lower()
-        if _mode:
+        if _mode in _MODE_TYPE_MAP:
+            _mode_override = _mode
             signals.append(
-                f"URL query parameter mode={_mode!r} detected — this is a "
-                "server-side delivery mode hint, not a stream format indicator.  "
-                "The stream format is determined from the response body above."
+                f"URL query parameter mode={_mode!r} recognised — "
+                f"classifying as '{_MODE_TYPE_MAP[_mode]}' "
+                "(mode parameter takes precedence over body-content detection)."
+            )
+        elif _mode:
+            signals.append(
+                f"URL query parameter mode={_mode!r} detected — unrecognised mode; "
+                "stream format determined from response body."
             )
 
-    stream_type, confidence, description, tips = _classify(
-        url_lower, ct, raw, signals
-    )
+    if _mode_override:
+        stream_type  = _MODE_TYPE_MAP[_mode_override]
+        confidence   = "high"
+        description  = _MODE_DESCRIPTIONS[_mode_override]
+        tips         = list(_MODE_TIPS[_mode_override])
+    else:
+        stream_type, confidence, description, tips = _classify(
+            url_lower, ct, raw, signals
+        )
 
     result["stream_type"] = stream_type
     result["confidence"] = confidence

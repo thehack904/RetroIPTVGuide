@@ -3320,9 +3320,9 @@ class TestStreamDetectCompatibleField:
 # ===========================================================================
 
 class TestStreamDetectQueryStringSignals:
-    """Verify that URL query parameters (e.g. ?mode=hls-direct) are surfaced
-    as detection signals so users understand the server-side hint vs. the
-    actual stream format detected from the response body."""
+    """Verify that URL query parameters (e.g. ?mode=hls-direct) are used as
+    authoritative overrides when the mode is recognised, and as informational
+    signals when unrecognised."""
 
     def _make_fake_fetch(self, body, ct="application/vnd.apple.mpegurl"):
         return {
@@ -3332,39 +3332,62 @@ class TestStreamDetectQueryStringSignals:
             "error": None, "raw_bytes": body,
         }
 
-    def test_mode_hls_direct_query_param_adds_signal(self):
-        """?mode=hls-direct in the URL produces a signal about the server mode."""
+    def test_mode_hls_direct_overrides_to_hls_direct(self):
+        """?mode=hls-direct overrides classification to 'HLS Direct' (incompatible)."""
         import utils.stream_detect as sd
         from unittest.mock import patch
-        # Body is an HLS Segmenter media playlist (the common real-world case for
-        # servers that use ?mode=hls-direct to mean 'direct passthrough HLS')
+        # Body would normally classify as HLS Segmenter (media playlist), but
+        # ?mode=hls-direct is authoritative — the server says it's direct passthrough.
         body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
         fake_fetch = self._make_fake_fetch(body)
         with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
              patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
              patch.object(sd, "_check_ssrf_risk", return_value=None):
             r = sd.detect_stream_type("http://iptv.lan:8409/iptv/channel/1.m3u8?mode=hls-direct")
-        # Content-based classification should win over URL param
-        assert r["stream_type"] == "HLS Segmenter"
-        # Signal about the URL query param must appear
-        signal_text = " ".join(r["signals"]).lower()
-        assert "mode=" in signal_text or "hls-direct" in signal_text, (
-            "Expected a signal about the mode=hls-direct URL parameter"
+        # mode= override takes priority over body content
+        assert r["stream_type"] == "HLS Direct", (
+            f"Expected 'HLS Direct' from mode=hls-direct override, got {r['stream_type']!r}"
         )
+        assert r["compatible"] is False
+        # Signal must mention the mode override
+        signal_text = " ".join(r["signals"]).lower()
+        assert "hls-direct" in signal_text, "Expected a signal mentioning mode=hls-direct"
 
-    def test_mode_query_param_does_not_override_body_classification(self):
-        """Classification is always based on body content, not URL query params."""
+    def test_mode_segmenter_overrides_to_hls_segmenter(self):
+        """?mode=segmenter overrides classification to 'HLS Segmenter' (compatible)."""
         import utils.stream_detect as sd
         from unittest.mock import patch
-        # Master playlist body → HLS Direct, regardless of what query param says
+        # ErsatzTV ?mode=segmenter returns a master playlist body (which body
+        # detection would classify as HLS Direct), but the mode is authoritative.
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://iptv.lan/low.m3u8\n"
         fake_fetch = self._make_fake_fetch(body)
         with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
              patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
              patch.object(sd, "_check_ssrf_risk", return_value=None):
-            r = sd.detect_stream_type("http://iptv.lan:8409/channel/1.m3u8?mode=hls-segmenter")
-        # Body says master playlist → HLS Direct
+            r = sd.detect_stream_type("http://iptv.lan:8409/iptv/channel/2.7.m3u8?mode=segmenter")
+        assert r["stream_type"] == "HLS Segmenter", (
+            f"Expected 'HLS Segmenter' from mode=segmenter override, got {r['stream_type']!r}"
+        )
+        assert r["compatible"] is True
+        signal_text = " ".join(r["signals"]).lower()
+        assert "segmenter" in signal_text, "Expected a signal mentioning mode=segmenter"
+
+    def test_unrecognised_mode_falls_back_to_body_classification(self):
+        """An unrecognised mode value does not override body-content classification."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        # Body is a master playlist → HLS Direct (body-based); mode=custom is unrecognised
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://iptv.lan/low.m3u8\n"
+        fake_fetch = self._make_fake_fetch(body)
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://iptv.lan:8409/channel/1.m3u8?mode=custom")
+        # Unrecognised mode → body wins
         assert r["stream_type"] == "HLS Direct"
+        # Signal should note it's unrecognised
+        signal_text = " ".join(r["signals"]).lower()
+        assert "unrecognised" in signal_text or "mode=" in signal_text
 
     def test_url_without_query_string_no_mode_signal(self):
         """URLs without query strings don't produce a mode signal."""
@@ -3380,7 +3403,7 @@ class TestStreamDetectQueryStringSignals:
         assert "mode=" not in signal_text
 
     def test_hls_direct_tips_warn_about_incompatibility(self):
-        """HLS Direct tips must NOT say 'compatible with RetroIPTVGuide'."""
+        """HLS Direct tips (from body classification) must warn about incompatibility."""
         from utils.stream_detect import _classify
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
         signals = []
