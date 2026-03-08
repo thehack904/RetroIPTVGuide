@@ -293,13 +293,19 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     result["signals"] = signals
 
     # Derive compatibility with RetroIPTVGuide (HLS.js-based player).
-    # True  → works out of the box
-    # False → requires proxy / unsupported (shows warning-colour tips in the UI)
-    # None  → unknown / neutral (e.g. channel list, undetermined)
+    # True  → works out of the box (green ✅ tips in the UI)
+    # False → requires proxy / unsupported (orange ⚠️ tips in the UI)
+    # None  → uncertain / cautionary — stream may or may not play (yellow 🟡 tips)
+    # key absent → purely informational — not a playback stream at all (neutral 💡 tips)
     result["compatible"] = _COMPATIBLE_TYPES.get(stream_type, None)
 
     # ── M3U channel list: attach parsed channel data for the dropdown UI ──
     if stream_type == "M3U Channel List":
+        # This is a channel playlist, not a stream.  Tips are purely informational
+        # (e.g. "select a channel from the dropdown"), so remove the 'compatible'
+        # key — its absence tells the UI to render them as neutral 💡 hints, not
+        # as yellow 🟡 caution notices.
+        del result["compatible"]
         try:
             text = raw.decode("utf-8", errors="ignore")
         except (UnicodeDecodeError, LookupError):

@@ -3270,7 +3270,7 @@ class TestStreamDetectCompatibleField:
         assert r["compatible"] is False
 
     def test_m3u_channel_list_compatible_is_none(self):
-        """M3U Channel List → compatible = None (neutral, it's a list not a stream)."""
+        """M3U Channel List → no 'compatible' key (tips are informational, not cautionary)."""
         import utils.stream_detect as sd
         from unittest.mock import patch
         body = (
@@ -3289,10 +3289,20 @@ class TestStreamDetectCompatibleField:
              patch.object(sd, "_check_ssrf_risk", return_value=None):
             r = sd.detect_stream_type("http://example.com/channels.m3u")
         assert r["stream_type"] == "M3U Channel List"
-        assert r["compatible"] is None
+        # 'compatible' is intentionally absent for M3U Channel List — the UI renders
+        # missing-key tips as neutral 💡, not yellow 🟡 caution (the tips are
+        # informational, e.g. "select a channel from the dropdown", not playback warnings).
+        assert "compatible" not in r, (
+            "M3U Channel List must not have a 'compatible' key — its tips are purely "
+            "informational and should render as neutral 💡, not yellow 🟡 caution"
+        )
 
     def test_compatible_field_present_in_result_keys(self):
-        """The 'compatible' key is always present in the result dict."""
+        """The 'compatible' key is present for all stream types except M3U Channel List.
+
+        M3U Channel List intentionally omits 'compatible' so the UI renders its
+        tips as neutral 💡 hints rather than yellow 🟡 caution notices.
+        """
         from utils.stream_detect import detect_stream_type
         r = detect_stream_type("")
         assert "compatible" in r
