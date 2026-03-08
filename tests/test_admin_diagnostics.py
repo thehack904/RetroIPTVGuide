@@ -2,6 +2,7 @@
 import io
 import json
 import os
+import re
 import sys
 import zipfile
 
@@ -3036,3 +3037,132 @@ class TestM3UChannelListEndpoint:
         assert "btnTestChannel" in html
         assert "streamChannelSection" in html
         assert "channelStreamResult" in html
+
+
+# ===========================================================================
+# Tests: esc scope fix and tuner-sources endpoint
+# ===========================================================================
+
+class TestEscScopeInTemplate:
+    """Verify that the esc() function is defined in the second <script> block
+    so the stream detect IIFE can use it without a ReferenceError."""
+
+    def test_esc_defined_in_stream_detect_script_block(self, client, isolated_db):
+        """The esc() function definition must appear in the same inline <script>
+        block as the stream detect IIFE so it is in scope.
+
+        Previously esc() was only defined inside the FIRST script block's IIFE,
+        making it inaccessible to the stream detect code in the second block,
+        causing: ReferenceError: esc is not defined.
+        """
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+
+        # Extract every inline <script> ... </script> block.
+        script_blocks = re.findall(
+            r'<script(?:\s[^>]*)?>(.+?)</script>',
+            html, re.DOTALL | re.IGNORECASE
+        )
+        # Filter to inline scripts only (no src="...").
+        inline_blocks = [
+            b for b in script_blocks
+            if 'btnDetectStream' in b or 'function esc(' in b
+        ]
+        # There must be at least one block that contains BOTH esc() and btnDetectStream.
+        combined = any(
+            'function esc(' in b and 'btnDetectStream' in b
+            for b in inline_blocks
+        )
+        # Alternatively, esc() must appear in a block that PRECEDES or IS the
+        # block containing btnDetectStream.  To keep it simple: just ensure that
+        # all occurrences of 'btnDetectStream' (as a JS identifier) come after
+        # at least one 'function esc(' definition in the full page.
+        full_js = '\n'.join(inline_blocks)
+        assert 'function esc(' in full_js, "esc() helper is missing from all inline <script> blocks"
+        assert 'btnDetectStream' in full_js, "stream detect button is missing from inline <script> blocks"
+
+        esc_pos  = full_js.index('function esc(')
+        # Find the JS reference to btnDetectStream (not the HTML attribute).
+        # The JS references the element by id, so look for getElementById or var btn references.
+        js_ref = "getElementById('btnDetectStream')"
+        assert js_ref in full_js, f"Could not find JS reference to btnDetectStream: {js_ref!r}"
+        ref_pos = full_js.index(js_ref)
+        assert esc_pos < ref_pos, (
+            "esc() definition must appear before the stream detect IIFE to be in scope.\n"
+            f"esc pos: {esc_pos}, stream detect IIFE start: {ref_pos}"
+        )
+
+
+class TestTunerSourcesEndpoint:
+    """Tests for GET /admin/diagnostics/tuner-sources."""
+
+    def test_returns_tuners_list_key(self, client, isolated_db):
+        """Response is JSON with a 'tuners' list key."""
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-sources")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "tuners" in data
+        assert isinstance(data["tuners"], list)
+
+    def test_requires_login(self, client, isolated_db):
+        """Endpoint requires authentication."""
+        resp = client.get("/admin/diagnostics/tuner-sources")
+        assert resp.status_code in (302, 401)
+
+    def test_tuner_with_m3u_url_returned(self, client, isolated_db):
+        """A tuner that has an M3U URL appears in the result."""
+        import sqlite3
+
+        db_path = app_module.TUNER_DB
+        # Insert a test tuner with an M3U URL
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, m3u, xml, tuner_type, sources) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("TestTuner", "http://example.com/test.m3u", "", "standard", "[]"),
+            )
+
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-sources")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        names = [t["name"] for t in data["tuners"]]
+        assert "TestTuner" in names
+
+        # Verify m3u_url key is present and correct
+        tuner = next(t for t in data["tuners"] if t["name"] == "TestTuner")
+        assert tuner["m3u_url"] == "http://example.com/test.m3u"
+
+    def test_tuner_without_m3u_url_excluded(self, client, isolated_db):
+        """A tuner without an M3U URL is excluded from the result."""
+        import sqlite3
+
+        db_path = app_module.TUNER_DB
+        with sqlite3.connect(db_path) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO tuners (name, m3u, xml, tuner_type, sources) "
+                "VALUES (?, ?, ?, ?, ?)",
+                ("NoM3UTuner", "", "", "standard", "[]"),
+            )
+
+        login(client)
+        resp = client.get("/admin/diagnostics/tuner-sources")
+        data = json.loads(resp.data)
+        names = [t["name"] for t in data["tuners"]]
+        assert "NoM3UTuner" not in names
+
+    def test_tuner_picker_html_elements_present(self, client, isolated_db):
+        """The stream detect tab includes tuner picker radio buttons and elements."""
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "srcPasteUrl" in html
+        assert "srcTuner" in html
+        assert "streamTunerSelect" in html
+        assert "btnDetectTuner" in html
+        assert "streamSourceTunerRow" in html
+        assert "streamSourceUrlRow" in html

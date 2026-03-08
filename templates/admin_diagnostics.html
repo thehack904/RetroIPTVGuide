@@ -320,19 +320,42 @@ body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#70
         Probe a stream URL from the <strong>server side</strong> and identify whether it is
         <strong>HLS Direct</strong>, <strong>HLS Segmenter</strong>, <strong>MPEG-TS</strong>,
         DASH, MP4, RTMP, or Unknown.
-        You can also paste a <strong>.m3u channel list URL</strong> — the channels will be
-        parsed and shown in a dropdown so you can test each one individually.
+        You can also probe a <strong>.m3u channel list URL</strong> — the channels will be
+        parsed into a dropdown so you can test each one individually.
       </p>
-      <p style="font-size:0.85rem;color:var(--dc-muted);margin:0 0 0.8rem">
-        Paste any stream or playlist URL — the server will analyse headers, binary signatures,
-        and playlist tags to determine the type.
-      </p>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.9rem;align-items:center">
+
+      <!-- Source picker -->
+      <div style="margin-bottom:0.7rem;font-size:0.88rem;color:var(--dc-label)">
+        <label style="margin-right:1.2rem;cursor:pointer">
+          <input type="radio" name="streamSource" id="srcPasteUrl" value="url" checked style="margin-right:0.3rem">
+          Paste a URL
+        </label>
+        <label style="cursor:pointer">
+          <input type="radio" name="streamSource" id="srcTuner" value="tuner" style="margin-right:0.3rem">
+          Use a configured tuner
+        </label>
+      </div>
+
+      <!-- Paste URL row (default) -->
+      <div id="streamSourceUrlRow" style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.9rem;align-items:center">
         <input type="text" id="streamUrlInput"
           placeholder="e.g. http://provider.example/playlist.m3u  or  /live/ch1/index.m3u8"
           style="flex:1;min-width:220px;padding:0.4rem 0.6rem;border:1px solid var(--dc-border);border-radius:3px;background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.9rem;">
         <button type="button" class="btn-action" id="btnDetectStream">&#x25BA; Detect Stream Type</button>
       </div>
+
+      <!-- Tuner picker row (shown when "Use a configured tuner" is selected) -->
+      <div id="streamSourceTunerRow" style="display:none;margin-bottom:0.9rem">
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <select id="streamTunerSelect"
+            style="flex:1;min-width:180px;padding:0.4rem 0.5rem;border:1px solid var(--dc-border);border-radius:3px;background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.88rem">
+            <option value="">— loading tuners… —</option>
+          </select>
+          <button type="button" class="btn-action" id="btnDetectTuner">&#x25BA; Detect Stream Type</button>
+        </div>
+        <p id="streamTunerNote" style="font-size:0.8rem;color:var(--dc-muted);margin:0.3rem 0 0"></p>
+      </div>
+
       <div id="streamResult" style="display:none">
         <!-- Type badge row -->
         <div id="streamTypeBadge" style="display:flex;align-items:center;gap:0.7rem;margin-bottom:0.8rem;flex-wrap:wrap">
@@ -1039,6 +1062,15 @@ function renderFeedTrace(label, t, kind){
 
 <script>
 /* ── Report Issue Tab ─────────────────────────────────────────────────── */
+
+/* esc() is also defined in the first <script> block (inside an IIFE).
+   Re-declare it here so it is available to every IIFE in this block. */
+function esc(s){
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
 (function(){
 "use strict";
 
@@ -1237,9 +1269,8 @@ function fallbackCopy(text){
     sec.style.display = 'block';
   }
 
-  /* ── Main detect button ── */
-  btn.addEventListener('click', function(){
-    var url = (input.value || '').trim();
+  /* ── Shared detect logic — accepts a URL string ── */
+  function runDetect(url){
     if(!url){ showError('Enter a stream URL first.'); return; }
     errEl.style.display = 'none';
     res.style.display = 'none';
@@ -1304,11 +1335,77 @@ function fallbackCopy(text){
       spin('streamSpinner', false);
       showError('Request failed: ' + String(e));
     });
+  }
+
+  /* ── "Paste URL" detect button ── */
+  btn.addEventListener('click', function(){
+    runDetect((input.value || '').trim());
   });
 
-  /* Allow Enter key in the input box */
+  /* Allow Enter key in the URL input box */
   input.addEventListener('keydown', function(e){
     if(e.key === 'Enter') btn.click();
+  });
+
+  /* ── Source picker: toggle between paste-URL and tuner rows ── */
+  var _tunersLoaded = false;
+
+  function loadTuners(){
+    if(_tunersLoaded) return;
+    _tunersLoaded = true;
+    var sel  = document.getElementById('streamTunerSelect');
+    var note = document.getElementById('streamTunerNote');
+    fetch('/admin/diagnostics/tuner-sources', {credentials:'same-origin'})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(d.error){
+          sel.innerHTML = '<option value="">⚠ Could not load tuners</option>';
+          note.textContent = d.error;
+          return;
+        }
+        var tuners = d.tuners || [];
+        if(!tuners.length){
+          sel.innerHTML = '<option value="">— no tuners with an M3U URL configured —</option>';
+          note.textContent = 'Add an M3U URL to a tuner in Settings first.';
+          return;
+        }
+        /* Build options via createElement to avoid innerHTML injection risk */
+        sel.innerHTML = '';
+        tuners.forEach(function(t){
+          var opt = document.createElement('option');
+          opt.value = t.m3u_url;
+          opt.textContent = t.name;
+          sel.appendChild(opt);
+        });
+        note.textContent = 'Selecting a tuner will probe its M3U URL.';
+      })
+      .catch(function(e){
+        sel.innerHTML = '<option value="">⚠ Failed to load tuners</option>';
+        note.textContent = String(e);
+      });
+  }
+
+  document.querySelectorAll('input[name="streamSource"]').forEach(function(radio){
+    radio.addEventListener('change', function(){
+      var urlRow   = document.getElementById('streamSourceUrlRow');
+      var tunerRow = document.getElementById('streamSourceTunerRow');
+      if(this.value === 'tuner'){
+        urlRow.style.display   = 'none';
+        tunerRow.style.display = 'block';
+        loadTuners();
+      } else {
+        urlRow.style.display   = 'flex';
+        tunerRow.style.display = 'none';
+      }
+    });
+  });
+
+  /* ── "Use a configured tuner" detect button ── */
+  document.getElementById('btnDetectTuner').addEventListener('click', function(){
+    var sel = document.getElementById('streamTunerSelect');
+    var url = (sel.value || '').trim();
+    if(!url){ showError('Select a tuner with an M3U URL, or add one in Settings.'); return; }
+    runDetect(url);
   });
 
   /* ── Test Selected Channel button ── */

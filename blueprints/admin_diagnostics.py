@@ -13,6 +13,7 @@ Routes (ALL GET, admin-only, login required):
   GET  /admin/diagnostics/conflicts       – channel conflict detector JSON
   GET  /admin/diagnostics/security        – security configuration checks JSON
   POST /admin/diagnostics/stream-detect   – probe a stream URL and return its type JSON
+  GET  /admin/diagnostics/tuner-sources   – list tuners with M3U URLs for the stream test picker
 
 Security:
   * Admin-only via ``current_user.username == 'admin'`` check.
@@ -396,6 +397,34 @@ def diagnostics_stream_detect():
     from utils.stream_detect import detect_stream_type  # noqa: PLC0415
     result = detect_stream_type(url)
     return jsonify(result)
+
+
+@admin_diagnostics_bp.route("/tuner-sources", methods=["GET"])
+@login_required
+def diagnostics_tuner_sources():
+    """Return a list of configured tuners with their M3U URLs.
+
+    Used by the Stream Type Detector's "Use a configured tuner" source picker.
+
+    Returns JSON: ``[{"name": "...", "m3u_url": "..."}, ...]``
+    Only tuners that have a non-empty M3U URL are included.
+    """
+    _require_admin()
+    import sqlite3 as _sqlite3  # noqa: PLC0415
+
+    _, _, tuner_db_path, _, _ = _get_config()
+    tuners = []
+    try:
+        with _sqlite3.connect(tuner_db_path, timeout=5) as conn:
+            cur = conn.execute("SELECT name, m3u FROM tuners ORDER BY name")
+            for row in cur.fetchall():
+                name, m3u_url = row
+                if m3u_url and m3u_url.strip():
+                    tuners.append({"name": name, "m3u_url": m3u_url.strip()})
+    except Exception as exc:  # noqa: BLE001
+        logger.error("tuner-sources: failed to read tuner DB: %s", exc, exc_info=True)
+        return jsonify({"error": "Could not load tuner list. Please try again.", "tuners": []}), 500
+    return jsonify({"tuners": tuners})
 
 
 @admin_diagnostics_bp.route("/support", methods=["GET", "POST"])
