@@ -2552,3 +2552,232 @@ class TestSecurityDiag:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert "channel_conflicts" in data
+
+
+# ===========================================================================
+# Tests: Stream Type Detector
+# ===========================================================================
+
+class TestStreamDetectUnit:
+    """Unit tests for utils.stream_detect — no live network calls."""
+
+    def test_classify_hls_segmenter_by_content(self):
+        """M3U8 with EXT-X-MEDIA-SEQUENCE → HLS Segmenter."""
+        from utils.stream_detect import _classify
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\n"
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/live.m3u8", "application/vnd.apple.mpegurl", body, signals)
+        assert st == "HLS Segmenter"
+        assert conf == "high"
+        assert "#EXT-X-MEDIA-SEQUENCE" in " ".join(signals)
+
+    def test_classify_hls_direct_master_playlist(self):
+        """M3U8 with EXT-X-STREAM-INF and no media-sequence → HLS Direct."""
+        from utils.stream_detect import _classify
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/master.m3u8", "application/vnd.apple.mpegurl", body, signals)
+        assert st == "HLS Direct"
+        assert conf == "high"
+
+    def test_classify_mpeg_ts_by_sync_bytes(self):
+        """Binary data starting with 0x47 every 188 bytes → MPEG-TS."""
+        from utils.stream_detect import _classify
+        # Construct a minimal fake TS stream: sync byte at 0, 188, 376, 564, 752
+        raw = bytearray(188 * 6)
+        for i in range(6):
+            raw[i * 188] = 0x47
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/stream", "video/mp2t", bytes(raw), signals)
+        assert "MPEG-TS" in st
+        assert conf in ("high", "medium")
+
+    def test_classify_dash_by_content_type(self):
+        """Content-Type application/dash+xml → DASH."""
+        from utils.stream_detect import _classify
+        body = b'<?xml version="1.0"?><MPD xmlns="urn:mpeg:dash:schema:mpd:2011"></MPD>'
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/manifest.mpd", "application/dash+xml", body, signals)
+        assert st == "DASH"
+        assert conf in ("high", "medium")
+
+    def test_classify_mp4_by_ftyp_box(self):
+        """MP4 ftyp box at offset 4 → MP4."""
+        from utils.stream_detect import _classify
+        # ftyp box layout: 4-byte size (0x20=32), 4-byte type ('ftyp'), 4-byte brand, 4-byte version, 16-byte compat brands
+        raw = b'\x00\x00\x00\x20ftypisom' + b'\x00' * 24  # 0x20 = 32 = ftyp box size
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/video.mp4", "video/mp4", raw, signals)
+        assert st == "MP4"
+
+    def test_classify_rtmp_url_scheme(self):
+        """rtmp:// URL → RTMP without HTTP fetch."""
+        from utils.stream_detect import detect_stream_type
+        result = detect_stream_type("rtmp://example.com/live/stream")
+        assert result["stream_type"] == "RTMP"
+        assert result["confidence"] == "high"
+        assert result["fetch"] is None  # no HTTP fetch for RTMP
+
+    def test_classify_unknown_no_signals(self):
+        """Text/HTML response with no stream signals → Unknown."""
+        from utils.stream_detect import _classify
+        body = b"<html><body>Hello world</body></html>"
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/page.html", "text/html", body, signals)
+        assert st == "Unknown"
+        assert conf == "none"
+
+    def test_detect_empty_url_returns_error(self):
+        """Empty URL → error in fetch, no crash."""
+        from utils.stream_detect import detect_stream_type
+        result = detect_stream_type("")
+        assert result["stream_type"] == "Unknown"
+        assert result["fetch"]["error"] == "No URL provided"
+
+    def test_detect_unsupported_scheme(self):
+        """Unsupported scheme (ftp://) → Unknown, no HTTP attempt."""
+        from utils.stream_detect import detect_stream_type
+        result = detect_stream_type("ftp://example.com/file.ts")
+        assert result["stream_type"] == "Unknown"
+
+    def test_count_ts_sync_bytes_valid(self):
+        """_count_ts_sync_bytes correctly counts packets."""
+        from utils.stream_detect import _count_ts_sync_bytes
+        raw = bytearray(188 * 5)
+        for i in range(5):
+            raw[i * 188] = 0x47
+        count = _count_ts_sync_bytes(bytes(raw))
+        assert count == 5
+
+    def test_count_ts_sync_bytes_too_short(self):
+        """Data shorter than one packet → 0."""
+        from utils.stream_detect import _count_ts_sync_bytes
+        assert _count_ts_sync_bytes(b"\x47" * 100) == 0
+
+    def test_is_mp4_ftyp(self):
+        """MP4 ftyp box correctly identified."""
+        from utils.stream_detect import _is_mp4
+        # 0x20 = 32 = the ftyp box size field; bytes 4-7 are the box type
+        raw = b'\x00\x00\x00\x20ftypisom' + b'\x00' * 24
+        assert _is_mp4(raw) is True
+
+    def test_is_mp4_non_mp4(self):
+        """Non-MP4 data not identified as MP4."""
+        from utils.stream_detect import _is_mp4
+        assert _is_mp4(b"#EXTM3U\n#EXT-X-MEDIA") is False
+
+    def test_hls_vod_endlist_tip(self):
+        """HLS Segmenter with EXT-X-ENDLIST mentions VOD in tips."""
+        from utils.stream_detect import _classify
+        body = (
+            b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:0\n#EXT-X-TARGETDURATION:5\n"
+            b"seg0.ts\n#EXT-X-ENDLIST\n"
+        )
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/vod.m3u8", "application/vnd.apple.mpegurl", body, signals)
+        assert st == "HLS Segmenter"
+        tip_text = " ".join(tips).lower()
+        assert "vod" in tip_text or "completed" in tip_text
+
+    def test_ts_segment_url_medium_confidence(self):
+        """URL ending in .ts with no other signals → MPEG-TS segment, medium."""
+        from utils.stream_detect import _classify
+        signals = []
+        st, conf, desc, tips = _classify("http://example.com/segment0001.ts", "application/octet-stream", b"", signals)
+        assert "ts" in st.lower() or "mpeg" in st.lower()
+        assert conf in ("medium", "low")
+
+
+class TestStreamDetectEndpoint:
+    """Integration tests for the /admin/diagnostics/stream-detect endpoint."""
+
+    def test_endpoint_requires_login(self, client, isolated_db):
+        """Unauthenticated request is redirected."""
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/stream.m3u8"},
+        )
+        assert resp.status_code in (302, 401, 403)
+
+    def test_endpoint_requires_admin(self, client, isolated_db):
+        """Regular user gets 403."""
+        client.post("/login", data={"username": "regular", "password": "regpass"}, follow_redirects=True)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/stream.m3u8"},
+        )
+        assert resp.status_code == 403
+
+    def test_endpoint_rejects_invalid_scheme(self, client, isolated_db):
+        """ftp:// URL is rejected with 400."""
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "ftp://example.com/stream.ts"},
+        )
+        assert resp.status_code == 400
+        data = json.loads(resp.data)
+        assert "error" in data
+
+    def test_endpoint_returns_json_for_rtmp(self, client, isolated_db):
+        """RTMP URL is classified without a live HTTP fetch."""
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "rtmp://example.com/live/stream"},
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["stream_type"] == "RTMP"
+        assert data["confidence"] == "high"
+        assert data["fetch"] is None
+
+    def test_endpoint_returns_required_keys(self, client, isolated_db, monkeypatch):
+        """Result always contains the required top-level keys."""
+        # Mock out the actual HTTP call so the test doesn't require network
+        def _mock_detect(url):
+            return {
+                "url": url,
+                "stream_type": "HLS Segmenter",
+                "confidence": "high",
+                "description": "Mock description",
+                "tips": [],
+                "fetch": {"ok": True, "status_code": 200, "content_type": "application/vnd.apple.mpegurl",
+                          "content_length": None, "response_time_ms": 42, "error": None},
+                "dns": {"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None},
+                "signals": ["Mock signal"],
+            }
+
+        import utils.stream_detect as sd_mod
+        monkeypatch.setattr(sd_mod, "detect_stream_type", _mock_detect)
+
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/live.m3u8"},
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        for key in ("stream_type", "confidence", "description", "tips", "fetch", "dns", "signals", "url"):
+            assert key in data, f"Missing key: {key}"
+
+    def test_endpoint_empty_url_returns_result(self, client, isolated_db):
+        """Empty URL returns a safe result (no crash, no 500)."""
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": ""},
+        )
+        # Should return 200 with Unknown type (no network call made)
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["stream_type"] == "Unknown"
+
+    def test_stream_tab_visible_on_diagnostics_page(self, client, isolated_db):
+        """The Stream Detect tab button appears in the diagnostics HTML."""
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "stream" in html.lower()
+        assert "Stream Detect" in html or "stream-detect" in html.lower()

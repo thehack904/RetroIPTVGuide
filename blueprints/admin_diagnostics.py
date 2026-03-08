@@ -12,6 +12,7 @@ Routes (ALL GET, admin-only, login required):
   GET  /admin/diagnostics/dependencies    – external binary + Python package checks JSON
   GET  /admin/diagnostics/conflicts       – channel conflict detector JSON
   GET  /admin/diagnostics/security        – security configuration checks JSON
+  POST /admin/diagnostics/stream-detect   – probe a stream URL and return its type JSON
 
 Security:
   * Admin-only via ``current_user.username == 'admin'`` check.
@@ -369,6 +370,32 @@ def diagnostics_security():
             bind_host=bind_host,
         )
     )
+
+
+@admin_diagnostics_bp.route("/stream-detect", methods=["POST"])
+@login_required
+def diagnostics_stream_detect():
+    """Probe a stream URL and return its detected type as JSON.
+
+    Accepts JSON body: ``{"url": "<stream url>"}``
+
+    Returns the structured result from :func:`utils.stream_detect.detect_stream_type`.
+    """
+    _require_admin()
+
+    data = request.get_json(force=True, silent=True) or {}
+    url = (data.get("url") or "").strip()
+
+    # Basic URL validation — same scheme guard used elsewhere in the app
+    if url:
+        from urllib.parse import urlparse as _up  # noqa: PLC0415
+        _parsed = _up(url)
+        if _parsed.scheme not in ("http", "https", "rtmp", "rtmps", "rtmpe", "rtmpt", "rtmpte"):
+            return jsonify({"error": "Invalid URL scheme — only http/https/rtmp are supported."}), 400
+
+    from utils.stream_detect import detect_stream_type  # noqa: PLC0415
+    result = detect_stream_type(url)
+    return jsonify(result)
 
 
 @admin_diagnostics_bp.route("/support", methods=["GET", "POST"])

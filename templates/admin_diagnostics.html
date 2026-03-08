@@ -177,6 +177,25 @@ body.retro-magazine .diag-container { --dc-accent: #bb0000; }
 .issue-markdown-pre { background: var(--dc-log-bg); color: var(--dc-log-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.76rem; white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow-y: auto; min-height: 120px; margin-bottom: 0.7rem; }
 .issue-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
 .btn-action.copied { background: #1a6a1a; color: #aaffaa; }
+/* Stream detect tab */
+.sd-confidence-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700; letter-spacing:0.04em; }
+.sd-conf-high   { background:rgba(51,255,102,0.18); color:#33ff66; border:1px solid #33ff66; }
+.sd-conf-medium { background:rgba(255,204,0,0.18);  color:#ffcc00; border:1px solid #ffcc00; }
+.sd-conf-low    { background:rgba(255,153,0,0.18);  color:#ff9900; border:1px solid #ff9900; }
+.sd-conf-none   { background:rgba(255,68,68,0.18);  color:#ff4444; border:1px solid #ff4444; }
+body.light .sd-conf-high   { background:rgba(0,150,50,0.12);   color:#006622; border-color:#006622; }
+body.light .sd-conf-medium { background:rgba(160,100,0,0.12);  color:#7a4d00; border-color:#7a4d00; }
+body.light .sd-conf-low    { background:rgba(170,80,0,0.12);   color:#8a4400; border-color:#8a4400; }
+body.light .sd-conf-none   { background:rgba(180,0,0,0.10);    color:#880000; border-color:#880000; }
+body.retroiptv .sd-conf-high   { background:rgba(0,130,80,0.14);  color:#005a33; border-color:#005a33; }
+body.retroiptv .sd-conf-medium { background:rgba(140,90,0,0.14);  color:#6b4500; border-color:#6b4500; }
+body.retroiptv .sd-conf-low    { background:rgba(160,70,0,0.14);  color:#7a3500; border-color:#7a3500; }
+body.retroiptv .sd-conf-none   { background:rgba(160,0,0,0.12);   color:#800000; border-color:#800000; }
+body.retro-magazine .sd-conf-high   { background:rgba(0,100,30,0.12);  color:#005a00; border-color:#005a00; }
+body.retro-magazine .sd-conf-medium { background:rgba(100,60,0,0.12);  color:#5a3000; border-color:#5a3000; }
+body.retro-magazine .sd-conf-low    { background:rgba(130,60,0,0.12);  color:#662f00; border-color:#662f00; }
+body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#700000; border-color:#700000; }
+.sd-tip { background:var(--dc-bg-deep); border-left:3px solid var(--dc-accent); padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
 </style>
 {% endblock %}
 
@@ -190,6 +209,7 @@ body.retro-magazine .diag-container { --dc-accent: #bb0000; }
     <button class="diag-tab-btn{% if active_tab == 'logs' %} active{% endif %}"    data-tab="logs">&#x1F4C4; Logs</button>
     <button class="diag-tab-btn{% if active_tab == 'health' %} active{% endif %}"  data-tab="health">&#x2764;&#xFE0F; Health</button>
     <button class="diag-tab-btn{% if active_tab == 'system' %} active{% endif %}"  data-tab="system">&#x1F5A5; System</button>
+    <button class="diag-tab-btn{% if active_tab == 'stream' %} active{% endif %}"  data-tab="stream">&#x1F4F6; Stream Detect</button>
     <button class="diag-tab-btn{% if active_tab == 'support' %} active{% endif %}" data-tab="support">&#x1F4E6; Support Bundle</button>
     <button class="diag-tab-btn{% if active_tab == 'issue' %} active{% endif %}"   data-tab="issue">&#x1F41B; Report Issue</button>
   </div>
@@ -289,6 +309,56 @@ body.retro-magazine .diag-container { --dc-accent: #bb0000; }
       <h3>System &amp; Runtime Info <span id="sysSpinner" class="spinner" style="display:none"></span></h3>
       <button type="button" class="btn-action" id="btnLoadSystem" style="margin-bottom:0.8rem">&#x25BA; Load Info</button>
       <table class="sysinfo-table"><tbody id="sysTableBody"><tr><td colspan="2" style="color:var(--dc-muted)">Click "Load Info".</td></tr></tbody></table>
+    </div>
+  </div>
+
+  <!-- STREAM DETECT TAB -->
+  <div id="panel-stream" class="diag-panel{% if active_tab == 'stream' %} active{% endif %}">
+    <div class="diag-box">
+      <h3>&#x1F4F6; Stream Type Detector <span id="streamSpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:var(--dc-muted2);font-size:0.9rem;margin:0 0 0.4rem">
+        Probe a stream URL from the <strong>server side</strong> and identify whether it is
+        <strong>HLS Direct</strong>, <strong>HLS Segmenter</strong>, <strong>MPEG-TS</strong>,
+        DASH, MP4, RTMP, or Unknown.
+      </p>
+      <p style="font-size:0.85rem;color:var(--dc-muted);margin:0 0 0.8rem">
+        Paste any channel stream URL — the server will fetch up to 64 KB and analyse headers,
+        binary signatures, and M3U8 tags to determine the type.
+      </p>
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.9rem;align-items:center">
+        <input type="text" id="streamUrlInput"
+          placeholder="e.g. http://provider.example/live/ch1/index.m3u8"
+          style="flex:1;min-width:220px;padding:0.4rem 0.6rem;border:1px solid var(--dc-border);border-radius:3px;background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.9rem;">
+        <button type="button" class="btn-action" id="btnDetectStream">&#x25BA; Detect Stream Type</button>
+      </div>
+      <div id="streamResult" style="display:none">
+        <!-- Type badge row -->
+        <div id="streamTypeBadge" style="display:flex;align-items:center;gap:0.7rem;margin-bottom:0.8rem;flex-wrap:wrap">
+          <span style="font-size:1.5rem;font-weight:900;letter-spacing:0.02em" id="streamTypeLabel"></span>
+          <span class="sd-confidence-badge" id="streamConfBadge"></span>
+        </div>
+        <!-- Description -->
+        <p id="streamDesc" style="font-size:0.92rem;margin:0 0 0.7rem;line-height:1.5"></p>
+        <!-- Tips -->
+        <div id="streamTips" style="margin-bottom:0.8rem"></div>
+        <!-- HTTP / DNS details -->
+        <details id="streamDetails">
+          <summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin-bottom:0.4rem">
+            &#x25BA; HTTP &amp; DNS details
+          </summary>
+          <table class="sysinfo-table" id="streamDetailsTable" style="margin-top:0.4rem">
+            <tbody></tbody>
+          </table>
+        </details>
+        <!-- Detection signals -->
+        <details id="streamSignals" style="margin-top:0.5rem">
+          <summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin-bottom:0.4rem">
+            &#x25BA; Detection signals
+          </summary>
+          <ul id="streamSignalsList" style="font-size:0.8rem;color:var(--dc-muted2);margin:0.3rem 0 0;padding-left:1.2rem;line-height:1.7"></ul>
+        </details>
+      </div>
+      <div id="streamError" style="display:none;color:#ff4444;font-size:0.85rem;margin-top:0.4rem"></div>
     </div>
   </div>
 
@@ -1017,6 +1087,122 @@ function fallbackCopy(text){
   try{ document.execCommand('copy'); } catch(e){}
   document.body.removeChild(ta);
 }
+
+/* ── Stream Type Detector ── */
+(function(){
+  var btn   = document.getElementById('btnDetectStream');
+  var input = document.getElementById('streamUrlInput');
+  var res   = document.getElementById('streamResult');
+  var errEl = document.getElementById('streamError');
+
+  function showError(msg){
+    res.style.display = 'none';
+    errEl.style.display = 'block';
+    errEl.textContent = msg;
+  }
+
+  function confClass(c){
+    var m = {'high':'sd-conf-high','medium':'sd-conf-medium','low':'sd-conf-low','none':'sd-conf-none'};
+    return 'sd-confidence-badge ' + (m[c] || 'sd-conf-none');
+  }
+
+  function confLabel(c){
+    var m = {'high':'HIGH confidence','medium':'MEDIUM confidence','low':'LOW confidence','none':'Unknown'};
+    return m[c] || c;
+  }
+
+  /* Map stream type to an emoji for quick visual recognition */
+  function typeEmoji(t){
+    if(!t) return '❓';
+    var tl = t.toLowerCase();
+    if(tl.indexOf('hls direct') !== -1)      return '📺';
+    if(tl.indexOf('hls segmenter') !== -1)   return '🔗';
+    if(tl.indexOf('hls') !== -1)             return '📺';
+    if(tl.indexOf('mpeg-ts') !== -1)         return '📡';
+    if(tl.indexOf('dash') !== -1)            return '⚡';
+    if(tl.indexOf('mp4') !== -1)             return '🎬';
+    if(tl.indexOf('rtmp') !== -1)            return '🔴';
+    return '❓';
+  }
+
+  btn.addEventListener('click', function(){
+    var url = (input.value || '').trim();
+    if(!url){ showError('Enter a stream URL first.'); return; }
+    errEl.style.display = 'none';
+    res.style.display = 'none';
+    spin('streamSpinner', true);
+
+    fetch('/admin/diagnostics/stream-detect', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url: url})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+      spin('streamSpinner', false);
+      if(d.error){ showError(d.error); return; }
+
+      /* Type + confidence */
+      var typeLabel = document.getElementById('streamTypeLabel');
+      typeLabel.textContent = typeEmoji(d.stream_type) + '\u00a0' + esc(d.stream_type || 'Unknown');
+
+      var confBadge = document.getElementById('streamConfBadge');
+      confBadge.className = confClass(d.confidence);
+      confBadge.textContent = confLabel(d.confidence);
+
+      /* Description */
+      document.getElementById('streamDesc').textContent = d.description || '';
+
+      /* Tips */
+      var tipsEl = document.getElementById('streamTips');
+      var tips = d.tips || [];
+      if(tips.length){
+        tipsEl.innerHTML = tips.map(function(t){
+          return '<div class="sd-tip">&#x1F4A1; '+esc(t)+'</div>';
+        }).join('');
+      } else {
+        tipsEl.innerHTML = '';
+      }
+
+      /* HTTP / DNS details */
+      var tbody = document.querySelector('#streamDetailsTable tbody');
+      var fetch = d.fetch || {};
+      var dns   = d.dns   || {};
+      var rows = [
+        ['URL probed',       esc(d.url || url)],
+        ['HTTP status',      fetch.status_code != null ? esc(String(fetch.status_code)) : '—'],
+        ['Content-Type',     esc(fetch.content_type || '—')],
+        ['Content-Length',   fetch.content_length != null ? esc(String(fetch.content_length)) : '—'],
+        ['Response time',    fetch.response_time_ms != null ? esc(String(fetch.response_time_ms)) + ' ms' : '—'],
+        ['HTTP error',       fetch.error ? '<span class="st-fail">'+esc(fetch.error)+'</span>' : '<span class="st-pass">None</span>'],
+        ['DNS hostname',     esc(dns.hostname || '—')],
+        ['DNS resolved IP',  esc(dns.resolved_ip || '—')],
+        ['DNS error',        dns.error ? '<span class="st-fail">'+esc(dns.error)+'</span>' : '<span class="st-pass">None</span>'],
+      ];
+      tbody.innerHTML = rows.map(function(r){
+        return '<tr><th>'+r[0]+'</th><td>'+r[1]+'</td></tr>';
+      }).join('');
+
+      /* Signals */
+      var sigList = document.getElementById('streamSignalsList');
+      var sigs = d.signals || [];
+      sigList.innerHTML = sigs.length
+        ? sigs.map(function(s){ return '<li>'+esc(s)+'</li>'; }).join('')
+        : '<li style="color:var(--dc-muted)">No detection signals recorded.</li>';
+
+      res.style.display = 'block';
+    })
+    .catch(function(e){
+      spin('streamSpinner', false);
+      showError('Request failed: ' + String(e));
+    });
+  });
+
+  /* Allow Enter key in the input box */
+  input.addEventListener('keydown', function(e){
+    if(e.key === 'Enter') btn.click();
+  });
+})();
 
 })();
 </script>
