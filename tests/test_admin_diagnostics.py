@@ -2781,3 +2781,258 @@ class TestStreamDetectEndpoint:
         html = resp.data.decode()
         assert "stream" in html.lower()
         assert "Stream Detect" in html or "stream-detect" in html.lower()
+
+
+# ===========================================================================
+# Tests: M3U Channel List detection and channel dropdown data
+# ===========================================================================
+
+class TestM3UChannelListDetection:
+    """Unit tests for M3U channel list detection in utils.stream_detect."""
+
+    def _m3u_body(self, channels):
+        """Build a minimal IPTV M3U playlist text from a list of (name, url, group) tuples."""
+        lines = ["#EXTM3U"]
+        for name, url, group in channels:
+            lines.append(f'#EXTINF:-1 tvg-id="{name.lower()}" group-title="{group}",{name}')
+            lines.append(url)
+        return "\n".join(lines).encode("utf-8")
+
+    def test_classify_m3u_channel_list_tvg_id(self):
+        """M3U with tvg-id attributes and no HLS tags → M3U Channel List."""
+        from utils.stream_detect import _classify
+        body = self._m3u_body([
+            ("CNN", "http://example.com/cnn/stream", "News"),
+            ("BBC", "http://example.com/bbc/stream", "News"),
+        ])
+        signals = []
+        st, conf, desc, tips = _classify(
+            "http://example.com/playlist.m3u",
+            "application/vnd.apple.mpegurl",
+            body, signals
+        )
+        assert st == "M3U Channel List"
+        assert conf == "high"
+
+    def test_classify_m3u_channel_list_group_title(self):
+        """group-title attribute alone (no tvg-id) still triggers channel list."""
+        from utils.stream_detect import _classify
+        body = b'#EXTM3U\n#EXTINF:-1 group-title="Sports",ESPN\nhttp://example.com/espn\n'
+        signals = []
+        st, conf, _, _ = _classify("http://example.com/list.m3u", "audio/x-mpegurl", body, signals)
+        assert st == "M3U Channel List"
+
+    def test_classify_m3u_extinf_minus1_duration(self):
+        """#EXTINF:-1 (no other attrs) is the IPTV live-stream convention → channel list."""
+        from utils.stream_detect import _classify
+        body = b'#EXTM3U\n#EXTINF:-1,Channel One\nhttp://example.com/ch1\n'
+        signals = []
+        st, conf, _, _ = _classify("http://example.com/ch.m3u", "audio/x-mpegurl", body, signals)
+        assert st == "M3U Channel List"
+
+    def test_hls_segmenter_not_confused_with_channel_list(self):
+        """HLS Segmenter with #EXT-X-MEDIA-SEQUENCE is NOT classified as channel list."""
+        from utils.stream_detect import _classify
+        body = (
+            b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\n"
+            b"seg001.ts\nseg002.ts\n"
+        )
+        signals = []
+        st, conf, _, _ = _classify("http://example.com/live.m3u8", "application/vnd.apple.mpegurl", body, signals)
+        assert st == "HLS Segmenter"
+
+    def test_hls_direct_not_confused_with_channel_list(self):
+        """HLS master playlist with #EXT-X-STREAM-INF is NOT classified as channel list."""
+        from utils.stream_detect import _classify
+        body = (
+            b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\n"
+            b"http://example.com/low.m3u8\n"
+        )
+        signals = []
+        st, _, _, _ = _classify("http://example.com/master.m3u8", "application/vnd.apple.mpegurl", body, signals)
+        assert st == "HLS Direct"
+
+
+class TestParseM3UChannels:
+    """Unit tests for the _parse_m3u_channels helper."""
+
+    def test_basic_channel_parse(self):
+        """Parses name, url, group, tvg_id correctly."""
+        from utils.stream_detect import _parse_m3u_channels
+        text = (
+            "#EXTM3U\n"
+            '#EXTINF:-1 tvg-id="cnn" tvg-name="CNN" group-title="News",CNN International\n'
+            "http://example.com/cnn\n"
+            '#EXTINF:-1 tvg-id="bbc" group-title="News",BBC One\n'
+            "http://example.com/bbc\n"
+        )
+        channels = _parse_m3u_channels(text)
+        assert len(channels) == 2
+        assert channels[0]["name"] == "CNN International"
+        assert channels[0]["url"] == "http://example.com/cnn"
+        assert channels[0]["group"] == "News"
+        assert channels[0]["tvg_id"] == "cnn"
+        assert channels[1]["name"] == "BBC One"
+        assert channels[1]["tvg_id"] == "bbc"
+
+    def test_empty_text_returns_empty_list(self):
+        from utils.stream_detect import _parse_m3u_channels
+        assert _parse_m3u_channels("") == []
+
+    def test_no_extinf_returns_empty_list(self):
+        from utils.stream_detect import _parse_m3u_channels
+        text = "#EXTM3U\nhttp://example.com/stream\n"
+        assert _parse_m3u_channels(text) == []
+
+    def test_channel_without_group_has_empty_group(self):
+        from utils.stream_detect import _parse_m3u_channels
+        text = "#EXTM3U\n#EXTINF:-1 tvg-id=\"ch1\",My Channel\nhttp://example.com/ch1\n"
+        channels = _parse_m3u_channels(text)
+        assert channels[0]["group"] == ""
+
+    def test_channel_without_tvg_id_has_empty_tvg_id(self):
+        from utils.stream_detect import _parse_m3u_channels
+        text = "#EXTM3U\n#EXTINF:-1 group-title=\"Movies\",Action Film\nhttp://example.com/film\n"
+        channels = _parse_m3u_channels(text)
+        assert channels[0]["tvg_id"] == ""
+
+    def test_cap_at_max_channels(self):
+        """Parser caps output at _MAX_CHANNELS entries."""
+        from utils.stream_detect import _parse_m3u_channels, _MAX_CHANNELS
+        lines = ["#EXTM3U"]
+        for i in range(_MAX_CHANNELS + 50):
+            lines.append(f'#EXTINF:-1 tvg-id="ch{i}",Channel {i}')
+            lines.append(f"http://example.com/ch{i}")
+        channels = _parse_m3u_channels("\n".join(lines))
+        assert len(channels) == _MAX_CHANNELS
+
+    def test_url_on_next_line(self):
+        """Stream URL is correctly picked from the line following #EXTINF."""
+        from utils.stream_detect import _parse_m3u_channels
+        text = "#EXTM3U\n#EXTINF:-1 tvg-id=\"x\",X\nhttp://example.com/x\n"
+        channels = _parse_m3u_channels(text)
+        assert channels[0]["url"] == "http://example.com/x"
+
+    def test_skips_comment_lines_between_extinf_and_url(self):
+        """A comment line between #EXTINF and the URL should be skipped."""
+        from utils.stream_detect import _parse_m3u_channels
+        text = "#EXTM3U\n#EXTINF:-1 tvg-id=\"y\",Y\n#EXTVLCOPT:network-caching=1000\nhttp://example.com/y\n"
+        channels = _parse_m3u_channels(text)
+        assert channels[0]["url"] == "http://example.com/y"
+
+
+class TestM3UChannelListEndpoint:
+    """Integration tests for the stream-detect endpoint with M3U channel lists."""
+
+    def _make_m3u_body(self):
+        return (
+            b"#EXTM3U\n"
+            b'#EXTINF:-1 tvg-id="cnn" group-title="News",CNN\n'
+            b"http://example.com/cnn\n"
+            b'#EXTINF:-1 tvg-id="bbc" group-title="News",BBC\n'
+            b"http://example.com/bbc\n"
+            b'#EXTINF:-1 tvg-id="espn" group-title="Sports",ESPN\n'
+            b"http://example.com/espn\n"
+        )
+
+    def test_m3u_result_has_channels_key(self, client, isolated_db, monkeypatch):
+        """When an M3U channel list is detected, result includes 'channels'."""
+        from utils import stream_detect as sd_mod
+
+        def _mock_detect(url):
+            from utils.stream_detect import _parse_m3u_channels
+            text = self._make_m3u_body().decode("utf-8")
+            channels = _parse_m3u_channels(text)
+            return {
+                "url": url,
+                "stream_type": "M3U Channel List",
+                "confidence": "high",
+                "description": "Mock M3U channel list",
+                "tips": [],
+                "channels": channels,
+                "channel_count": len(channels),
+                "fetch": {"ok": True, "status_code": 200, "content_type": "audio/x-mpegurl",
+                          "content_length": None, "response_time_ms": 10, "error": None},
+                "dns": {"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None},
+                "signals": [],
+            }
+
+        monkeypatch.setattr(sd_mod, "detect_stream_type", _mock_detect)
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/playlist.m3u"},
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["stream_type"] == "M3U Channel List"
+        assert "channels" in data
+        assert isinstance(data["channels"], list)
+        assert len(data["channels"]) == 3
+        assert "channel_count" in data
+        assert data["channel_count"] == 3
+
+    def test_m3u_channels_have_required_keys(self, client, isolated_db, monkeypatch):
+        """Each channel dict has name, url, group, tvg_id keys."""
+        from utils import stream_detect as sd_mod
+        from utils.stream_detect import _parse_m3u_channels
+
+        text = self._make_m3u_body().decode("utf-8")
+
+        def _mock_detect(url):
+            channels = _parse_m3u_channels(text)
+            return {
+                "url": url, "stream_type": "M3U Channel List", "confidence": "high",
+                "description": "", "tips": [],
+                "channels": channels, "channel_count": len(channels),
+                "fetch": {"ok": True, "status_code": 200, "content_type": "audio/x-mpegurl",
+                          "content_length": None, "response_time_ms": 5, "error": None},
+                "dns": {"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None},
+                "signals": [],
+            }
+
+        monkeypatch.setattr(sd_mod, "detect_stream_type", _mock_detect)
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/playlist.m3u"},
+        )
+        data = json.loads(resp.data)
+        for ch in data["channels"]:
+            for k in ("name", "url", "group", "tvg_id"):
+                assert k in ch, f"Channel missing key: {k}"
+
+    def test_non_m3u_result_has_no_channels_key(self, client, isolated_db, monkeypatch):
+        """Non-M3U results do NOT include a 'channels' key."""
+        from utils import stream_detect as sd_mod
+
+        def _mock_detect(url):
+            return {
+                "url": url, "stream_type": "HLS Segmenter", "confidence": "high",
+                "description": "", "tips": [],
+                "fetch": {"ok": True, "status_code": 200, "content_type": "application/vnd.apple.mpegurl",
+                          "content_length": None, "response_time_ms": 5, "error": None},
+                "dns": {"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None},
+                "signals": [],
+            }
+
+        monkeypatch.setattr(sd_mod, "detect_stream_type", _mock_detect)
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/live.m3u8"},
+        )
+        data = json.loads(resp.data)
+        assert data["stream_type"] == "HLS Segmenter"
+        assert "channels" not in data
+
+    def test_channel_dropdown_elements_in_html(self, client, isolated_db):
+        """The diagnostics page HTML includes the channel dropdown elements."""
+        login(client)
+        resp = client.get("/admin/diagnostics")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "streamChannelSelect" in html
+        assert "btnTestChannel" in html
+        assert "streamChannelSection" in html
+        assert "channelStreamResult" in html

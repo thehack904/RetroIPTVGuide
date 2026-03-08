@@ -320,14 +320,16 @@ body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#70
         Probe a stream URL from the <strong>server side</strong> and identify whether it is
         <strong>HLS Direct</strong>, <strong>HLS Segmenter</strong>, <strong>MPEG-TS</strong>,
         DASH, MP4, RTMP, or Unknown.
+        You can also paste a <strong>.m3u channel list URL</strong> — the channels will be
+        parsed and shown in a dropdown so you can test each one individually.
       </p>
       <p style="font-size:0.85rem;color:var(--dc-muted);margin:0 0 0.8rem">
-        Paste any channel stream URL — the server will fetch up to 64 KB and analyse headers,
-        binary signatures, and M3U8 tags to determine the type.
+        Paste any stream or playlist URL — the server will analyse headers, binary signatures,
+        and playlist tags to determine the type.
       </p>
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.9rem;align-items:center">
         <input type="text" id="streamUrlInput"
-          placeholder="e.g. http://provider.example/live/ch1/index.m3u8"
+          placeholder="e.g. http://provider.example/playlist.m3u  or  /live/ch1/index.m3u8"
           style="flex:1;min-width:220px;padding:0.4rem 0.6rem;border:1px solid var(--dc-border);border-radius:3px;background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.9rem;">
         <button type="button" class="btn-action" id="btnDetectStream">&#x25BA; Detect Stream Type</button>
       </div>
@@ -341,6 +343,41 @@ body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#70
         <p id="streamDesc" style="font-size:0.92rem;margin:0 0 0.7rem;line-height:1.5"></p>
         <!-- Tips -->
         <div id="streamTips" style="margin-bottom:0.8rem"></div>
+
+        <!-- M3U Channel List dropdown (shown only for M3U Channel List type) -->
+        <div id="streamChannelSection" style="display:none;margin-bottom:1rem">
+          <div style="background:var(--dc-bg-deep);border:1px solid var(--dc-border);border-radius:4px;padding:0.7rem 0.9rem">
+            <p id="streamChannelCount" style="font-size:0.88rem;font-weight:600;color:var(--dc-label);margin:0 0 0.5rem">
+              Found <span id="streamChannelCountNum">0</span> channels
+            </p>
+            <label for="streamChannelSelect" style="display:block;font-size:0.83rem;color:var(--dc-muted);margin-bottom:0.3rem">
+              Select a channel to test its stream type:
+            </label>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+              <select id="streamChannelSelect"
+                style="flex:1;min-width:180px;padding:0.4rem 0.5rem;border:1px solid var(--dc-border);border-radius:3px;background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.85rem;max-width:100%">
+              </select>
+              <button type="button" class="btn-action" id="btnTestChannel">
+                &#x1F50E; Test Selected Channel <span id="channelSpinner" class="spinner" style="display:none"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Channel stream sub-result -->
+          <div id="channelStreamResult" style="display:none;margin-top:0.7rem;background:var(--dc-bg-deep);border:1px solid var(--dc-border);border-radius:4px;padding:0.7rem 0.9rem">
+            <p style="font-size:0.8rem;color:var(--dc-muted);margin:0 0 0.5rem">
+              Stream test result for: <code id="channelTestedUrl" style="word-break:break-all"></code>
+            </p>
+            <div id="chanTypeBadge" style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;flex-wrap:wrap">
+              <span style="font-size:1.1rem;font-weight:800" id="chanTypeLabel"></span>
+              <span class="sd-confidence-badge" id="chanConfBadge"></span>
+            </div>
+            <p id="chanDesc" style="font-size:0.86rem;margin:0 0 0.5rem;line-height:1.4;color:var(--dc-text)"></p>
+            <div id="chanTips"></div>
+          </div>
+          <div id="channelError" style="display:none;color:#ff4444;font-size:0.82rem;margin-top:0.4rem"></div>
+        </div>
+
         <!-- HTTP / DNS details -->
         <details id="streamDetails">
           <summary style="cursor:pointer;font-size:0.82rem;color:var(--dc-muted);margin-bottom:0.4rem">
@@ -1115,16 +1152,92 @@ function fallbackCopy(text){
   function typeEmoji(t){
     if(!t) return '❓';
     var tl = t.toLowerCase();
-    if(tl.indexOf('hls direct') !== -1)      return '📺';
-    if(tl.indexOf('hls segmenter') !== -1)   return '🔗';
-    if(tl.indexOf('hls') !== -1)             return '📺';
-    if(tl.indexOf('mpeg-ts') !== -1)         return '📡';
-    if(tl.indexOf('dash') !== -1)            return '⚡';
-    if(tl.indexOf('mp4') !== -1)             return '🎬';
-    if(tl.indexOf('rtmp') !== -1)            return '🔴';
+    if(tl.indexOf('hls direct') !== -1)        return '📺';
+    if(tl.indexOf('hls segmenter') !== -1)     return '🔗';
+    if(tl.indexOf('hls') !== -1)               return '📺';
+    if(tl.indexOf('m3u channel list') !== -1)  return '📋';
+    if(tl.indexOf('mpeg-ts') !== -1)           return '📡';
+    if(tl.indexOf('dash') !== -1)              return '⚡';
+    if(tl.indexOf('mp4') !== -1)               return '🎬';
+    if(tl.indexOf('rtmp') !== -1)              return '🔴';
     return '❓';
   }
 
+  /* Render tips list into a container element */
+  function renderTips(containerEl, tips){
+    if(tips && tips.length){
+      containerEl.innerHTML = tips.map(function(t){
+        return '<div class="sd-tip">&#x1F4A1; '+esc(t)+'</div>';
+      }).join('');
+    } else {
+      containerEl.innerHTML = '';
+    }
+  }
+
+  /* ── Populate the channel dropdown from the channels array ── */
+  function populateChannelDropdown(channels, channelCount){
+    var sec    = document.getElementById('streamChannelSection');
+    var select = document.getElementById('streamChannelSelect');
+    var countEl = document.getElementById('streamChannelCountNum');
+
+    // Hide channel sub-result from a previous probe
+    document.getElementById('channelStreamResult').style.display = 'none';
+    document.getElementById('channelError').style.display = 'none';
+
+    if(!channels || channels.length === 0){
+      sec.style.display = 'none';
+      return;
+    }
+
+    countEl.textContent = String(channelCount || channels.length);
+    if(channelCount > channels.length){
+      countEl.textContent += ' (showing first ' + channels.length + ')';
+    }
+
+    /* Build grouped <optgroup> structure when channels have groups */
+    var groups = {};
+    var ungrouped = [];
+    channels.forEach(function(ch){
+      if(ch.group){
+        if(!groups[ch.group]) groups[ch.group] = [];
+        groups[ch.group].push(ch);
+      } else {
+        ungrouped.push(ch);
+      }
+    });
+
+    var html = '';
+    var groupNames = Object.keys(groups).sort();
+
+    if(groupNames.length > 0){
+      groupNames.forEach(function(g){
+        html += '<optgroup label="'+esc(g)+'">';
+        groups[g].forEach(function(ch, idx){
+          var label = ch.name || ('Channel ' + (idx + 1));
+          html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+        });
+        html += '</optgroup>';
+      });
+      if(ungrouped.length){
+        html += '<optgroup label="(no group)">';
+        ungrouped.forEach(function(ch, idx){
+          var label = ch.name || ('Channel ' + (idx + 1));
+          html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+        });
+        html += '</optgroup>';
+      }
+    } else {
+      channels.forEach(function(ch, idx){
+        var label = ch.name || ('Channel ' + (idx + 1));
+        html += '<option value="'+esc(ch.url)+'">'+esc(label)+'</option>';
+      });
+    }
+
+    select.innerHTML = html;
+    sec.style.display = 'block';
+  }
+
+  /* ── Main detect button ── */
   btn.addEventListener('click', function(){
     var url = (input.value || '').trim();
     if(!url){ showError('Enter a stream URL first.'); return; }
@@ -1154,27 +1267,22 @@ function fallbackCopy(text){
       document.getElementById('streamDesc').textContent = d.description || '';
 
       /* Tips */
-      var tipsEl = document.getElementById('streamTips');
-      var tips = d.tips || [];
-      if(tips.length){
-        tipsEl.innerHTML = tips.map(function(t){
-          return '<div class="sd-tip">&#x1F4A1; '+esc(t)+'</div>';
-        }).join('');
-      } else {
-        tipsEl.innerHTML = '';
-      }
+      renderTips(document.getElementById('streamTips'), d.tips);
+
+      /* Channel dropdown (M3U channel list only) */
+      populateChannelDropdown(d.channels || [], d.channel_count || 0);
 
       /* HTTP / DNS details */
       var tbody = document.querySelector('#streamDetailsTable tbody');
-      var fetch = d.fetch || {};
+      var fetchData = d.fetch || {};
       var dns   = d.dns   || {};
       var rows = [
         ['URL probed',       esc(d.url || url)],
-        ['HTTP status',      fetch.status_code != null ? esc(String(fetch.status_code)) : '—'],
-        ['Content-Type',     esc(fetch.content_type || '—')],
-        ['Content-Length',   fetch.content_length != null ? esc(String(fetch.content_length)) : '—'],
-        ['Response time',    fetch.response_time_ms != null ? esc(String(fetch.response_time_ms)) + ' ms' : '—'],
-        ['HTTP error',       fetch.error ? '<span class="st-fail">'+esc(fetch.error)+'</span>' : '<span class="st-pass">None</span>'],
+        ['HTTP status',      fetchData.status_code != null ? esc(String(fetchData.status_code)) : '—'],
+        ['Content-Type',     esc(fetchData.content_type || '—')],
+        ['Content-Length',   fetchData.content_length != null ? esc(String(fetchData.content_length)) : '—'],
+        ['Response time',    fetchData.response_time_ms != null ? esc(String(fetchData.response_time_ms)) + ' ms' : '—'],
+        ['HTTP error',       fetchData.error ? '<span class="st-fail">'+esc(fetchData.error)+'</span>' : '<span class="st-pass">None</span>'],
         ['DNS hostname',     esc(dns.hostname || '—')],
         ['DNS resolved IP',  esc(dns.resolved_ip || '—')],
         ['DNS error',        dns.error ? '<span class="st-fail">'+esc(dns.error)+'</span>' : '<span class="st-pass">None</span>'],
@@ -1201,6 +1309,59 @@ function fallbackCopy(text){
   /* Allow Enter key in the input box */
   input.addEventListener('keydown', function(e){
     if(e.key === 'Enter') btn.click();
+  });
+
+  /* ── Test Selected Channel button ── */
+  document.getElementById('btnTestChannel').addEventListener('click', function(){
+    var select  = document.getElementById('streamChannelSelect');
+    var chanUrl = (select.value || '').trim();
+    var chanErr = document.getElementById('channelError');
+    var chanRes = document.getElementById('channelStreamResult');
+
+    chanErr.style.display = 'none';
+    chanRes.style.display = 'none';
+
+    if(!chanUrl){
+      chanErr.textContent = 'No URL for the selected channel.';
+      chanErr.style.display = 'block';
+      return;
+    }
+
+    spin('channelSpinner', true);
+
+    fetch('/admin/diagnostics/stream-detect', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({url: chanUrl})
+    }).then(function(r){ return r.json(); })
+    .then(function(d){
+      spin('channelSpinner', false);
+      if(d.error){
+        chanErr.textContent = d.error;
+        chanErr.style.display = 'block';
+        return;
+      }
+
+      document.getElementById('channelTestedUrl').textContent = chanUrl;
+
+      var tl = document.getElementById('chanTypeLabel');
+      tl.textContent = typeEmoji(d.stream_type) + '\u00a0' + esc(d.stream_type || 'Unknown');
+
+      var cb = document.getElementById('chanConfBadge');
+      cb.className = confClass(d.confidence);
+      cb.textContent = confLabel(d.confidence);
+
+      document.getElementById('chanDesc').textContent = d.description || '';
+      renderTips(document.getElementById('chanTips'), d.tips);
+
+      chanRes.style.display = 'block';
+    })
+    .catch(function(e){
+      spin('channelSpinner', false);
+      chanErr.textContent = 'Request failed: ' + String(e);
+      chanErr.style.display = 'block';
+    });
   });
 })();
 

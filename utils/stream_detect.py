@@ -3,25 +3,30 @@
 ``detect_stream_type(url)`` performs a lightweight server-side probe of a stream
 URL and classifies it as one of the known stream types:
 
-  * **HLS Direct**       – M3U8 master playlist (``#EXT-X-STREAM-INF`` / no
-                            ``#EXT-X-MEDIA-SEQUENCE``).  The client plays the
-                            best-matching variant — good for on-demand or
-                            multi-bitrate live.
-  * **HLS Segmenter**    – M3U8 live media playlist (``#EXT-X-MEDIA-SEQUENCE``
-                            present).  The server assembles TS segments in real
-                            time; suitable for live IPTV.
-  * **MPEG-TS**          – Raw MPEG-2 Transport Stream (0x47 sync byte,
-                            confirmed by Content-Type or binary inspection).
-  * **MPEG-TS over HTTP**– Same as MPEG-TS but served over plain HTTP without
-                            M3U8 wrapping.
-  * **DASH**             – MPEG-DASH manifest (.mpd / Content-Type
-                            ``application/dash+xml``).
-  * **MP4 / fMP4**       – Progressive download or fragmented MP4.
-  * **RTMP**             – Real-Time Messaging Protocol (``rtmp://`` / ``rtmps://``).
-  * **Unknown**          – Could not determine; raw details are included.
+  * **HLS Direct**        – M3U8 master playlist (``#EXT-X-STREAM-INF`` / no
+                             ``#EXT-X-MEDIA-SEQUENCE``).  The client plays the
+                             best-matching variant — good for on-demand or
+                             multi-bitrate live.
+  * **HLS Segmenter**     – M3U8 live media playlist (``#EXT-X-MEDIA-SEQUENCE``
+                             present).  The server assembles TS segments in real
+                             time; suitable for live IPTV.
+  * **MPEG-TS**           – Raw MPEG-2 Transport Stream (0x47 sync byte,
+                             confirmed by Content-Type or binary inspection).
+  * **MPEG-TS over HTTP** – Same as MPEG-TS but served over plain HTTP without
+                             M3U8 wrapping.
+  * **DASH**              – MPEG-DASH manifest (.mpd / Content-Type
+                             ``application/dash+xml``).
+  * **MP4 / fMP4**        – Progressive download or fragmented MP4.
+  * **RTMP**              – Real-Time Messaging Protocol (``rtmp://`` / ``rtmps://``).
+  * **M3U Channel List**  – IPTV multi-channel playlist (``#EXTINF`` lines with
+                             tvg-id / group-title attributes, no HLS ``#EXT-X-*``
+                             tags).  The result includes a ``channels`` list so the
+                             caller can present a per-channel stream test UI.
+  * **Unknown**           – Could not determine; raw details are included.
 
-Only the first ~64 KB of the stream body is fetched, so the probe is fast
-even for large streams.
+Only the first ~256 KB of the stream body is fetched, so the probe is fast
+even for large streams.  The larger window also allows more channels to be
+parsed from M3U playlists for the channel dropdown feature.
 """
 
 from __future__ import annotations
@@ -38,7 +43,8 @@ from urllib.parse import urlparse
 # ---------------------------------------------------------------------------
 
 #: Maximum bytes to read from the stream body for content-based detection.
-_PROBE_BYTES = 64 * 1024  # 64 KB
+#: 256 KB is enough to detect stream type and parse ~1 000+ M3U channel entries.
+_PROBE_BYTES = 256 * 1024
 
 #: HTTP request timeout (seconds).  Keep short — this is a UI-triggered probe.
 _TIMEOUT = 20
@@ -70,6 +76,15 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
 
     ``tips``
         List of actionable hints (may be empty).
+
+    ``channels``
+        Present only when ``stream_type == "M3U Channel List"``.  A list of
+        dicts, each with keys ``name``, ``url``, ``group``, ``tvg_id``.
+        Capped at 300 entries.
+
+    ``channel_count``
+        Total number of channels parsed from the M3U (present alongside
+        ``channels``).
 
     ``fetch``
         Sub-dict with HTTP metadata: ``status_code``, ``content_type``,
@@ -178,6 +193,16 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     result["description"] = description
     result["tips"] = tips
     result["signals"] = signals
+
+    # ── M3U channel list: attach parsed channel data for the dropdown UI ──
+    if stream_type == "M3U Channel List":
+        try:
+            text = raw.decode("utf-8", errors="ignore")
+        except (UnicodeDecodeError, LookupError):
+            text = ""
+        channels = _parse_m3u_channels(text)
+        result["channels"] = channels
+        result["channel_count"] = len(channels)
 
     # Remove raw_bytes — not JSON-serialisable, not needed in response
     fetch.pop("raw_bytes", None)
@@ -342,6 +367,43 @@ def _classify(
                 tips,
             )
 
+        # ── M3U channel list — IPTV multi-channel playlist ─────────────
+        # An IPTV .m3u playlist has #EXTINF lines with tvg-id / group-title /
+        # tvg-name attributes (or uses -1 duration) and NO HLS #EXT-X-* tags.
+        # This is a channel directory, not a stream — the stream URLs are
+        # embedded inside it.
+        has_extinf = "#extinf:" in text.lower()
+        has_iptv_attrs = (
+            'tvg-id="' in text
+            or 'group-title="' in text
+            or 'tvg-name="' in text
+            or "#extinf:-1" in text.lower()
+        )
+        if has_extinf and has_iptv_attrs and not (has_endlist or has_stream_inf or has_media_seq or has_targetdur):
+            # Extra guard: all HLS-specific tags were already checked above (has_stream_inf
+            # → HLS Direct, has_media_seq/has_targetdur → HLS Segmenter).  We also exclude
+            # has_endlist here because that tag belongs to HLS VOD playlists.  At this point
+            # we have a genuine IPTV channel list, not an HLS stream.
+            signals.append(
+                "#EXTINF lines with IPTV channel attributes (tvg-id/group-title) detected "
+                "— this is a multi-channel IPTV playlist, not a direct stream"
+            )
+            return (
+                "M3U Channel List",
+                "high",
+                (
+                    "IPTV M3U channel playlist detected.  This file lists multiple channels "
+                    "with their stream URLs — it is not a stream itself.  "
+                    "Use the channel dropdown below to select a specific channel and test "
+                    "its stream URL."
+                ),
+                [
+                    "Select a channel from the dropdown and click 'Test Selected Channel' "
+                    "to identify the stream type for that channel.",
+                    "You can add this URL as a tuner M3U source in RetroIPTVGuide's tuner settings.",
+                ],
+            )
+
         # EXTM3U present but can't tell if master or media
         return (
             "HLS (type undetermined)",
@@ -458,9 +520,69 @@ def _classify(
     )
 
 
+
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+#: Maximum number of channels to return from an M3U channel list.
+#: Large playlists can have thousands of channels; cap the dropdown at 300
+#: to keep the JSON response manageable and the UI usable.
+_MAX_CHANNELS = 300
+
+#: How many lines after a ``#EXTINF`` tag to search for the stream URL.
+#: A value of 4 accommodates playlists that insert ``#EXTVLCOPT`` or similar
+#: extension tags between the ``#EXTINF`` and the URL.
+_MAX_URL_LOOKAHEAD = 4
+
+
+def _parse_m3u_channels(text: str) -> List[Dict[str, Any]]:
+    """Parse an IPTV M3U playlist text and return a list of channel dicts.
+
+    Each dict has keys:
+        ``name``   – display name from the ``#EXTINF`` comma-suffix
+        ``url``    – stream URL that follows the ``#EXTINF`` line
+        ``group``  – value of ``group-title`` attribute, or ``""``
+        ``tvg_id`` – value of ``tvg-id`` attribute, or ``""``
+
+    Returns at most :data:`_MAX_CHANNELS` entries.  If the playlist contains
+    more, the caller should surface that via ``channel_count`` (the total
+    parsed before capping).
+    """
+    lines = text.splitlines()
+    channels: List[Dict[str, Any]] = []
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped.upper().startswith("#EXTINF:"):
+            continue
+
+        # Channel name — everything after the last comma on the #EXTINF line
+        name_match = re.search(r",(.+)$", stripped)
+        name = name_match.group(1).strip() if name_match else ""
+
+        # Attributes embedded in the #EXTINF line
+        tvg_id_match = re.search(r'tvg-id="([^"]*)"', stripped, re.IGNORECASE)
+        tvg_id = tvg_id_match.group(1).strip() if tvg_id_match else ""
+
+        group_match = re.search(r'group-title="([^"]*)"', stripped, re.IGNORECASE)
+        group = group_match.group(1).strip() if group_match else ""
+
+        # The stream URL is on the next non-blank, non-comment line
+        url = ""
+        for j in range(i + 1, min(i + 1 + _MAX_URL_LOOKAHEAD, len(lines))):
+            candidate = lines[j].strip()
+            if candidate and not candidate.startswith("#"):
+                url = candidate
+                break
+
+        channels.append({"name": name, "url": url, "group": group, "tvg_id": tvg_id})
+
+        if len(channels) >= _MAX_CHANNELS:
+            break
+
+    return channels
+
 
 def _check_ssrf_risk(parsed) -> Optional[str]:
     """Return an error message string if the URL targets a loopback or link-local
