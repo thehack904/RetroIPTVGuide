@@ -1301,6 +1301,7 @@ _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
 _OVERPASS_PREWARM_STAGGER_S = 12  # seconds between per-city Overpass requests at startup
 _OVERPASS_MAX_RETRIES = 3         # retry attempts on 429 / transient errors
 _OVERPASS_RETRY_BACKOFF_S = 10    # initial back-off in seconds (doubles each retry)
+_OVERPASS_SEMAPHORE = threading.Semaphore(1)  # at most one live Overpass request at a time
 
 
 def _roads_cache_path(city_id: int) -> str:
@@ -1373,6 +1374,8 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
     Retries up to _OVERPASS_MAX_RETRIES times on 429 / transient errors,
     honouring the Retry-After response header when present.
+    _OVERPASS_SEMAPHORE ensures at most one live Overpass request runs at a time
+    across all threads, preventing concurrent requests that trigger rate-limits.
     On permanent failure returns an empty FeatureCollection."""
     query = (
         f"[out:json][timeout:60];"
@@ -1380,41 +1383,42 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
         f"(around:{radius_m},{lat},{lon}););"
         f"out body;>;out skel qt;"
     )
-    backoff = _OVERPASS_RETRY_BACKOFF_S
-    for attempt in range(_OVERPASS_MAX_RETRIES + 1):
-        try:
-            resp = requests.post(
-                "https://overpass-api.de/api/interpreter",
-                data={"data": query},
-                timeout=65,
-                headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
-            )
-            if resp.status_code == 429 and attempt < _OVERPASS_MAX_RETRIES:
-                wait = int(resp.headers.get("Retry-After", backoff))
-                logging.warning(
-                    "_fetch_overpass_roads: 429 rate-limited (attempt %d/%d),"
-                    " sleeping %ds before retry",
-                    attempt + 1, _OVERPASS_MAX_RETRIES, wait,
+    with _OVERPASS_SEMAPHORE:
+        backoff = _OVERPASS_RETRY_BACKOFF_S
+        for attempt in range(_OVERPASS_MAX_RETRIES + 1):
+            try:
+                resp = requests.post(
+                    "https://overpass-api.de/api/interpreter",
+                    data={"data": query},
+                    timeout=65,
+                    headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
                 )
-                time.sleep(wait)
-                backoff *= 2
-                continue
-            resp.raise_for_status()
-            return resp.json()
-        except Exception:
-            if attempt < _OVERPASS_MAX_RETRIES:
-                logging.warning(
-                    "_fetch_overpass_roads: transient error (attempt %d/%d),"
-                    " retrying in %ds",
-                    attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
-                )
-                time.sleep(backoff)
-                backoff *= 2
-            else:
-                logging.exception(
-                    "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
-                )
-    return {"elements": []}
+                if resp.status_code == 429 and attempt < _OVERPASS_MAX_RETRIES:
+                    wait = int(resp.headers.get("Retry-After", backoff))
+                    logging.warning(
+                        "_fetch_overpass_roads: 429 rate-limited (attempt %d/%d),"
+                        " sleeping %ds before retry",
+                        attempt + 1, _OVERPASS_MAX_RETRIES, wait,
+                    )
+                    time.sleep(wait)
+                    backoff *= 2
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+            except Exception:
+                if attempt < _OVERPASS_MAX_RETRIES:
+                    logging.warning(
+                        "_fetch_overpass_roads: transient error (attempt %d/%d),"
+                        " retrying in %ds",
+                        attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff *= 2
+                else:
+                    logging.exception(
+                        "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
+                    )
+        return {"elements": []}
 
 
 def _overpass_to_geojson(raw: dict) -> dict:
@@ -1503,19 +1507,40 @@ def get_traffic_demo_roads(city_id: int) -> dict:
 def _prewarm_roads_cache() -> None:
     """Background thread: fetch road geometry for every enabled city so the
     Overpass data is cached before any user rotates to that city.
-    Requests are staggered by 5 s to stay within Overpass fair-use limits."""
+
+    Local sources (memory cache, disk cache, bundled static files) are checked
+    first for every city.  The inter-request stagger delay is only inserted
+    immediately before cities that genuinely need a live Overpass call, so
+    deployments with pre-downloaded bundled data complete the prewarm instantly
+    with zero Overpass requests."""
     try:
         cities = [c for c in get_traffic_demo_cities() if c.get("enabled")]
     except Exception:
         logging.exception("_prewarm_roads_cache: could not load city list")
         return
+    last_overpass_at = 0.0
     for city in cities:
+        cid = city["id"]
+        # Determine upfront whether a live Overpass call will be needed by
+        # checking every local source in priority order.
+        needs_overpass = (
+            cid not in _ROADS_CACHE
+            and _load_roads_from_disk(cid) is None
+            and _load_bundled_roads(city["name"]) is None
+        )
+        if needs_overpass:
+            # Only stagger when a real Overpass request is coming up.
+            elapsed   = time.time() - last_overpass_at
+            remaining = _OVERPASS_PREWARM_STAGGER_S - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
         try:
-            get_traffic_demo_roads(city["id"])
+            get_traffic_demo_roads(cid)
             logging.info("_prewarm_roads_cache: cached roads for %s", city["name"])
         except Exception:
-            logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
-        time.sleep(_OVERPASS_PREWARM_STAGGER_S)
+            logging.exception("_prewarm_roads_cache: failed for city id=%s", cid)
+        if needs_overpass:
+            last_overpass_at = time.time()
 
 
 # ─── Static basemap PNGs (OSM tile stitching) ─────────────────────────────────

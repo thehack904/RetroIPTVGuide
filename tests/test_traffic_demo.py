@@ -24,6 +24,7 @@ from app import (
     _TILE_SERVERS,
     _generate_placeholder_basemap_png,
     _BASEMAP_W, _BASEMAP_H,
+    _prewarm_roads_cache,
 )
 
 
@@ -758,7 +759,7 @@ class TestLoadBundledRoads:
         assert _load_bundled_roads("Chicago") is None
 
     def test_slug_matches_city_name(self, monkeypatch, tmp_path):
-        """'New York City' → 'newyorkcity.geojson'"""
+        """'New York City' -> 'newyorkcity.geojson'"""
         monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
         path = tmp_path / "newyorkcity.geojson"
         path.write_text(json.dumps(self._sample_geojson()), encoding="utf-8")
@@ -876,6 +877,134 @@ class TestGetTrafficDemoRoadsBundledFallback:
         cities = get_traffic_demo_cities()
         get_traffic_demo_roads(cities[0]['id'])
         assert call_count['n'] == 1, "Overpass must be called when no bundled or disk data exists"
+
+
+# ─── _prewarm_roads_cache stagger / skip logic ───────────────────────────────
+
+class TestPrewarmRoadsCache:
+    """Verify that _prewarm_roads_cache() checks local data before sleeping or
+    calling Overpass, so deployments with bundled/cached data never trigger
+    rate-limit (429) warnings at startup."""
+
+    def _minimal_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                "properties": {"way_id": 1, "name": "Test Rd", "highway": "motorway"},
+            }],
+        }
+
+    def _write_bundled_for_all(self, bundled_dir):
+        """Write a valid bundled GeoJSON file for every city."""
+        os.makedirs(bundled_dir, exist_ok=True)
+        for city in get_traffic_demo_cities():
+            slug = _city_slug(city['name'])
+            with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+                json.dump(self._minimal_geojson(), fh)
+
+    def _write_disk_cache_for_all(self, cache_dir):
+        """Write a valid disk-cache file for every city."""
+        os.makedirs(cache_dir, exist_ok=True)
+        for city in get_traffic_demo_cities():
+            with open(os.path.join(cache_dir, f"city_{city['id']}.json"), "w", encoding="utf-8") as fh:
+                json.dump(self._minimal_geojson(), fh)
+
+    def test_no_overpass_calls_when_all_bundled(self, monkeypatch, tmp_path):
+        """Prewarm must not call Overpass when every city has a bundled file."""
+        bundled_dir = str(tmp_path / "bundled")
+        self._write_bundled_for_all(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.time, 'sleep', mock_sleep)
+
+        _prewarm_roads_cache()
+
+        assert call_count['n'] == 0, "Overpass must not be called when all cities have bundled data"
+        assert mock_sleep.call_count == 0, "No sleep needed when all data is available locally"
+
+    def test_no_overpass_calls_when_all_disk_cached(self, monkeypatch, tmp_path):
+        """Prewarm must not call Overpass when every city has a valid disk-cache file."""
+        cache_dir = str(tmp_path / "cache")
+        self._write_disk_cache_for_all(cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.time, 'sleep', mock_sleep)
+
+        _prewarm_roads_cache()
+
+        assert call_count['n'] == 0, "Overpass must not be called when all cities have disk-cache data"
+        assert mock_sleep.call_count == 0, "No sleep needed when all data is on disk"
+
+    def test_stagger_only_between_consecutive_overpass_calls(self, monkeypatch, tmp_path):
+        """Sleep must be called exactly N-1 times for N cities that all need Overpass."""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   str(tmp_path / "empty_cache"))
+
+        cities = [c for c in get_traffic_demo_cities() if c.get('enabled')]
+        n = len(cities)
+
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+        sleep_calls = []
+        monkeypatch.setattr(app_module.time, 'sleep', lambda s: sleep_calls.append(s))
+
+        _prewarm_roads_cache()
+
+        # First city gets no pre-sleep; every subsequent Overpass city does.
+        assert len(sleep_calls) == n - 1, (
+            f"Expected {n - 1} stagger sleeps for {n} cities, got {len(sleep_calls)}"
+        )
+        assert all(0 < s <= app_module._OVERPASS_PREWARM_STAGGER_S for s in sleep_calls), (
+            "Each stagger sleep must be a positive duration within the configured stagger"
+        )
+
+    def test_no_stagger_for_cached_cities_mixed_with_overpass(self, monkeypatch, tmp_path):
+        """Cities with bundled data must not introduce a stagger sleep between them."""
+        bundled_dir = str(tmp_path / "bundled")
+        cache_dir   = str(tmp_path / "cache")
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   cache_dir)
+
+        cities = [c for c in get_traffic_demo_cities() if c.get('enabled')]
+        # Give only the first city bundled data; the rest need Overpass.
+        os.makedirs(bundled_dir)
+        first = cities[0]
+        slug = _city_slug(first['name'])
+        with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+            json.dump(self._minimal_geojson(), fh)
+
+        overpass_cities = []
+        def fake_fetch(lat, lon, radius_m=80_467):
+            overpass_cities.append((lat, lon))
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        sleep_calls = []
+        monkeypatch.setattr(app_module.time, 'sleep', lambda s: sleep_calls.append(s))
+
+        _prewarm_roads_cache()
+
+        # First city served from bundled — never hits Overpass
+        assert (first['lat'], first['lon']) not in overpass_cities
+        # Remaining N-1 cities need Overpass; N-2 stagger sleeps between them
+        n_overpass = len(cities) - 1
+        assert len(overpass_cities) == n_overpass
+        assert len(sleep_calls) == n_overpass - 1
 
 
 # ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────
