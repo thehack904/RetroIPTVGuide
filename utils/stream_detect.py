@@ -108,8 +108,9 @@ _MODE_TIPS: Dict[str, List[str]] = {
     ],
     "hls-direct": [
         "HLS.js supports multi-bitrate master playlists — this stream should play on most sources.",
-        "If you see a spinner that does not stop, or the video never starts, "
-        "this stream is not supported by RetroIPTVGuide.",
+        "If you see a spinner that does not stop, or the video never starts, the source stream's "
+        "codec or format is not supported by HLS.js in your browser — this is a browser limitation, "
+        "not something RetroIPTVGuide can change.",
     ],
 }
 
@@ -443,8 +444,9 @@ def _classify(
             tips = [
                 "HLS master playlists should play in RetroIPTVGuide — HLS.js can handle "
                 "multi-bitrate streams for most sources.",
-                "If you see a spinner that does not stop, or the video never starts, "
-                "this stream is not supported by RetroIPTVGuide.",
+                "If you see a spinner that does not stop, or the video never starts, the source "
+                "stream's codec or format is not supported by HLS.js in your browser — this is a "
+                "browser limitation, not something RetroIPTVGuide can change.",
             ]
             if has_endlist:
                 tips.append("The playlist contains #EXT-X-ENDLIST — this is VOD, not live.")
