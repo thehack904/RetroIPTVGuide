@@ -2,8 +2,10 @@
 import json
 import os
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests as req_lib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -16,6 +18,12 @@ from app import (
     _get_congestion_distribution, _build_traffic_demo_payload,
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
+    _fetch_overpass_roads,
+    _load_roads_from_disk, _save_roads_to_disk,
+    _city_slug, _generate_basemap_png, _prewarm_basemaps,
+    _TILE_SERVERS,
+    _generate_placeholder_basemap_png,
+    _BASEMAP_W, _BASEMAP_H,
 )
 
 
@@ -25,8 +33,10 @@ from app import (
 def isolated_db(tmp_path, monkeypatch):
     users_db  = str(tmp_path / "users_test.db")
     tuners_db = str(tmp_path / "tuners_test.db")
-    monkeypatch.setattr(app_module, "DATABASE",  users_db)
-    monkeypatch.setattr(app_module, "TUNER_DB",  tuners_db)
+    roads_dir = str(tmp_path / "roads_cache")
+    monkeypatch.setattr(app_module, "DATABASE",       users_db)
+    monkeypatch.setattr(app_module, "TUNER_DB",       tuners_db)
+    monkeypatch.setattr(app_module, "ROADS_CACHE_DIR", roads_dir)
     # Also clear the module-level caches between tests
     monkeypatch.setattr(app_module, "_TRAFFIC_DEMO_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE", {})
@@ -649,6 +659,56 @@ class TestGetTrafficDemoRoads:
         assert result['type'] == 'FeatureCollection'
         assert result['features'] == []
 
+    def test_result_is_saved_to_disk(self, monkeypatch, tmp_path):
+        roads_dir = str(tmp_path / "roads_save_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert os.path.isfile(cache_file), "GeoJSON should be persisted to disk after fetch"
+
+    def test_disk_cache_used_on_restart(self, monkeypatch, tmp_path):
+        """After data is saved to disk, clearing the in-memory cache simulates a restart.
+        The next call must load from disk without hitting the Overpass API."""
+        roads_dir = str(tmp_path / "roads_restart_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        fetch_count = {'calls': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            fetch_count['calls'] += 1
+            return self._minimal_overpass()
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+
+        # First call: populates disk cache
+        get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1
+
+        # Simulate restart by clearing the in-memory cache
+        app_module._ROADS_CACHE.clear()
+        app_module._ROADS_CACHE_TIME.clear()
+
+        # Second call: should load from disk, NOT call Overpass
+        result = get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1, "Overpass should not be called again when disk cache exists"
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) >= 1
+
+    def test_empty_response_not_saved_to_disk(self, monkeypatch, tmp_path):
+        """An empty Overpass response must not be persisted so the next startup retries."""
+        roads_dir = str(tmp_path / "roads_empty_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert not os.path.isfile(cache_file), "Empty GeoJSON must not be persisted to disk"
+
 
 # ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────
 
@@ -711,3 +771,301 @@ class TestApiTrafficDemoRoads:
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
         assert data['type'] == 'FeatureCollection'
         assert data['features'] == []
+
+
+# ─── _fetch_overpass_roads retry / rate-limit handling ───────────────────────
+
+class TestFetchOverpassRoadsRetry:
+    """Test that _fetch_overpass_roads retries on 429 and respects Retry-After."""
+
+    _GOOD_RESPONSE = {"elements": [{"type": "node", "id": 1, "lat": 41.88, "lon": -87.63}]}
+
+    def _make_response(self, status_code: int, json_body=None, headers=None):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = headers or {}
+        if status_code >= 400:
+            mock_resp.raise_for_status.side_effect = req_lib.exceptions.HTTPError(
+                f"{status_code} error"
+            )
+        else:
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.json.return_value = json_body or self._GOOD_RESPONSE
+        return mock_resp
+
+    def test_success_on_first_attempt(self, monkeypatch):
+        mock_post = MagicMock(return_value=self._make_response(200, self._GOOD_RESPONSE))
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 1
+
+    def test_retries_on_429_and_eventually_succeeds(self, monkeypatch):
+        """First two calls return 429; third succeeds."""
+        responses = [
+            self._make_response(429),
+            self._make_response(429),
+            self._make_response(200, self._GOOD_RESPONSE),
+        ]
+        mock_post = MagicMock(side_effect=responses)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 3
+        assert mock_sleep.call_count == 2  # slept twice before the successful call
+
+    def test_respects_retry_after_header(self, monkeypatch):
+        """Retry-After header value must be used as the sleep duration."""
+        rate_limited = self._make_response(429, headers={"Retry-After": "30"})
+        success = self._make_response(200, self._GOOD_RESPONSE)
+        mock_post = MagicMock(side_effect=[rate_limited, success])
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        _fetch_overpass_roads(41.88, -87.63)
+        mock_sleep.assert_called_once_with(30)
+
+    def test_exhausted_retries_return_empty(self, monkeypatch):
+        """All attempts return 429 - function must return empty elements dict."""
+        mock_post = MagicMock(return_value=self._make_response(429))
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == {"elements": []}
+        # Should have attempted _OVERPASS_MAX_RETRIES + 1 total calls
+        assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
+
+
+# ─── Basemap PNG generation ────────────────────────────────────────────────────
+
+class TestCitySlug:
+    """_city_slug must mirror the JS citySlug() function in traffic.html."""
+
+    @pytest.mark.parametrize("name,expected", [
+        ("New York City",  "newyorkcity"),
+        ("Los Angeles",    "losangeles"),
+        ("Chicago",        "chicago"),
+        ("San Jose",       "sanjose"),
+        ("San Antonio",    "sanantonio"),
+        ("Philadelphia",   "philadelphia"),
+    ])
+    def test_known_cities(self, name, expected):
+        assert _city_slug(name) == expected
+
+    def test_lowercase(self):
+        assert _city_slug("DALLAS") == "dallas"
+
+    def test_removes_spaces(self):
+        assert _city_slug("San Diego") == "sandiego"
+
+    def test_removes_special_chars(self):
+        assert _city_slug("St. Louis") == "stlouis"
+
+    def test_empty_string(self):
+        assert _city_slug("") == ""
+
+
+class TestGenerateBasemapPng:
+    """_generate_basemap_png writes a PNG file; tiles provided via mock."""
+
+    def _make_tile_response(self, colour=(100, 149, 237)):
+        """Create a fake 256x256 tile response in memory."""
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), colour)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_creates_png_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        img = _I.open(out)
+        assert img.size == (app_module._BASEMAP_W, app_module._BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_returns_false_when_all_tiles_fail(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(side_effect=Exception("network error"))
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "fail.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_falls_back_to_secondary_tile_server(self, monkeypatch, tmp_path):
+        """If the first tile server fails, the function tries the next server."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+
+        primary_url = _TILE_SERVERS[0].split("{")[0]  # e.g. "https://tile.openstreetmap.org/"
+        good_resp   = self._make_tile_response()
+
+        # When monkeypatching a class method the Session instance is passed as
+        # the first positional argument, followed by the URL.
+        def selective_get(_session, url, **kwargs):
+            if primary_url in url:
+                raise Exception("primary server blocked")
+            return good_resp
+
+        monkeypatch.setattr(app_module.requests.Session, "get", selective_get)
+
+        out = str(tmp_path / "fallback.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_atomic_write_no_partial_file_on_failure(self, monkeypatch, tmp_path):
+        """If generation fails the destination path must not be created."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("err")))
+        out = str(tmp_path / "atomic.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        assert not os.path.isfile(out)
+        # Temp file must also be cleaned up
+        assert not os.path.isfile(out + ".tmp")
+
+
+class TestPrewarmBasemaps:
+    """_prewarm_basemaps generates a file for each seed city that lacks one."""
+
+    def _make_tile_response(self):
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), (80, 120, 200))
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_generates_png_per_city(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing basemap for {city['name']}"
+
+    def test_skips_existing_files(self, monkeypatch, tmp_path):
+        """Pre-existing PNGs must not trigger tile downloads."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        # Pre-create all PNG files
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            (tmp_path / f"{slug}.png").write_bytes(b"dummy")
+
+        _prewarm_basemaps()
+        # No tiles should have been fetched
+        mock_get.assert_not_called()
+
+    def test_noop_without_pillow(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+        mock_get.assert_not_called()
+
+    def test_uses_placeholder_when_all_tile_servers_fail(self, monkeypatch, tmp_path):
+        """When tile downloads fail, _prewarm_basemaps must still create a PNG via placeholder."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("tile server blocked")))
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing placeholder basemap for {city['name']}"
+
+
+class TestGeneratePlaceholderBasemapPng:
+    """_generate_placeholder_basemap_png creates a valid PNG with no network access."""
+
+    def test_creates_png_file(self, tmp_path):
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_placeholder_basemap_png("Test City", out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, tmp_path):
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_placeholder_basemap_png("Chicago", out)
+        img = _I.open(out)
+        assert img.size == (_BASEMAP_W, _BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_placeholder_basemap_png("Chicago", out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_atomic_write(self, tmp_path):
+        """Destination file must not exist until write completes; no .tmp left behind."""
+        out = str(tmp_path / "atomic.png")
+        _generate_placeholder_basemap_png("Philadelphia", out)
+        assert os.path.isfile(out)
+        assert not os.path.isfile(out + ".tmp")
+
+    def test_no_network_calls(self, monkeypatch, tmp_path):
+        """Placeholder generation must never make HTTP requests."""
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+        out = str(tmp_path / "nonet.png")
+        _generate_placeholder_basemap_png("New York City", out)
+        mock_get.assert_not_called()

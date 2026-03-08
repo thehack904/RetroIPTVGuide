@@ -32,6 +32,17 @@ except Exception as e:
     # Log the import failure so we can see why it failed when the app starts
     logging.exception("Failed to import vlc_control: %s", e)
 
+# Pillow is used to stitch OSM map tiles into the static basemap PNGs for the
+# traffic demo.  It is optional — without it the browser falls back to Leaflet.
+try:
+    from PIL import Image as _PilImage
+    import io as _io
+    import math as _math
+    _PILLOW_AVAILABLE = True
+except ImportError:
+    _PILLOW_AVAILABLE = False
+    logging.info("Pillow not installed — traffic demo will use Leaflet basemaps")
+
 APP_START_TIME = datetime.now()
 
 # ------------------- Config -------------------
@@ -42,6 +53,7 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
@@ -1282,9 +1294,47 @@ def _build_traffic_demo_payload():
 
 # Roads are cached per city (long TTL — road geometry rarely changes).
 _ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
-_ROADS_CACHE_TTL = 86400  # 24 hours in seconds
+_ROADS_CACHE_TTL = 86400  # 24 hours — in-memory hot cache
+_ROADS_DISK_TTL  = 2_592_000  # 30 days — disk cache; road geometry barely changes
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
-_OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
+_OVERPASS_PREWARM_STAGGER_S = 12  # seconds between per-city Overpass requests at startup
+_OVERPASS_MAX_RETRIES = 3         # retry attempts on 429 / transient errors
+_OVERPASS_RETRY_BACKOFF_S = 10    # initial back-off in seconds (doubles each retry)
+
+
+def _roads_cache_path(city_id: int) -> str:
+    """Return the absolute path of the on-disk cache file for a given city."""
+    return os.path.join(ROADS_CACHE_DIR, f"city_{city_id}.json")
+
+
+def _load_roads_from_disk(city_id: int) -> dict | None:
+    """Load GeoJSON from disk cache if the file exists and is not stale.
+    Returns the GeoJSON dict on success, None if missing or expired."""
+    path = _roads_cache_path(city_id)
+    try:
+        if not os.path.isfile(path):
+            return None
+        age = time.time() - os.path.getmtime(path)
+        if age > _ROADS_DISK_TTL:
+            return None
+        with open(path, "r", encoding="utf-8") as fh:
+            return _json.load(fh)
+    except Exception:
+        logging.warning("_load_roads_from_disk: failed to read cache for city_id=%s", city_id,
+                        exc_info=True)
+        return None
+
+
+def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
+    """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
+    path = _roads_cache_path(city_id)
+    try:
+        os.makedirs(ROADS_CACHE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(geojson, fh)
+    except Exception:
+        logging.warning("_save_roads_to_disk: failed to write cache for city_id=%s", city_id,
+                        exc_info=True)
 
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
@@ -1293,25 +1343,50 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     Only motorway and trunk-class roads are fetched; at this scale primary/
     secondary roads would return thousands of segments across the viewport.
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
-    On network failure returns an empty FeatureCollection."""
+    Retries up to _OVERPASS_MAX_RETRIES times on 429 / transient errors,
+    honouring the Retry-After response header when present.
+    On permanent failure returns an empty FeatureCollection."""
     query = (
         f"[out:json][timeout:60];"
         f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
         f"(around:{radius_m},{lat},{lon}););"
         f"out body;>;out skel qt;"
     )
-    try:
-        resp = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            timeout=65,
-            headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
-        return {"elements": []}
+    backoff = _OVERPASS_RETRY_BACKOFF_S
+    for attempt in range(_OVERPASS_MAX_RETRIES + 1):
+        try:
+            resp = requests.post(
+                "https://overpass-api.de/api/interpreter",
+                data={"data": query},
+                timeout=65,
+                headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
+            )
+            if resp.status_code == 429 and attempt < _OVERPASS_MAX_RETRIES:
+                wait = int(resp.headers.get("Retry-After", backoff))
+                logging.warning(
+                    "_fetch_overpass_roads: 429 rate-limited (attempt %d/%d),"
+                    " sleeping %ds before retry",
+                    attempt + 1, _OVERPASS_MAX_RETRIES, wait,
+                )
+                time.sleep(wait)
+                backoff *= 2
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        except Exception:
+            if attempt < _OVERPASS_MAX_RETRIES:
+                logging.warning(
+                    "_fetch_overpass_roads: transient error (attempt %d/%d),"
+                    " retrying in %ds",
+                    attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                )
+                time.sleep(backoff)
+                backoff *= 2
+            else:
+                logging.exception(
+                    "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
+                )
+    return {"elements": []}
 
 
 def _overpass_to_geojson(raw: dict) -> dict:
@@ -1345,13 +1420,29 @@ def _overpass_to_geojson(raw: dict) -> dict:
 
 
 def get_traffic_demo_roads(city_id: int) -> dict:
-    """Return cached road GeoJSON for a city, fetching from Overpass if not cached or stale."""
+    """Return cached road GeoJSON for a city, fetching from Overpass only when needed.
+
+    Lookup order:
+      1. In-memory cache  (hot, 24 h TTL)
+      2. Disk cache       (persistent across restarts, 30 day TTL)
+      3. Overpass API     (network call — only when no valid cached copy exists)
+
+    After a successful Overpass fetch the result is saved to disk so that
+    subsequent app restarts never need to call the API for already-fetched cities.
+    """
     now_ts = time.time()
     cached_at = _ROADS_CACHE_TIME.get(city_id, 0)
     if city_id in _ROADS_CACHE and (now_ts - cached_at) < _ROADS_CACHE_TTL:
         return _ROADS_CACHE[city_id]
 
-    # Look up city coordinates from DB
+    # 2. Try disk cache before making a network call
+    disk_geojson = _load_roads_from_disk(city_id)
+    if disk_geojson is not None:
+        _ROADS_CACHE[city_id] = disk_geojson
+        _ROADS_CACHE_TIME[city_id] = now_ts
+        return disk_geojson
+
+    # 3. Look up city coordinates from DB, then call Overpass
     try:
         cities = get_traffic_demo_cities()
         city = next((c for c in cities if c["id"] == city_id), None)
@@ -1365,6 +1456,9 @@ def get_traffic_demo_roads(city_id: int) -> dict:
     geojson = _overpass_to_geojson(raw)
     _ROADS_CACHE[city_id] = geojson
     _ROADS_CACHE_TIME[city_id] = now_ts
+    # Persist to disk so future restarts skip the Overpass call
+    if geojson["features"]:
+        _save_roads_to_disk(city_id, geojson)
     return geojson
 
 
@@ -1385,6 +1479,235 @@ def _prewarm_roads_cache() -> None:
             logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
         time.sleep(_OVERPASS_PREWARM_STAGGER_S)
 
+
+# ─── Static basemap PNGs (OSM tile stitching) ─────────────────────────────────
+
+_BASEMAP_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'static', 'maps', 'traffic_demo')
+_BASEMAP_ZOOM = 10       # OSM zoom level — matches traffic.html BASEMAP_ZOOM
+_BASEMAP_W    = 1280     # output width  — matches traffic.html BASEMAP_W
+_BASEMAP_H    = 720      # output height — matches traffic.html BASEMAP_H
+_TILE_SIZE    = 256      # standard OSM tile size in pixels
+_OSM_TILE_UA  = "RetroIPTVGuide/1.0 (traffic demo basemap; see github.com/thehack904/RetroIPTVGuide)"
+
+# Tile server templates tried in order.  Multiple mirrors improve reliability
+# from cloud/datacenter hosts where tile.openstreetmap.org may rate-limit.
+_TILE_SERVERS = [
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://b.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://c.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+]
+
+
+def _city_slug(name: str) -> str:
+    """Convert a city name to the lowercase alphanumeric slug used for PNG filenames.
+    Must match the JavaScript citySlug() function in traffic.html."""
+    return ''.join(c for c in name.lower() if c.isalnum())
+
+
+def _generate_basemap_png(lat: float, lon: float, out_path: str) -> bool:
+    """Stitch OSM tiles into a _BASEMAP_W x _BASEMAP_H PNG centred on lat/lon.
+
+    Returns True on success, False if Pillow is unavailable or all tiles fail.
+    The file is written atomically (temp file → rename) so a half-written PNG
+    is never served to the browser.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    zoom = _BASEMAP_ZOOM
+    n    = 2 ** zoom
+
+    # Fractional tile coordinates for the centre point
+    cx_f = (lon + 180.0) / 360.0 * n
+    lat_rad = _math.radians(lat)
+    cy_f = (1.0 - _math.asinh(_math.tan(lat_rad)) / _math.pi) / 2.0 * n
+
+    cx_tile = int(cx_f)
+    cy_tile = int(cy_f)
+    off_x   = (cx_f - cx_tile) * _TILE_SIZE   # pixel offset within centre tile
+    off_y   = (cy_f - cy_tile) * _TILE_SIZE
+
+    # Number of extra tiles needed on each side of the centre tile
+    half_w = _BASEMAP_W / 2
+    half_h = _BASEMAP_H / 2
+    tiles_left  = _math.ceil((half_w - (_TILE_SIZE - off_x)) / _TILE_SIZE) + 1
+    tiles_right = _math.ceil((half_w - off_x)               / _TILE_SIZE) + 1
+    tiles_up    = _math.ceil((half_h - (_TILE_SIZE - off_y)) / _TILE_SIZE) + 1
+    tiles_down  = _math.ceil((half_h - off_y)               / _TILE_SIZE) + 1
+
+    x0 = cx_tile - tiles_left
+    y0 = cy_tile - tiles_up
+    x1 = cx_tile + tiles_right
+    y1 = cy_tile + tiles_down
+    cols = x1 - x0 + 1
+    rows = y1 - y0 + 1
+
+    canvas = _PilImage.new("RGB", (cols * _TILE_SIZE, rows * _TILE_SIZE))
+    sess   = requests.Session()
+    sess.headers.update({"User-Agent": _OSM_TILE_UA})
+    any_ok = False
+    server_idx = 0  # round-robin across tile servers to spread load
+
+    for row_i, ty in enumerate(range(y0, y1 + 1)):
+        for col_i, tx in enumerate(range(x0, x1 + 1)):
+            tx_c = max(0, min(n - 1, tx))
+            ty_c = max(0, min(n - 1, ty))
+            fetched = False
+            for attempt in range(len(_TILE_SERVERS) * 2):
+                srv = _TILE_SERVERS[server_idx % len(_TILE_SERVERS)]
+                url = srv.format(z=zoom, x=tx_c, y=ty_c)
+                try:
+                    resp = sess.get(url, timeout=15)
+                    resp.raise_for_status()
+                    tile = _PilImage.open(_io.BytesIO(resp.content)).convert("RGB")
+                    canvas.paste(tile, (col_i * _TILE_SIZE, row_i * _TILE_SIZE))
+                    any_ok = True
+                    fetched = True
+                    time.sleep(0.15)   # respect tile server fair-use policy
+                    break
+                except Exception as exc:
+                    logging.debug("_generate_basemap_png: %s tile %s/%s attempt %s failed: %s",
+                                  srv, tx_c, ty_c, attempt + 1, exc)
+                    server_idx += 1    # try next server on next attempt
+                    if attempt < len(_TILE_SERVERS) * 2 - 1:
+                        time.sleep(min(2 ** (attempt % len(_TILE_SERVERS)), 30))
+            if not fetched:
+                logging.warning("_generate_basemap_png: all servers failed for tile %s/%s", tx_c, ty_c)
+            server_idx += 1  # distribute load across servers
+
+    if not any_ok:
+        return False
+
+    # Crop to exact output size, centred on the requested coordinates
+    centre_x = (cx_tile - x0) * _TILE_SIZE + off_x
+    centre_y = (cy_tile - y0) * _TILE_SIZE + off_y
+    left   = int(centre_x - half_w)
+    top    = int(centre_y - half_h)
+    cropped = canvas.crop((left, top, left + _BASEMAP_W, top + _BASEMAP_H))
+
+    # Write atomically
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    cropped.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
+def _generate_placeholder_basemap_png(city_name: str, out_path: str) -> bool:
+    """Generate a map-like placeholder PNG using Pillow only (no network access).
+
+    Creates a 1280×720 image with a street-map-inspired colour scheme — a
+    light-grey land base, subtle grid lines for roads, and the city name
+    centred in the image.  This runs instantly at startup so the traffic
+    overlay always has a background, even when external tile servers are
+    unreachable.
+
+    Returns True on success, False if Pillow is unavailable.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    from PIL import ImageDraw, ImageFont
+
+    w, h = _BASEMAP_W, _BASEMAP_H
+
+    # OSM-inspired colour palette
+    BG_LAND    = (242, 239, 233)   # warm off-white (OSM land)
+    GRID_MAJOR = (200, 196, 187)   # subtle grey grid (arterial roads)
+    GRID_MINOR = (220, 216, 208)   # lighter minor grid
+    LABEL_CLR  = (130, 120, 100)   # muted brown-grey for city name
+
+    img  = _PilImage.new("RGB", (w, h), BG_LAND)
+    draw = ImageDraw.Draw(img)
+
+    # Minor grid (~city blocks, ~64 px apart)
+    for x in range(0, w, 64):
+        draw.line([(x, 0), (x, h)], fill=GRID_MINOR, width=1)
+    for y in range(0, h, 64):
+        draw.line([(0, y), (w, y)], fill=GRID_MINOR, width=1)
+
+    # Major grid (~arterial roads, ~256 px apart)
+    for x in range(0, w, 256):
+        draw.line([(x, 0), (x, h)], fill=GRID_MAJOR, width=2)
+    for y in range(0, h, 256):
+        draw.line([(0, y), (w, y)], fill=GRID_MAJOR, width=2)
+
+    # City name label centred on the image
+    _font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # Debian/Ubuntu
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",             # Fedora/RHEL
+        "/System/Library/Fonts/Helvetica.ttc",                     # macOS
+        "C:/Windows/Fonts/arial.ttf",                              # Windows
+    ]
+    font = None
+    for _fp in _font_candidates:
+        try:
+            font = ImageFont.truetype(_fp, 36)
+            break
+        except Exception:
+            pass
+    if font is None:
+        font = ImageFont.load_default()
+
+    label = city_name
+    bbox  = draw.textbbox((0, 0), label, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((w - tw) // 2, (h - th) // 2), label, fill=LABEL_CLR, font=font)
+
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    img.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
+def _prewarm_basemaps() -> None:
+    """Background thread: generate missing basemap PNGs for all seed cities.
+
+    Runs once at startup.  Already-present files are skipped so the roads
+    and basemap pre-warm threads don't conflict on subsequent restarts.
+
+    Strategy (in order):
+    1. Try to download real OSM tiles via _generate_basemap_png.
+    2. If all tile servers fail (e.g. datacenter IP is blocked), fall back to
+       _generate_placeholder_basemap_png which uses Pillow only and works
+       instantly with no network access.  This guarantees every city gets a
+       usable basemap at startup regardless of tile-server availability.
+    """
+    if not _PILLOW_AVAILABLE:
+        logging.info("_prewarm_basemaps: Pillow not available, skipping basemap generation")
+        return
+
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    for city in _TRAFFIC_DEMO_CITIES_SEED:
+        slug     = _city_slug(city['name'])
+        out_path = os.path.join(_BASEMAP_DIR, f"{slug}.png")
+        if os.path.isfile(out_path):
+            logging.debug("_prewarm_basemaps: %s already exists, skipping", slug)
+            continue
+        logging.info("_prewarm_basemaps: generating basemap for %s …", city['name'])
+        try:
+            ok = _generate_basemap_png(city['lat'], city['lon'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved real OSM basemap for %s", slug)
+                time.sleep(1)
+                continue
+        except Exception:
+            logging.exception("_prewarm_basemaps: tile download exception for %s", city['name'])
+
+        # Tile download failed — generate a placeholder so the page always works
+        logging.info("_prewarm_basemaps: tile servers unavailable, using placeholder for %s",
+                     city['name'])
+        try:
+            ok = _generate_placeholder_basemap_png(city['name'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved placeholder basemap for %s", slug)
+            else:
+                logging.warning("_prewarm_basemaps: placeholder also failed for %s", city['name'])
+        except Exception:
+            logging.exception("_prewarm_basemaps: placeholder exception for %s", city['name'])
 
 
 def get_channel_music_file(tvg_id):
@@ -3988,6 +4311,10 @@ if __name__ == '__main__':
     # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
     # so the overlay is ready before any city rotation happens.
     threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
+
+    # Generate missing static basemap PNGs (OSM tile mosaics) for all seed
+    # cities so the traffic demo never serves 404s for the basemap images.
+    threading.Thread(target=_prewarm_basemaps, daemon=True, name="basemaps-prewarm").start()
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
