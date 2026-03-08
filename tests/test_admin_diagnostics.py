@@ -3176,8 +3176,8 @@ class TestStreamDetectCompatibleField:
     """Verify the 'compatible' field is set correctly for each stream type
     so the UI can render incompatibility tips in amber rather than green."""
 
-    def test_hls_direct_is_not_compatible(self):
-        """HLS Direct → compatible = False (master playlists spin in RetroIPTVGuide)."""
+    def test_hls_direct_is_compatible(self):
+        """HLS Direct → compatible = True (HLS.js natively handles master playlists)."""
         from utils.stream_detect import _classify
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
         signals = []
@@ -3186,7 +3186,7 @@ class TestStreamDetectCompatibleField:
             "application/vnd.apple.mpegurl", body, signals
         )
         assert st == "HLS Direct"
-        # Verify via detect_stream_type result dict that compatible is False
+        # Verify via detect_stream_type result dict that compatible is True
         from unittest.mock import patch
         import utils.stream_detect as sd
         fake_fetch = {
@@ -3200,7 +3200,9 @@ class TestStreamDetectCompatibleField:
              patch.object(sd, "_check_ssrf_risk", return_value=None):
             r = sd.detect_stream_type("http://example.com/master.m3u8")
         assert r["stream_type"] == "HLS Direct"
-        assert r["compatible"] is False, "HLS Direct (master playlist) must be False — it spins in RetroIPTVGuide"
+        assert r["compatible"] is True, (
+            "HLS Direct (master playlist) must be True — HLS.js plays master playlists natively"
+        )
 
     def test_hls_segmenter_is_compatible(self):
         """HLS Segmenter → compatible = True."""
@@ -3333,7 +3335,7 @@ class TestStreamDetectQueryStringSignals:
         }
 
     def test_mode_hls_direct_overrides_to_hls_direct(self):
-        """?mode=hls-direct overrides classification to 'HLS Direct' (incompatible)."""
+        """?mode=hls-direct overrides classification to 'HLS Direct' (compatible)."""
         import utils.stream_detect as sd
         from unittest.mock import patch
         # Body would normally classify as HLS Segmenter (media playlist), but
@@ -3348,7 +3350,7 @@ class TestStreamDetectQueryStringSignals:
         assert r["stream_type"] == "HLS Direct", (
             f"Expected 'HLS Direct' from mode=hls-direct override, got {r['stream_type']!r}"
         )
-        assert r["compatible"] is False
+        assert r["compatible"] is True, "HLS Direct must be compatible — HLS.js plays master playlists"
         # Signal must mention the mode override
         signal_text = " ".join(r["signals"]).lower()
         assert "hls-direct" in signal_text, "Expected a signal mentioning mode=hls-direct"
@@ -3402,8 +3404,8 @@ class TestStreamDetectQueryStringSignals:
         signal_text = " ".join(r["signals"]).lower()
         assert "mode=" not in signal_text
 
-    def test_hls_direct_tips_warn_about_incompatibility(self):
-        """HLS Direct tips (from body classification) must warn about incompatibility."""
+    def test_hls_direct_tips_are_informational_not_warnings(self):
+        """HLS Direct tips (from body classification) must be informational, not scare warnings."""
         from utils.stream_detect import _classify
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
         signals = []
@@ -3413,20 +3415,22 @@ class TestStreamDetectQueryStringSignals:
         )
         assert st == "HLS Direct"
         tip_text = " ".join(tips).lower()
-        # Must not falsely claim compatibility
-        assert "this is compatible with retroiptvguide" not in tip_text
-        # Must warn about potential playback issues
+        desc_text = desc.lower()
+        # Must not falsely claim it will spin or fail
+        assert "spin without playing" not in tip_text
+        assert "will spin" not in tip_text
+        assert "may fail to play" not in desc_text
+        # Must convey that HLS.js can handle master playlists
         assert any(
-            kw in tip_text
-            for kw in ("may", "fail", "spin", "not", "prefer", "segmenter", "media playlist")
-        ), f"Expected a warning in HLS Direct tips, got: {tip_text!r}"
+            kw in tip_text or kw in desc_text
+            for kw in ("compatible", "natively", "hls.js", "master playlist", "play")
+        ), f"Expected HLS Direct to be described as compatible, got tips={tip_text!r} desc={desc_text!r}"
 
-    def test_hls_direct_not_in_compatible_types_true(self):
-        """_COMPATIBLE_TYPES must NOT have HLS Direct mapped to True."""
+    def test_hls_direct_is_in_compatible_types_true(self):
+        """_COMPATIBLE_TYPES must have HLS Direct mapped to True."""
         from utils.stream_detect import _COMPATIBLE_TYPES
-        assert _COMPATIBLE_TYPES.get("HLS Direct") is not True, (
-            "HLS Direct must be False in _COMPATIBLE_TYPES — master playlists "
-            "do not play reliably in RetroIPTVGuide"
+        assert _COMPATIBLE_TYPES.get("HLS Direct") is True, (
+            "HLS Direct must be True in _COMPATIBLE_TYPES — HLS.js plays master playlists natively"
         )
 
 
@@ -3480,7 +3484,7 @@ class TestStreamDetectModeHintParsing:
 
         # HLS Direct channel
         assert ch2["stream_type_hint"] == "HLS Direct"
-        assert ch2["compatible_hint"] is False, "HLS Direct must be incompatible"
+        assert ch2["compatible_hint"] is True, "HLS Direct must be compatible — HLS.js plays master playlists"
 
         # HLS Segmenter channel
         assert ch3["stream_type_hint"] == "HLS Segmenter"
@@ -3524,11 +3528,11 @@ class TestStreamDetectModeHintParsing:
         )
 
     def test_body_disagrees_with_hls_direct_mode_result_still_hls_direct(self):
-        """When body says HLS Segmenter but mode=hls-direct, result is HLS Direct (incompatible)."""
+        """When body says HLS Segmenter but mode=hls-direct, result is still HLS Direct (compatible)."""
         import utils.stream_detect as sd
         from unittest.mock import patch
         # Body is a media playlist (body classification: HLS Segmenter), but
-        # mode=hls-direct overrides to HLS Direct (incompatible).
+        # mode=hls-direct overrides to HLS Direct (both are compatible with HLS.js).
         body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
         fake_fetch = {
             "ok": True, "status_code": 200,
@@ -3540,9 +3544,9 @@ class TestStreamDetectModeHintParsing:
              patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
              patch.object(sd, "_check_ssrf_risk", return_value=None):
             r = sd.detect_stream_type("http://iptv.lan:8409/ch.m3u8?mode=hls-direct")
-        # mode= override wins even though body body looks like HLS Segmenter
+        # mode= override wins even though body looks like HLS Segmenter
         assert r["stream_type"] == "HLS Direct"
-        assert r["compatible"] is False
+        assert r["compatible"] is True, "HLS Direct must be compatible — HLS.js plays master playlists"
 
     def test_no_mode_param_uses_body_only(self):
         """Without ?mode=, classification is purely body-content based."""
