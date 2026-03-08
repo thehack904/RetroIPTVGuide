@@ -22,6 +22,8 @@ from app import (
     _load_roads_from_disk, _save_roads_to_disk,
     _city_slug, _generate_basemap_png, _prewarm_basemaps,
     _TILE_SERVERS,
+    _generate_placeholder_basemap_png,
+    _BASEMAP_W, _BASEMAP_H,
 )
 
 
@@ -1013,4 +1015,57 @@ class TestPrewarmBasemaps:
         monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
 
         _prewarm_basemaps()
+        mock_get.assert_not_called()
+
+    def test_uses_placeholder_when_all_tile_servers_fail(self, monkeypatch, tmp_path):
+        """When tile downloads fail, _prewarm_basemaps must still create a PNG via placeholder."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("tile server blocked")))
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing placeholder basemap for {city['name']}"
+
+
+class TestGeneratePlaceholderBasemapPng:
+    """_generate_placeholder_basemap_png creates a valid PNG with no network access."""
+
+    def test_creates_png_file(self, tmp_path):
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_placeholder_basemap_png("Test City", out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, tmp_path):
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_placeholder_basemap_png("Chicago", out)
+        img = _I.open(out)
+        assert img.size == (_BASEMAP_W, _BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_placeholder_basemap_png("Chicago", out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_atomic_write(self, tmp_path):
+        """Destination file must not exist until write completes; no .tmp left behind."""
+        out = str(tmp_path / "atomic.png")
+        _generate_placeholder_basemap_png("Philadelphia", out)
+        assert os.path.isfile(out)
+        assert not os.path.isfile(out + ".tmp")
+
+    def test_no_network_calls(self, monkeypatch, tmp_path):
+        """Placeholder generation must never make HTTP requests."""
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+        out = str(tmp_path / "nonet.png")
+        _generate_placeholder_basemap_png("New York City", out)
         mock_get.assert_not_called()

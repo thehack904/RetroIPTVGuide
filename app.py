@@ -1595,12 +1595,86 @@ def _generate_basemap_png(lat: float, lon: float, out_path: str) -> bool:
     return True
 
 
+def _generate_placeholder_basemap_png(city_name: str, out_path: str) -> bool:
+    """Generate a map-like placeholder PNG using Pillow only (no network access).
+
+    Creates a 1280×720 image with a street-map-inspired colour scheme — a
+    light-grey land base, subtle grid lines for roads, and the city name
+    centred in the image.  This runs instantly at startup so the traffic
+    overlay always has a background, even when external tile servers are
+    unreachable.
+
+    Returns True on success, False if Pillow is unavailable.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    from PIL import ImageDraw, ImageFont
+
+    w, h = _BASEMAP_W, _BASEMAP_H
+
+    # OSM-inspired colour palette
+    BG_LAND    = (242, 239, 233)   # warm off-white (OSM land)
+    GRID_MAJOR = (200, 196, 187)   # subtle grey grid (arterial roads)
+    GRID_MINOR = (220, 216, 208)   # lighter minor grid
+    LABEL_CLR  = (130, 120, 100)   # muted brown-grey for city name
+
+    img  = _PilImage.new("RGB", (w, h), BG_LAND)
+    draw = ImageDraw.Draw(img)
+
+    # Minor grid (~city blocks, ~64 px apart)
+    for x in range(0, w, 64):
+        draw.line([(x, 0), (x, h)], fill=GRID_MINOR, width=1)
+    for y in range(0, h, 64):
+        draw.line([(0, y), (w, y)], fill=GRID_MINOR, width=1)
+
+    # Major grid (~arterial roads, ~256 px apart)
+    for x in range(0, w, 256):
+        draw.line([(x, 0), (x, h)], fill=GRID_MAJOR, width=2)
+    for y in range(0, h, 256):
+        draw.line([(0, y), (w, y)], fill=GRID_MAJOR, width=2)
+
+    # City name label centred on the image
+    _font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # Debian/Ubuntu
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",             # Fedora/RHEL
+        "/System/Library/Fonts/Helvetica.ttc",                     # macOS
+        "C:/Windows/Fonts/arial.ttf",                              # Windows
+    ]
+    font = None
+    for _fp in _font_candidates:
+        try:
+            font = ImageFont.truetype(_fp, 36)
+            break
+        except Exception:
+            pass
+    if font is None:
+        font = ImageFont.load_default()
+
+    label = city_name
+    bbox  = draw.textbbox((0, 0), label, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((w - tw) // 2, (h - th) // 2), label, fill=LABEL_CLR, font=font)
+
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    img.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
 def _prewarm_basemaps() -> None:
     """Background thread: generate missing basemap PNGs for all seed cities.
 
     Runs once at startup.  Already-present files are skipped so the roads
     and basemap pre-warm threads don't conflict on subsequent restarts.
-    Requests are staggered to stay within OSM tile-server fair-use limits.
+
+    Strategy (in order):
+    1. Try to download real OSM tiles via _generate_basemap_png.
+    2. If all tile servers fail (e.g. datacenter IP is blocked), fall back to
+       _generate_placeholder_basemap_png which uses Pillow only and works
+       instantly with no network access.  This guarantees every city gets a
+       usable basemap at startup regardless of tile-server availability.
     """
     if not _PILLOW_AVAILABLE:
         logging.info("_prewarm_basemaps: Pillow not available, skipping basemap generation")
@@ -1617,12 +1691,23 @@ def _prewarm_basemaps() -> None:
         try:
             ok = _generate_basemap_png(city['lat'], city['lon'], out_path)
             if ok:
-                logging.info("_prewarm_basemaps: saved %s.png", slug)
-            else:
-                logging.warning("_prewarm_basemaps: could not generate basemap for %s", city['name'])
+                logging.info("_prewarm_basemaps: saved real OSM basemap for %s", slug)
+                time.sleep(1)
+                continue
         except Exception:
-            logging.exception("_prewarm_basemaps: exception for %s", city['name'])
-        time.sleep(1)
+            logging.exception("_prewarm_basemaps: tile download exception for %s", city['name'])
+
+        # Tile download failed — generate a placeholder so the page always works
+        logging.info("_prewarm_basemaps: tile servers unavailable, using placeholder for %s",
+                     city['name'])
+        try:
+            ok = _generate_placeholder_basemap_png(city['name'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved placeholder basemap for %s", slug)
+            else:
+                logging.warning("_prewarm_basemaps: placeholder also failed for %s", city['name'])
+        except Exception:
+            logging.exception("_prewarm_basemaps: placeholder exception for %s", city['name'])
 
 
 def get_channel_music_file(tvg_id):
