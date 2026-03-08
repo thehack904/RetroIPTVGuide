@@ -3176,11 +3176,8 @@ class TestStreamDetectCompatibleField:
     """Verify the 'compatible' field is set correctly for each stream type
     so the UI can render incompatibility tips in amber rather than green."""
 
-    def test_hls_direct_is_compatible(self):
-        """HLS Direct → compatible = True."""
-        from utils.stream_detect import detect_stream_type
-        result = detect_stream_type("rtmp://fake")  # won't be HLS
-        # Use _classify directly for HLS Direct
+    def test_hls_direct_is_not_compatible(self):
+        """HLS Direct → compatible = False (master playlists spin in RetroIPTVGuide)."""
         from utils.stream_detect import _classify
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
         signals = []
@@ -3189,8 +3186,8 @@ class TestStreamDetectCompatibleField:
             "application/vnd.apple.mpegurl", body, signals
         )
         assert st == "HLS Direct"
-        # Verify via detect_stream_type result dict that compatible is set
-        from unittest.mock import patch, MagicMock
+        # Verify via detect_stream_type result dict that compatible is False
+        from unittest.mock import patch
         import utils.stream_detect as sd
         fake_fetch = {
             "ok": True, "status_code": 200,
@@ -3203,7 +3200,7 @@ class TestStreamDetectCompatibleField:
              patch.object(sd, "_check_ssrf_risk", return_value=None):
             r = sd.detect_stream_type("http://example.com/master.m3u8")
         assert r["stream_type"] == "HLS Direct"
-        assert r["compatible"] is True
+        assert r["compatible"] is False, "HLS Direct (master playlist) must be False — it spins in RetroIPTVGuide"
 
     def test_hls_segmenter_is_compatible(self):
         """HLS Segmenter → compatible = True."""
@@ -3316,3 +3313,95 @@ class TestStreamDetectCompatibleField:
         html = resp.data.decode()
         assert "sd-tip-warn" in html
         assert "sd-tip-ok" in html
+
+
+# ===========================================================================
+# Tests: URL query string signal detection + HLS Direct incompatibility
+# ===========================================================================
+
+class TestStreamDetectQueryStringSignals:
+    """Verify that URL query parameters (e.g. ?mode=hls-direct) are surfaced
+    as detection signals so users understand the server-side hint vs. the
+    actual stream format detected from the response body."""
+
+    def _make_fake_fetch(self, body, ct="application/vnd.apple.mpegurl"):
+        return {
+            "ok": True, "status_code": 200,
+            "content_type": ct,
+            "content_length": len(body), "response_time_ms": 10,
+            "error": None, "raw_bytes": body,
+        }
+
+    def test_mode_hls_direct_query_param_adds_signal(self):
+        """?mode=hls-direct in the URL produces a signal about the server mode."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        # Body is an HLS Segmenter media playlist (the common real-world case for
+        # servers that use ?mode=hls-direct to mean 'direct passthrough HLS')
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
+        fake_fetch = self._make_fake_fetch(body)
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://iptv.lan:8409/iptv/channel/1.m3u8?mode=hls-direct")
+        # Content-based classification should win over URL param
+        assert r["stream_type"] == "HLS Segmenter"
+        # Signal about the URL query param must appear
+        signal_text = " ".join(r["signals"]).lower()
+        assert "mode=" in signal_text or "hls-direct" in signal_text, (
+            "Expected a signal about the mode=hls-direct URL parameter"
+        )
+
+    def test_mode_query_param_does_not_override_body_classification(self):
+        """Classification is always based on body content, not URL query params."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        # Master playlist body → HLS Direct, regardless of what query param says
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://iptv.lan/low.m3u8\n"
+        fake_fetch = self._make_fake_fetch(body)
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "iptv.lan", "resolved_ip": "192.168.1.1", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://iptv.lan:8409/channel/1.m3u8?mode=hls-segmenter")
+        # Body says master playlist → HLS Direct
+        assert r["stream_type"] == "HLS Direct"
+
+    def test_url_without_query_string_no_mode_signal(self):
+        """URLs without query strings don't produce a mode signal."""
+        import utils.stream_detect as sd
+        from unittest.mock import patch
+        body = b"#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:1\n#EXT-X-TARGETDURATION:5\nseg0.ts\n"
+        fake_fetch = self._make_fake_fetch(body)
+        with patch.object(sd, "_fetch_partial", return_value=fake_fetch), \
+             patch.object(sd, "_check_dns", return_value={"hostname": "example.com", "resolved_ip": "1.2.3.4", "error": None}), \
+             patch.object(sd, "_check_ssrf_risk", return_value=None):
+            r = sd.detect_stream_type("http://example.com/live.m3u8")
+        signal_text = " ".join(r["signals"]).lower()
+        assert "mode=" not in signal_text
+
+    def test_hls_direct_tips_warn_about_incompatibility(self):
+        """HLS Direct tips must NOT say 'compatible with RetroIPTVGuide'."""
+        from utils.stream_detect import _classify
+        body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
+        signals = []
+        st, conf, desc, tips = _classify(
+            "http://example.com/master.m3u8",
+            "application/vnd.apple.mpegurl", body, signals
+        )
+        assert st == "HLS Direct"
+        tip_text = " ".join(tips).lower()
+        # Must not falsely claim compatibility
+        assert "this is compatible with retroiptvguide" not in tip_text
+        # Must warn about potential playback issues
+        assert any(
+            kw in tip_text
+            for kw in ("may", "fail", "spin", "not", "prefer", "segmenter", "media playlist")
+        ), f"Expected a warning in HLS Direct tips, got: {tip_text!r}"
+
+    def test_hls_direct_not_in_compatible_types_true(self):
+        """_COMPATIBLE_TYPES must NOT have HLS Direct mapped to True."""
+        from utils.stream_detect import _COMPATIBLE_TYPES
+        assert _COMPATIBLE_TYPES.get("HLS Direct") is not True, (
+            "HLS Direct must be False in _COMPATIBLE_TYPES — master playlists "
+            "do not play reliably in RetroIPTVGuide"
+        )

@@ -61,8 +61,8 @@ _UA = "RetroIPTVGuide-StreamProbe/1.0"
 # work (False) with RetroIPTVGuide's HLS.js-based player.  Types not listed
 # here return None (unknown / neutral) from detect_stream_type().
 _COMPATIBLE_TYPES: Dict[str, bool] = {
-    "HLS Direct":    True,
-    "HLS Segmenter": True,
+    "HLS Direct":    False,   # master playlists (multi-bitrate) spin without playing in RetroIPTVGuide
+    "HLS Segmenter": True,    # single-variant live media playlists work with HLS.js
     "MPEG-TS":          False,
     "MPEG-TS (likely)": False,
     "MPEG-TS segment":  False,
@@ -198,6 +198,22 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     raw = fetch.get("raw_bytes", b"")
     url_lower = url.lower().split("?")[0]  # path without query string
     signals: List[str] = []
+
+    # ── URL query-string signals ───────────────────────────────────────────
+    # The query string may carry server-side mode hints (e.g. ?mode=hls-direct).
+    # These are NOT stream format indicators — the body content determines the
+    # actual stream type — but they are useful context shown to the user.
+    _qs = url.split("?", 1)[1] if "?" in url else ""
+    if _qs:
+        from urllib.parse import parse_qs
+        _qs_params = parse_qs(_qs, keep_blank_values=True)
+        _mode = (_qs_params.get("mode") or _qs_params.get("MODE") or [""])[0].lower()
+        if _mode:
+            signals.append(
+                f"URL query parameter mode={_mode!r} detected — this is a "
+                "server-side delivery mode hint, not a stream format indicator.  "
+                "The stream format is determined from the response body above."
+            )
 
     stream_type, confidence, description, tips = _classify(
         url_lower, ct, raw, signals
@@ -352,8 +368,11 @@ def _classify(
         if has_stream_inf and not has_media_seq:
             # Master playlist → HLS Direct
             tips = [
-                "This is compatible with RetroIPTVGuide (HLS.js supports master playlists).",
-                "The client selects the best variant stream based on bandwidth.",
+                "RetroIPTVGuide uses HLS.js with a single-variant media playlist.  "
+                "Multi-bitrate master playlists (HLS Direct) may spin without playing — "
+                "use the HLS Segmenter (media playlist) URL instead if your server offers one.",
+                "Check if your IPTV source exposes a direct media playlist URL "
+                "(e.g. with ?mode=hls-segmenter or similar) instead of a master playlist.",
             ]
             if has_endlist:
                 tips.append("The playlist contains #EXT-X-ENDLIST — this is VOD, not live.")
@@ -362,8 +381,9 @@ def _classify(
                 "high",
                 (
                     "HLS master playlist detected.  The server provides multiple quality "
-                    "variants (#EXT-X-STREAM-INF) and the player automatically picks the "
-                    "best one.  This is the recommended format for multi-bitrate live TV."
+                    "variants (#EXT-X-STREAM-INF) and expects the player to pick one.  "
+                    "RetroIPTVGuide's HLS.js player may fail to play this reliably — "
+                    "a single-variant media playlist (HLS Segmenter) is preferred."
                 ),
                 tips,
             )
