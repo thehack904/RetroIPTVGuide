@@ -3408,7 +3408,7 @@ class TestStreamDetectQueryStringSignals:
         assert "mode=" not in signal_text
 
     def test_hls_direct_tips_are_informational_not_warnings(self):
-        """HLS Direct tips (from body classification) must be cautionary, not alarming."""
+        """HLS Direct tips must be cautionary, must not recommend ?mode=segmenter."""
         from utils.stream_detect import _classify
         body = b"#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=500000\nhttp://example.com/low.m3u8\n"
         signals = []
@@ -3423,11 +3423,21 @@ class TestStreamDetectQueryStringSignals:
         assert "spin without playing" not in tip_text
         assert "will spin" not in tip_text
         assert "will not play" not in desc_text
+        # Must NOT recommend ?mode=segmenter — not all servers support it
+        assert "mode=segmenter" not in tip_text, (
+            "HLS Direct tips must not tell users to try ?mode=segmenter "
+            "— this parameter is ErsatzTV-specific and not universally available"
+        )
         # Must convey that HLS.js can handle master playlists, with cautionary nuance
         assert any(
             kw in tip_text or kw in desc_text
             for kw in ("should play", "hls.js", "master playlist", "play", "most")
         ), f"Expected cautionary-but-positive HLS Direct tips, got tips={tip_text!r} desc={desc_text!r}"
+        # Must tell the user what to do when it doesn't work
+        assert "not supported" in tip_text or "spinner" in tip_text, (
+            "HLS Direct tips must explain what persistent buffering/spinner means: "
+            "the stream is not supported"
+        )
 
     def test_hls_direct_is_in_compatible_types_none(self):
         """_COMPATIBLE_TYPES must have HLS Direct mapped to None (caution — shown yellow in UI)."""

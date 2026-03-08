@@ -107,9 +107,9 @@ _MODE_TIPS: Dict[str, List[str]] = {
         "The ?mode=segmenter parameter tells the server to re-transcode and segment the stream.",
     ],
     "hls-direct": [
-        "HLS.js supports multi-bitrate master playlists natively — this stream should play.",
-        "If you experience buffering or quality issues, try ?mode=segmenter to have the "
-        "server re-encode the stream for a more stable single-bitrate output.",
+        "HLS.js supports multi-bitrate master playlists — this stream should play on most sources.",
+        "If you see a spinner that does not stop, or the video never starts, "
+        "this stream is not supported by RetroIPTVGuide.",
     ],
 }
 
@@ -437,9 +437,8 @@ def _classify(
             tips = [
                 "HLS master playlists should play in RetroIPTVGuide — HLS.js can handle "
                 "multi-bitrate streams for most sources.",
-                "Playback depends on the source codec and network; if you see buffering or "
-                "a spinner, try ?mode=segmenter (if your server supports it) for a "
-                "more stable single-bitrate output.",
+                "If you see a spinner that does not stop, or the video never starts, "
+                "this stream is not supported by RetroIPTVGuide.",
             ]
             if has_endlist:
                 tips.append("The playlist contains #EXT-X-ENDLIST — this is VOD, not live.")
