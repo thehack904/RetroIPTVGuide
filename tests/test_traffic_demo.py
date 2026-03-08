@@ -19,7 +19,7 @@ from app import (
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
     _fetch_overpass_roads,
-    _load_roads_from_disk, _save_roads_to_disk,
+    _load_roads_from_disk, _save_roads_to_disk, _load_bundled_roads,
     _city_slug, _generate_basemap_png, _prewarm_basemaps,
     _TILE_SERVERS,
     _generate_placeholder_basemap_png,
@@ -708,6 +708,174 @@ class TestGetTrafficDemoRoads:
         get_traffic_demo_roads(cid)
         cache_file = os.path.join(roads_dir, f"city_{cid}.json")
         assert not os.path.isfile(cache_file), "Empty GeoJSON must not be persisted to disk"
+
+
+# ─── _load_bundled_roads ──────────────────────────────────────────────────────
+
+class TestLoadBundledRoads:
+    """Unit tests for the bundled static road-data loader."""
+
+    def _sample_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                    "properties": {"way_id": 10, "name": "Test Rd", "highway": "motorway"},
+                }
+            ],
+        }
+
+    def test_returns_none_when_directory_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "no_such_dir"))
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_returns_none_when_file_absent(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_loads_valid_geojson(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text(json.dumps(self._sample_geojson()), encoding="utf-8")
+        result = _load_bundled_roads("Chicago")
+        assert result is not None
+        assert result["type"] == "FeatureCollection"
+        assert len(result["features"]) == 1
+
+    def test_returns_none_for_empty_feature_collection(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text(json.dumps({"type": "FeatureCollection", "features": []}),
+                        encoding="utf-8")
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_returns_none_for_corrupt_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text("not valid json", encoding="utf-8")
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_slug_matches_city_name(self, monkeypatch, tmp_path):
+        """'New York City' → 'newyorkcity.geojson'"""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "newyorkcity.geojson"
+        path.write_text(json.dumps(self._sample_geojson()), encoding="utf-8")
+        result = _load_bundled_roads("New York City")
+        assert result is not None
+        assert len(result["features"]) == 1
+
+
+class TestGetTrafficDemoRoadsBundledFallback:
+    """Ensure get_traffic_demo_roads() uses bundled data when disk cache is absent."""
+
+    def _sample_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                    "properties": {"way_id": 10, "name": "Test Rd", "highway": "motorway"},
+                }
+            ],
+        }
+
+    def test_bundled_used_when_no_disk_cache_and_overpass_empty(self, monkeypatch, tmp_path):
+        """Bundled data is returned when disk cache is empty and Overpass returns nothing."""
+        bundled_dir = str(tmp_path / "bundled")
+        os.makedirs(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+        # Overpass returns empty
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+        bundled_file = os.path.join(bundled_dir, f"{slug}.geojson")
+        with open(bundled_file, "w", encoding="utf-8") as fh:
+            json.dump(self._sample_geojson(), fh)
+
+        result = get_traffic_demo_roads(city['id'])
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) == 1
+
+    def test_overpass_not_called_when_bundled_available(self, monkeypatch, tmp_path):
+        """Overpass should NOT be called when a valid bundled file exists."""
+        bundled_dir = str(tmp_path / "bundled")
+        os.makedirs(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+        bundled_file = os.path.join(bundled_dir, f"{slug}.geojson")
+        with open(bundled_file, "w", encoding="utf-8") as fh:
+            json.dump(self._sample_geojson(), fh)
+
+        get_traffic_demo_roads(city['id'])
+        assert call_count['n'] == 0, "Overpass must not be called when bundled data is available"
+
+    def test_disk_cache_preferred_over_bundled(self, monkeypatch, tmp_path):
+        """Disk cache (step 2) must be preferred over bundled data (step 3)."""
+        bundled_dir = str(tmp_path / "bundled")
+        cache_dir   = str(tmp_path / "cache")
+        os.makedirs(bundled_dir)
+        os.makedirs(cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   cache_dir)
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+
+        # Write distinct bundled and disk-cache files
+        bundled_geojson = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature",
+                          "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                          "properties": {"way_id": 1, "name": "Bundled Rd", "highway": "motorway"}}]
+        }
+        disk_geojson = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature",
+                          "geometry": {"type": "LineString", "coordinates": [[2, 2], [3, 3]]},
+                          "properties": {"way_id": 2, "name": "Disk Rd", "highway": "trunk"}}]
+        }
+
+        with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+            json.dump(bundled_geojson, fh)
+        with open(os.path.join(cache_dir, f"city_{city['id']}.json"), "w", encoding="utf-8") as fh:
+            json.dump(disk_geojson, fh)
+
+        result = get_traffic_demo_roads(city['id'])
+        # Disk cache should win
+        assert result['features'][0]['properties']['name'] == 'Disk Rd'
+
+    def test_overpass_called_when_no_bundled_and_no_disk_cache(self, monkeypatch, tmp_path):
+        """Overpass IS called when both disk cache and bundled data are absent."""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   str(tmp_path / "empty_cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+
+        cities = get_traffic_demo_cities()
+        get_traffic_demo_roads(cities[0]['id'])
+        assert call_count['n'] == 1, "Overpass must be called when no bundled or disk data exists"
 
 
 # ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────
