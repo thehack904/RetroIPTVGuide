@@ -197,16 +197,21 @@ body.retro-magazine .sd-conf-low    { background:rgba(130,60,0,0.12);  color:#66
 body.retro-magazine .sd-conf-none   { background:rgba(140,0,0,0.10);   color:#700000; border-color:#700000; }
 /* Tip cards: base style (neutral/info) */
 .sd-tip { background:var(--dc-bg-deep); border-left:3px solid var(--dc-accent); padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
-/* Compatible stream — green/teal accent, e.g. "works with RetroIPTVGuide" */
+/* Confirmed-compatible stream — green/teal accent (HLS Segmenter, always reliable) */
 .sd-tip-ok { background:rgba(0,200,80,0.07); border-left:3px solid #00c850; color:inherit; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
+/* Caution: should play but not guaranteed — yellow accent (HLS Direct / master playlists) */
+.sd-tip-caution { background:rgba(220,180,0,0.10); border-left:3px solid #d4b400; color:inherit; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
 /* Incompatible stream — amber/orange accent, e.g. "cannot play MPEG-TS" */
 .sd-tip-warn { background:rgba(255,140,0,0.10); border-left:3px solid #ff8c00; color:inherit; padding:0.4rem 0.7rem; margin:0.3rem 0; font-size:0.83rem; border-radius:0 3px 3px 0; }
-body.light .sd-tip-ok   { background:rgba(0,140,50,0.08);  border-left-color:#006622; }
-body.light .sd-tip-warn { background:rgba(180,80,0,0.08);  border-left-color:#8a4400; }
-body.retroiptv .sd-tip-ok   { background:rgba(0,100,60,0.10); border-left-color:#005a33; }
-body.retroiptv .sd-tip-warn { background:rgba(160,70,0,0.10); border-left-color:#7a3500; }
-body.retro-magazine .sd-tip-ok   { background:rgba(0,80,20,0.10);  border-left-color:#005a00; }
-body.retro-magazine .sd-tip-warn { background:rgba(130,50,0,0.10); border-left-color:#662f00; }
+body.light .sd-tip-ok      { background:rgba(0,140,50,0.08);   border-left-color:#006622; }
+body.light .sd-tip-caution { background:rgba(160,130,0,0.08);  border-left-color:#7a6200; }
+body.light .sd-tip-warn    { background:rgba(180,80,0,0.08);   border-left-color:#8a4400; }
+body.retroiptv .sd-tip-ok      { background:rgba(0,100,60,0.10);  border-left-color:#005a33; }
+body.retroiptv .sd-tip-caution { background:rgba(140,110,0,0.10); border-left-color:#6e5500; }
+body.retroiptv .sd-tip-warn    { background:rgba(160,70,0,0.10);  border-left-color:#7a3500; }
+body.retro-magazine .sd-tip-ok      { background:rgba(0,80,20,0.10);  border-left-color:#005a00; }
+body.retro-magazine .sd-tip-caution { background:rgba(120,95,0,0.10); border-left-color:#5e4a00; }
+body.retro-magazine .sd-tip-warn    { background:rgba(130,50,0,0.10); border-left-color:#662f00; }
 </style>
 {% endblock %}
 
@@ -1207,18 +1212,21 @@ function fallbackCopy(text){
   }
 
   /* Render tips list into a container element.
-     compatible: true  → green ok class (HLS, works in RetroIPTVGuide)
-                 false → amber warn class (MPEG-TS, RTMP, DASH — needs proxy)
-                 null/undefined → default neutral accent class */
+     compatible: true      → green ok class    (HLS Segmenter — confirmed reliable)
+                 null      → yellow caution    (HLS Direct — should play, not guaranteed)
+                 false     → amber warn class  (MPEG-TS, RTMP, DASH — needs proxy)
+                 undefined → neutral blue      (truly unknown — no classification data) */
   function renderTips(containerEl, tips, compatible){
     if(tips && tips.length){
       var cls = compatible === true  ? 'sd-tip-ok'
               : compatible === false ? 'sd-tip-warn'
+              : compatible === null  ? 'sd-tip-caution'
               : 'sd-tip';
-      /* For incompatible streams swap the bulb emoji for a warning sign */
-      var icon = compatible === false ? '&#x26A0;&#xFE0F;'  /* ⚠️ warning */
-               : compatible === true  ? '&#x2705;'          /* ✅ check mark */
-               : '&#x1F4A1;';                               /* 💡 lightbulb */
+      /* Icon: confirmed works = ✅, caution/uncertain = 🟡, incompatible = ⚠️, unknown = 💡 */
+      var icon = compatible === false ? '\u26A0\uFE0F'   /* ⚠️ warning */
+               : compatible === true  ? '\u2705'         /* ✅ check mark */
+               : compatible === null  ? '\uD83D\uDFE1'   /* 🟡 yellow circle */
+               : '\uD83D\uDCA1';                         /* 💡 lightbulb */
       containerEl.innerHTML = tips.map(function(t){
         return '<div class="'+cls+'">'+icon+' '+esc(t)+'</div>';
       }).join('');
@@ -1264,9 +1272,9 @@ function fallbackCopy(text){
        so users can see compatibility at a glance before testing. */
     function channelHint(ch){
       if(!ch.stream_type_hint) return '';
-      var icon = ch.compatible_hint === true ? '\u2705' :    /* ✅ */
-                 ch.compatible_hint === false ? '\u26a0\ufe0f' : /* ⚠️ */
-                 '\uD83D\uDCA1';                               /* 💡 */
+      var icon = ch.compatible_hint === true ? '\u2705' :    /* ✅ confirmed works */
+                 ch.compatible_hint === false ? '\u26a0\ufe0f' : /* ⚠️ incompatible */
+                 '\uD83D\uDFE1';                               /* 🟡 caution/uncertain */
       return ' \u2014 ' + icon + ' ' + ch.stream_type_hint;
     }
 

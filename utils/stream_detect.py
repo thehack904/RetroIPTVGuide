@@ -60,9 +60,9 @@ _UA = "RetroIPTVGuide-StreamProbe/1.0"
 # Compatibility mapping: stream types that are known to work (True) or not
 # work (False) with RetroIPTVGuide's HLS.js-based player.  Types not listed
 # here return None (unknown / neutral) from detect_stream_type().
-_COMPATIBLE_TYPES: Dict[str, bool] = {
-    "HLS Direct":    True,    # HLS.js natively handles multi-bitrate master playlists
-    "HLS Segmenter": True,    # single-variant live media playlists work with HLS.js
+_COMPATIBLE_TYPES: Dict[str, Optional[bool]] = {
+    "HLS Direct":    None,    # HLS.js can handle master playlists, but playback is not guaranteed
+    "HLS Segmenter": True,    # single-variant live media playlists work reliably with HLS.js
     "MPEG-TS":          False,
     "MPEG-TS (likely)": False,
     "MPEG-TS segment":  False,
@@ -435,11 +435,11 @@ def _classify(
         if has_stream_inf and not has_media_seq:
             # Master playlist → HLS Direct
             tips = [
-                "HLS.js natively supports multi-bitrate master playlists — "
-                "this stream should play in RetroIPTVGuide.",
-                "If you experience quality or buffering issues, check whether your "
-                "server offers a single-bitrate media playlist URL "
-                "(e.g. with ?mode=segmenter) for a more stable output.",
+                "HLS master playlists should play in RetroIPTVGuide — HLS.js can handle "
+                "multi-bitrate streams for most sources.",
+                "Playback depends on the source codec and network; if you see buffering or "
+                "a spinner, try ?mode=segmenter (if your server supports it) for a "
+                "more stable single-bitrate output.",
             ]
             if has_endlist:
                 tips.append("The playlist contains #EXT-X-ENDLIST — this is VOD, not live.")
@@ -448,8 +448,9 @@ def _classify(
                 "high",
                 (
                     "HLS master playlist detected.  The server provides multiple quality "
-                    "variants (#EXT-X-STREAM-INF) and HLS.js will automatically select "
-                    "the best one.  This stream type is compatible with RetroIPTVGuide."
+                    "variants (#EXT-X-STREAM-INF) for HLS.js to choose from.  "
+                    "Most HLS Direct streams play fine — but source codec or CDN "
+                    "differences mean playback is not guaranteed."
                 ),
                 tips,
             )
