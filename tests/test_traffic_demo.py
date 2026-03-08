@@ -839,6 +839,46 @@ class TestFetchOverpassRoadsRetry:
         # Should have attempted _OVERPASS_MAX_RETRIES + 1 total calls
         assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
 
+    def test_retries_on_504_and_eventually_succeeds(self, monkeypatch):
+        """504 Gateway Timeout is treated as a transient error; function retries and succeeds."""
+        responses = [
+            self._make_response(504),
+            self._make_response(504),
+            self._make_response(200, self._GOOD_RESPONSE),
+        ]
+        mock_post = MagicMock(side_effect=responses)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 3
+        assert mock_sleep.call_count == 2  # slept before each retry
+
+    def test_exhausted_504_retries_return_empty(self, monkeypatch):
+        """All attempts return 504 - function must return empty elements dict."""
+        mock_post = MagicMock(return_value=self._make_response(504))
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == {"elements": []}
+        assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
+
+    def test_backoff_doubles_on_transient_errors(self, monkeypatch):
+        """Sleep duration must double between retries (exponential back-off)."""
+        mock_post = MagicMock(return_value=self._make_response(504))
+        sleep_calls = []
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", lambda s: sleep_calls.append(s))
+        _fetch_overpass_roads(41.88, -87.63)
+        # Verify each sleep is double the previous one
+        assert len(sleep_calls) == app_module._OVERPASS_MAX_RETRIES
+        initial = app_module._OVERPASS_RETRY_BACKOFF_S
+        assert sleep_calls[0] == initial
+        assert sleep_calls[1] == initial * 2
+        assert sleep_calls[2] == initial * 4
+
 
 # ─── Basemap PNG generation ────────────────────────────────────────────────────
 
