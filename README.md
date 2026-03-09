@@ -1,8 +1,8 @@
-# 📺 RetroIPTVGuide v4.7.1
+# 📺 RetroIPTVGuide v4.8.0
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-vv4.7.1-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-v4.8.0-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
@@ -23,20 +23,54 @@ RetroIPTVGuide is an IPTV Web Interface inspired by 90s/2000s cable TV guides.
 
 It is designed to work with [ErsatzTV](https://ersatztv.org/) [(GitRepo)](https://github.com/ErsatzTV/ErsatzTV/tree/main) but supports any `.m3u`, `.m3u8`, and `.xml` IPTV source.  
 
-Includes **Docker and TrueNAS SCALE deployment** for easy installation and persistence.
-
 ## 🚀 Features
-- 🧰 Unified installers for Linux, Raspberry Pi, and Windows
-- 📺 Self-hosted IPTV Electronic Program Guide (EPG)
-- 📡 M3U / M3U8 playlist support with XMLTV integration
-- 🧭 Integrated channel guide with auto-scroll navigation
-- 📱 TV-optimized web UI (Android TV / Fire TV compatible)
-- 🎛️ Display scaling modes (Large / Medium / Small)
-- 🎨 Multiple customizable retro-inspired themes
-- 👥 User management web interface (`manage_users.html`)
-- 🐳 Docker support with Linux, Raspberry Pi, and Windows installers
-- ⚙️ Lightweight Flask backend, easy to self-host
-- 🔐 Local-first by default — no cloud or external dependencies
+
+📺 **Self-hosted IPTV Electronic Program Guide (EPG)**  
+Turn any IPTV playlist into a full TV-style channel guide.
+
+🛰 **Virtual Channels System**  
+Create channels such as **News, Weather, Traffic (simulated), and System Status** that appear directly inside your guide alongside live IPTV channels.
+
+- **News** uses your own configurable RSS feeds  
+- **Weather** provides location-based forecasts using ZIP code or latitude/longitude  
+- **Traffic** provides simulated retro-style traffic reports  
+
+📡 **Multi-Source IPTV Support**  
+Load multiple **M3U / M3U8 playlists** with **XMLTV EPG data**.
+
+🔀 **Combined Tuners**  
+Merge multiple IPTV providers or playlists into one unified channel lineup.
+
+🧭 **Integrated Channel Guide**  
+Retro-style guide with smooth **auto-scroll navigation** and TV-style browsing.
+
+📱 **TV-Optimized Web Interface**  
+Designed to work well on **Android TV, Fire TV, browsers, and tablets**.
+
+🎛 **Display Scaling Modes**  
+Adjust the interface for different screen sizes: **Large / Medium / Small**.
+
+🎨 **Customizable Retro Themes**  
+Multiple themes inspired by classic TV guides and retro UI styles.
+
+👥 **User Management System**  
+Admin interface for managing users and guide preferences.
+
+🐳 **Simple Deployment Options**
+
+Run almost anywhere:
+
+- Docker
+- Linux
+- Windows
+- Raspberry Pi
+
+🔐 **Local-First by Default**  
+Runs entirely on your server with **no cloud services or external dependencies**.
+
+⚙ **Lightweight Backend**  
+Built with Flask for easy self-hosting and minimal system requirements.
+
 
 ## 📦 Image Information
 
@@ -105,12 +139,12 @@ After installation:
 
 ### 🐧 Linux 
 ```bash
-sudo retroiptv_linux.sh update --yes
+sudo /home/iptv/iptv-server/retroiptv_linux.sh update --yes
 ```
 
 ### 🍓 Raspberry Pi 
 ```bash
-sudo retroiptv_rpi.sh update --yes
+sudo /home/iptv/iptv-server/retroiptv_rpi.sh update --yes
 ```
 
 ### 🪟 Windows
@@ -123,14 +157,15 @@ git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
 
 ## 📘 Uninstall
 
-### 🐧 Linux 
+### 🐧 Linux
+Run the updater from your installed RetroIPTVGuide folder.
 ```bash
-sudo retroiptv_linux.sh uninstall --yes
+sudo /home/iptv/iptv-server/retroiptv_linux.sh uninstall --yes
 ```
 
 ### 🍓 Raspberry Pi
 ```bash
-sudo retroiptv_rpi.sh uninstall --yes
+sudo /home/iptv/iptv-server/retroiptv_rpi.sh uninstall --yes
 ```
 
 ### 🪟 Windows
@@ -140,11 +175,20 @@ sudo retroiptv_rpi.sh uninstall --yes
 ---
 
 ## 📸 Screenshots
+### 📺 Guide Page - Weather
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Guide_w_Weather.png)
+
+### 📺 Guide Page - Traffic
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Guide_w_Traffic.png)
+
+### 📺 Virtual Channel - News
+![Guide Screenshot](docs/screenshots/Virtual_Channel-News.png)
+
+### 📺 Virtual Channel - Traffic (Simulated)
+![Guide Screenshot](docs/screenshots/Virtual_Channel-Traffic-Simulated.png)
+
 ### 📺 Auto Scroll
 ![Auto Scroll](docs/screenshots/auto-scroll.gif)
-
-### 📺 Guide Page
-![Guide Screenshot](docs/screenshots/guide.png)
 
 ### 📺 Mobile
 ![Mobile](docs/screenshots/IMG_0001.jpg)
