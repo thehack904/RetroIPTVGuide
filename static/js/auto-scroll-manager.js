@@ -79,34 +79,22 @@
     try {
       var theme = (e && e.detail && e.detail.theme) ? e.detail.theme : null;
       if (!theme) return;
-      if (theme === 'tvguide1990') {
-        disableAutoScrollForTheme();
-      } else {
-        clearThemeDisableMarker();
-        // Optionally remove clones when switching away too (keep DOM tidy)
-        removeAutoScrollClones();
-      }
+      clearThemeDisableMarker();
+      // Remove any stale clones when the theme changes so auto-scroll starts clean.
+      removeAutoScrollClones();
     } catch (err) {
       console.error('onThemeApplied error', err);
     }
   }
 
-  // Also guard if theme gets applied via attribute/class changes on the document
-  // (some code may set body class or html data-theme directly). Observe body attributes.
   function watchBodyForThemeClass() {
     try {
       var observer = new MutationObserver(function (mutations) {
         mutations.forEach(function (m) {
           if (m.type === 'attributes' && m.attributeName === 'class') {
             try {
-              var cls = document.body.className || '';
-              if (cls.split(/\s+/).indexOf('tvguide1990') !== -1) {
-                disableAutoScrollForTheme();
-              } else {
-                // No tvguide1990 in classes: clear marker and remove clones
-                clearThemeDisableMarker();
-                removeAutoScrollClones();
-              }
+              clearThemeDisableMarker();
+              removeAutoScrollClones();
             } catch (e) {}
           }
         });
@@ -115,15 +103,9 @@
     } catch (e) {}
   }
 
-  // On load: if current theme is tvguide1990, disable auto-scroll and clean clones.
+  // On load: if auto-scroll is disabled in localStorage, ensure clones are not left behind.
   function initRunChecks() {
     try {
-      var saved = null;
-      try { saved = localStorage.getItem('theme'); } catch (e) {}
-      if (saved === 'tvguide1990') {
-        disableAutoScrollForTheme();
-      }
-      // If auto-scroll is disabled in localStorage, ensure clones are not left behind
       try {
         var enabled = localStorage.getItem('autoScrollEnabled');
         if (enabled === 'false') removeAutoScrollClones();

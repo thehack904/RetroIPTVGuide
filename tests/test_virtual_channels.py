@@ -794,12 +794,14 @@ class TestNewsFeedCycling:
 
     def test_get_current_feed_state_returns_valid_values(self):
         from app import get_current_feed_state
-        idx, ms = get_current_feed_state(6)
+        idx, ms, elapsed_ms = get_current_feed_state(6)
         assert 0 <= idx < 6
         assert 0 < ms <= 5 * 60 * 1000  # at most one full slot (5 min for 6 feeds)
+        assert 0 <= elapsed_ms < 5 * 60 * 1000
 
     def test_get_current_feed_state_zero_feeds_fallback(self):
         from app import get_current_feed_state
-        idx, ms = get_current_feed_state(0)
+        idx, ms, elapsed_ms = get_current_feed_state(0)
         assert idx == 0
         assert ms == 5 * 60 * 1000
+        assert elapsed_ms == 0

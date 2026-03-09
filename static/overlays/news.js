@@ -63,11 +63,24 @@
     }
     .vc-news-brand strong { font-weight: 900; }
     .vc-news-header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.05em;
+    }
+    .vc-news-header-title {
       font-size: 1.2em;
       font-weight: 900;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #fff;
+    }
+    .vc-news-header-updated {
+      font-size: 0.7em;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd700;
     }
     .vc-news-body {
       flex: 1;
@@ -249,6 +262,12 @@
     return `<img src="${src}" alt="${esc(alt)}" onerror="this.src='${FALLBACK_IMG}'">`;
   }
 
+  function formatLocalTime(isoStr) {
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
   function applyTickerSpeed(frame) {
     const track = frame.querySelector('.vc-news-ticker-track');
     if (!track) return;
@@ -325,7 +344,10 @@
           '<span class="vc-news-globe">\uD83C\uDF10</span>' +
           '<span class="vc-news-brand">RetroIPTV <strong>News</strong></span>' +
         '</div>' +
-        '<div class="vc-news-header-right">Latest Headlines</div>' +
+        '<div class="vc-news-header-right">' +
+          '<div class="vc-news-header-title">Latest Headlines</div>' +
+          '<div class="vc-news-header-updated">Updated: ' + (data && data.updated ? formatLocalTime(data.updated) : '') + '</div>' +
+        '</div>' +
       '</div>' +
       '<div class="vc-news-body">' +
         '<div class="vc-news-main">' + mainHtml + '</div>' +
@@ -354,6 +376,11 @@
   // are always in sync regardless of whether anyone is tuned in.
   let _cycleTimer    = null; // fires at ms_until_next_feed to trigger next render
 
+  // Tracks the last-seen feed index so we only update the displayed "Updated"
+  // timestamp when the feed actually switches, not on every periodic refresh.
+  let _lastFeedIndex = null;
+  let _feedUpdatedAt = null;
+
   // Called when the cycle timer fires — the server has already transitioned to
   // the next slot, so a plain OverlayEngine.tick() picks up the new feed_index.
   function advanceAndTick() {
@@ -367,6 +394,12 @@
   const _origFetchData = fetchData;
   async function fetchDataWithCycling() {
     const data = await _origFetchData();
+    // Only advance the "Updated" timestamp when the feed index changes.
+    if (data.feed_index !== _lastFeedIndex) {
+      _lastFeedIndex = data.feed_index;
+      _feedUpdatedAt = data.updated;
+    }
+    data.updated = _feedUpdatedAt || data.updated;
     // Schedule the next feed transition precisely at ms_until_next_feed.
     // Only set a new timer if one isn't already pending — this prevents
     // OverlayEngine's own periodic refresh (e.g. every 60 s) from resetting

@@ -1,3 +1,4 @@
 flask
 flask-login
 requests
+Pillow
