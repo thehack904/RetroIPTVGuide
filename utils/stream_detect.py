@@ -32,6 +32,7 @@ parsed from M3U playlists for the channel dropdown feature.
 from __future__ import annotations
 
 import re
+import requests as _req
 import socket
 import time
 from typing import Any, Dict, List, Optional
@@ -810,7 +811,6 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT) -> Dict[str, Any]:
     }
     t0 = time.monotonic()
     try:
-        import requests as _req  # noqa: PLC0415
         # nosec B113 — intentional admin-only SSRF: URL has been validated against
         # loopback/link-local addresses by _check_ssrf_risk() before reaching here.
         # RFC-1918 private addresses are intentionally allowed because many IPTV
