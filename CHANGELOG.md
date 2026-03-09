@@ -6,6 +6,73 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.8.0 - 2026-03-05
+
+### Added
+- **Virtual Channels system**
+  - Added a new Virtual Channels framework that allows RetroIPTVGuide to create built-in guide channels independent of tuner sources.
+  - Virtual channels are merged directly into the guide and include synthetic EPG data so they behave like regular channels.
+
+- **Built-in virtual channels**
+  - Added **News Now**
+  - Added **Weather Now**
+  - Added **System Status**
+  - Added **Traffic Now (SIMULATED)**
+
+- **Virtual channel playback**
+  - Virtual channels now play inside the existing video player using local looping video assets.
+  - Added per-channel loop assets, overlay types, refresh intervals, and virtual-channel metadata.
+
+- **Overlay engine**
+  - Added a frontend overlay engine for dynamic virtual channel overlays.
+  - Added dedicated overlay renderers for News, Weather, Status, and Traffic.
+
+- **Virtual Channels admin page**
+  - Added a dedicated Virtual Channels management page.
+  - Added enable/disable controls for each virtual channel.
+  - Added persistent virtual channel ordering.
+  - Added per-channel settings panels.
+
+- **News channel configuration**
+  - Added support for up to 6 configurable RSS/Atom feed URLs.
+  - Added standalone News preview page.
+
+- **Weather channel configuration**
+  - Added weather configuration for latitude, longitude, location name, and units.
+  - Added ZIP code lookup workflow.
+  - Added standalone Weather preview page.
+
+- **Traffic channel configuration**
+  - Added simulated traffic channel with locally generated traffic/demo data.
+  - Added city rotation controls, city enable/disable toggles, weighting, and bulk actions.
+  - Added standalone Traffic preview page.
+
+- **Status channel**
+  - Added standalone Status preview page and system-status virtual overlay rendering.
+
+- **Background music for virtual channels**
+  - Added support for selecting uploaded audio files as virtual-channel background music.
+
+- **Virtual channel fullscreen controls**
+  - Added fullscreen and mute controls for virtual channels.
+
+- **Navigation**
+  - Added Virtual Channels entry to the admin/header navigation.
+
+- **Tests**
+  - Added test coverage for audio handling, virtual channels, weather, and traffic demo functionality.
+
+### Changed
+- Updated guide playback logic to support virtual channels alongside normal tuner channels.
+- Split administration more cleanly between Tuner Management and Virtual Channels.
+- Updated display-size and video-resize handling to support virtual overlay/fullscreen behavior.
+
+### Fixed
+- Improved persistence and validation for virtual channel settings, including feed URLs, weather configuration, traffic demo settings, and per-channel audio selection.
+- Improved guide behavior when switching between normal tuner channels and virtual channels.
+
+---
+
 ## v4.7.1 - 2026-02-28
 
 ### Fixed
