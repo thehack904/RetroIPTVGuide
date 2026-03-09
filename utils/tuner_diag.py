@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import html
 import re
+import requests as _req
 import socket
 import sqlite3
 import time
@@ -85,8 +86,6 @@ def parse_tuner_with_trace(tuner_name: str, tuner_db_path: str) -> Dict[str, Any
 
 def _trace_m3u(url: str) -> Dict[str, Any]:
     """Fetch and analyse an M3U playlist URL."""
-    import requests as _req  # noqa: PLC0415
-
     trace: Dict[str, Any] = {
         "url": url,
         "fetch": None,
@@ -553,8 +552,6 @@ def _check_dns(url: str) -> Dict[str, Any]:
 
 def _fetch_url(url: str, timeout: int = 15) -> Dict[str, Any]:
     """HTTP GET *url*, return fetch metadata + raw bytes (capped at 5 MB)."""
-    import requests as _req  # noqa: PLC0415
-
     MAX_FETCH_BYTES = 5 * 1024 * 1024
 
     result: Dict[str, Any] = {
