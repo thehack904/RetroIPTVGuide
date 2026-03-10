@@ -159,6 +159,7 @@ install_app() {
   else
     ( cd "$APP_DIR" && sudo -u "$APP_USER" git pull )
   fi
+  sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
 
   # Python venv setup
   if [ ! -d "$APP_DIR/venv" ]; then
