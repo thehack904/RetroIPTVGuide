@@ -177,6 +177,12 @@ body.retro-magazine .diag-container { --dc-accent: #bb0000; }
 .issue-markdown-pre { background: var(--dc-log-bg); color: var(--dc-log-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.7rem; font-family: 'Courier New', monospace; font-size: 0.76rem; white-space: pre-wrap; word-break: break-all; max-height: 50vh; overflow-y: auto; min-height: 120px; margin-bottom: 0.7rem; }
 .issue-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-top: 0.5rem; }
 .btn-action.copied { background: #1a6a1a; color: #aaffaa; }
+/* Activity log tab */
+.activity-log-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+.activity-log-table th { color:var(--dc-muted); font-weight:normal; text-transform:uppercase; font-size:0.72rem; padding:0.3rem 0.5rem; border-bottom:1px solid var(--dc-border); text-align:left; }
+.activity-log-table td { padding:0.35rem 0.5rem; border-bottom:1px solid var(--dc-border-faint); font-family:monospace; word-break:break-all; vertical-align:top; }
+.activity-log-table tr.security td { color:#ffbaba; font-weight:700; background:rgba(200,30,30,0.12); }
+.activity-pagination { display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap; margin-top:0.8rem; }
 /* Stream detect tab */
 .sd-confidence-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:20px; font-size:0.78rem; font-weight:700; letter-spacing:0.04em; }
 .sd-conf-high   { background:rgba(51,255,102,0.18); color:#33ff66; border:1px solid #33ff66; }
@@ -223,6 +229,7 @@ body.retro-magazine .sd-tip-warn    { background:rgba(130,50,0,0.10); border-lef
     <button class="diag-tab-btn{% if active_tab == 'tuners' %} active{% endif %}" data-tab="tuners">&#x1F50C; Tuners</button>
     <button class="diag-tab-btn{% if active_tab == 'config' %} active{% endif %}"  data-tab="config">&#x2699;&#xFE0F; Config</button>
     <button class="diag-tab-btn{% if active_tab == 'logs' %} active{% endif %}"    data-tab="logs">&#x1F4C4; Logs</button>
+    <button class="diag-tab-btn{% if active_tab == 'activity' %} active{% endif %}" data-tab="activity">&#x1F4CB; Activity</button>
     <button class="diag-tab-btn{% if active_tab == 'health' %} active{% endif %}"  data-tab="health">&#x2764;&#xFE0F; Health</button>
     <button class="diag-tab-btn{% if active_tab == 'system' %} active{% endif %}"  data-tab="system">&#x1F5A5; System</button>
     <button class="diag-tab-btn{% if active_tab == 'stream' %} active{% endif %}"  data-tab="stream">&#x1F4F6; Stream Detect</button>
@@ -305,6 +312,65 @@ body.retro-magazine .sd-tip-warn    { background:rgba(130,50,0,0.10); border-lef
       </div>
       <div class="log-meta" id="logMeta"></div>
       <pre id="logOutput"><span style="color:var(--dc-muted)">Select a log file and click Tail or Full Log.</span></pre>
+    </div>
+  </div>
+
+  <!-- ACTIVITY TAB -->
+  <div id="panel-activity" class="diag-panel{% if active_tab == 'activity' %} active{% endif %}">
+    <div class="diag-box">
+      <h3>Activity Log <span id="activitySpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.8rem">
+        User logins, password changes, tuner switches, and other admin actions recorded in <code>activity.log</code>.
+      </p>
+
+      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.8rem">
+        <button type="button" class="btn-action" id="btnLoadActivity">&#x25BA; Load Activity Log</button>
+        <form method="POST" action="{{ url_for('clear_logs') }}" id="clearLogsForm" style="display:inline">
+          <button type="submit" class="btn-action" style="background:#c00;color:#fff"
+            onclick="return confirm('Clear all activity logs? This cannot be undone.')">
+            &#x1F9F9; Clear Logs
+          </button>
+        </form>
+        <span id="activityLogSize" style="font-size:0.82rem;color:var(--dc-muted)"></span>
+      </div>
+
+      <!-- Search and filter bar -->
+      <div class="log-controls" style="margin-bottom:0.6rem">
+        <input type="text" id="activitySearch" placeholder="Search logs…"
+          style="padding:0.3rem 0.6rem;border-radius:3px;border:1px solid var(--dc-border);background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.88rem;flex:1;min-width:160px"
+          oninput="activityApply()">
+        <button type="button" class="btn-action activity-filter-btn active" data-filter="all" onclick="activitySetFilter(this,'all')">All</button>
+        <button type="button" class="btn-action secondary activity-filter-btn" data-filter="activity" onclick="activitySetFilter(this,'activity')">Activity</button>
+        <button type="button" class="btn-action secondary activity-filter-btn" data-filter="security" onclick="activitySetFilter(this,'security')">Security</button>
+      </div>
+
+      <!-- Log table -->
+      <div style="overflow-x:auto">
+        <table id="activityTable" class="activity-log-table">
+          <thead>
+            <tr><th>User</th><th>Action</th><th>Timestamp</th></tr>
+          </thead>
+          <tbody id="activityTableBody">
+            <tr><td colspan="3" style="color:var(--dc-muted);text-align:center;padding:1rem">
+              Click &ldquo;Load Activity Log&rdquo; to view entries.
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="activity-pagination">
+        <button type="button" class="btn-action secondary" id="activityPrevBtn" onclick="activityChangePage(-1)" disabled>Previous</button>
+        <span id="activityPageInfo" style="font-size:0.85rem;color:var(--dc-muted);padding:0 0.5rem">Page 1</span>
+        <button type="button" class="btn-action secondary" id="activityNextBtn" onclick="activityChangePage(1)" disabled>Next</button>
+        <select id="activityPageSize" onchange="activityChangePageSize()"
+          style="padding:0.3rem 0.5rem;border-radius:3px;border:1px solid var(--dc-border);background:var(--dc-bg-input);color:var(--dc-input-text);font-size:0.85rem">
+          <option value="10">10 per page</option>
+          <option value="25" selected>25 per page</option>
+          <option value="50">50 per page</option>
+          <option value="100">100 per page</option>
+        </select>
+      </div>
     </div>
   </div>
 
@@ -1500,6 +1566,160 @@ function fallbackCopy(text){
       chanErr.style.display = 'block';
     });
   });
+})();
+
+/* ── Activity Log Tab ── */
+(function(){
+  var ACTIVITY_MAX_ENTRIES = 2000;
+  var activityRows = [];      // parsed row objects: {user, action, ts, type}
+  var activityFilter = 'all';
+  var activityPage = 1;
+  var activityPageSize = 25;
+
+  var SECURITY_KEYWORDS = ['unauthorized','revoked','failed','denied'];
+
+  // Lines returned by the API are already HTML-escaped. The pipe separator
+  // is not a special HTML character, so we can split safely on ' | '.
+  // We keep the parts as-is (HTML-escaped) for display via innerHTML.
+  function parseActivityLine(line){
+    var sep = ' | ';
+    var first = line.indexOf(sep);
+    var last  = line.lastIndexOf(sep);
+    var user, action, ts;
+    if(first !== -1 && last !== -1 && first !== last){
+      user   = line.slice(0, first).trim();
+      action = line.slice(first + sep.length, last).trim();
+      ts     = line.slice(last + sep.length).trim();
+    } else if(first !== -1){
+      user   = line.slice(0, first).trim();
+      action = line.slice(first + sep.length).trim();
+      ts     = '';
+    } else {
+      user   = 'system';
+      action = line.trim();
+      ts     = '';
+    }
+    // Check security keywords on the raw (HTML-escaped) text — keywords
+    // don't contain special HTML characters so matching is safe.
+    var isSecure = SECURITY_KEYWORDS.some(function(kw){
+      return action.toLowerCase().indexOf(kw) !== -1;
+    });
+    return {user: user, action: action, ts: ts, type: isSecure ? 'security' : 'activity'};
+  }
+
+  function setTbodyMessage(msg){
+    var tbody = document.getElementById('activityTableBody');
+    tbody.textContent = '';
+    var tr = document.createElement('tr');
+    var td = document.createElement('td');
+    td.colSpan = 3;
+    td.style.cssText = 'color:var(--dc-muted);text-align:center;padding:1rem';
+    td.textContent = msg;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+  }
+
+  function buildTableRows(slice){
+    var frag = document.createDocumentFragment();
+    slice.forEach(function(r){
+      var tr = document.createElement('tr');
+      if(r.type === 'security') tr.className = 'security';
+      ['user','action','ts'].forEach(function(key){
+        var td = document.createElement('td');
+        td.textContent = r[key];
+        tr.appendChild(td);
+      });
+      frag.appendChild(tr);
+    });
+    return frag;
+  }
+
+  function loadActivity(){
+    spin('activitySpinner', true);
+    fetch('/admin/diagnostics/logs?key=activity&n='+ACTIVITY_MAX_ENTRIES, {credentials:'same-origin'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      spin('activitySpinner', false);
+      activityRows = [];
+      if(d.error && !d.lines.length){
+        setTbodyMessage('Error: ' + d.error);
+        return;
+      }
+      document.getElementById('activityLogSize').textContent =
+        d.count + ' entr' + (d.count === 1 ? 'y' : 'ies') + ' loaded';
+
+      d.lines.forEach(function(line){
+        activityRows.push(parseActivityLine(line));
+      });
+      activityPage = 1;
+      activityApply();
+    })
+    .catch(function(e){
+      spin('activitySpinner', false);
+      setTbodyMessage('Failed to load: ' + String(e));
+    });
+  }
+
+  function activityGetFiltered(){
+    var q = (document.getElementById('activitySearch').value || '').toLowerCase();
+    return activityRows.filter(function(r){
+      if(activityFilter !== 'all' && r.type !== activityFilter) return false;
+      if(q && (r.user+' '+r.action+' '+r.ts).toLowerCase().indexOf(q) === -1) return false;
+      return true;
+    });
+  }
+
+  window.activityApply = function(){
+    var filtered = activityGetFiltered();
+    var total = filtered.length;
+    var pages = Math.max(1, Math.ceil(total / activityPageSize));
+    if(activityPage > pages) activityPage = pages;
+    if(activityPage < 1) activityPage = 1;
+
+    var start = (activityPage - 1) * activityPageSize;
+    var slice = filtered.slice(start, start + activityPageSize);
+
+    var tbody = document.getElementById('activityTableBody');
+    tbody.textContent = '';
+    if(total === 0){
+      setTbodyMessage('No entries match the current filter.');
+    } else {
+      tbody.appendChild(buildTableRows(slice));
+    }
+
+    document.getElementById('activityPageInfo').textContent =
+      'Page ' + activityPage + ' of ' + pages + ' (' + total + ' entries)';
+    document.getElementById('activityPrevBtn').disabled = activityPage <= 1 || total === 0;
+    document.getElementById('activityNextBtn').disabled = activityPage >= pages || total === 0;
+  };
+
+  window.activitySetFilter = function(btn, filter){
+    activityFilter = filter;
+    activityPage = 1;
+    document.querySelectorAll('.activity-filter-btn').forEach(function(b){
+      b.classList.toggle('active', b === btn);
+      b.classList.toggle('secondary', b !== btn);
+    });
+    activityApply();
+  };
+
+  window.activityChangePage = function(delta){
+    activityPage += delta;
+    activityApply();
+  };
+
+  window.activityChangePageSize = function(){
+    activityPageSize = parseInt(document.getElementById('activityPageSize').value, 10) || 25;
+    activityPage = 1;
+    activityApply();
+  };
+
+  document.getElementById('btnLoadActivity').addEventListener('click', loadActivity);
+
+  // Auto-load if the activity tab is the active tab on page load
+  {% if active_tab == 'activity' %}
+  loadActivity();
+  {% endif %}
 })();
 
 })();
