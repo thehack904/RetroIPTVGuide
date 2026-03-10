@@ -127,6 +127,7 @@ clone_or_stage_project(){
   git clone --depth 1 -b main https://github.com/thehack904/RetroIPTVGuide.git "$TMP"
   rsync -a --delete --exclude 'venv' "$TMP/" "$APP_DIR/"
   chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+  chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
 }
 
 make_venv_and_install(){
