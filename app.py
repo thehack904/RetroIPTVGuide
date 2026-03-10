@@ -4054,12 +4054,12 @@ def view_logs():
 def clear_logs():
     if current_user.username != 'admin':
         flash("Unauthorized access.")
-        return redirect(url_for('view_logs'))
+        return redirect(url_for('guide'))
 
     open(LOG_PATH, "w").close()  # clear the file
     log_event("admin", "Cleared log file")
     flash("🧹 Logs cleared successfully.")
-    return redirect(url_for('view_logs'))
+    return redirect(url_for('admin_diagnostics.diagnostics_index', tab='activity'))
 
 
 # ------------------- Constants -------------------
