@@ -30,7 +30,7 @@ try:
 except Exception as e:
     vlc_control = None
     # Log the import failure so we can see why it failed when the app starts
-    logging.exception("Failed to import vlc_control: %s", e)
+    # logging.exception("Failed to import vlc_control: %s", e)
 
 # Pillow is used to stitch OSM map tiles into the static basemap PNGs for the
 # traffic demo.  It is optional — without it the browser falls back to Leaflet.
