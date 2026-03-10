@@ -45,6 +45,62 @@ except ImportError:
 
 APP_START_TIME = datetime.now()
 
+# ------------------- Canonical Data Directory -------------------
+# Priority: 1) RETROIPTV_DATA_DIR env var  2) OS default  3) ./config fallback
+def _resolve_data_dir() -> str:
+    env_val = os.environ.get("RETROIPTV_DATA_DIR", "").strip()
+    if env_val:
+        return env_val
+    if sys.platform == "win32":
+        prog_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        return os.path.join(prog_data, "RetroIPTVGuide")
+    # Linux / macOS: try the system path only when we can actually write to it
+    system_path = "/var/lib/retroiptvguide"
+    try:
+        os.makedirs(system_path, exist_ok=True)
+        # Verify writability with a probe
+        probe = os.path.join(system_path, ".write_probe")
+        with open(probe, "w") as _fh:
+            _fh.write("ok")
+        os.unlink(probe)
+        return system_path
+    except (PermissionError, OSError):
+        pass
+    # Fallback: portable ./config directory next to app.py
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
+
+DATA_DIR = _resolve_data_dir()
+
+# Ensure required subdirectories exist
+for _subdir in ("logs", "db", "xmltv", "support"):
+    _subdir_path = os.path.join(DATA_DIR, _subdir)
+    try:
+        os.makedirs(_subdir_path, exist_ok=True)
+    except (PermissionError, OSError) as _mkdir_err:
+        print(
+            f"[RetroIPTVGuide] WARNING: could not create directory {_subdir_path!r}: {_mkdir_err}",
+            file=sys.stderr,
+        )
+
+# ------------------- Logging Setup -------------------
+from utils.logging_setup import configure_logging as _configure_logging
+_configure_logging(DATA_DIR)
+
+# ------------------- Startup Diagnostics -------------------
+# Initialised right after logging so startup errors are captured
+# even if later imports fail or the DB can't be opened.
+from utils.startup_diag import (
+    configure_startup_log as _configure_startup_log,
+    record_environment as _record_environment,
+    record_startup_event as _record_startup_event,
+    record_import_error as _record_import_error,
+    record_db_init as _record_db_init,
+)
+_configure_startup_log(DATA_DIR)
+_record_environment()
+_record_startup_event("info", "data_dir", DATA_DIR)
+_record_startup_event("info", "app_version", APP_VERSION)
+
 # ------------------- Config -------------------
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # replace with a fixed key in production
@@ -64,8 +120,49 @@ login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
 
+# ------------------- Diagnostics Blueprint -------------------
+from utils.log_reading import configure_allowed_logs as _configure_allowed_logs
+_configure_allowed_logs(DATA_DIR)
+
+from blueprints.admin_diagnostics import admin_diagnostics_bp
+
+# Inject runtime config into the app so the blueprint can access it
+app.config["DIAG_DATA_DIR"] = DATA_DIR
+app.config["DIAG_APP_VERSION"] = APP_VERSION
+app.config["DIAG_APP_START_TIME"] = APP_START_TIME
+# DATABASE and TUNER_DB may be overridden in tests; blueprint reads them lazily
+# via a lambda so they pick up any monkeypatch changes made after import.
+app.config["DIAG_DATABASE"] = DATABASE
+app.config["DIAG_TUNER_DB"] = TUNER_DB
+
+app.register_blueprint(admin_diagnostics_bp)
+
+# ------------------- Public startup-status endpoint -------------------
+@app.route('/startup-status')
+def startup_status_public():
+    """Public (no login required) endpoint for pre-login diagnostics.
+
+    Returns minimal JSON describing whether the app started successfully and
+    any critical errors that occurred during startup.  Deliberately limited —
+    no log content, no paths, no secrets.  Useful when the admin panel itself
+    cannot be reached.
+    """
+    from utils.startup_diag import get_startup_summary
+    summary = get_startup_summary()
+    # Return only fields safe for unauthenticated callers
+    return jsonify({
+        "app": "RetroIPTVGuide",
+        "version": APP_VERSION,
+        "status": summary["status"],
+        "finished_at": summary["finished_at"],
+        "error_count": summary["error_count"],
+        "warning_count": summary["warning_count"],
+        # Surface error categories (no detail text) so the caller knows where to look
+        "error_categories": list({e["category"] for e in summary["errors"]}),
+    })
+
 # ------------------- Activity Log -------------------
-LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "activity.log")
+LOG_PATH = os.path.join(DATA_DIR, "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -1365,6 +1462,14 @@ def _load_bundled_roads(city_name: str) -> dict | None:
                         exc_info=True)
         return None
 
+# Most-recent Overpass API error recorded at runtime. Populated by
+# _fetch_overpass_roads on any HTTP error (including 429 rate-limit and
+# 504 gateway timeout) and cleared after a successful fetch. Exposed to
+# the Admin Diagnostics external-services check so that rate-limiting
+# failures are visible in the health panel even though the /api/status
+# probe may return 200 OK.
+_OVERPASS_LAST_ERROR: dict = {}  # keys: status_code, lat, lon, ts, message
+
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
     """Fetch major road geometry from the Overpass API (free, no API key).
@@ -1376,7 +1481,10 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     honouring the Retry-After response header when present.
     _OVERPASS_SEMAPHORE ensures at most one live Overpass request runs at a time
     across all threads, preventing concurrent requests that trigger rate-limits.
-    On permanent failure returns an empty FeatureCollection."""
+    On any HTTP error (including 429 Too Many Requests and 504 Gateway Timeout)
+    records the failure in _OVERPASS_LAST_ERROR for the Admin Diagnostics health
+    check.  On permanent failure returns an empty FeatureCollection."""
+    global _OVERPASS_LAST_ERROR  # noqa: PLW0603
     query = (
         f"[out:json][timeout:60];"
         f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
@@ -1404,7 +1512,36 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
                     backoff *= 2
                     continue
                 resp.raise_for_status()
+                # Successful fetch — clear any previously recorded error so that the
+                # diagnostics check reflects the current (healthy) state.
+                _OVERPASS_LAST_ERROR = {}
                 return resp.json()
+            except requests.exceptions.HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if attempt < _OVERPASS_MAX_RETRIES and status_code not in (429,):
+                    logging.warning(
+                        "_fetch_overpass_roads: HTTP error %s (attempt %d/%d),"
+                        " retrying in %ds",
+                        status_code, attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                if status_code == 429:
+                    logging.warning(
+                        "_fetch_overpass_roads rate-limited (429 Too Many Requests) "
+                        "for lat=%s lon=%s — road overlay will be empty until rate limit lifts",
+                        lat, lon,
+                    )
+                else:
+                    logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+                _OVERPASS_LAST_ERROR = {
+                    "status_code": status_code,
+                    "lat": lat,
+                    "lon": lon,
+                    "ts": time.time(),
+                    "message": str(exc),
+                }
             except Exception:
                 if attempt < _OVERPASS_MAX_RETRIES:
                     logging.warning(
@@ -1414,10 +1551,17 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
                     )
                     time.sleep(backoff)
                     backoff *= 2
-                else:
-                    logging.exception(
-                        "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
-                    )
+                    continue
+                logging.exception(
+                    "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
+                )
+                _OVERPASS_LAST_ERROR = {
+                    "status_code": None,
+                    "lat": lat,
+                    "lon": lon,
+                    "ts": time.time(),
+                    "message": "network or timeout error",
+                }
         return {"elements": []}
 
 
@@ -4356,9 +4500,22 @@ def api_health():
 
 
 if __name__ == '__main__':
-    init_db()
+    from utils.startup_diag import finalise_startup as _finalise_startup
+    try:
+        init_db()
+        _record_db_init("users.db", DATABASE, success=True)
+    except Exception as _dberr:
+        _record_db_init("users.db", DATABASE, success=False, error=str(_dberr))
+        raise
+
     add_user('admin', 'strongpassword123')
-    init_tuners_db()
+
+    try:
+        init_tuners_db()
+        _record_db_init("tuners.db", TUNER_DB, success=True)
+    except Exception as _dberr:
+        _record_db_init("tuners.db", TUNER_DB, success=False, error=str(_dberr))
+        raise
 
     # make sure there’s at least one tuner in the DB
     ensure_default_tuner()
@@ -4371,6 +4528,9 @@ if __name__ == '__main__':
     # Use load_tuner_data so combined tuners are handled correctly at startup.
     cached_channels, cached_epg = load_tuner_data(current_tuner)
 
+    _record_startup_event("info", "cache_load",
+                          f"Loaded {len(cached_channels)} channel(s) from tuner '{current_tuner}'")
+
     # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
     # so the overlay is ready before any city rotation happens.
     threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
@@ -4378,6 +4538,9 @@ if __name__ == '__main__':
     # Generate missing static basemap PNGs (OSM tile mosaics) for all seed
     # cities so the traffic demo never serves 404s for the basemap images.
     threading.Thread(target=_prewarm_basemaps, daemon=True, name="basemaps-prewarm").start()
+
+    # Mark startup complete before handing off to Flask
+    _finalise_startup(success=True)
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)
