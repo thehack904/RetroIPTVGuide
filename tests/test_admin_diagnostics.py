@@ -1719,7 +1719,11 @@ class TestSelectableSupportBundle:
         assert "[IP-REDACTED]" in all_content
 
 
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/cache endpoint
+# ---------------------------------------------------------------------------
 
+class TestCacheEndpointAllTuners:
     def test_cache_endpoint_includes_all_tuners(self, client, isolated_db):
         login(client)
         resp = client.get("/admin/diagnostics/cache")
@@ -2187,6 +2191,119 @@ class TestDraftSanitizer:
         result = self.sanitize_text(text)
         assert "pass" not in result
         assert "192.168.1.5" not in result
+
+    # ── GPS coordinate redaction (sanitize_text) ──────────────────────────
+
+    def test_latitude_query_param_redacted(self):
+        """latitude= in a URL query string must be replaced."""
+        url = "https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current=temperature_2m"
+        result = self.sanitize_text(url)
+        assert "51.5074" not in result
+        assert "-0.1278" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_lat_lon_error_message_redacted(self):
+        """lat= / lon= in an error string must be replaced."""
+        msg = "Runtime error on /api/interpreter (lat=51.5074, lon=-0.1278): 429"
+        result = self.sanitize_text(msg)
+        assert "51.5074" not in result
+        assert "-0.1278" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_negative_longitude_redacted(self):
+        result = self.sanitize_text("lon=-74.0060 failed")
+        assert "-74.0060" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_integer_coordinate_redacted(self):
+        result = self.sanitize_text("latitude=51 reported")
+        assert "latitude=51" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    # ── GPS coordinate redaction (sanitize_data) ──────────────────────────
+
+    def test_sanitize_data_redacts_lat_lon_dict_values(self):
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "51.5074", "lon": "-0.1278", "location_name": "London"}
+        result = sanitize_data(data)
+        assert result["lat"] == "[LOCATION-REDACTED]"
+        assert result["lon"] == "[LOCATION-REDACTED]"
+        # location_name is NOT a coordinate key — must be kept
+        assert result["location_name"] == "London"
+
+    def test_sanitize_data_redacts_latitude_longitude_keys(self):
+        from utils.draft_sanitizer import sanitize_data
+        data = {"latitude": 51.5074, "longitude": -0.1278}
+        result = sanitize_data(data)
+        assert result["latitude"] == "[LOCATION-REDACTED]"
+        assert result["longitude"] == "[LOCATION-REDACTED]"
+
+    def test_sanitize_data_preserves_not_set_sentinel(self):
+        """'(not set)' sentinel values must not be replaced."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "(not set)", "lon": "(not set)"}
+        result = sanitize_data(data)
+        assert result["lat"] == "(not set)"
+        assert result["lon"] == "(not set)"
+
+    def test_sanitize_data_preserves_empty_and_none(self):
+        """Empty string and None coordinate values must not be replaced."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "", "lon": None}
+        result = sanitize_data(data)
+        assert result["lat"] == ""
+        assert result["lon"] is None
+
+    def test_sanitize_data_redacts_nested_coords(self):
+        """Coordinates nested inside a list of dicts must also be redacted."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"channels": [{"lat": "51.5074", "lon": "-0.1278"}]}
+        result = sanitize_data(data)
+        assert result["channels"][0]["lat"] == "[LOCATION-REDACTED]"
+        assert result["channels"][0]["lon"] == "[LOCATION-REDACTED]"
+
+    # ── GPS coordinates in support bundle ────────────────────────────────
+
+    def test_lat_lon_redacted_from_config_json_in_bundle(self):
+        """weather_config lat/lon must not appear in the support bundle."""
+        from utils.log_reading import build_support_bundle
+        config_data = {
+            "virtual_channels": {
+                "status": "PASS",
+                "channels": [
+                    {
+                        "name": "Weather Now",
+                        "weather_config": {
+                            "lat": "51.5074",
+                            "lon": "-0.1278",
+                            "location_name": "London, UK",
+                            "units": "F",
+                        },
+                    }
+                ],
+            },
+            "external_services": {
+                "status": "PASS",
+                "services": [
+                    {
+                        "id": "weather_api",
+                        "url": "https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current=temperature_2m",
+                    }
+                ],
+            },
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": ""},
+            extra={"config.json": config_data},
+            include={"config.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "51.5074" not in all_content
+        assert "-0.1278" not in all_content
+        assert "[LOCATION-REDACTED]" in all_content
 
 
 # ---------------------------------------------------------------------------
