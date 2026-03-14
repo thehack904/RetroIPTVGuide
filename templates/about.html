@@ -8,42 +8,36 @@
 {% block content %}
 <div class="container-about">
 
-  <!-- ===================== -->
-  <!--    SYSTEM HEALTH BOX  -->
-  <!-- ===================== -->
-  <div class="box about-box health-box">
-    <h2>System Health</h2>
-
-    <!-- Quick Status Rows -->
-    <ul class="health-list">
-      <li><strong>M3U Playlist</strong><span id="health-m3u-text">● Checking…</span></li>
-      <li><strong>XMLTV File</strong><span id="health-xml-text">● Checking…</span></li>
-      <li><strong>EPG Freshness</strong><span id="health-epg-text">● Checking…</span></li>
-      <li><strong>Active Tuner</strong><span id="health-tuner-text">{{ current_tuner }}</span></li>
-    </ul>
-
-    {% if current_user is defined and current_user.username == 'admin' %}
-    <p style="margin-top:12px;font-size:0.88rem;">
-      <a href="{{ url_for('admin_diagnostics.diagnostics_index') }}" style="color:inherit;opacity:0.7;">View Full Diagnostics →</a>
-    </p>
-    {% endif %}
-  </div>
-
-  <!-- ===================== -->
-  <!--      ABOUT BOX        -->
-  <!-- ===================== -->
   <div class="box about-box">
-    <h2>About RetroIPTVGuide</h2>
+    <h2>📺 RetroIPTVGuide</h2>
+    <p style="text-align:center;margin:0 0 16px;font-size:0.97rem;opacity:0.85;">
+      A self-hosted IPTV &amp; EPG web interface inspired by classic cable TV guides.
+    </p>
+
     <ul>
-      <li><strong>Version:</strong><span>{{ info.version }}</span></li>
-      <li><strong>Release date:</strong><span>{{ info.release_date }}</span></li>
-      <li><strong>Python version:</strong><span>{{ info.python_version }}</span></li>
-      <li><strong>OS:</strong><span>{{ info.os_info }}</span></li>
-      <li><strong>Install path:</strong><span>{{ info.install_path }}</span></li>
-      <li><strong>Database:</strong><span>{{ info.db_path }}</span></li>
-      <li><strong>Logs:</strong><span>{{ info.log_path }}</span></li>
-      <li><strong>Server uptime:</strong><span>{{ info.uptime }}</span></li>
+      <li><strong>Version</strong><span>{{ version }}</span></li>
+      <li><strong>Released</strong><span>{{ release_date }}</span></li>
     </ul>
+
+    <p style="margin-top:18px;font-size:0.9rem;opacity:0.75;line-height:1.6;">
+      Built for home labs, retro media setups, and TV screens. Works with
+      <a href="https://ersatztv.org/" target="_blank" rel="noopener noreferrer" style="color:inherit;">ErsatzTV</a>
+      or any <code>.m3u</code> / <code>.m3u8</code> / <code>.xml</code> IPTV source.
+    </p>
+
+    <p style="margin-top:10px;font-size:0.9rem;opacity:0.75;">
+      <a href="https://github.com/thehack904/RetroIPTVGuide" target="_blank" rel="noopener noreferrer" style="color:inherit;">
+        ⭐ View on GitHub
+      </a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/thehack904/RetroIPTVGuide/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer" style="color:inherit;">
+        📋 Changelog
+      </a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/thehack904/RetroIPTVGuide/issues" target="_blank" rel="noopener noreferrer" style="color:inherit;">
+        🐛 Report an Issue
+      </a>
+    </p>
   </div>
 
 </div>
@@ -51,48 +45,6 @@
 {% block scripts_extra %}
 <script>
 document.addEventListener("DOMContentLoaded", () => {
-
-    // ------------------
-    // Load Health Status
-    // ------------------
-    async function loadHealthPanel() {
-        try {
-            const res = await fetch("/api/health");
-            const h = await res.json();
-
-            const isCombined = h.tuner_type === "combined";
-
-            const setColor = (el, ok, stale=false) => {
-                if (!el) return;
-                el.style.color = ok ? (stale ? "gold" : "limegreen") : "red";
-                el.textContent = "● " + (ok ? (stale ? "STALE" : "OK") : "ERROR");
-            };
-
-            const setNA = (el) => {
-                if (!el) return;
-                el.style.color = "gray";
-                el.textContent = "● N/A (Combined Tuner)";
-            };
-
-            if (isCombined) {
-                setNA(document.getElementById("health-m3u-text"));
-                setNA(document.getElementById("health-xml-text"));
-                setNA(document.getElementById("health-epg-text"));
-            } else {
-                setColor(document.getElementById("health-m3u-text"), h.m3u_reachable);
-                setColor(document.getElementById("health-xml-text"), h.xml_reachable);
-                setColor(document.getElementById("health-epg-text"), h.xmltv_fresh, !h.xmltv_fresh);
-            }
-        } catch (err) {
-            console.error("Health panel error:", err);
-        }
-    }
-
-    loadHealthPanel();
-
-    // ------------------
-    // Theme + Clock
-    // ------------------
     const saved = localStorage.getItem("theme") || "dark";
     if (typeof setTheme === 'function') setTheme(saved);
     if (typeof updateClock === 'function') updateClock();

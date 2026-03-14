@@ -256,12 +256,13 @@ def diagnostics_system():
     _require_admin()
     import os
     from utils.system_info import get_system_info
-    import app as app_module  # noqa: PLC0415
+    import app as app_module  # Late import to avoid circular dependency with the app module
 
     data_dir, db_path, _, app_version, app_start_time = _get_config()
     release_date = getattr(app_module, "APP_RELEASE_DATE", "")
     install_path = os.getcwd()
-    # Derive the log directory the same way as the /about route
+    # Derive the log directory from the app's LOG_PATH constant, falling back to the
+    # platform default when not available.
     log_path = getattr(app_module, "LOG_PATH", None)
     if log_path:
         log_path = os.path.dirname(log_path)

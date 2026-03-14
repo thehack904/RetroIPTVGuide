@@ -2716,33 +2716,9 @@ def manage_users():
 
 
 @app.route("/about")
-@login_required  # optional
+@login_required
 def about():
-    python_version = sys.version.split()[0]
-    os_info = platform.platform()
-    install_path = os.getcwd()
-    db_path = os.path.join(install_path, "app.db")
-    log_path = "/var/log/iptv" if os.name != "nt" else os.path.join(install_path, "logs")
-
-    # calculate uptime
-    uptime_delta = datetime.now() - APP_START_TIME
-    days, seconds = uptime_delta.days, uptime_delta.seconds
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
-    uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
-
-    info = {
-        "version": APP_VERSION,
-        "release_date": APP_RELEASE_DATE,
-        "python_version": python_version,
-        "os_info": os_info,
-        "install_path": install_path,
-        "db_path": db_path,
-        "log_path": log_path,
-        "uptime": uptime_str
-    }
-    return render_template("about.html", info=info)
+    return render_template("about.html", version=APP_VERSION, release_date=APP_RELEASE_DATE)
 
 
 
