@@ -934,7 +934,7 @@ document.getElementById('btnLoadSystem').addEventListener('click',function(){
   .then(function(d){
     spin('sysSpinner',false);
     var rows='';
-    var appKeys=['app_version','python_version','python_full','os_info','os_name','os_release','architecture','hostname','uptime','data_dir','install_mode'];
+    var appKeys=['app_version','release_date','python_version','python_full','os_info','os_name','os_release','architecture','hostname','uptime','install_path','data_dir','db_path','log_path','install_mode'];
     rows+='<tr><td class="si-section" colspan="2">Application</td></tr>';
     appKeys.forEach(function(k){ if(d[k]!=null) rows+='<tr><th>'+esc(k)+'</th><td>'+esc(String(d[k]))+'</td></tr>'; });
     if(d.safe_env&&Object.keys(d.safe_env).length){

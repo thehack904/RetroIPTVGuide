@@ -265,8 +265,8 @@ class TestDiagnosticsSystem:
         resp = client.get("/admin/diagnostics/system")
         assert resp.status_code == 200
         data = json.loads(resp.data)
-        for key in ("app_version", "python_version", "os_info", "uptime",
-                    "data_dir", "install_mode", "safe_env"):
+        for key in ("app_version", "release_date", "python_version", "os_info", "uptime",
+                    "install_path", "data_dir", "db_path", "log_path", "install_mode", "safe_env"):
             assert key in data
 
     def test_system_no_secrets_in_safe_env(self, client, monkeypatch):
