@@ -1595,9 +1595,131 @@ class TestSelectableSupportBundle:
                          "startup.json", "index.html"):
             assert expected in names
 
+    # ── Sanitization tests ───────────────────────────────────────────────
+
+    def test_ip_addresses_redacted_from_tuners_json(self):
+        """IPs in tuner probe results must not appear in the bundle."""
+        from utils.log_reading import build_support_bundle
+        tuner_data = [
+            {
+                "name": "Tuner 1",
+                "m3u_url": "http://10.244.42.6:9981/playlist/channels.m3u",
+                "xml_url": "http://10.244.42.6:9981/xmltv",
+                "m3u_probe": {
+                    "url": "http://10.244.42.6:9981/playlist/channels.m3u",
+                    "resolved_ip": "10.244.42.6",
+                    "hostname": "10.244.42.6",
+                    "error": None,
+                },
+                "xml_probe": {
+                    "url": "http://10.244.42.6:9981/xmltv",
+                    "resolved_ip": "10.244.42.6",
+                    "hostname": "10.244.42.6",
+                    "error": "Connection timed out after 8s (server at 10.244.42.6 did not respond)",
+                },
+            }
+        ]
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": "myserver"},
+            extra={"tuners.json": tuner_data},
+            include={"tuners.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "10.244.42.6" not in all_content
+        assert "[IP-REDACTED]" in all_content
+
+    def test_home_path_redacted_from_health_json(self):
+        """Home-directory paths in health.json must be abbreviated to ~/…"""
+        from utils.log_reading import build_support_bundle
+        health_data = {
+            "db": {
+                "status": "PASS",
+                "detail": "Connection OK. Path: /home/sebastian/Desktop/src/RetroIPTVGuide/users.db  Size: 24576 bytes.",
+                "path": "/home/sebastian/Desktop/src/RetroIPTVGuide/users.db",
+            }
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data=health_data,
+            system_data={"hostname": "myserver"},
+            include={"health.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "sebastian" not in all_content
+        assert "/home/sebastian" not in all_content
+
+    def test_server_hostname_redacted_from_all_sections(self):
+        """The actual machine hostname must be replaced with [HOSTNAME] everywhere."""
+        from utils.log_reading import build_support_bundle
+        system_data = {
+            "hostname": "secrethost",
+            "app_version": "v1.0",
+        }
+        health_data = {
+            "db": {"status": "PASS", "detail": "Running on secrethost OK"}
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data=health_data,
+            system_data=system_data,
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        # The literal machine hostname must not appear in any section
+        assert "secrethost" not in all_content
+        assert "[HOSTNAME]" in all_content
+
+    def test_ip_addresses_redacted_from_log_files(self, tmp_path):
+        """IP addresses in bundled log files must be replaced with [IP-REDACTED]."""
+        from utils.log_reading import build_support_bundle, ALLOWED_LOGS
+        log_path = ALLOWED_LOGS.get("app", str(tmp_path / "retroiptvguide.log"))
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w") as fh:
+            fh.write("2026-01-01 Connecting to tuner at 192.168.1.50:9981\n")
+            fh.write("2026-01-01 Resolved host to 10.0.0.1\n")
+        zb = build_support_bundle(
+            str(tmp_path),
+            health_data={},
+            system_data={"hostname": ""},
+            include={"logs/app"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "192.168.1.50" not in all_content
+        assert "10.0.0.1" not in all_content
+        assert "[IP-REDACTED]" in all_content
+
+    def test_public_ip_redacted_from_tuners_json(self):
+        """Public (non-RFC1918) IPs must also be redacted from JSON sections."""
+        from utils.log_reading import build_support_bundle
+        tuner_data = [
+            {
+                "name": "Cloud Tuner",
+                "m3u_probe": {
+                    "resolved_ip": "203.0.113.55",
+                    "hostname": "streams.example.com",
+                    "error": "HTTP 403",
+                },
+            }
+        ]
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": ""},
+            extra={"tuners.json": tuner_data},
+            include={"tuners.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "203.0.113.55" not in all_content
+        assert "[IP-REDACTED]" in all_content
 
 
-class TestCacheEndpointAllTuners:
+
     def test_cache_endpoint_includes_all_tuners(self, client, isolated_db):
         login(client)
         resp = client.get("/admin/diagnostics/cache")

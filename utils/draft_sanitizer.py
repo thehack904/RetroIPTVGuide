@@ -25,10 +25,11 @@ Usage
 -----
 ::
 
-    from utils.draft_sanitizer import sanitize_text, sanitize_hostname
+    from utils.draft_sanitizer import sanitize_text, sanitize_hostname, sanitize_data
 
     clean = sanitize_text(raw_string, server_hostname=platform.node())
     safe_host = sanitize_hostname(platform.node())   # always "[HOSTNAME]"
+    safe_obj = sanitize_data(nested_dict, server_hostname=platform.node())
 """
 
 from __future__ import annotations
@@ -150,3 +151,32 @@ def sanitize_text(text: Any, *, server_hostname: str = "") -> str:
     text = _WIN_HOME_RE.sub("~", text)
 
     return text
+
+
+def sanitize_data(data: Any, *, server_hostname: str = "") -> Any:
+    """Recursively sanitize all string values inside *data*.
+
+    Walks dicts, lists, and tuples, applying :func:`sanitize_text` to every
+    ``str`` leaf value.  Non-string scalars (``int``, ``float``, ``bool``,
+    ``None``) are returned unchanged so that JSON structure is preserved.
+
+    Parameters
+    ----------
+    data:
+        Any JSON-serialisable value (dict, list, str, int, …).
+    server_hostname:
+        Passed through to :func:`sanitize_text` so the machine name is
+        replaced with ``[HOSTNAME]`` wherever it appears.
+    """
+    if isinstance(data, str):
+        return sanitize_text(data, server_hostname=server_hostname)
+    if isinstance(data, dict):
+        return {
+            k: sanitize_data(v, server_hostname=server_hostname)
+            for k, v in data.items()
+        }
+    if isinstance(data, (list, tuple)):
+        sanitized = [sanitize_data(item, server_hostname=server_hostname) for item in data]
+        return type(data)(sanitized)
+    # int, float, bool, None — leave untouched
+    return data
