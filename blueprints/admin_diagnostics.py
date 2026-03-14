@@ -254,10 +254,29 @@ def diagnostics_tuner_parse():
 def diagnostics_system():
     """Return sanitised system/runtime information as JSON."""
     _require_admin()
+    import os
     from utils.system_info import get_system_info
+    import app as app_module  # noqa: PLC0415
 
-    data_dir, _, _, app_version, app_start_time = _get_config()
-    info = get_system_info(app_version, app_start_time, data_dir)
+    data_dir, db_path, _, app_version, app_start_time = _get_config()
+    release_date = getattr(app_module, "APP_RELEASE_DATE", "")
+    install_path = os.getcwd()
+    # Derive the log directory the same way as the /about route
+    log_path = getattr(app_module, "LOG_PATH", None)
+    if log_path:
+        log_path = os.path.dirname(log_path)
+    else:
+        log_path = "/var/log/iptv" if os.name != "nt" else os.path.join(install_path, "logs")
+
+    info = get_system_info(
+        app_version,
+        app_start_time,
+        data_dir,
+        release_date=release_date,
+        install_path=install_path,
+        db_path=db_path,
+        log_path=log_path,
+    )
     return jsonify(info)
 
 
