@@ -1595,7 +1595,133 @@ class TestSelectableSupportBundle:
                          "startup.json", "index.html"):
             assert expected in names
 
+    # ── Sanitization tests ───────────────────────────────────────────────
 
+    def test_ip_addresses_redacted_from_tuners_json(self):
+        """IPs in tuner probe results must not appear in the bundle."""
+        from utils.log_reading import build_support_bundle
+        tuner_data = [
+            {
+                "name": "Tuner 1",
+                "m3u_url": "http://10.244.42.6:9981/playlist/channels.m3u",
+                "xml_url": "http://10.244.42.6:9981/xmltv",
+                "m3u_probe": {
+                    "url": "http://10.244.42.6:9981/playlist/channels.m3u",
+                    "resolved_ip": "10.244.42.6",
+                    "hostname": "10.244.42.6",
+                    "error": None,
+                },
+                "xml_probe": {
+                    "url": "http://10.244.42.6:9981/xmltv",
+                    "resolved_ip": "10.244.42.6",
+                    "hostname": "10.244.42.6",
+                    "error": "Connection timed out after 8s (server at 10.244.42.6 did not respond)",
+                },
+            }
+        ]
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": "myserver"},
+            extra={"tuners.json": tuner_data},
+            include={"tuners.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "10.244.42.6" not in all_content
+        assert "[IP-REDACTED]" in all_content
+
+    def test_home_path_redacted_from_health_json(self):
+        """Home-directory paths in health.json must be abbreviated to ~/…"""
+        from utils.log_reading import build_support_bundle
+        health_data = {
+            "db": {
+                "status": "PASS",
+                "detail": "Connection OK. Path: /home/sebastian/Desktop/src/RetroIPTVGuide/users.db  Size: 24576 bytes.",
+                "path": "/home/sebastian/Desktop/src/RetroIPTVGuide/users.db",
+            }
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data=health_data,
+            system_data={"hostname": "myserver"},
+            include={"health.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "sebastian" not in all_content
+        assert "/home/sebastian" not in all_content
+
+    def test_server_hostname_redacted_from_all_sections(self):
+        """The actual machine hostname must be replaced with [HOSTNAME] everywhere."""
+        from utils.log_reading import build_support_bundle
+        system_data = {
+            "hostname": "secrethost",
+            "app_version": "v1.0",
+        }
+        health_data = {
+            "db": {"status": "PASS", "detail": "Running on secrethost OK"}
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data=health_data,
+            system_data=system_data,
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        # The literal machine hostname must not appear in any section
+        assert "secrethost" not in all_content
+        assert "[HOSTNAME]" in all_content
+
+    def test_ip_addresses_redacted_from_log_files(self, tmp_path):
+        """IP addresses in bundled log files must be replaced with [IP-REDACTED]."""
+        from utils.log_reading import build_support_bundle, ALLOWED_LOGS
+        log_path = ALLOWED_LOGS.get("app", str(tmp_path / "retroiptvguide.log"))
+        os.makedirs(os.path.dirname(log_path), exist_ok=True)
+        with open(log_path, "w") as fh:
+            fh.write("2026-01-01 Connecting to tuner at 192.168.1.50:9981\n")
+            fh.write("2026-01-01 Resolved host to 10.0.0.1\n")
+        zb = build_support_bundle(
+            str(tmp_path),
+            health_data={},
+            system_data={"hostname": ""},
+            include={"logs/app"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "192.168.1.50" not in all_content
+        assert "10.0.0.1" not in all_content
+        assert "[IP-REDACTED]" in all_content
+
+    def test_public_ip_redacted_from_tuners_json(self):
+        """Public (non-RFC1918) IPs must also be redacted from JSON sections."""
+        from utils.log_reading import build_support_bundle
+        tuner_data = [
+            {
+                "name": "Cloud Tuner",
+                "m3u_probe": {
+                    "resolved_ip": "203.0.113.55",
+                    "hostname": "streams.example.com",
+                    "error": "HTTP 403",
+                },
+            }
+        ]
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": ""},
+            extra={"tuners.json": tuner_data},
+            include={"tuners.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "203.0.113.55" not in all_content
+        assert "[IP-REDACTED]" in all_content
+
+
+# ---------------------------------------------------------------------------
+# Tests: /admin/diagnostics/cache endpoint
+# ---------------------------------------------------------------------------
 
 class TestCacheEndpointAllTuners:
     def test_cache_endpoint_includes_all_tuners(self, client, isolated_db):
@@ -2065,6 +2191,119 @@ class TestDraftSanitizer:
         result = self.sanitize_text(text)
         assert "pass" not in result
         assert "192.168.1.5" not in result
+
+    # ── GPS coordinate redaction (sanitize_text) ──────────────────────────
+
+    def test_latitude_query_param_redacted(self):
+        """latitude= in a URL query string must be replaced."""
+        url = "https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current=temperature_2m"
+        result = self.sanitize_text(url)
+        assert "51.5074" not in result
+        assert "-0.1278" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_lat_lon_error_message_redacted(self):
+        """lat= / lon= in an error string must be replaced."""
+        msg = "Runtime error on /api/interpreter (lat=51.5074, lon=-0.1278): 429"
+        result = self.sanitize_text(msg)
+        assert "51.5074" not in result
+        assert "-0.1278" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_negative_longitude_redacted(self):
+        result = self.sanitize_text("lon=-74.0060 failed")
+        assert "-74.0060" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    def test_integer_coordinate_redacted(self):
+        result = self.sanitize_text("latitude=51 reported")
+        assert "latitude=51" not in result
+        assert "[LOCATION-REDACTED]" in result
+
+    # ── GPS coordinate redaction (sanitize_data) ──────────────────────────
+
+    def test_sanitize_data_redacts_lat_lon_dict_values(self):
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "51.5074", "lon": "-0.1278", "location_name": "London"}
+        result = sanitize_data(data)
+        assert result["lat"] == "[LOCATION-REDACTED]"
+        assert result["lon"] == "[LOCATION-REDACTED]"
+        # location_name is NOT a coordinate key — must be kept
+        assert result["location_name"] == "London"
+
+    def test_sanitize_data_redacts_latitude_longitude_keys(self):
+        from utils.draft_sanitizer import sanitize_data
+        data = {"latitude": 51.5074, "longitude": -0.1278}
+        result = sanitize_data(data)
+        assert result["latitude"] == "[LOCATION-REDACTED]"
+        assert result["longitude"] == "[LOCATION-REDACTED]"
+
+    def test_sanitize_data_preserves_not_set_sentinel(self):
+        """'(not set)' sentinel values must not be replaced."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "(not set)", "lon": "(not set)"}
+        result = sanitize_data(data)
+        assert result["lat"] == "(not set)"
+        assert result["lon"] == "(not set)"
+
+    def test_sanitize_data_preserves_empty_and_none(self):
+        """Empty string and None coordinate values must not be replaced."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"lat": "", "lon": None}
+        result = sanitize_data(data)
+        assert result["lat"] == ""
+        assert result["lon"] is None
+
+    def test_sanitize_data_redacts_nested_coords(self):
+        """Coordinates nested inside a list of dicts must also be redacted."""
+        from utils.draft_sanitizer import sanitize_data
+        data = {"channels": [{"lat": "51.5074", "lon": "-0.1278"}]}
+        result = sanitize_data(data)
+        assert result["channels"][0]["lat"] == "[LOCATION-REDACTED]"
+        assert result["channels"][0]["lon"] == "[LOCATION-REDACTED]"
+
+    # ── GPS coordinates in support bundle ────────────────────────────────
+
+    def test_lat_lon_redacted_from_config_json_in_bundle(self):
+        """weather_config lat/lon must not appear in the support bundle."""
+        from utils.log_reading import build_support_bundle
+        config_data = {
+            "virtual_channels": {
+                "status": "PASS",
+                "channels": [
+                    {
+                        "name": "Weather Now",
+                        "weather_config": {
+                            "lat": "51.5074",
+                            "lon": "-0.1278",
+                            "location_name": "London, UK",
+                            "units": "F",
+                        },
+                    }
+                ],
+            },
+            "external_services": {
+                "status": "PASS",
+                "services": [
+                    {
+                        "id": "weather_api",
+                        "url": "https://api.open-meteo.com/v1/forecast?latitude=51.5074&longitude=-0.1278&current=temperature_2m",
+                    }
+                ],
+            },
+        }
+        zb = build_support_bundle(
+            "/tmp",
+            health_data={},
+            system_data={"hostname": ""},
+            extra={"config.json": config_data},
+            include={"config.json"},
+        )
+        zf = zipfile.ZipFile(io.BytesIO(zb))
+        all_content = b"".join(zf.read(n) for n in zf.namelist()).decode("utf-8")
+        assert "51.5074" not in all_content
+        assert "-0.1278" not in all_content
+        assert "[LOCATION-REDACTED]" in all_content
 
 
 # ---------------------------------------------------------------------------
