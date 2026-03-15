@@ -583,7 +583,7 @@ def _classify(
             ),
             [
                 "Web browsers and HLS.js cannot play raw MPEG-TS — an HLS proxy is required.",
-                "Use VLC or ffprobe to confirm: ffprobe -v quiet -show_format '{}'".format(url),
+                "Use VLC or ffprobe to confirm: ffprobe -v quiet -show_format '{}'".format(url_lower),
             ],
         )
 
