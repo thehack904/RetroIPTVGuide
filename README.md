@@ -1,23 +1,23 @@
 # 📺 RetroIPTVGuide
 
-```{=html}
 <p align="center">
-```
-`<a href="https://github.com/thehack904/RetroIPTVGuide">`{=html}
-`<img src="https://img.shields.io/badge/version-v4.8.0-blue?style=for-the-badge" alt="Version">`{=html}
-`</a>`{=html}
-`<a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">`{=html}
-`<img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">`{=html}
-`</a>`{=html}
-`<a href="https://github.com/thehack904/RetroIPTVGuide/actions/workflows/docker-publish.yml">`{=html}
-`<img src="https://img.shields.io/github/actions/workflow/status/thehack904/RetroIPTVGuide/docker-publish.yml?style=for-the-badge&logo=github" alt="Build Status">`{=html}
-`</a>`{=html}
-```{=html}
+  <a href="https://github.com/thehack904/RetroIPTVGuide">
+    <img src="https://img.shields.io/badge/version-v4.8.1-blue?style=for-the-badge" alt="Version">
+  </a>
+  <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
+    <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
+  </a>
+  <a href="https://github.com/thehack904/RetroIPTVGuide/actions/workflows/docker-publish.yml">
+    <img src="https://img.shields.io/github/actions/workflow/status/thehack904/RetroIPTVGuide/docker-publish.yml?style=for-the-badge&logo=github" alt="Build Status">
+  </a>
+  <a href="https://creativecommons.org/licenses/by-nc-sa/4.0/">
+    <img src="https://img.shields.io/badge/license-CC--BY--NC--SA%204.0-lightgrey?style=for-the-badge" alt="License">
+  </a>
 </p>
 <p align="center">
   <img src="docs/screenshots/RetroIPTVGuide.png" width="900">
 </p>
-```
+
 RetroIPTVGuide is a **self‑hosted IPTV guide interface** inspired by
 classic cable television listings from the 1990s and early 2000s.
 
