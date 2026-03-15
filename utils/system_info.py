@@ -56,6 +56,10 @@ def get_system_info(
     app_version: str,
     app_start_time: datetime,
     data_dir: str,
+    release_date: str = "",
+    install_path: str = "",
+    db_path: str = "",
+    log_path: str = "",
 ) -> Dict[str, Any]:
     """Return a sanitised snapshot of system and runtime information.
 
@@ -67,6 +71,14 @@ def get_system_info(
         ``datetime`` when the application process started.
     data_dir:
         Resolved DATA_DIR path.
+    release_date:
+        Human-readable release date string (e.g. ``"2026-03-05"``).
+    install_path:
+        Working directory / install root (``os.getcwd()``).
+    db_path:
+        Path to the main SQLite database file.
+    log_path:
+        Directory where application logs are written.
     """
     uptime_delta = datetime.now() - app_start_time
     days = uptime_delta.days
@@ -83,6 +95,7 @@ def get_system_info(
 
     return {
         "app_version": app_version,
+        "release_date": release_date,
         "python_version": sys.version.split()[0],
         "python_full": sys.version,
         "os_info": platform.platform(),
@@ -91,7 +104,10 @@ def get_system_info(
         "architecture": platform.machine(),
         "hostname": platform.node(),
         "uptime": uptime_str,
+        "install_path": install_path,
         "data_dir": data_dir,
+        "db_path": db_path,
+        "log_path": log_path,
         "install_mode": _detect_install_mode(),
         "safe_env": safe_env,
     }

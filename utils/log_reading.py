@@ -343,8 +343,15 @@ def build_support_bundle(
     - Application log (+ available rotated copies)
     - activity.log (+ available rotated copies)
 
+    All content is sanitized before being written:
+    * IP addresses (IPv4 and IPv6) → ``[IP-REDACTED]``
+    * Server hostname → ``[HOSTNAME]``
+    * Home-directory paths (``/home/user/…``, ``C:\\Users\\user\\…``) → ``~/…``
+    * URL credentials → ``[CREDENTIALS]@``
+    * Secret key=value patterns (token=, password=, …) → ``***``
+
     Nothing outside the strict ``ALLOWED_LOGS`` allowlist is included for
-    log files.  Secrets are redacted from log files.
+    log files.
 
     Parameters
     ----------
@@ -367,37 +374,59 @@ def build_support_bundle(
     """
     import json
     from datetime import datetime, timezone
+    from utils.draft_sanitizer import sanitize_data, sanitize_text
 
     generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+    # Extract the server hostname *before* sanitizing system_data so that the
+    # literal machine name can be stripped from every other section too.
+    server_hostname: str = (
+        system_data.get("hostname", "") if isinstance(system_data, dict) else ""
+    ) or ""
+
+    def _sanitize(data: object) -> object:
+        """Sanitize a JSON-serialisable object for bundle inclusion."""
+        return sanitize_data(data, server_hostname=server_hostname)
+
+    def _sanitize_log_line(raw: str) -> str:
+        """Credential-redact then fully sanitize a single log line."""
+        return sanitize_text(_redact(raw), server_hostname=server_hostname)
 
     def _should_include(key: str) -> bool:
         """Return True when *key* should be included."""
         return include is None or key in include
 
+    # Sanitize the core datasets once; reuse for both ZIP entries and the viewer.
+    safe_health = _sanitize(health_data) if _should_include("health.json") else {}
+    safe_system = _sanitize(system_data) if _should_include("system.json") else {}
+    safe_extra: Dict[str, object] = {
+        fname: _sanitize(fdata)
+        for fname, fdata in (extra or {}).items()
+        if _should_include(fname)
+    }
+
     # Build sections dict for the viewer (order matters for display)
     sections: Dict[str, object] = {}
     if _should_include("health.json"):
-        sections["health.json"] = health_data
+        sections["health.json"] = safe_health
     if _should_include("system.json"):
-        sections["system.json"] = system_data
-    for fname, fdata in (extra or {}).items():
-        if _should_include(fname):
-            sections[fname] = fdata
+        sections["system.json"] = safe_system
+    for fname, fdata in safe_extra.items():
+        sections[fname] = fdata
 
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         # --- health.json ---
         if _should_include("health.json"):
-            zf.writestr("health.json", json.dumps(health_data, indent=2, default=str))
+            zf.writestr("health.json", json.dumps(safe_health, indent=2, default=str))
 
         # --- system.json ---
         if _should_include("system.json"):
-            zf.writestr("system.json", json.dumps(system_data, indent=2, default=str))
+            zf.writestr("system.json", json.dumps(safe_system, indent=2, default=str))
 
         # --- extra JSON files (tuners.json, cache_state.json, …) ---
-        for fname, fdata in (extra or {}).items():
-            if _should_include(fname):
-                zf.writestr(fname, json.dumps(fdata, indent=2, default=str))
+        for fname, fdata in safe_extra.items():
+            zf.writestr(fname, json.dumps(fdata, indent=2, default=str))
 
         # --- log files ---
         # Collect plain-text versions for the HTML viewer while writing to ZIP.
@@ -414,16 +443,16 @@ def build_support_bundle(
                     continue
                 arcname = "logs/" + os.path.basename(candidate)
                 try:
-                    redacted_lines: List[str] = []
+                    sanitized_lines: List[str] = []
                     bytes_read = 0
                     with open(candidate, "r", encoding="utf-8", errors="replace") as fh:
                         for raw in fh:
                             bytes_read += len(raw.encode("utf-8", errors="replace"))
                             if bytes_read > MAX_BYTES:
-                                redacted_lines.append("[... truncated at 2 MB limit ...]\n")
+                                sanitized_lines.append("[... truncated at 2 MB limit ...]\n")
                                 break
-                            redacted_lines.append(_redact(raw))
-                    content = "".join(redacted_lines)
+                            sanitized_lines.append(_sanitize_log_line(raw))
+                    content = "".join(sanitized_lines)
                     zf.writestr(arcname, content)
                     log_texts[os.path.basename(candidate)] = content
                 except (PermissionError, OSError):
