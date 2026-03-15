@@ -199,6 +199,16 @@ install_linux(){
 update_linux(){
   echo "Updating app..."
   sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
+  echo "Updating Python dependencies..."
+  if [[ -d "$APP_DIR/venv" ]]; then
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+  else
+    echo "⚠️  No venv found -- recreating..."
+    sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+  fi
   systemctl daemon-reload; systemctl restart "$SERVICE_NAME"
   echo "✅ Updated and restarted."
 }
