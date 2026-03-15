@@ -60,9 +60,10 @@ Docker images are automatically built through GitHub Actions.
 ------------------------------------------------------------------------
 
 ## 🐳 Quick Start (Docker)
-
-docker pull ghcr.io/thehack904/retroiptvguide:latest docker run -d -p
-5000:5000 ghcr.io/thehack904/retroiptvguide:latest
+```
+docker pull ghcr.io/thehack904/retroiptvguide:latest 
+docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
+```
 
 Then open:
 
