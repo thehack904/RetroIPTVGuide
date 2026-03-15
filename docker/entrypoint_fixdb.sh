@@ -3,6 +3,11 @@ set -eu
 
 mkdir -p /app/config /app/logs /app/data
 
+# Ensure Python dependencies are up-to-date (handles new packages added in upgrades)
+if [ -f /app/requirements.txt ]; then
+  pip install --quiet --no-cache-dir -r /app/requirements.txt
+fi
+
 # One-time migration: if legacy DBs exist in /app, move into persisted config dir
 for f in users.db tuners.db; do
   if [ -f "/app/$f" ] && [ ! -f "/app/config/$f" ]; then

@@ -31,9 +31,18 @@ http://<your-server-ip>:5000
 ---
 
 ## 🔄 Updating
+
+**Pull the latest pre-built image (recommended):**
 ```bash
 docker compose pull && docker compose up -d
 ```
+
+**Or, rebuild locally from source (e.g. after `git pull`):**
+```bash
+git pull && docker compose build && docker compose up -d
+```
+
+> Python dependencies in `requirements.txt` are automatically installed when the image is built, and the entrypoint also ensures they are up-to-date on every container start.
 
 ---
 
