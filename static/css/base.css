@@ -637,6 +637,20 @@ body.light{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
     height: 0;
 }
 
+/* Section header label inside a dropdown (e.g. "Administration") */
+.dropdown-section-header {
+    padding: 6px 14px 4px;
+    font-size: 0.72em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    opacity: 0.55;
+    cursor: default;
+    list-style: none;
+    pointer-events: none;
+    user-select: none;
+}
+
 /* ── Per-user channel preferences ───────────────────────────────────────────── */
 
 /* Hidden channels: rows are hidden by default; .chan-hidden-visible reveals them

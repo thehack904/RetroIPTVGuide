@@ -11,71 +11,96 @@
       <div class="dropdown" id="settingsMenu">
           <button class="dropbtn">SETTINGS ▾</button>
           <div class="dropdown-content">
-              {% if current_user is defined and current_user.username == 'admin' %}
+              <!-- Guide -->
               <li class="submenu">
-                <a href="#">Change Tuner</a>
+                <a href="#">Guide</a>
                 <ul class="submenu-content">
-                  {% if tuner_names is defined and tuner_names %}
-                    {% for t in tuner_names %}
-                      <li><a href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a></li>
-                    {% endfor %}
+                  <li class="submenu">
+                    <a href="#">Auto-Scroll</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" id="toggleAutoScroll">Enable / Disable</a></li>
+                      <li class="submenu">
+                        <a href="#">Scroll Speed</a>
+                        <ul class="submenu-content">
+                          <li><a href="#" data-scroll-speed="slow">Slow</a></li>
+                          <li><a href="#" data-scroll-speed="medium">Medium</a></li>
+                          <li><a href="#" data-scroll-speed="fast">Fast</a></li>
+                        </ul>
+                      </li>
+                    </ul>
+                  </li>
+                  {% if request.endpoint == 'guide' %}
+                  <li class="submenu">
+                    <a href="#">Guide Preferences</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" id="setAutoLoadChannel">Auto Load Channel</a></li>
+                      <li><a href="#" id="clearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
+                    </ul>
+                  </li>
                   {% endif %}
-                  <li class="separator"></li>
-                  <li><a href="{{ url_for('change_tuner') }}">Tuner Management…</a></li>
-                  <li><a href="{{ url_for('virtual_channels') }}">Virtual Channels…</a></li>
                 </ul>
               </li>
-              <a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a>
-              <a href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a>
-              {% endif %}
-              <li><a href="{{ url_for('about') }}">About</a></li>
+              <!-- Appearance -->
               <li class="submenu">
-                <a href="#">Auto-Scroll</a>
+                <a href="#">Appearance</a>
                 <ul class="submenu-content">
-                  <li><a href="#" id="toggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
                   <li class="submenu">
-                    <a href="#">Scroll Speed</a>
+                    <a href="#">Themes</a>
                     <ul class="submenu-content">
-                      <li><a href="#" data-scroll-speed="slow">Slow</a></li>
-                      <li><a href="#" data-scroll-speed="medium">Medium</a></li>
-                      <li><a href="#" data-scroll-speed="fast">Fast</a></li>
+                      <li><a href="#" data-theme-selector data-theme="auto">Auto (System)</a></li>
+                      <li><a href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
+                      <li><a href="#" data-theme-selector data-theme="light">Light</a></li>
+                      <li><a href="#" data-theme-selector data-theme="dark">Dark</a></li>
+                      <li><a href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
+                      <li><a href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
+                      <li><a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
+                      <li><a href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
+                      <li><a href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                    </ul>
+                  </li>
+                  <li class="submenu">
+                    <a href="#">Display Size</a>
+                    <ul class="submenu-content">
+                      <li><a href="#" data-display-size-selector data-display-size="default">Default</a></li>
+                      <li><a href="#" data-display-size-selector data-display-size="large">Large</a></li>
+                      <li><a href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
+                      <li><a href="#" data-display-size-selector data-display-size="small">Small</a></li>
                     </ul>
                   </li>
                 </ul>
               </li>
-              <a href="{{ url_for('change_password') }}">Change Password</a>
-              {% if request.endpoint == 'guide' %}
+              <!-- Account -->
               <li class="submenu">
-                <a href="#">Channel Preferences</a>
+                <a href="#">Account</a>
                 <ul class="submenu-content">
-                  <li><a href="#" id="setAutoLoadChannel">Set Auto-Load Channel</a></li>
-                  <li><a href="#" id="clearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
+                  <li><a href="{{ url_for('change_password') }}">Change Password</a></li>
                 </ul>
               </li>
+              <!-- Administration (admin only) -->
+              {% if current_user is defined and current_user.username == 'admin' %}
+              <li class="separator"></li>
+              <li class="dropdown-section-header">Administration</li>
+              <li class="submenu">
+                <a href="#">Tuners</a>
+                <ul class="submenu-content">
+                  <li class="submenu">
+                    <a href="#">Select Active Tuner</a>
+                    <ul class="submenu-content">
+                      {% if tuner_names is defined and tuner_names %}
+                        {% for t in tuner_names %}
+                          <li><a href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a></li>
+                        {% endfor %}
+                      {% endif %}
+                    </ul>
+                  </li>
+                  <li><a href="{{ url_for('change_tuner') }}">Tuner Management</a></li>
+                </ul>
+              </li>
+              <li><a href="{{ url_for('virtual_channels') }}">Virtual Channels</a></li>
+              <li><a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a></li>
+              <li><a href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
+              <li><a href="{{ url_for('about') }}">System Info</a></li>
               {% endif %}
-              <li class="submenu">
-                <a href="#">Themes</a>
-                <ul class="submenu-content">
-                  <li><a href="#" data-theme-selector data-theme="auto">Auto (System)</a></li>
-                  <li><a href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
-                  <li><a href="#" data-theme-selector data-theme="light">Light</a></li>
-                  <li><a href="#" data-theme-selector data-theme="dark">Dark</a></li>
-                  <li><a href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
-                  <li><a href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
-                  <li><a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
-                  <li><a href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
-                  <li><a href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
-                </ul>
-              </li>
-              <li class="submenu">
-                <a href="#">Display Size</a>
-                <ul class="submenu-content">
-                  <li><a href="#" data-display-size-selector data-display-size="default">Default</a></li>
-                  <li><a href="#" data-display-size-selector data-display-size="large">Large</a></li>
-                  <li><a href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
-                  <li><a href="#" data-display-size-selector data-display-size="small">Small</a></li>
-                </ul>
-              </li>
           </div>
       </div>
 
@@ -95,12 +120,8 @@
 
     <ul class="mobile-links" role="menubar">
       <li role="none"><a role="menuitem" href="{{ url_for('guide') }}">HOME</a></li>
-      {% if current_user is defined and current_user.username == 'admin' %}
-      {# moved Manage Users under the Settings submenu for mobile too #}
-      {# previously a top-level item; now grouped under Settings #}
-      {% endif %}
 
-      <!-- Settings collapsible: contains Toggle Auto-Scroll, Change Password, and nested Themes -->
+      <!-- Settings collapsible -->
       <li class="mobile-submenu" role="none">
         <button
           class="mobile-submenu-toggle"
@@ -112,131 +133,170 @@
         </button>
 
         <ul id="mobileSettingsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+
+          <!-- Guide -->
+          <li class="mobile-submenu mobile-section-group" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileGuideList"
+              type="button">
+              Guide
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+            <ul id="mobileGuideList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileAutoScrollList"
+                  type="button">
+                  Auto-Scroll
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileAutoScrollList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Enable / Disable</a></li>
+                  <li class="mobile-submenu" role="none">
+                    <button
+                      class="mobile-submenu-toggle"
+                      aria-expanded="false"
+                      aria-controls="mobileScrollSpeedList"
+                      type="button">
+                      Scroll Speed
+                      <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                    </button>
+                    <ul id="mobileScrollSpeedList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                      <li role="none"><a role="menuitem" href="#" data-scroll-speed="slow">Slow</a></li>
+                      <li role="none"><a role="menuitem" href="#" data-scroll-speed="medium">Medium</a></li>
+                      <li role="none"><a role="menuitem" href="#" data-scroll-speed="fast">Fast</a></li>
+                    </ul>
+                  </li>
+                </ul>
+              </li>
+              {% if request.endpoint == 'guide' %}
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileGuidePrefsList"
+                  type="button">
+                  Guide Preferences
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileGuidePrefsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Auto Load Channel</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
+                </ul>
+              </li>
+              {% endif %}
+            </ul>
+          </li>
+
+          <!-- Appearance -->
+          <li class="mobile-submenu mobile-section-group" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileAppearanceList"
+              type="button">
+              Appearance
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+            <ul id="mobileAppearanceList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileThemesListNested"
+                  type="button">
+                  Themes
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileThemesListNested" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="auto">Auto (System)</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="light">Light</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="dark">Dark</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                </ul>
+              </li>
+              <li class="mobile-submenu" role="none">
+                <button
+                  class="mobile-submenu-toggle"
+                  aria-expanded="false"
+                  aria-controls="mobileDisplaySizeList"
+                  type="button">
+                  Display Size
+                  <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+                </button>
+                <ul id="mobileDisplaySizeList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="default">Default</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="large">Large</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="small">Small</a></li>
+                </ul>
+              </li>
+            </ul>
+          </li>
+
+          <!-- Account -->
+          <li class="mobile-submenu mobile-section-group" role="none">
+            <button
+              class="mobile-submenu-toggle"
+              aria-expanded="false"
+              aria-controls="mobileAccountList"
+              type="button">
+              Account
+              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
+            </button>
+            <ul id="mobileAccountList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+              <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
+            </ul>
+          </li>
+
           {% if current_user is defined and current_user.username == 'admin' %}
+          <!-- Administration (admin only) -->
+          <li class="mobile-admin-separator" role="separator" aria-hidden="true"></li>
+          <li class="mobile-section-label" role="none" aria-hidden="true">Administration</li>
           <li class="mobile-submenu" role="none">
             <button
               class="mobile-submenu-toggle"
               aria-expanded="false"
               aria-controls="mobileTunerList"
               type="button">
-              Change Tuner
+              Tuners
               <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
             </button>
-
             <ul id="mobileTunerList" class="mobile-submenu-list" role="menu" aria-hidden="true">
-              {% if tuner_names is defined and tuner_names %}
-                {% for t in tuner_names %}
-                  <li role="none">
-                    <a role="menuitem" href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a>
-                  </li>
-                {% endfor %}
-              {% endif %}
-              <li class="separator"></li>
-              <li role="none">
-                <a role="menuitem" href="{{ url_for('change_tuner') }}">Tuner Management…</a>
-              </li>
-              <li role="none">
-                <a role="menuitem" href="{{ url_for('virtual_channels') }}">Virtual Channels…</a>
-              </li>
-            </ul>
-          </li>
-          <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
-          <li role="none"><a role="menuitem" href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
-          {% endif %}
-          <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
-          <li class="mobile-submenu" role="none">
-            <button
-              class="mobile-submenu-toggle"
-              aria-expanded="false"
-              aria-controls="mobileAutoScrollList"
-              type="button">
-              Auto-Scroll
-              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
-            </button>
-
-            <ul id="mobileAutoScrollList" class="mobile-submenu-list" role="menu" aria-hidden="true">
-              <li role="none"><a role="menuitem" href="#" id="mobileToggleAutoScroll">Enable/Disable Auto-Scroll</a></li>
               <li class="mobile-submenu" role="none">
                 <button
                   class="mobile-submenu-toggle"
                   aria-expanded="false"
-                  aria-controls="mobileScrollSpeedList"
+                  aria-controls="mobileActiveTunerList"
                   type="button">
-                  Scroll Speed
+                  Select Active Tuner
                   <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
                 </button>
-
-                <ul id="mobileScrollSpeedList" class="mobile-submenu-list" role="menu" aria-hidden="true">
-                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="slow">Slow</a></li>
-                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="medium">Medium</a></li>
-                  <li role="none"><a role="menuitem" href="#" data-scroll-speed="fast">Fast</a></li>
+                <ul id="mobileActiveTunerList" class="mobile-submenu-list" role="menu" aria-hidden="true">
+                  {% if tuner_names is defined and tuner_names %}
+                    {% for t in tuner_names %}
+                      <li role="none"><a role="menuitem" href="{{ url_for('set_tuner', name=t) }}">{{ t }}</a></li>
+                    {% endfor %}
+                  {% endif %}
                 </ul>
               </li>
+              <li role="none"><a role="menuitem" href="{{ url_for('change_tuner') }}">Tuner Management</a></li>
             </ul>
           </li>
-          <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
-
-          {% if request.endpoint == 'guide' %}
-          <!-- Channel Preferences submenu (guide page only) -->
-          <li class="mobile-submenu" role="none">
-            <button
-              class="mobile-submenu-toggle"
-              aria-expanded="false"
-              aria-controls="mobileChannelPrefsList"
-              type="button">
-              Channel Preferences
-              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
-            </button>
-
-            <ul id="mobileChannelPrefsList" class="mobile-submenu-list" role="menu" aria-hidden="true">
-              <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Set Auto-Load Channel</a></li>
-              <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">❌ Clear Auto-Load Channel</a></li>
-            </ul>
-          </li>
+          <li role="none"><a role="menuitem" href="{{ url_for('virtual_channels') }}">Virtual Channels</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
+          <li role="none"><a role="menuitem" href="{{ url_for('about') }}">System Info</a></li>
           {% endif %}
-
-          <!-- Nested Themes submenu -->
-          <li class="mobile-submenu" role="none">
-            <button
-              class="mobile-submenu-toggle"
-              aria-expanded="false"
-              aria-controls="mobileThemesListNested"
-              type="button">
-              Themes
-              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
-            </button>
-
-            <ul id="mobileThemesListNested" class="mobile-submenu-list" role="menu" aria-hidden="true">
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="auto">Auto (System)</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="light">Light</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="dark">Dark</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-aol">AOL / CompuServe</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="retro-magazine">TV Guide (Refresh)</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
-              <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
-            </ul>
-          </li>
-
-          <!-- Nested Display Size submenu -->
-          <li class="mobile-submenu" role="none">
-            <button
-              class="mobile-submenu-toggle"
-              aria-expanded="false"
-              aria-controls="mobileDisplaySizeList"
-              type="button">
-              Display Size
-              <span class="mobile-submenu-caret" aria-hidden="true">▸</span>
-            </button>
-
-            <ul id="mobileDisplaySizeList" class="mobile-submenu-list" role="menu" aria-hidden="true">
-              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="default">Default</a></li>
-              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="large">Large</a></li>
-              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="medium">Medium</a></li>
-              <li role="none"><a role="menuitem" href="#" data-display-size-selector data-display-size="small">Small</a></li>
-            </ul>
-          </li>
 
         </ul>
       </li>

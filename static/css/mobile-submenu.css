@@ -16,6 +16,33 @@
     list-style: none;
   }
 
+  /* Extra top spacing for major section groups inside a submenu */
+  .mobile-submenu-list > li.mobile-section-group {
+    margin-top: 12px;
+  }
+
+  /* Thin separator line above the admin section */
+  .mobile-admin-separator {
+    list-style: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    margin: 12px 0 4px;
+    padding: 0;
+    height: 0;
+  }
+
+  /* "Administration" section label */
+  .mobile-section-label {
+    list-style: none;
+    padding: 4px 10px 2px;
+    font-size: 0.7em;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    opacity: 0.5;
+    pointer-events: none;
+    user-select: none;
+  }
+
   /* TOP-LEVEL link / toggle styling
      Targets only top-level entries in the mobile-links list so "Settings" visually matches HOME/MANAGE/LOGOUT */
   .mobile-links > li > a,
