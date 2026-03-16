@@ -277,7 +277,7 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
         # Always run body-content classification too — the user needs to see both.
         # Not all servers use ?mode=; for those that do, transparency about what the
         # body actually contains helps with debugging mismatches.
-        body_type, _, _, _ = _classify(url_lower, ct, raw, signals)
+        body_type, _, _, _ = _classify(url_lower, ct, raw, signals, url)
         if body_type != stream_type:
             signals.append(
                 f"Body content analysis suggests '{body_type}' — "
@@ -285,7 +285,7 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
             )
     else:
         stream_type, confidence, description, tips = _classify(
-            url_lower, ct, raw, signals
+            url_lower, ct, raw, signals, url
         )
 
     result["stream_type"] = stream_type
@@ -331,6 +331,7 @@ def _classify(
     ct: str,
     raw: bytes,
     signals: List[str],
+    url: str = "",
 ) -> tuple:
     """Return (stream_type, confidence, description, tips)."""
 
@@ -583,7 +584,7 @@ def _classify(
             ),
             [
                 "Web browsers and HLS.js cannot play raw MPEG-TS — an HLS proxy is required.",
-                "Use VLC or ffprobe to confirm: ffprobe -v quiet -show_format '{}'".format(url),
+                "Use VLC or ffprobe to confirm: ffprobe -v quiet -show_format '{}'".format(url or url_lower),
             ],
         )
 
