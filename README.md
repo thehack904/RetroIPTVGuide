@@ -32,6 +32,10 @@ The project works particularly well alongside playout systems such as
 -   XMLTV `.xml` EPG data\
 -   **HLS segmented streams** for browser playback
 
+## ⚠️ **Beta Notice:**  
+This version is feature-complete and stable, but still displays a *Beta* disclaimer during installation for liability protection.  
+Do not expose your instance directly to the public Internet.
+ 
 ------------------------------------------------------------------------
 
 ## 🚀 Features
