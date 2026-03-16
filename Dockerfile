@@ -36,6 +36,12 @@ RUN pip install --upgrade pip && pip install -r requirements.txt
 COPY . .
 
 # --------------------------------------------
+# Copy entrypoint script and make it executable
+# --------------------------------------------
+COPY docker/entrypoint_fixdb.sh /entrypoint_fixdb.sh
+RUN chmod +x /entrypoint_fixdb.sh
+
+# --------------------------------------------
 # Create persistent directories for TrueNAS mounts
 # --------------------------------------------
 RUN mkdir -p /app/config /app/logs /app/data
@@ -46,9 +52,10 @@ RUN mkdir -p /app/config /app/logs /app/data
 EXPOSE 5000
 
 # --------------------------------------------
-# Use tini as init for graceful shutdown handling
+# Use tini as init for graceful shutdown handling, 
+# with entrypoint_fixdb.sh to set up database symlinks
 # --------------------------------------------
-ENTRYPOINT ["/usr/bin/tini", "--"]
+ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint_fixdb.sh"]
 
 # --------------------------------------------
 # Start the Flask app
