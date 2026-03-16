@@ -20,6 +20,12 @@ ENV/
 *.sqlite3
 db/*.db
 
+# Road geometry disk cache (populated at runtime by the Overpass fetch)
+data/roads_cache/
+
+# Traffic demo basemap PNGs (generated at runtime by stitching OSM tiles)
+static/maps/traffic_demo/*.png
+
 # Logs
 *.log
 

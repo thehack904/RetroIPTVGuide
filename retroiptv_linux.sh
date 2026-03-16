@@ -3,7 +3,7 @@
 # License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 set -euo pipefail
-VERSION="4.8.0"
+VERSION="4.9.0"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
@@ -127,6 +127,7 @@ clone_or_stage_project(){
   git clone --depth 1 -b main https://github.com/thehack904/RetroIPTVGuide.git "$TMP"
   rsync -a --delete --exclude 'venv' "$TMP/" "$APP_DIR/"
   chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+  chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
 }
 
 make_venv_and_install(){
@@ -198,6 +199,16 @@ install_linux(){
 update_linux(){
   echo "Updating app..."
   sudo -u "$APP_USER" bash -c "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
+  echo "Updating Python dependencies..."
+  if [[ -d "$APP_DIR/venv" ]]; then
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+  else
+    echo "⚠️  No venv found -- recreating..."
+    sudo -u "$APP_USER" python3 -m venv "$APP_DIR/venv"
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
+    sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
+  fi
   systemctl daemon-reload; systemctl restart "$SERVICE_NAME"
   echo "✅ Updated and restarted."
 }

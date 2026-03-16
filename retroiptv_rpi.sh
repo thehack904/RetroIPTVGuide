@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="4.8.0"
+VERSION="4.9.0"
 # RetroIPTVGuide Raspberry Pi Installer (Headless, Pi3/4/5)
 # Installs to /home/iptv/iptv-server for consistency with Debian/Windows
 # Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log
@@ -159,6 +159,7 @@ install_app() {
   else
     ( cd "$APP_DIR" && sudo -u "$APP_USER" git pull )
   fi
+  sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
 
   # Python venv setup
   if [ ! -d "$APP_DIR/venv" ]; then

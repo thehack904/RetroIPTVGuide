@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.8.0"
-APP_RELEASE_DATE = "2026-03-05"
+APP_VERSION = "v4.9.0"
+APP_RELEASE_DATE = "2026-03-15"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -30,9 +30,76 @@ try:
 except Exception as e:
     vlc_control = None
     # Log the import failure so we can see why it failed when the app starts
-    logging.exception("Failed to import vlc_control: %s", e)
+    # logging.exception("Failed to import vlc_control: %s", e)
+
+# Pillow is used to stitch OSM map tiles into the static basemap PNGs for the
+# traffic demo.  It is optional — without it the browser falls back to Leaflet.
+try:
+    from PIL import Image as _PilImage
+    import io as _io
+    import math as _math
+    _PILLOW_AVAILABLE = True
+except ImportError:
+    _PILLOW_AVAILABLE = False
+    logging.info("Pillow not installed — traffic demo will use Leaflet basemaps")
 
 APP_START_TIME = datetime.now()
+
+# ------------------- Canonical Data Directory -------------------
+# Priority: 1) RETROIPTV_DATA_DIR env var  2) OS default  3) ./config fallback
+def _resolve_data_dir() -> str:
+    env_val = os.environ.get("RETROIPTV_DATA_DIR", "").strip()
+    if env_val:
+        return env_val
+    if sys.platform == "win32":
+        prog_data = os.environ.get("PROGRAMDATA", r"C:\ProgramData")
+        return os.path.join(prog_data, "RetroIPTVGuide")
+    # Linux / macOS: try the system path only when we can actually write to it
+    system_path = "/var/lib/retroiptvguide"
+    try:
+        os.makedirs(system_path, exist_ok=True)
+        # Verify writability with a probe
+        probe = os.path.join(system_path, ".write_probe")
+        with open(probe, "w") as _fh:
+            _fh.write("ok")
+        os.unlink(probe)
+        return system_path
+    except (PermissionError, OSError):
+        pass
+    # Fallback: portable ./config directory next to app.py
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "config")
+
+DATA_DIR = _resolve_data_dir()
+
+# Ensure required subdirectories exist
+for _subdir in ("logs", "db", "xmltv", "support"):
+    _subdir_path = os.path.join(DATA_DIR, _subdir)
+    try:
+        os.makedirs(_subdir_path, exist_ok=True)
+    except (PermissionError, OSError) as _mkdir_err:
+        print(
+            f"[RetroIPTVGuide] WARNING: could not create directory {_subdir_path!r}: {_mkdir_err}",
+            file=sys.stderr,
+        )
+
+# ------------------- Logging Setup -------------------
+from utils.logging_setup import configure_logging as _configure_logging
+_configure_logging(DATA_DIR)
+
+# ------------------- Startup Diagnostics -------------------
+# Initialised right after logging so startup errors are captured
+# even if later imports fail or the DB can't be opened.
+from utils.startup_diag import (
+    configure_startup_log as _configure_startup_log,
+    record_environment as _record_environment,
+    record_startup_event as _record_startup_event,
+    record_import_error as _record_import_error,
+    record_db_init as _record_db_init,
+)
+_configure_startup_log(DATA_DIR)
+_record_environment()
+_record_startup_event("info", "data_dir", DATA_DIR)
+_record_startup_event("info", "app_version", APP_VERSION)
 
 # ------------------- Config -------------------
 app = Flask(__name__)
@@ -42,15 +109,60 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 DATABASE = 'users.db'
 TUNER_DB = 'tuners.db'
+ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
+ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'data', 'roads')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
+LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
+_ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
 
 login_manager = LoginManager()
 login_manager.login_view = 'login'
 login_manager.init_app(app)
 
+# ------------------- Diagnostics Blueprint -------------------
+from utils.log_reading import configure_allowed_logs as _configure_allowed_logs
+_configure_allowed_logs(DATA_DIR)
+
+from blueprints.admin_diagnostics import admin_diagnostics_bp
+
+# Inject runtime config into the app so the blueprint can access it
+app.config["DIAG_DATA_DIR"] = DATA_DIR
+app.config["DIAG_APP_VERSION"] = APP_VERSION
+app.config["DIAG_APP_START_TIME"] = APP_START_TIME
+# DATABASE and TUNER_DB may be overridden in tests; blueprint reads them lazily
+# via a lambda so they pick up any monkeypatch changes made after import.
+app.config["DIAG_DATABASE"] = DATABASE
+app.config["DIAG_TUNER_DB"] = TUNER_DB
+
+app.register_blueprint(admin_diagnostics_bp)
+
+# ------------------- Public startup-status endpoint -------------------
+@app.route('/startup-status')
+def startup_status_public():
+    """Public (no login required) endpoint for pre-login diagnostics.
+
+    Returns minimal JSON describing whether the app started successfully and
+    any critical errors that occurred during startup.  Deliberately limited —
+    no log content, no paths, no secrets.  Useful when the admin panel itself
+    cannot be reached.
+    """
+    from utils.startup_diag import get_startup_summary
+    summary = get_startup_summary()
+    # Return only fields safe for unauthenticated callers
+    return jsonify({
+        "app": "RetroIPTVGuide",
+        "version": APP_VERSION,
+        "status": summary["status"],
+        "finished_at": summary["finished_at"],
+        "error_count": summary["error_count"],
+        "warning_count": summary["warning_count"],
+        # Surface error categories (no detail text) so the caller knows where to look
+        "error_categories": list({e["category"] for e in summary["errors"]}),
+    })
+
 # ------------------- Activity Log -------------------
-LOG_PATH = os.path.join(os.path.dirname(__file__), "logs", "activity.log")
+LOG_PATH = os.path.join(DATA_DIR, "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -832,7 +944,7 @@ def save_news_feed_url(url):
     save_news_feed_urls([url])
 
 def get_current_feed_state(feed_count):
-    """Return ``(feed_index, ms_until_next_feed)`` driven entirely by wall-clock time.
+    """Return ``(feed_index, ms_until_next_feed, elapsed_in_slot_ms)`` driven entirely by wall-clock time.
 
     The 30-minute block is divided equally across feeds.  All clients receive
     the same ``feed_index`` at any given moment, so the cycling happens in the
@@ -840,19 +952,23 @@ def get_current_feed_state(feed_count):
 
     ``ms_until_next_feed`` is how many milliseconds remain in the current slot,
     letting clients schedule their next reload precisely at the transition point.
+
+    ``elapsed_in_slot_ms`` is how many milliseconds have elapsed since the slot
+    started, so callers can compute the exact slot-start wall-clock time.
     """
     if feed_count <= 0:
-        return 0, 5 * 60 * 1000
+        return 0, 5 * 60 * 1000, 0
     feed_duration_s = (30 * 60) / feed_count
     now = time.time()
     time_slot = int(now / feed_duration_s)
     feed_index = time_slot % feed_count
     elapsed_in_slot_s = now % feed_duration_s
+    elapsed_in_slot_ms = int(elapsed_in_slot_s * 1000)
     remaining_ms = int((feed_duration_s - elapsed_in_slot_s) * 1000)
     # Clamp to at least 1 s so clients never schedule a zero-delay reload
     _MIN_MS = 1000
     ms_until_next = max(_MIN_MS, remaining_ms)
-    return feed_index, ms_until_next
+    return feed_index, ms_until_next, elapsed_in_slot_ms
 
 
 
@@ -1276,9 +1392,83 @@ def _build_traffic_demo_payload():
 
 # Roads are cached per city (long TTL — road geometry rarely changes).
 _ROADS_CACHE: dict = {}   # city_id -> GeoJSON FeatureCollection dict
-_ROADS_CACHE_TTL = 86400  # 24 hours in seconds
+_ROADS_CACHE_TTL = 86400  # 24 hours — in-memory hot cache
+_ROADS_DISK_TTL  = 2_592_000  # 30 days — disk cache; road geometry barely changes
 _ROADS_CACHE_TIME: dict = {}  # city_id -> timestamp of last fetch
-_OVERPASS_PREWARM_STAGGER_S = 5  # seconds between per-city Overpass requests at startup
+_OVERPASS_PREWARM_STAGGER_S = 12  # seconds between per-city Overpass requests at startup
+_OVERPASS_MAX_RETRIES = 3         # retry attempts on 429 / transient errors
+_OVERPASS_RETRY_BACKOFF_S = 10    # initial back-off in seconds (doubles each retry)
+_OVERPASS_SEMAPHORE = threading.Semaphore(1)  # at most one live Overpass request at a time
+
+
+def _roads_cache_path(city_id: int) -> str:
+    """Return the absolute path of the on-disk cache file for a given city."""
+    return os.path.join(ROADS_CACHE_DIR, f"city_{city_id}.json")
+
+
+def _load_roads_from_disk(city_id: int) -> dict | None:
+    """Load GeoJSON from disk cache if the file exists and is not stale.
+    Returns the GeoJSON dict on success, None if missing or expired."""
+    path = _roads_cache_path(city_id)
+    try:
+        if not os.path.isfile(path):
+            return None
+        age = time.time() - os.path.getmtime(path)
+        if age > _ROADS_DISK_TTL:
+            return None
+        with open(path, "r", encoding="utf-8") as fh:
+            return _json.load(fh)
+    except Exception:
+        logging.warning("_load_roads_from_disk: failed to read cache for city_id=%s", city_id,
+                        exc_info=True)
+        return None
+
+
+def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
+    """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
+    path = _roads_cache_path(city_id)
+    try:
+        os.makedirs(ROADS_CACHE_DIR, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as fh:
+            _json.dump(geojson, fh)
+    except Exception:
+        logging.warning("_save_roads_to_disk: failed to write cache for city_id=%s", city_id,
+                        exc_info=True)
+
+
+def _load_bundled_roads(city_name: str) -> dict | None:
+    """Load GeoJSON from the bundled static file shipped with the repository.
+
+    These files are pre-downloaded via ``scripts/download_road_data.py`` and
+    committed to ``static/data/roads/<cityslug>.geojson`` so the app can serve
+    road geometry without any external network connection.
+
+    Returns the GeoJSON dict when a non-empty bundled file is found, otherwise
+    returns None so the caller can fall back to the Overpass API.
+    """
+    slug = _city_slug(city_name)
+    path = os.path.join(ROADS_BUNDLED_DIR, f"{slug}.geojson")
+    try:
+        if not os.path.isfile(path):
+            return None
+        with open(path, "r", encoding="utf-8") as fh:
+            data = _json.load(fh)
+        # Only use the bundled file if it contains actual road features
+        if data.get("features"):
+            return data
+        return None
+    except Exception:
+        logging.warning("_load_bundled_roads: failed to read bundled file for %s", city_name,
+                        exc_info=True)
+        return None
+
+# Most-recent Overpass API error recorded at runtime. Populated by
+# _fetch_overpass_roads on any HTTP error (including 429 rate-limit and
+# 504 gateway timeout) and cleared after a successful fetch. Exposed to
+# the Admin Diagnostics external-services check so that rate-limiting
+# failures are visible in the health panel even though the /api/status
+# probe may return 200 OK.
+_OVERPASS_LAST_ERROR: dict = {}  # keys: status_code, lat, lon, ts, message
 
 
 def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dict:
@@ -1287,24 +1477,91 @@ def _fetch_overpass_roads(lat: float, lon: float, radius_m: int = 80_467) -> dic
     Only motorway and trunk-class roads are fetched; at this scale primary/
     secondary roads would return thousands of segments across the viewport.
     Returns a GeoJSON FeatureCollection with LineString features for each road way.
-    On network failure returns an empty FeatureCollection."""
+    Retries up to _OVERPASS_MAX_RETRIES times on 429 / transient errors,
+    honouring the Retry-After response header when present.
+    _OVERPASS_SEMAPHORE ensures at most one live Overpass request runs at a time
+    across all threads, preventing concurrent requests that trigger rate-limits.
+    On any HTTP error (including 429 Too Many Requests and 504 Gateway Timeout)
+    records the failure in _OVERPASS_LAST_ERROR for the Admin Diagnostics health
+    check.  On permanent failure returns an empty FeatureCollection."""
+    global _OVERPASS_LAST_ERROR  # noqa: PLW0603
     query = (
         f"[out:json][timeout:60];"
         f"(way[\"highway\"~\"^(motorway|trunk)$\"]"
         f"(around:{radius_m},{lat},{lon}););"
         f"out body;>;out skel qt;"
     )
-    try:
-        resp = requests.post(
-            "https://overpass-api.de/api/interpreter",
-            data={"data": query},
-            timeout=65,
-            headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
-        )
-        resp.raise_for_status()
-        return resp.json()
-    except Exception:
-        logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+    with _OVERPASS_SEMAPHORE:
+        backoff = _OVERPASS_RETRY_BACKOFF_S
+        for attempt in range(_OVERPASS_MAX_RETRIES + 1):
+            try:
+                resp = requests.post(
+                    "https://overpass-api.de/api/interpreter",
+                    data={"data": query},
+                    timeout=65,
+                    headers={"User-Agent": "RetroIPTVGuide/1.0 (traffic demo overlay)"},
+                )
+                if resp.status_code == 429 and attempt < _OVERPASS_MAX_RETRIES:
+                    wait = int(resp.headers.get("Retry-After", backoff))
+                    logging.warning(
+                        "_fetch_overpass_roads: 429 rate-limited (attempt %d/%d),"
+                        " sleeping %ds before retry",
+                        attempt + 1, _OVERPASS_MAX_RETRIES, wait,
+                    )
+                    time.sleep(wait)
+                    backoff *= 2
+                    continue
+                resp.raise_for_status()
+                # Successful fetch — clear any previously recorded error so that the
+                # diagnostics check reflects the current (healthy) state.
+                _OVERPASS_LAST_ERROR = {}
+                return resp.json()
+            except requests.exceptions.HTTPError as exc:
+                status_code = exc.response.status_code if exc.response is not None else None
+                if attempt < _OVERPASS_MAX_RETRIES and status_code not in (429,):
+                    logging.warning(
+                        "_fetch_overpass_roads: HTTP error %s (attempt %d/%d),"
+                        " retrying in %ds",
+                        status_code, attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                if status_code == 429:
+                    logging.warning(
+                        "_fetch_overpass_roads rate-limited (429 Too Many Requests) "
+                        "for lat=%s lon=%s — road overlay will be empty until rate limit lifts",
+                        lat, lon,
+                    )
+                else:
+                    logging.exception("_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon)
+                _OVERPASS_LAST_ERROR = {
+                    "status_code": status_code,
+                    "lat": lat,
+                    "lon": lon,
+                    "ts": time.time(),
+                    "message": str(exc),
+                }
+            except Exception:
+                if attempt < _OVERPASS_MAX_RETRIES:
+                    logging.warning(
+                        "_fetch_overpass_roads: transient error (attempt %d/%d),"
+                        " retrying in %ds",
+                        attempt + 1, _OVERPASS_MAX_RETRIES, backoff,
+                    )
+                    time.sleep(backoff)
+                    backoff *= 2
+                    continue
+                logging.exception(
+                    "_fetch_overpass_roads failed for lat=%s lon=%s", lat, lon
+                )
+                _OVERPASS_LAST_ERROR = {
+                    "status_code": None,
+                    "lat": lat,
+                    "lon": lon,
+                    "ts": time.time(),
+                    "message": "network or timeout error",
+                }
         return {"elements": []}
 
 
@@ -1339,13 +1596,30 @@ def _overpass_to_geojson(raw: dict) -> dict:
 
 
 def get_traffic_demo_roads(city_id: int) -> dict:
-    """Return cached road GeoJSON for a city, fetching from Overpass if not cached or stale."""
+    """Return cached road GeoJSON for a city, fetching from Overpass only when needed.
+
+    Lookup order:
+      1. In-memory cache  (hot, 24 h TTL)
+      2. Disk cache       (persistent across restarts, 30 day TTL)
+      3. Bundled static data (ships with the repo; no network required)
+      4. Overpass API     (network call — only when no valid cached copy exists)
+
+    After a successful Overpass fetch the result is saved to disk so that
+    subsequent app restarts never need to call the API for already-fetched cities.
+    """
     now_ts = time.time()
     cached_at = _ROADS_CACHE_TIME.get(city_id, 0)
     if city_id in _ROADS_CACHE and (now_ts - cached_at) < _ROADS_CACHE_TTL:
         return _ROADS_CACHE[city_id]
 
-    # Look up city coordinates from DB
+    # 2. Try disk cache before making a network call
+    disk_geojson = _load_roads_from_disk(city_id)
+    if disk_geojson is not None:
+        _ROADS_CACHE[city_id] = disk_geojson
+        _ROADS_CACHE_TIME[city_id] = now_ts
+        return disk_geojson
+
+    # 3. Look up city coordinates from DB (needed for both bundled lookup and Overpass)
     try:
         cities = get_traffic_demo_cities()
         city = next((c for c in cities if c["id"] == city_id), None)
@@ -1355,30 +1629,292 @@ def get_traffic_demo_roads(city_id: int) -> dict:
         logging.exception("get_traffic_demo_roads: city lookup failed for id=%s", city_id)
         return {"type": "FeatureCollection", "features": []}
 
+    # 3. Try bundled static GeoJSON files (pre-downloaded via scripts/download_road_data.py)
+    bundled = _load_bundled_roads(city["name"])
+    if bundled is not None:
+        logging.info("get_traffic_demo_roads: using bundled data for %s", city["name"])
+        _ROADS_CACHE[city_id] = bundled
+        _ROADS_CACHE_TIME[city_id] = now_ts
+        return bundled
+
+    # 4. Last resort: fetch from Overpass API (requires network access)
     raw = _fetch_overpass_roads(city["lat"], city["lon"])
     geojson = _overpass_to_geojson(raw)
     _ROADS_CACHE[city_id] = geojson
     _ROADS_CACHE_TIME[city_id] = now_ts
+    # Persist to disk so future restarts skip the Overpass call
+    if geojson["features"]:
+        _save_roads_to_disk(city_id, geojson)
     return geojson
 
 
 def _prewarm_roads_cache() -> None:
     """Background thread: fetch road geometry for every enabled city so the
     Overpass data is cached before any user rotates to that city.
-    Requests are staggered by 5 s to stay within Overpass fair-use limits."""
+
+    Local sources (memory cache, disk cache, bundled static files) are checked
+    first for every city.  The inter-request stagger delay is only inserted
+    immediately before cities that genuinely need a live Overpass call, so
+    deployments with pre-downloaded bundled data complete the prewarm instantly
+    with zero Overpass requests."""
     try:
         cities = [c for c in get_traffic_demo_cities() if c.get("enabled")]
     except Exception:
         logging.exception("_prewarm_roads_cache: could not load city list")
         return
+    last_overpass_at = 0.0
     for city in cities:
+        cid = city["id"]
+        # Determine upfront whether a live Overpass call will be needed by
+        # checking every local source in priority order.
+        needs_overpass = (
+            cid not in _ROADS_CACHE
+            and _load_roads_from_disk(cid) is None
+            and _load_bundled_roads(city["name"]) is None
+        )
+        if needs_overpass:
+            # Only stagger when a real Overpass request is coming up.
+            elapsed   = time.time() - last_overpass_at
+            remaining = _OVERPASS_PREWARM_STAGGER_S - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
         try:
-            get_traffic_demo_roads(city["id"])
+            get_traffic_demo_roads(cid)
             logging.info("_prewarm_roads_cache: cached roads for %s", city["name"])
         except Exception:
-            logging.exception("_prewarm_roads_cache: failed for city id=%s", city["id"])
-        time.sleep(_OVERPASS_PREWARM_STAGGER_S)
+            logging.exception("_prewarm_roads_cache: failed for city id=%s", cid)
+        if needs_overpass:
+            last_overpass_at = time.time()
 
+
+# ─── Static basemap PNGs (OSM tile stitching) ─────────────────────────────────
+
+_BASEMAP_DIR  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                              'static', 'maps', 'traffic_demo')
+_BASEMAP_ZOOM = 10       # OSM zoom level — matches traffic.html BASEMAP_ZOOM
+_BASEMAP_W    = 1280     # output width  — matches traffic.html BASEMAP_W
+_BASEMAP_H    = 720      # output height — matches traffic.html BASEMAP_H
+_TILE_SIZE    = 256      # standard OSM tile size in pixels
+_OSM_TILE_UA  = "RetroIPTVGuide/1.0 (traffic demo basemap; see github.com/thehack904/RetroIPTVGuide)"
+
+# Tile server templates tried in order.  Multiple mirrors improve reliability
+# from cloud/datacenter hosts where tile.openstreetmap.org may rate-limit.
+_TILE_SERVERS = [
+    "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+    "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://b.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+    "https://c.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png",
+]
+
+
+def _city_slug(name: str) -> str:
+    """Convert a city name to the lowercase alphanumeric slug used for PNG filenames.
+    Must match the JavaScript citySlug() function in traffic.html."""
+    return ''.join(c for c in name.lower() if c.isalnum())
+
+
+def _generate_basemap_png(lat: float, lon: float, out_path: str) -> bool:
+    """Stitch OSM tiles into a _BASEMAP_W x _BASEMAP_H PNG centred on lat/lon.
+
+    Returns True on success, False if Pillow is unavailable or all tiles fail.
+    The file is written atomically (temp file → rename) so a half-written PNG
+    is never served to the browser.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    zoom = _BASEMAP_ZOOM
+    n    = 2 ** zoom
+
+    # Fractional tile coordinates for the centre point
+    cx_f = (lon + 180.0) / 360.0 * n
+    lat_rad = _math.radians(lat)
+    cy_f = (1.0 - _math.asinh(_math.tan(lat_rad)) / _math.pi) / 2.0 * n
+
+    cx_tile = int(cx_f)
+    cy_tile = int(cy_f)
+    off_x   = (cx_f - cx_tile) * _TILE_SIZE   # pixel offset within centre tile
+    off_y   = (cy_f - cy_tile) * _TILE_SIZE
+
+    # Number of extra tiles needed on each side of the centre tile
+    half_w = _BASEMAP_W / 2
+    half_h = _BASEMAP_H / 2
+    tiles_left  = _math.ceil((half_w - (_TILE_SIZE - off_x)) / _TILE_SIZE) + 1
+    tiles_right = _math.ceil((half_w - off_x)               / _TILE_SIZE) + 1
+    tiles_up    = _math.ceil((half_h - (_TILE_SIZE - off_y)) / _TILE_SIZE) + 1
+    tiles_down  = _math.ceil((half_h - off_y)               / _TILE_SIZE) + 1
+
+    x0 = cx_tile - tiles_left
+    y0 = cy_tile - tiles_up
+    x1 = cx_tile + tiles_right
+    y1 = cy_tile + tiles_down
+    cols = x1 - x0 + 1
+    rows = y1 - y0 + 1
+
+    canvas = _PilImage.new("RGB", (cols * _TILE_SIZE, rows * _TILE_SIZE))
+    sess   = requests.Session()
+    sess.headers.update({"User-Agent": _OSM_TILE_UA})
+    any_ok = False
+    server_idx = 0  # round-robin across tile servers to spread load
+
+    for row_i, ty in enumerate(range(y0, y1 + 1)):
+        for col_i, tx in enumerate(range(x0, x1 + 1)):
+            tx_c = max(0, min(n - 1, tx))
+            ty_c = max(0, min(n - 1, ty))
+            fetched = False
+            for attempt in range(len(_TILE_SERVERS) * 2):
+                srv = _TILE_SERVERS[server_idx % len(_TILE_SERVERS)]
+                url = srv.format(z=zoom, x=tx_c, y=ty_c)
+                try:
+                    resp = sess.get(url, timeout=15)
+                    resp.raise_for_status()
+                    tile = _PilImage.open(_io.BytesIO(resp.content)).convert("RGB")
+                    canvas.paste(tile, (col_i * _TILE_SIZE, row_i * _TILE_SIZE))
+                    any_ok = True
+                    fetched = True
+                    time.sleep(0.15)   # respect tile server fair-use policy
+                    break
+                except Exception as exc:
+                    logging.debug("_generate_basemap_png: %s tile %s/%s attempt %s failed: %s",
+                                  srv, tx_c, ty_c, attempt + 1, exc)
+                    server_idx += 1    # try next server on next attempt
+                    if attempt < len(_TILE_SERVERS) * 2 - 1:
+                        time.sleep(min(2 ** (attempt % len(_TILE_SERVERS)), 30))
+            if not fetched:
+                logging.warning("_generate_basemap_png: all servers failed for tile %s/%s", tx_c, ty_c)
+            server_idx += 1  # distribute load across servers
+
+    if not any_ok:
+        return False
+
+    # Crop to exact output size, centred on the requested coordinates
+    centre_x = (cx_tile - x0) * _TILE_SIZE + off_x
+    centre_y = (cy_tile - y0) * _TILE_SIZE + off_y
+    left   = int(centre_x - half_w)
+    top    = int(centre_y - half_h)
+    cropped = canvas.crop((left, top, left + _BASEMAP_W, top + _BASEMAP_H))
+
+    # Write atomically
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    cropped.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
+def _generate_placeholder_basemap_png(city_name: str, out_path: str) -> bool:
+    """Generate a map-like placeholder PNG using Pillow only (no network access).
+
+    Creates a 1280×720 image with a street-map-inspired colour scheme — a
+    light-grey land base, subtle grid lines for roads, and the city name
+    centred in the image.  This runs instantly at startup so the traffic
+    overlay always has a background, even when external tile servers are
+    unreachable.
+
+    Returns True on success, False if Pillow is unavailable.
+    """
+    if not _PILLOW_AVAILABLE:
+        return False
+
+    from PIL import ImageDraw, ImageFont
+
+    w, h = _BASEMAP_W, _BASEMAP_H
+
+    # OSM-inspired colour palette
+    BG_LAND    = (242, 239, 233)   # warm off-white (OSM land)
+    GRID_MAJOR = (200, 196, 187)   # subtle grey grid (arterial roads)
+    GRID_MINOR = (220, 216, 208)   # lighter minor grid
+    LABEL_CLR  = (130, 120, 100)   # muted brown-grey for city name
+
+    img  = _PilImage.new("RGB", (w, h), BG_LAND)
+    draw = ImageDraw.Draw(img)
+
+    # Minor grid (~city blocks, ~64 px apart)
+    for x in range(0, w, 64):
+        draw.line([(x, 0), (x, h)], fill=GRID_MINOR, width=1)
+    for y in range(0, h, 64):
+        draw.line([(0, y), (w, y)], fill=GRID_MINOR, width=1)
+
+    # Major grid (~arterial roads, ~256 px apart)
+    for x in range(0, w, 256):
+        draw.line([(x, 0), (x, h)], fill=GRID_MAJOR, width=2)
+    for y in range(0, h, 256):
+        draw.line([(0, y), (w, y)], fill=GRID_MAJOR, width=2)
+
+    # City name label centred on the image
+    _font_candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",   # Debian/Ubuntu
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf",             # Fedora/RHEL
+        "/System/Library/Fonts/Helvetica.ttc",                     # macOS
+        "C:/Windows/Fonts/arial.ttf",                              # Windows
+    ]
+    font = None
+    for _fp in _font_candidates:
+        try:
+            font = ImageFont.truetype(_fp, 36)
+            break
+        except Exception:
+            pass
+    if font is None:
+        font = ImageFont.load_default()
+
+    label = city_name
+    bbox  = draw.textbbox((0, 0), label, font=font)
+    tw, th = bbox[2] - bbox[0], bbox[3] - bbox[1]
+    draw.text(((w - tw) // 2, (h - th) // 2), label, fill=LABEL_CLR, font=font)
+
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    tmp_path = out_path + ".tmp"
+    img.save(tmp_path, "PNG", optimize=True)
+    os.replace(tmp_path, out_path)
+    return True
+
+
+def _prewarm_basemaps() -> None:
+    """Background thread: generate missing basemap PNGs for all seed cities.
+
+    Runs once at startup.  Already-present files are skipped so the roads
+    and basemap pre-warm threads don't conflict on subsequent restarts.
+
+    Strategy (in order):
+    1. Try to download real OSM tiles via _generate_basemap_png.
+    2. If all tile servers fail (e.g. datacenter IP is blocked), fall back to
+       _generate_placeholder_basemap_png which uses Pillow only and works
+       instantly with no network access.  This guarantees every city gets a
+       usable basemap at startup regardless of tile-server availability.
+    """
+    if not _PILLOW_AVAILABLE:
+        logging.info("_prewarm_basemaps: Pillow not available, skipping basemap generation")
+        return
+
+    os.makedirs(_BASEMAP_DIR, exist_ok=True)
+    for city in _TRAFFIC_DEMO_CITIES_SEED:
+        slug     = _city_slug(city['name'])
+        out_path = os.path.join(_BASEMAP_DIR, f"{slug}.png")
+        if os.path.isfile(out_path):
+            logging.debug("_prewarm_basemaps: %s already exists, skipping", slug)
+            continue
+        logging.info("_prewarm_basemaps: generating basemap for %s …", city['name'])
+        try:
+            ok = _generate_basemap_png(city['lat'], city['lon'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved real OSM basemap for %s", slug)
+                time.sleep(1)
+                continue
+        except Exception:
+            logging.exception("_prewarm_basemaps: tile download exception for %s", city['name'])
+
+        # Tile download failed — generate a placeholder so the page always works
+        logging.info("_prewarm_basemaps: tile servers unavailable, using placeholder for %s",
+                     city['name'])
+        try:
+            ok = _generate_placeholder_basemap_png(city['name'], out_path)
+            if ok:
+                logging.info("_prewarm_basemaps: saved placeholder basemap for %s", slug)
+            else:
+                logging.warning("_prewarm_basemaps: placeholder also failed for %s", city['name'])
+        except Exception:
+            logging.exception("_prewarm_basemaps: placeholder exception for %s", city['name'])
 
 
 def get_channel_music_file(tvg_id):
@@ -1434,7 +1970,57 @@ def list_audio_files():
         logging.exception("list_audio_files failed")
         return []
 
-# WMO weather code → (label, icon_key)
+# Default logo paths for each virtual channel (used to restore after a reset)
+_DEFAULT_CHANNEL_LOGOS = {
+    'virtual.news':    '/static/logos/virtual/news.svg',
+    'virtual.weather': '/static/logos/virtual/weather.svg',
+    'virtual.status':  '/static/logos/virtual/status.svg',
+    'virtual.traffic': '/static/logos/virtual/traffic.svg',
+}
+
+def get_channel_custom_logo(tvg_id):
+    """Return the custom logo filename for a virtual channel, or '' if none is set."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?", (f"channel.{tvg_id}.logo",))
+            row = c.fetchone()
+            return row[0] if row else ''
+    except Exception:
+        logging.exception("get_channel_custom_logo failed")
+        return ''
+
+def save_channel_custom_logo(tvg_id, filename):
+    """Persist a custom logo filename for a virtual channel.
+    Pass '' to clear.  Validates that the file exists in LOGO_UPLOAD_DIR."""
+    filename = str(filename).strip()
+    if filename:
+        safe = secure_filename(filename)
+        if safe != filename or not safe:
+            raise ValueError(f"Invalid logo filename: {filename!r}")
+        ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+        if ext not in _ALLOWED_LOGO_EXTENSIONS:
+            raise ValueError(f"Unsupported logo type: {ext!r}")
+        target = os.path.join(LOGO_UPLOAD_DIR, safe)
+        real_target = os.path.realpath(target)
+        real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
+        if os.path.commonpath([real_dir, real_target]) != real_dir:
+            raise ValueError(f"Invalid logo filename: {filename!r}")
+        if not os.path.isfile(target):
+            raise ValueError(f"Logo file not found: {safe!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      (f"channel.{tvg_id}.logo", filename))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_custom_logo failed")
+        raise
+
+
 # icon_key maps to SVG/emoji used in the weather template
 _WMO_MAP = {
     0:  ('Sunny',           'sunny'),
@@ -1779,9 +2365,15 @@ def save_virtual_channel_order(order):
         raise
 
 def get_virtual_channels():
-    """Return the list of virtual channel definitions in the user-defined order."""
+    """Return the list of virtual channel definitions in the user-defined order.
+    Any channel that has a custom logo uploaded will have its logo field updated."""
     import copy
     channels = copy.deepcopy(VIRTUAL_CHANNELS)
+    # Apply custom logos where set
+    for ch in channels:
+        custom = get_channel_custom_logo(ch['tvg_id'])
+        if custom:
+            ch['logo'] = f'/static/logos/virtual/{custom}'
     order = get_virtual_channel_order()
     if order:
         id_to_ch = {ch['tvg_id']: ch for ch in channels}
@@ -2124,33 +2716,9 @@ def manage_users():
 
 
 @app.route("/about")
-@login_required  # optional
+@login_required
 def about():
-    python_version = sys.version.split()[0]
-    os_info = platform.platform()
-    install_path = os.getcwd()
-    db_path = os.path.join(install_path, "app.db")
-    log_path = "/var/log/iptv" if os.name != "nt" else os.path.join(install_path, "logs")
-
-    # calculate uptime
-    uptime_delta = datetime.now() - APP_START_TIME
-    days, seconds = uptime_delta.days, uptime_delta.seconds
-    hours = seconds // 3600
-    minutes = (seconds % 3600) // 60
-    seconds = seconds % 60
-    uptime_str = f"{days}d {hours}h {minutes}m {seconds}s"
-
-    info = {
-        "version": APP_VERSION,
-        "release_date": APP_RELEASE_DATE,
-        "python_version": python_version,
-        "os_info": os_info,
-        "install_path": install_path,
-        "db_path": db_path,
-        "log_path": log_path,
-        "uptime": uptime_str
-    }
-    return render_template("about.html", info=info)
+    return render_template("about.html", version=APP_VERSION, release_date=APP_RELEASE_DATE)
 
 
 
@@ -2793,13 +3361,16 @@ def api_news():
     feeds = get_news_feed_urls()
     feed_count = len(feeds)
     refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
-    feed_index, ms_until_next_feed = get_current_feed_state(feed_count)
+    feed_index, ms_until_next_feed, elapsed_in_slot_ms = get_current_feed_state(feed_count)
+    # Compute the wall-clock time when the current feed slot started so that
+    # all viewers see the same "Updated" time regardless of when they tune in.
+    slot_start = datetime.now(timezone.utc) - timedelta(milliseconds=elapsed_in_slot_ms)
     if feeds:
         headlines = fetch_rss_headlines(feeds[feed_index])
     else:
         headlines = []
     return jsonify({
-        "updated": datetime.now(timezone.utc).isoformat(),
+        "updated": slot_start.isoformat(),
         "headlines": headlines,
         "feed_count": feed_count,
         "feed_index": feed_index,
@@ -3055,6 +3626,63 @@ def api_audio_delete(filename):
     os.remove(target)
     log_event(current_user.username, f"Deleted audio file: {safe_name}")
     return jsonify({'ok': True})
+
+
+# ─── Logo upload / management routes ─────────────────────────────────────────
+
+@app.route('/api/logo/upload', methods=['POST'])
+@login_required
+def api_logo_upload():
+    """Upload a custom channel logo image for a virtual channel."""
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Admin access required.'}), 403
+    tvg_id = request.form.get('tvg_id', '').strip()
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if tvg_id not in valid_ids:
+        return jsonify({'error': 'Unknown virtual channel.'}), 400
+    if 'logo_file' not in request.files:
+        return jsonify({'error': 'No file provided.'}), 400
+    f = request.files['logo_file']
+    if not f or not f.filename:
+        return jsonify({'error': 'No file selected.'}), 400
+    original_name = f.filename
+    safe_name = secure_filename(original_name)
+    if not safe_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
+    ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
+    if ext not in _ALLOWED_LOGO_EXTENSIONS:
+        return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_LOGO_EXTENSIONS))}'}), 400
+    # Prefix filename with tvg_id slug to avoid name collisions between channels
+    slug = tvg_id.replace('.', '_')
+    dest_name = f'{slug}_logo.{ext}'
+    os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+    dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
+    f.save(dest)
+    try:
+        save_channel_custom_logo(tvg_id, dest_name)
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    log_event(current_user.username, f"Uploaded logo for {tvg_id}: {dest_name}")
+    return jsonify({'ok': True, 'filename': dest_name, 'url': f'/static/logos/virtual/{dest_name}'}), 201
+
+
+@app.route('/api/logo/reset/<tvg_id>', methods=['POST'])
+@login_required
+def api_logo_reset(tvg_id):
+    """Reset a virtual channel's logo to the built-in default."""
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Admin access required.'}), 403
+    valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
+    if tvg_id not in valid_ids:
+        return jsonify({'error': 'Unknown virtual channel.'}), 400
+    try:
+        save_channel_custom_logo(tvg_id, '')
+    except Exception:
+        return jsonify({'error': 'Failed to reset logo.'}), 500
+    log_event(current_user.username, f"Reset logo for {tvg_id} to default")
+    default_url = _DEFAULT_CHANNEL_LOGOS.get(tvg_id, '')
+    return jsonify({'ok': True, 'url': default_url})
+
 
 @app.route('/api/overlay/settings', methods=['GET'])
 @login_required
@@ -3402,12 +4030,12 @@ def view_logs():
 def clear_logs():
     if current_user.username != 'admin':
         flash("Unauthorized access.")
-        return redirect(url_for('view_logs'))
+        return redirect(url_for('guide'))
 
     open(LOG_PATH, "w").close()  # clear the file
     log_event("admin", "Cleared log file")
     flash("🧹 Logs cleared successfully.")
-    return redirect(url_for('view_logs'))
+    return redirect(url_for('admin_diagnostics.diagnostics_index', tab='activity'))
 
 
 # ------------------- Constants -------------------
@@ -3848,9 +4476,22 @@ def api_health():
 
 
 if __name__ == '__main__':
-    init_db()
+    from utils.startup_diag import finalise_startup as _finalise_startup
+    try:
+        init_db()
+        _record_db_init("users.db", DATABASE, success=True)
+    except Exception as _dberr:
+        _record_db_init("users.db", DATABASE, success=False, error=str(_dberr))
+        raise
+
     add_user('admin', 'strongpassword123')
-    init_tuners_db()
+
+    try:
+        init_tuners_db()
+        _record_db_init("tuners.db", TUNER_DB, success=True)
+    except Exception as _dberr:
+        _record_db_init("tuners.db", TUNER_DB, success=False, error=str(_dberr))
+        raise
 
     # make sure there’s at least one tuner in the DB
     ensure_default_tuner()
@@ -3863,9 +4504,19 @@ if __name__ == '__main__':
     # Use load_tuner_data so combined tuners are handled correctly at startup.
     cached_channels, cached_epg = load_tuner_data(current_tuner)
 
+    _record_startup_event("info", "cache_load",
+                          f"Loaded {len(cached_channels)} channel(s) from tuner '{current_tuner}'")
+
     # Pre-warm the Overpass road-geometry cache for all enabled traffic cities
     # so the overlay is ready before any city rotation happens.
     threading.Thread(target=_prewarm_roads_cache, daemon=True, name="roads-prewarm").start()
+
+    # Generate missing static basemap PNGs (OSM tile mosaics) for all seed
+    # cities so the traffic demo never serves 404s for the basemap images.
+    threading.Thread(target=_prewarm_basemaps, daemon=True, name="basemaps-prewarm").start()
+
+    # Mark startup complete before handing off to Flask
+    _finalise_startup(success=True)
 
     # No background scheduler — auto-refresh is triggered lazily on page/API hits.
     app.run(host='0.0.0.0', port=5000, debug=False)

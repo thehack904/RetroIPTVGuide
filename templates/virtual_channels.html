@@ -46,7 +46,7 @@
       <div class="card-body vc-card-body">
         {% for ch in VIRTUAL_CHANNELS %}
         {% if vc_settings.get(ch.tvg_id, true) %}
-        <div class="vc-enabled-item">
+        <div class="vc-enabled-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
             {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
             <div class="vc-item-info">
@@ -228,12 +228,32 @@
                   Use Save above to persist the Rotation Mode and Interval settings.
                 </div>
               </div>
-              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px; flex-basis:100%; width:100%;">
                 <a href="/traffic" target="_blank" class="btn-link small">&#128663; Preview Traffic Page &#8599;</a>
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
               {% endif %}
-              <div class="vc-prefs-field vc-prefs-field-wide">
+              <div class="vc-prefs-field vc-prefs-field-wide" style="align-self:flex-start;">
+                <label>&#128247; Channel Logo</label>
+                <div class="vc-logo-upload-section" data-tvg-id="{{ ch.tvg_id }}">
+                  <div class="form-row form-row-inline" style="gap:8px; align-items:center; margin-bottom:6px;">
+                    <img src="{{ ch.logo }}" alt="Current logo" class="vc-logo-preview" id="vc-logo-preview-{{ loop.index }}"
+                         style="width:48px;height:48px;object-fit:contain;border:1px solid rgba(255,255,255,0.15);border-radius:4px;background:#0a0e2a;">
+                    <span class="muted small">Current logo</span>
+                  </div>
+                  <input type="file" class="vc-logo-file-input" id="vc-logo-input-{{ loop.index }}"
+                         accept=".png,.jpg,.jpeg,.gif,.svg,.webp" style="max-width:100%; min-width:0; margin-bottom:4px;">
+                  <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                    <button type="button" class="primary small vc-logo-upload-btn"
+                            data-index="{{ loop.index }}" data-tvg-id="{{ ch.tvg_id }}">Upload</button>
+                    <button type="button" class="secondary small vc-logo-reset-btn"
+                            data-index="{{ loop.index }}" data-tvg-id="{{ ch.tvg_id }}">Reset</button>
+                    <span class="vc-logo-status muted small" id="vc-logo-status-{{ loop.index }}" aria-live="polite"></span>
+                  </div>
+                  <p class="muted small" style="margin:4px 0 0;">Allowed: png, jpg, jpeg, gif, svg, webp. Reset restores the default logo.</p>
+                </div>
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="align-self:flex-start;">
                 <label>&#127925; Background Music</label>
                 <select name="ch_music_file">
                   <option value="">&#8212; None &#8212;</option>
@@ -274,7 +294,7 @@
         {% for ch in VIRTUAL_CHANNELS %}
         {% if not vc_settings.get(ch.tvg_id, true) %}
         {% set any_shown.v = true %}
-        <div class="vc-available-item">
+        <div class="vc-available-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
             {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
             <div class="vc-item-info">
@@ -670,6 +690,70 @@ document.addEventListener('DOMContentLoaded', () => {
         .finally(() => { uploadBtn.disabled = false; });
     });
   }
+})();
+
+// Channel logo upload and reset
+(function() {
+  document.querySelectorAll('.vc-logo-upload-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = btn.dataset.index;
+      var tvgId = btn.dataset.tvgId;
+      var fileInput = document.getElementById('vc-logo-input-' + idx);
+      var statusEl = document.getElementById('vc-logo-status-' + idx);
+      var previewImg = document.getElementById('vc-logo-preview-' + idx);
+      function setLogoStatus(msg, isError) {
+        statusEl.textContent = msg;
+        statusEl.style.color = isError ? '#ff7b7b' : '#7bffb0';
+      }
+      if (!fileInput.files || !fileInput.files[0]) { setLogoStatus('Please select a file first.', true); return; }
+      var formData = new FormData();
+      formData.append('logo_file', fileInput.files[0]);
+      formData.append('tvg_id', tvgId);
+      btn.disabled = true; setLogoStatus('Uploading\u2026', false);
+      fetch('/api/logo/upload', { method: 'POST', body: formData, credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            previewImg.src = data.url + '?t=' + Date.now();
+            // Update logo shown in channel list
+            document.querySelectorAll('img.vc-logo-lg, img.vc-logo-sm').forEach(function(img) {
+              if (img.closest('[data-tvg-id="' + tvgId + '"]')) {
+                img.src = data.url + '?t=' + Date.now();
+              }
+            });
+            setLogoStatus('\u2713 Logo updated', false);
+            fileInput.value = '';
+          } else { setLogoStatus(data.error || 'Upload failed.', true); }
+        })
+        .catch(function() { setLogoStatus('Upload request failed.', true); })
+        .finally(function() { btn.disabled = false; });
+    });
+  });
+
+  document.querySelectorAll('.vc-logo-reset-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var idx = btn.dataset.index;
+      var tvgId = btn.dataset.tvgId;
+      var statusEl = document.getElementById('vc-logo-status-' + idx);
+      var previewImg = document.getElementById('vc-logo-preview-' + idx);
+      function setLogoStatus(msg, isError) {
+        statusEl.textContent = msg;
+        statusEl.style.color = isError ? '#ff7b7b' : '#7bffb0';
+      }
+      if (!confirm('Reset the logo for this channel to its default?')) return;
+      btn.disabled = true; setLogoStatus('Resetting\u2026', false);
+      fetch('/api/logo/reset/' + encodeURIComponent(tvgId), { method: 'POST', credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.ok) {
+            previewImg.src = data.url + '?t=' + Date.now();
+            setLogoStatus('\u2713 Logo reset to default', false);
+          } else { setLogoStatus(data.error || 'Reset failed.', true); }
+        })
+        .catch(function() { setLogoStatus('Reset request failed.', true); })
+        .finally(function() { btn.disabled = false; });
+    });
+  });
 })();
 </script>
 {% endblock %}

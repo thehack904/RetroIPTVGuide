@@ -2,8 +2,10 @@
 import json
 import os
 import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
+import requests as req_lib
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -16,6 +18,13 @@ from app import (
     _get_congestion_distribution, _build_traffic_demo_payload,
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
+    _fetch_overpass_roads,
+    _load_roads_from_disk, _save_roads_to_disk, _load_bundled_roads,
+    _city_slug, _generate_basemap_png, _prewarm_basemaps,
+    _TILE_SERVERS,
+    _generate_placeholder_basemap_png,
+    _BASEMAP_W, _BASEMAP_H,
+    _prewarm_roads_cache,
 )
 
 
@@ -25,12 +34,15 @@ from app import (
 def isolated_db(tmp_path, monkeypatch):
     users_db  = str(tmp_path / "users_test.db")
     tuners_db = str(tmp_path / "tuners_test.db")
-    monkeypatch.setattr(app_module, "DATABASE",  users_db)
-    monkeypatch.setattr(app_module, "TUNER_DB",  tuners_db)
+    roads_dir = str(tmp_path / "roads_cache")
+    monkeypatch.setattr(app_module, "DATABASE",       users_db)
+    monkeypatch.setattr(app_module, "TUNER_DB",       tuners_db)
+    monkeypatch.setattr(app_module, "ROADS_CACHE_DIR", roads_dir)
     # Also clear the module-level caches between tests
     monkeypatch.setattr(app_module, "_TRAFFIC_DEMO_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE", {})
     monkeypatch.setattr(app_module, "_ROADS_CACHE_TIME", {})
+    monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {})
     init_db()
     init_tuners_db()
     from app import add_user
@@ -649,6 +661,352 @@ class TestGetTrafficDemoRoads:
         assert result['type'] == 'FeatureCollection'
         assert result['features'] == []
 
+    def test_result_is_saved_to_disk(self, monkeypatch, tmp_path):
+        roads_dir = str(tmp_path / "roads_save_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: self._minimal_overpass())
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert os.path.isfile(cache_file), "GeoJSON should be persisted to disk after fetch"
+
+    def test_disk_cache_used_on_restart(self, monkeypatch, tmp_path):
+        """After data is saved to disk, clearing the in-memory cache simulates a restart.
+        The next call must load from disk without hitting the Overpass API."""
+        roads_dir = str(tmp_path / "roads_restart_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        fetch_count = {'calls': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            fetch_count['calls'] += 1
+            return self._minimal_overpass()
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+
+        # First call: populates disk cache
+        get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1
+
+        # Simulate restart by clearing the in-memory cache
+        app_module._ROADS_CACHE.clear()
+        app_module._ROADS_CACHE_TIME.clear()
+
+        # Second call: should load from disk, NOT call Overpass
+        result = get_traffic_demo_roads(cid)
+        assert fetch_count['calls'] == 1, "Overpass should not be called again when disk cache exists"
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) >= 1
+
+    def test_empty_response_not_saved_to_disk(self, monkeypatch, tmp_path):
+        """An empty Overpass response must not be persisted so the next startup retries."""
+        roads_dir = str(tmp_path / "roads_empty_test")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+        cities = get_traffic_demo_cities()
+        cid = cities[0]['id']
+        get_traffic_demo_roads(cid)
+        cache_file = os.path.join(roads_dir, f"city_{cid}.json")
+        assert not os.path.isfile(cache_file), "Empty GeoJSON must not be persisted to disk"
+
+
+# ─── _load_bundled_roads ──────────────────────────────────────────────────────
+
+class TestLoadBundledRoads:
+    """Unit tests for the bundled static road-data loader."""
+
+    def _sample_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                    "properties": {"way_id": 10, "name": "Test Rd", "highway": "motorway"},
+                }
+            ],
+        }
+
+    def test_returns_none_when_directory_missing(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "no_such_dir"))
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_returns_none_when_file_absent(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_loads_valid_geojson(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text(json.dumps(self._sample_geojson()), encoding="utf-8")
+        result = _load_bundled_roads("Chicago")
+        assert result is not None
+        assert result["type"] == "FeatureCollection"
+        assert len(result["features"]) == 1
+
+    def test_returns_none_for_empty_feature_collection(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text(json.dumps({"type": "FeatureCollection", "features": []}),
+                        encoding="utf-8")
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_returns_none_for_corrupt_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "chicago.geojson"
+        path.write_text("not valid json", encoding="utf-8")
+        assert _load_bundled_roads("Chicago") is None
+
+    def test_slug_matches_city_name(self, monkeypatch, tmp_path):
+        """'New York City' -> 'newyorkcity.geojson'"""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path))
+        path = tmp_path / "newyorkcity.geojson"
+        path.write_text(json.dumps(self._sample_geojson()), encoding="utf-8")
+        result = _load_bundled_roads("New York City")
+        assert result is not None
+        assert len(result["features"]) == 1
+
+
+class TestGetTrafficDemoRoadsBundledFallback:
+    """Ensure get_traffic_demo_roads() uses bundled data when disk cache is absent."""
+
+    def _sample_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                    "properties": {"way_id": 10, "name": "Test Rd", "highway": "motorway"},
+                }
+            ],
+        }
+
+    def test_bundled_used_when_no_disk_cache_and_overpass_empty(self, monkeypatch, tmp_path):
+        """Bundled data is returned when disk cache is empty and Overpass returns nothing."""
+        bundled_dir = str(tmp_path / "bundled")
+        os.makedirs(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+        # Overpass returns empty
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+        bundled_file = os.path.join(bundled_dir, f"{slug}.geojson")
+        with open(bundled_file, "w", encoding="utf-8") as fh:
+            json.dump(self._sample_geojson(), fh)
+
+        result = get_traffic_demo_roads(city['id'])
+        assert result['type'] == 'FeatureCollection'
+        assert len(result['features']) == 1
+
+    def test_overpass_not_called_when_bundled_available(self, monkeypatch, tmp_path):
+        """Overpass should NOT be called when a valid bundled file exists."""
+        bundled_dir = str(tmp_path / "bundled")
+        os.makedirs(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+        bundled_file = os.path.join(bundled_dir, f"{slug}.geojson")
+        with open(bundled_file, "w", encoding="utf-8") as fh:
+            json.dump(self._sample_geojson(), fh)
+
+        get_traffic_demo_roads(city['id'])
+        assert call_count['n'] == 0, "Overpass must not be called when bundled data is available"
+
+    def test_disk_cache_preferred_over_bundled(self, monkeypatch, tmp_path):
+        """Disk cache (step 2) must be preferred over bundled data (step 3)."""
+        bundled_dir = str(tmp_path / "bundled")
+        cache_dir   = str(tmp_path / "cache")
+        os.makedirs(bundled_dir)
+        os.makedirs(cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   cache_dir)
+
+        cities = get_traffic_demo_cities()
+        city   = cities[0]
+        slug   = _city_slug(city['name'])
+
+        # Write distinct bundled and disk-cache files
+        bundled_geojson = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature",
+                          "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+                          "properties": {"way_id": 1, "name": "Bundled Rd", "highway": "motorway"}}]
+        }
+        disk_geojson = {
+            "type": "FeatureCollection",
+            "features": [{"type": "Feature",
+                          "geometry": {"type": "LineString", "coordinates": [[2, 2], [3, 3]]},
+                          "properties": {"way_id": 2, "name": "Disk Rd", "highway": "trunk"}}]
+        }
+
+        with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+            json.dump(bundled_geojson, fh)
+        with open(os.path.join(cache_dir, f"city_{city['id']}.json"), "w", encoding="utf-8") as fh:
+            json.dump(disk_geojson, fh)
+
+        result = get_traffic_demo_roads(city['id'])
+        # Disk cache should win
+        assert result['features'][0]['properties']['name'] == 'Disk Rd'
+
+    def test_overpass_called_when_no_bundled_and_no_disk_cache(self, monkeypatch, tmp_path):
+        """Overpass IS called when both disk cache and bundled data are absent."""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   str(tmp_path / "empty_cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+
+        cities = get_traffic_demo_cities()
+        get_traffic_demo_roads(cities[0]['id'])
+        assert call_count['n'] == 1, "Overpass must be called when no bundled or disk data exists"
+
+
+# ─── _prewarm_roads_cache stagger / skip logic ───────────────────────────────
+
+class TestPrewarmRoadsCache:
+    """Verify that _prewarm_roads_cache() checks local data before sleeping or
+    calling Overpass, so deployments with bundled/cached data never trigger
+    rate-limit (429) warnings at startup."""
+
+    def _minimal_geojson(self):
+        return {
+            "type": "FeatureCollection",
+            "features": [{
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": [[-87.63, 41.88], [-87.64, 41.89]]},
+                "properties": {"way_id": 1, "name": "Test Rd", "highway": "motorway"},
+            }],
+        }
+
+    def _write_bundled_for_all(self, bundled_dir):
+        """Write a valid bundled GeoJSON file for every city."""
+        os.makedirs(bundled_dir, exist_ok=True)
+        for city in get_traffic_demo_cities():
+            slug = _city_slug(city['name'])
+            with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+                json.dump(self._minimal_geojson(), fh)
+
+    def _write_disk_cache_for_all(self, cache_dir):
+        """Write a valid disk-cache file for every city."""
+        os.makedirs(cache_dir, exist_ok=True)
+        for city in get_traffic_demo_cities():
+            with open(os.path.join(cache_dir, f"city_{city['id']}.json"), "w", encoding="utf-8") as fh:
+                json.dump(self._minimal_geojson(), fh)
+
+    def test_no_overpass_calls_when_all_bundled(self, monkeypatch, tmp_path):
+        """Prewarm must not call Overpass when every city has a bundled file."""
+        bundled_dir = str(tmp_path / "bundled")
+        self._write_bundled_for_all(bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', str(tmp_path / "cache"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.time, 'sleep', mock_sleep)
+
+        _prewarm_roads_cache()
+
+        assert call_count['n'] == 0, "Overpass must not be called when all cities have bundled data"
+        assert mock_sleep.call_count == 0, "No sleep needed when all data is available locally"
+
+    def test_no_overpass_calls_when_all_disk_cached(self, monkeypatch, tmp_path):
+        """Prewarm must not call Overpass when every city has a valid disk-cache file."""
+        cache_dir = str(tmp_path / "cache")
+        self._write_disk_cache_for_all(cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', cache_dir)
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+
+        call_count = {'n': 0}
+        def fake_fetch(lat, lon, radius_m=80_467):
+            call_count['n'] += 1
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.time, 'sleep', mock_sleep)
+
+        _prewarm_roads_cache()
+
+        assert call_count['n'] == 0, "Overpass must not be called when all cities have disk-cache data"
+        assert mock_sleep.call_count == 0, "No sleep needed when all data is on disk"
+
+    def test_stagger_only_between_consecutive_overpass_calls(self, monkeypatch, tmp_path):
+        """Sleep must be called exactly N-1 times for N cities that all need Overpass."""
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', str(tmp_path / "empty_bundled"))
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   str(tmp_path / "empty_cache"))
+
+        cities = [c for c in get_traffic_demo_cities() if c.get('enabled')]
+        n = len(cities)
+
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads',
+                            lambda lat, lon, radius_m=80_467: {'elements': []})
+        sleep_calls = []
+        monkeypatch.setattr(app_module.time, 'sleep', lambda s: sleep_calls.append(s))
+
+        _prewarm_roads_cache()
+
+        # First city gets no pre-sleep; every subsequent Overpass city does.
+        assert len(sleep_calls) == n - 1, (
+            f"Expected {n - 1} stagger sleeps for {n} cities, got {len(sleep_calls)}"
+        )
+        assert all(0 < s <= app_module._OVERPASS_PREWARM_STAGGER_S for s in sleep_calls), (
+            "Each stagger sleep must be a positive duration within the configured stagger"
+        )
+
+    def test_no_stagger_for_cached_cities_mixed_with_overpass(self, monkeypatch, tmp_path):
+        """Cities with bundled data must not introduce a stagger sleep between them."""
+        bundled_dir = str(tmp_path / "bundled")
+        cache_dir   = str(tmp_path / "cache")
+        monkeypatch.setattr(app_module, 'ROADS_BUNDLED_DIR', bundled_dir)
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR',   cache_dir)
+
+        cities = [c for c in get_traffic_demo_cities() if c.get('enabled')]
+        # Give only the first city bundled data; the rest need Overpass.
+        os.makedirs(bundled_dir)
+        first = cities[0]
+        slug = _city_slug(first['name'])
+        with open(os.path.join(bundled_dir, f"{slug}.geojson"), "w", encoding="utf-8") as fh:
+            json.dump(self._minimal_geojson(), fh)
+
+        overpass_cities = []
+        def fake_fetch(lat, lon, radius_m=80_467):
+            overpass_cities.append((lat, lon))
+            return {'elements': []}
+        monkeypatch.setattr(app_module, '_fetch_overpass_roads', fake_fetch)
+        sleep_calls = []
+        monkeypatch.setattr(app_module.time, 'sleep', lambda s: sleep_calls.append(s))
+
+        _prewarm_roads_cache()
+
+        # First city served from bundled — never hits Overpass
+        assert (first['lat'], first['lon']) not in overpass_cities
+        # Remaining N-1 cities need Overpass; N-2 stagger sleeps between them
+        n_overpass = len(cities) - 1
+        assert len(overpass_cities) == n_overpass
+        assert len(sleep_calls) == n_overpass - 1
+
 
 # ─── /api/traffic/demo/roads/<city_id> endpoint ───────────────────────────────
 
@@ -711,3 +1069,433 @@ class TestApiTrafficDemoRoads:
         data = client.get(f'/api/traffic/demo/roads/{cities[0]["id"]}').get_json()
         assert data['type'] == 'FeatureCollection'
         assert data['features'] == []
+
+
+# ─── _fetch_overpass_roads retry / rate-limit handling ───────────────────────
+
+class TestFetchOverpassRoadsRetry:
+    """Test that _fetch_overpass_roads retries on 429 and respects Retry-After."""
+
+    _GOOD_RESPONSE = {"elements": [{"type": "node", "id": 1, "lat": 41.88, "lon": -87.63}]}
+
+    def _make_response(self, status_code: int, json_body=None, headers=None):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.headers = headers or {}
+        if status_code >= 400:
+            mock_resp.raise_for_status.side_effect = req_lib.exceptions.HTTPError(
+                f"{status_code} error"
+            )
+        else:
+            mock_resp.raise_for_status.return_value = None
+            mock_resp.json.return_value = json_body or self._GOOD_RESPONSE
+        return mock_resp
+
+    def test_success_on_first_attempt(self, monkeypatch):
+        mock_post = MagicMock(return_value=self._make_response(200, self._GOOD_RESPONSE))
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 1
+
+    def test_retries_on_429_and_eventually_succeeds(self, monkeypatch):
+        """First two calls return 429; third succeeds."""
+        responses = [
+            self._make_response(429),
+            self._make_response(429),
+            self._make_response(200, self._GOOD_RESPONSE),
+        ]
+        mock_post = MagicMock(side_effect=responses)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 3
+        assert mock_sleep.call_count == 2  # slept twice before the successful call
+
+    def test_respects_retry_after_header(self, monkeypatch):
+        """Retry-After header value must be used as the sleep duration."""
+        rate_limited = self._make_response(429, headers={"Retry-After": "30"})
+        success = self._make_response(200, self._GOOD_RESPONSE)
+        mock_post = MagicMock(side_effect=[rate_limited, success])
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        _fetch_overpass_roads(41.88, -87.63)
+        mock_sleep.assert_called_once_with(30)
+
+    def test_exhausted_retries_return_empty(self, monkeypatch):
+        """All attempts return 429 - function must return empty elements dict."""
+        mock_post = MagicMock(return_value=self._make_response(429))
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == {"elements": []}
+        # Should have attempted _OVERPASS_MAX_RETRIES + 1 total calls
+        assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
+
+    def test_retries_on_504_and_eventually_succeeds(self, monkeypatch):
+        """504 Gateway Timeout is treated as a transient error; function retries and succeeds."""
+        responses = [
+            self._make_response(504),
+            self._make_response(504),
+            self._make_response(200, self._GOOD_RESPONSE),
+        ]
+        mock_post = MagicMock(side_effect=responses)
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == self._GOOD_RESPONSE
+        assert mock_post.call_count == 3
+        assert mock_sleep.call_count == 2  # slept before each retry
+
+    def test_exhausted_504_retries_return_empty(self, monkeypatch):
+        """All attempts return 504 - function must return empty elements dict."""
+        mock_post = MagicMock(return_value=self._make_response(504))
+        mock_sleep = MagicMock()
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", mock_sleep)
+        result = _fetch_overpass_roads(41.88, -87.63)
+        assert result == {"elements": []}
+        assert mock_post.call_count == app_module._OVERPASS_MAX_RETRIES + 1
+
+    def test_backoff_doubles_on_transient_errors(self, monkeypatch):
+        """Sleep duration must double between retries (exponential back-off)."""
+        mock_post = MagicMock(return_value=self._make_response(504))
+        sleep_calls = []
+        monkeypatch.setattr(app_module.requests, "post", mock_post)
+        monkeypatch.setattr(app_module.time, "sleep", lambda s: sleep_calls.append(s))
+        _fetch_overpass_roads(41.88, -87.63)
+        # Verify each sleep is double the previous one
+        assert len(sleep_calls) == app_module._OVERPASS_MAX_RETRIES
+        initial = app_module._OVERPASS_RETRY_BACKOFF_S
+        assert sleep_calls[0] == initial
+        assert sleep_calls[1] == initial * 2
+        assert sleep_calls[2] == initial * 4
+
+
+# ─── Basemap PNG generation ────────────────────────────────────────────────────
+
+class TestCitySlug:
+    """_city_slug must mirror the JS citySlug() function in traffic.html."""
+
+    @pytest.mark.parametrize("name,expected", [
+        ("New York City",  "newyorkcity"),
+        ("Los Angeles",    "losangeles"),
+        ("Chicago",        "chicago"),
+        ("San Jose",       "sanjose"),
+        ("San Antonio",    "sanantonio"),
+        ("Philadelphia",   "philadelphia"),
+    ])
+    def test_known_cities(self, name, expected):
+        assert _city_slug(name) == expected
+
+    def test_lowercase(self):
+        assert _city_slug("DALLAS") == "dallas"
+
+    def test_removes_spaces(self):
+        assert _city_slug("San Diego") == "sandiego"
+
+    def test_removes_special_chars(self):
+        assert _city_slug("St. Louis") == "stlouis"
+
+    def test_empty_string(self):
+        assert _city_slug("") == ""
+
+
+class TestGenerateBasemapPng:
+    """_generate_basemap_png writes a PNG file; tiles provided via mock."""
+
+    def _make_tile_response(self, colour=(100, 149, 237)):
+        """Create a fake 256x256 tile response in memory."""
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), colour)
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_creates_png_file(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        img = _I.open(out)
+        assert img.size == (app_module._BASEMAP_W, app_module._BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_returns_false_when_all_tiles_fail(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(side_effect=Exception("network error"))
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        out = str(tmp_path / "fail.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_falls_back_to_secondary_tile_server(self, monkeypatch, tmp_path):
+        """If the first tile server fails, the function tries the next server."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+
+        primary_url = _TILE_SERVERS[0].split("{")[0]  # e.g. "https://tile.openstreetmap.org/"
+        good_resp   = self._make_tile_response()
+
+        # When monkeypatching a class method the Session instance is passed as
+        # the first positional argument, followed by the URL.
+        def selective_get(_session, url, **kwargs):
+            if primary_url in url:
+                raise Exception("primary server blocked")
+            return good_resp
+
+        monkeypatch.setattr(app_module.requests.Session, "get", selective_get)
+
+        out = str(tmp_path / "fallback.png")
+        ok = _generate_basemap_png(37.33, -121.88, out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_atomic_write_no_partial_file_on_failure(self, monkeypatch, tmp_path):
+        """If generation fails the destination path must not be created."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("err")))
+        out = str(tmp_path / "atomic.png")
+        _generate_basemap_png(37.33, -121.88, out)
+        assert not os.path.isfile(out)
+        # Temp file must also be cleaned up
+        assert not os.path.isfile(out + ".tmp")
+
+
+class TestPrewarmBasemaps:
+    """_prewarm_basemaps generates a file for each seed city that lacks one."""
+
+    def _make_tile_response(self):
+        from PIL import Image as _I
+        import io
+        img = _I.new("RGB", (256, 256), (80, 120, 200))
+        buf = io.BytesIO()
+        img.save(buf, "PNG")
+        buf.seek(0)
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.raise_for_status.return_value = None
+        mock_resp.content = buf.read()
+        return mock_resp
+
+    def test_generates_png_per_city(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing basemap for {city['name']}"
+
+    def test_skips_existing_files(self, monkeypatch, tmp_path):
+        """Pre-existing PNGs must not trigger tile downloads."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        mock_get = MagicMock(return_value=self._make_tile_response())
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        # Pre-create all PNG files
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            (tmp_path / f"{slug}.png").write_bytes(b"dummy")
+
+        _prewarm_basemaps()
+        # No tiles should have been fetched
+        mock_get.assert_not_called()
+
+    def test_noop_without_pillow(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+
+        _prewarm_basemaps()
+        mock_get.assert_not_called()
+
+    def test_uses_placeholder_when_all_tile_servers_fail(self, monkeypatch, tmp_path):
+        """When tile downloads fail, _prewarm_basemaps must still create a PNG via placeholder."""
+        monkeypatch.setattr(app_module, "_BASEMAP_DIR", str(tmp_path))
+        monkeypatch.setattr(app_module.time, "sleep", MagicMock())
+        monkeypatch.setattr(app_module.requests.Session, "get",
+                            MagicMock(side_effect=Exception("tile server blocked")))
+
+        _prewarm_basemaps()
+
+        for city in _TRAFFIC_DEMO_CITIES_SEED:
+            slug = _city_slug(city['name'])
+            assert os.path.isfile(str(tmp_path / f"{slug}.png")), \
+                f"Missing placeholder basemap for {city['name']}"
+
+
+class TestGeneratePlaceholderBasemapPng:
+    """_generate_placeholder_basemap_png creates a valid PNG with no network access."""
+
+    def test_creates_png_file(self, tmp_path):
+        out = str(tmp_path / "testcity.png")
+        ok = _generate_placeholder_basemap_png("Test City", out)
+        assert ok is True
+        assert os.path.isfile(out)
+
+    def test_output_dimensions(self, tmp_path):
+        from PIL import Image as _I
+        out = str(tmp_path / "dims.png")
+        _generate_placeholder_basemap_png("Chicago", out)
+        img = _I.open(out)
+        assert img.size == (_BASEMAP_W, _BASEMAP_H)
+
+    def test_returns_false_when_pillow_unavailable(self, monkeypatch, tmp_path):
+        monkeypatch.setattr(app_module, "_PILLOW_AVAILABLE", False)
+        out = str(tmp_path / "nopillow.png")
+        ok = _generate_placeholder_basemap_png("Chicago", out)
+        assert ok is False
+        assert not os.path.isfile(out)
+
+    def test_atomic_write(self, tmp_path):
+        """Destination file must not exist until write completes; no .tmp left behind."""
+        out = str(tmp_path / "atomic.png")
+        _generate_placeholder_basemap_png("Philadelphia", out)
+        assert os.path.isfile(out)
+        assert not os.path.isfile(out + ".tmp")
+
+    def test_no_network_calls(self, monkeypatch, tmp_path):
+        """Placeholder generation must never make HTTP requests."""
+        mock_get = MagicMock()
+        monkeypatch.setattr(app_module.requests.Session, "get", mock_get)
+        out = str(tmp_path / "nonet.png")
+        _generate_placeholder_basemap_png("New York City", out)
+        mock_get.assert_not_called()
+
+
+# ─── _OVERPASS_LAST_ERROR tracking ───────────────────────────────────────────
+
+class TestOverpassLastError:
+    """Verify that _fetch_overpass_roads populates and clears _OVERPASS_LAST_ERROR."""
+
+    def _make_http_error_response(self, status_code):
+        """Build a minimal mock response that raises an HTTPError."""
+        import requests as _req
+
+        class _MockResp:
+            def __init__(self, code):
+                self.status_code = code
+
+            def raise_for_status(self):
+                raise _req.exceptions.HTTPError(
+                    f"{self.status_code} Error", response=self
+                )
+
+            def json(self):
+                return {}
+
+        return _MockResp(status_code)
+
+    def test_429_populates_last_error(self, monkeypatch):
+        """A 429 from requests.post should record the error in _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        resp = self._make_http_error_response(429)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(40.7128, -74.006)
+
+        err = app_module._OVERPASS_LAST_ERROR
+        assert err, "_OVERPASS_LAST_ERROR should be non-empty after 429"
+        assert err["status_code"] == 429
+        assert err["lat"] == 40.7128
+        assert err["lon"] == -74.006
+        assert "ts" in err
+
+    def test_504_populates_last_error(self, monkeypatch):
+        """A 504 from requests.post should record the error in _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        resp = self._make_http_error_response(504)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(33.4484, -112.074)
+
+        err = app_module._OVERPASS_LAST_ERROR
+        assert err["status_code"] == 504
+
+    def test_success_clears_last_error(self, monkeypatch):
+        """A successful fetch should clear _OVERPASS_LAST_ERROR."""
+        import requests as _req
+
+        # Seed an error first
+        monkeypatch.setattr(app_module, "_OVERPASS_LAST_ERROR", {
+            "status_code": 429, "lat": 40.7128, "lon": -74.006,
+            "ts": 0, "message": "stale",
+        })
+
+        class _OkResp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"elements": []}
+
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: _OkResp())
+
+        from app import _fetch_overpass_roads
+        _fetch_overpass_roads(40.7128, -74.006)
+
+        assert app_module._OVERPASS_LAST_ERROR == {}, \
+            "_OVERPASS_LAST_ERROR should be cleared after a successful fetch"
+
+    def test_429_returns_empty_elements(self, monkeypatch):
+        """A 429 should return {'elements': []} so callers get an empty GeoJSON."""
+        import requests as _req
+
+        resp = self._make_http_error_response(429)
+        monkeypatch.setattr(_req, "post", lambda *a, **kw: resp)
+
+        from app import _fetch_overpass_roads
+        result = _fetch_overpass_roads(40.7128, -74.006)
+        assert result == {"elements": []}

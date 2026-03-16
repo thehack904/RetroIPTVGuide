@@ -1,157 +1,94 @@
-# Installation Guide
+# INSTALL.md
 
-**Version:** v4.8.0  
-**Last Updated:** 2026-02-23
+This document provides detailed installation, update, and uninstall
+instructions for RetroIPTVGuide.
 
----
+------------------------------------------------------------------------
 
-## 🧰 Requirements
-- Python 3.10+ (Linux) / Python 3.12+ (Windows)
-- **Linux (Debian/Ubuntu with systemd)**, **Windows 10/11**, or **Raspberry Pi 3 / 4 / 5 (Headless OS) / Docker**
-- Administrative privileges:
-  - **Linux/WSL/Raspberry Pi:** run install/uninstall with `sudo`
-  - **Windows:** run from an Administrator **PowerShell** session
+# Docker Installation (Recommended)
 
----
-
-## 🛠 Installation
-
-### 🧱 Docker (Generic Linux / macOS / Windows)
-
-## 🐳 Quick Docker Run
-
-
-```bash
+Pull the latest container:
+```
 docker pull ghcr.io/thehack904/retroiptvguide:latest
-docker run -d   --name retroiptvguide   -p 5000:5000   -e TZ=America/Chicago   -e SECRET_KEY=$(openssl rand -hex 32)   -v $(pwd)/config:/app/config   -v $(pwd)/logs:/app/logs   -v $(pwd)/data:/app/data   ghcr.io/thehack904/retroiptvguide:latest
 ```
-
-#### Using Docker Compose
-
-```bash
-git clone https://github.com/thehack904/RetroIPTVGuide.git
-cd RetroIPTVGuide/docker
-cp .env.example .env
-docker compose up -d
+Run the container:
 ```
+docker run -d -p 5000:5000 ghcr.io/thehack904/retroiptvguide:latest
+```
+Access the interface:
 
-### 🐧 Linux
-#### Automated
-```bash
+http://`<server-ip>`{=html}:5000
+
+------------------------------------------------------------------------
+
+# Linux Installation
+
+Run the official installer:
+```
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh | sudo bash -s install --agree --yes
 ```
+Default install location:
 
-#### Manual
-```bash
-wget https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh
-sudo bash ./retroiptv_linux.sh install
+/home/iptv/iptv-server
+
+------------------------------------------------------------------------
+
+# Raspberry Pi Installation
 ```
-
----
-
-### 🍓 Raspberry Pi
-#### Automated
-```bash
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh | sudo bash -s install --agree --yes
 ```
+Supported hardware:
 
-#### Manual
-```bash
-wget https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh
-sudo bash ./retroiptv_rpi.sh install
+-   Raspberry Pi 3
+-   Raspberry Pi 4
+-   Raspberry Pi 5
+
+------------------------------------------------------------------------
+
+# Windows Installation
 ```
-
----
-
-### 🪟 Windows (PowerShell)
-#### Automated
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force
-Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
+Set-ExecutionPolicy Bypass -Scope Process -Force Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
 .\retroiptv_windows.bat install
 ```
+------------------------------------------------------------------------
 
-#### Manual
-1. Download `retroiptv_windows.ps1` from the GitHub repository.  
-2. Open **PowerShell as Administrator**.  
-3. Navigate to the folder containing the script.  
-4. Run:
-   ```powershell
-   Set-ExecutionPolicy Bypass -Scope Process -Force
-   .\retroiptv_windows.bat install
-   ```
+# Updating
 
----
-
-## 🌐 Access
-After installation:
+Linux
 ```
-🌐 RetroIPTVGuide Web Interface: http://<server-ip>:5000
-🔑 Default Login: admin / strongpassword123
+sudo /home/iptv/iptv-server/retroiptv_linux.sh update --yes
 ```
-
-> ⚠️ **Beta Notice:**  
-> This version is feature-complete and stable, but still displays a *Beta* disclaimer during installation for liability protection.  
-> Do not expose your instance directly to the public Internet.
-
----
-
-## 🔄 Updating
-
-### 🐧 Linux
-```bash
-sudo retroiptv_linux.sh update
+Raspberry Pi
 ```
-
-### 🍓 Raspberry Pi
-```bash
-sudo retroiptv_rpi.sh update
+sudo /home/iptv/iptv-server/retroiptv_rpi.sh update --yes
 ```
-
-### 🪟 Windows
-
-```powershell
-git fetch --all ; git reset --hard origin/main ; Restart-Service RetroIPTVGuide
+Docker
 ```
-
-#### Docker
-```bash
-docker compose pull && docker compose up -d
+docker pull ghcr.io/thehack904/retroiptvguide:latest
 ```
+Restart the container after pulling the new image.
 
----
+------------------------------------------------------------------------
 
-## 📘 Uninstall
+# Uninstall
 
-### 🐧 Linux
-```bash
-sudo retroiptv_linux.sh uninstall
+Linux
 ```
-
-### 🍓 Raspberry Pi
-```bash
-sudo retroiptv_rpi.sh uninstall
+sudo /home/iptv/iptv-server/retroiptv_linux.sh uninstall --yes
 ```
-
-### 🪟 Windows
-1. Double-click or right-click on `retroiptv_windows.bat` and select **Run as Administrator**  
-2. Select **Uninstall**
-
-#### Docker
-```bash
-docker compose down -v
+Raspberry Pi
 ```
+sudo /home/iptv/iptv-server/retroiptv_rpi.sh uninstall --yes
+```
+Windows
 
-**Each uninstaller stops its service, removes environment files, and cleans logs.**
-⚠️ To completely remove the project, manually delete the project folder after uninstalling.
----
+Run the installer again and select **Uninstall**.
 
-## ⚙️ Notes
-- All installers log activity with timestamps (stored in the same directory or `/var/log/retroiptvguide/`).  
-- Uninstallers remove services and dependencies cleanly but preserve user data unless explicitly deleted.  
-- These scripts are intended for **local or internal networks only**.
+------------------------------------------------------------------------
 
----
+# Default Login
 
-## License
-Licensed under **CC BY-NC-SA 4.0**. See `LICENSE` for details.
+Username: admin
+Password: strongpassword123
+
+Change the password after the first login.

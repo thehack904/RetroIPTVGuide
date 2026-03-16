@@ -2,6 +2,9 @@ services:
   retroiptvguide:
     container_name: retroiptvguide
     image: ghcr.io/thehack904/retroiptvguide:latest
+    build:
+      context: ..
+      dockerfile: Dockerfile
     restart: unless-stopped
     ports:
       - "5000:5000"
