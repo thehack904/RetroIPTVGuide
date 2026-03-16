@@ -11,7 +11,6 @@ This project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - New **Admin Diagnostics** panel with tools for tuner checks, system health, logs, dependency checks, and support bundle generation.
 - New Theme: **TV Guide (Classic)**
-- Optional **startup status endpoint** for viewing initialization progress before login.
 - **Custom logo uploads** for Virtual Channels with reset-to-default option.
 - Traffic virtual channel improvements including cached road data and startup prewarming.
 - New documentation: `AI_POLICY.md`, `ARCHITECTURE.md`, `DATA_FLOW.md`, `PROJECT_STRUCTURE.md`, `SECURITY_MODEL.md`, and `SYSTEM_OVERVIEW.md`.
