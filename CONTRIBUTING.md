@@ -4,6 +4,8 @@ Thank you for your interest in contributing to RetroIPTVGuide.
 
 This project is maintained as an open-source IPTV guide platform designed for retro-style television guide experiences. Contributions are welcome and encouraged.
 
+AI-assisted contributions are welcome, but all submissions must be reviewed for correctness and security before submission.
+
 ---
 
 ## Development Workflow
