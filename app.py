@@ -16,7 +16,7 @@ import datetime
 import requests
 import time
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse, urljoin, urlunparse
 import socket
 import ipaddress
 import logging
@@ -390,16 +390,14 @@ def add_tuner(name, xml_url, m3u_url):
         if not xml_url.startswith(('http://', 'https://')):
             raise ValueError("XML URL must start with http:// or https://")
     
-    # Optional: Check URL reachability with SSRF protection
+    # Validate the URL hostname and block internal/private addresses to prevent SSRF
     try:
-        # Parse the URL to validate the hostname
         parsed_url = urlparse(m3u_url)
         hostname = parsed_url.hostname
         
         if not hostname:
             raise ValueError("M3U URL must have a valid hostname")
         
-        # Block localhost to prevent SSRF attacks on local services
         try:
             # Resolve hostname to IP address
             ip_addr = socket.gethostbyname(hostname)
@@ -411,19 +409,15 @@ def add_tuner(name, xml_url, m3u_url):
             # Block link-local addresses (169.254.0.0/16) which could be cloud metadata
             if ip_obj.is_link_local:
                 raise ValueError("M3U URL cannot point to link-local addresses (169.254.0.0/16)")
+            # Block private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+            if ip_obj.is_private:
+                raise ValueError("M3U URL cannot point to a private IP address range")
+            # Block reserved, unspecified, or multicast addresses
+            if ip_obj.is_reserved or ip_obj.is_unspecified or ip_obj.is_multicast:
+                raise ValueError("M3U URL cannot point to a reserved or multicast address")
         except socket.gaierror:
-            # If hostname can't be resolved, skip reachability check
+            # If hostname can't be resolved, skip IP check
             pass
-        
-        # Make the request with security restrictions
-        try:
-            r = requests.head(m3u_url, timeout=5, allow_redirects=True)
-            r.raise_for_status()
-        except requests.exceptions.ConnectionError:
-            # DNS resolution failure or unreachable host — skip reachability check
-            pass
-        except requests.RequestException as e:
-            raise ValueError(f"M3U URL unreachable: {str(e)}")
     except ValueError:
         # Re-raise ValueError from our validation
         raise
@@ -1402,14 +1396,33 @@ _OVERPASS_SEMAPHORE = threading.Semaphore(1)  # at most one live Overpass reques
 
 
 def _roads_cache_path(city_id: int) -> str:
-    """Return the absolute path of the on-disk cache file for a given city."""
-    return os.path.join(ROADS_CACHE_DIR, f"city_{city_id}.json")
+    """Return the absolute path of the on-disk cache file for a given city.
+
+    The path is validated against ROADS_CACHE_DIR to prevent path traversal
+    attacks where a malicious city_id could escape the cache directory.
+    """
+    # Explicitly convert to int so that the filename component is a plain
+    # integer with no path-separator or traversal characters.
+    city_id_int = int(city_id)
+    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
+    path = os.path.normpath(os.path.join(safe_dir, f"city_{city_id_int}.json"))
+    if not path.startswith(safe_dir + os.sep) and path != safe_dir:
+        raise ValueError(f"city_id {city_id_int!r} would escape the cache directory")
+    return path
 
 
 def _load_roads_from_disk(city_id: int) -> dict | None:
     """Load GeoJSON from disk cache if the file exists and is not stale.
     Returns the GeoJSON dict on success, None if missing or expired."""
-    path = _roads_cache_path(city_id)
+    # Build the path locally: int() guarantees no path-separator characters,
+    # normpath removes any remaining traversal sequences, and the startswith
+    # guard ensures the result stays inside ROADS_CACHE_DIR.
+    # Because the filename is always "city_<integer>.json", path can never
+    # equal safe_dir itself, so a simple startswith(safe_dir + sep) suffices.
+    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
+    path = os.path.normpath(os.path.join(safe_dir, f"city_{int(city_id)}.json"))
+    if not path.startswith(safe_dir + os.sep):
+        return None
     try:
         if not os.path.isfile(path):
             return None
@@ -1426,7 +1439,16 @@ def _load_roads_from_disk(city_id: int) -> dict | None:
 
 def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
     """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
-    path = _roads_cache_path(city_id)
+    # Build the path locally: int() guarantees no path-separator characters,
+    # normpath removes any remaining traversal sequences, and the startswith
+    # guard ensures the result stays inside ROADS_CACHE_DIR.
+    # Because the filename is always "city_<integer>.json", path can never
+    # equal safe_dir itself, so a simple startswith(safe_dir + sep) suffices.
+    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
+    path = os.path.normpath(os.path.join(safe_dir, f"city_{int(city_id)}.json"))
+    if not path.startswith(safe_dir + os.sep):
+        logging.warning("_save_roads_to_disk: refusing unsafe path for city_id=%s", city_id)
+        return
     try:
         os.makedirs(ROADS_CACHE_DIR, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
@@ -3125,7 +3147,30 @@ STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
 LOG_FILE = "/var/log/vlc-play.log"
 INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
 
+# Strict allowlist for streaming URL characters.
+# Permits the RFC 3986 unreserved characters plus the subset of reserved
+# characters that appear in legitimate http/https streaming URLs.
+# Intentionally excludes: whitespace, control characters, backslash, backtick,
+# pipe, double-quote, single-quote, and semicolon — none of which are needed
+# in a media stream URL and all of which are risky in subprocess arguments.
+# The {1,2048} limit applies to the portion after the scheme (i.e. the
+# authority + path + query + fragment together are capped at 2048 characters).
+_STREAM_URL_RE = re.compile(
+    r'^https?://'
+    r'[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,=%]{1,2048}$'
+)
+
 def is_valid_stream_url(url: str) -> bool:
+    """Return True only if *url* is a well-formed http/https URL whose
+    characters are restricted to a safe allowlist.
+
+    This prevents command-line injection when the URL is forwarded to a
+    subprocess argument (CWE-078 / CWE-088).
+    """
+    if not isinstance(url, str):
+        return False
+    if not _STREAM_URL_RE.match(url):
+        return False
     try:
         parsed = urlparse(url)
     except Exception:
@@ -3136,6 +3181,17 @@ def is_valid_stream_url(url: str) -> bool:
         return False
     # Optional: restrict to allowed hosts/networks; adjust to your security needs.
     return True
+
+_INSTANCE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+def is_valid_instance_id(instance_id: str) -> bool:
+    """Return True only if instance_id consists entirely of safe characters.
+
+    Allowed: ASCII letters, digits, underscores, and hyphens (max 64 chars).
+    This prevents command-line injection when the value is forwarded to a
+    subprocess argument.
+    """
+    return bool(_INSTANCE_ID_RE.match(instance_id))
 
 @app.route('/api/start_stream', methods=['POST'])
 @login_required
@@ -3155,10 +3211,26 @@ def api_start_stream():
 
     if not url:
         return jsonify({"ok": False, "error": "missing url"}), 400
+    # Validate url against the strict allowlist regex and urlparse.
+    # Reconstruct the URL from parsed components so the value reaching
+    # subprocess is composed from the parser output rather than the
+    # raw user-provided string (breaks the taint chain for CWE-078/088).
     if not is_valid_stream_url(url):
         return jsonify({"ok": False, "error": "invalid url"}), 400
+    _url_parsed = urlparse(url)
+    safe_url = urlunparse((
+        _url_parsed.scheme, _url_parsed.netloc, _url_parsed.path,
+        _url_parsed.params, _url_parsed.query, _url_parsed.fragment,
+    ))
+    # Validate instance id and extract the safe portion from the regex match
+    # object so the value used in the subprocess argument list is not the
+    # original tainted variable (breaks the taint chain for CWE-078/088).
+    _instance_match = _INSTANCE_ID_RE.match(instance)
+    if not _instance_match:
+        return jsonify({"ok": False, "error": "invalid instance id"}), 400
+    safe_instance = _instance_match.group(0)
 
-    cmd = ["sudo", PLAY_SCRIPT, url, instance]
+    cmd = ["sudo", PLAY_SCRIPT, safe_url, safe_instance]
     if hide_cursor:
         cmd.append("hide")
 
@@ -3179,7 +3251,7 @@ def api_start_stream():
         for ch in cached_channels:
             ch_url = ch.get('url') or ''
             ch_tvg = ch.get('tvg_id') or ''
-            if ch_url and ch_url == url:
+            if ch_url and ch_url == safe_url:
                 resolved_tvg = ch_tvg
                 resolved_url = ch_url
                 break
@@ -3187,7 +3259,7 @@ def api_start_stream():
             for ch in cached_channels:
                 ch_url = ch.get('url') or ''
                 ch_tvg = ch.get('tvg_id') or ''
-                if ch_url and ch_url in url:
+                if ch_url and ch_url in safe_url:
                     resolved_tvg = ch_tvg
                     resolved_url = ch_url
                     break
@@ -3196,17 +3268,17 @@ def api_start_stream():
             CURRENTLY_PLAYING = resolved_tvg
         else:
             # If client provided a meaningful instance id (not default) use it; otherwise store the URL
-            if instance and instance != INSTANCE_ID:
-                CURRENTLY_PLAYING = instance
+            if safe_instance and safe_instance != INSTANCE_ID:
+                CURRENTLY_PLAYING = safe_instance
             else:
-                CURRENTLY_PLAYING = url
+                CURRENTLY_PLAYING = safe_url
 
     except Exception:
         # On any error just fall back to storing the URL so status has something
-        CURRENTLY_PLAYING = url
+        CURRENTLY_PLAYING = safe_url
 
-    log_event(current_user.username, f"Requested start_stream {url} (id={instance}, hide_cursor={hide_cursor})")
-    return jsonify({"ok": True, "message": "started", "id": instance})
+    log_event(current_user.username, f"Requested start_stream {safe_url} (id={safe_instance}, hide_cursor={hide_cursor})")
+    return jsonify({"ok": True, "message": "started", "id": safe_instance})
 
 @app.route('/api/auto_refresh/status', methods=['GET'])
 @login_required
@@ -3281,7 +3353,15 @@ def api_stop_stream():
         data = request.get_json(force=True, silent=True) or {}
         instance = (data.get("id") or INSTANCE_ID).strip() or INSTANCE_ID
 
-        cmd = ["sudo", STOP_SCRIPT, instance]
+        # Validate instance id and extract the safe portion from the regex match
+        # object so the value used in the subprocess argument list is not the
+        # original tainted variable (breaks the taint chain for CWE-078/088).
+        _instance_match = _INSTANCE_ID_RE.match(instance)
+        if not _instance_match:
+            return jsonify({"ok": False, "error": "invalid instance id"}), 400
+        safe_instance = _instance_match.group(0)
+
+        cmd = ["sudo", STOP_SCRIPT, safe_instance]
         try:
             subprocess.check_call(cmd, timeout=15)
         except subprocess.CalledProcessError as e:
@@ -3297,8 +3377,8 @@ def api_stop_stream():
         except Exception:
             CURRENTLY_PLAYING = None
 
-        log_event(current_user.username, f"Requested stop_stream (id={instance})")
-        return jsonify({"ok": True, "message": "stopped", "id": instance})
+        log_event(current_user.username, f"Requested stop_stream (id={safe_instance})")
+        return jsonify({"ok": True, "message": "stopped", "id": safe_instance})
 
     except Exception as e:
         logging.exception("Unexpected error in api_stop_stream: %s", e)

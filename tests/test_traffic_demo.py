@@ -1,8 +1,10 @@
 """Tests for Traffic Demo Mode: DB helpers, simulation engine, and API endpoints."""
 import json
 import os
+import re
 import sys
 from unittest.mock import MagicMock, patch
+from urllib.parse import urlparse
 
 import pytest
 import requests as req_lib
@@ -25,6 +27,7 @@ from app import (
     _generate_placeholder_basemap_png,
     _BASEMAP_W, _BASEMAP_H,
     _prewarm_roads_cache,
+    _roads_cache_path,
 )
 
 
@@ -524,8 +527,11 @@ class TestTrafficPage:
         assert b'static/maps/traffic_demo' in resp.data
         # Leaflet vendor bundle present as fallback
         assert b'leaflet' in resp.data.lower()
-        # OpenStreetMap URL present in fallback tile layer
-        assert b'openstreetmap.org' in resp.data
+        # OpenStreetMap URL present in fallback tile layer (parse hostname to avoid substring ambiguity)
+        decoded_html = resp.data.decode('utf-8', errors='replace')
+        found_urls = re.findall(r"https?://[^\s'\"\\]+", decoded_html)
+        assert any(urlparse(u).hostname == 'tile.openstreetmap.org' for u in found_urls), \
+            "Expected tile.openstreetmap.org tile layer URL in response"
         # CartoDB dark tiles are gone
         assert b'cartocdn' not in resp.data.lower()
 
@@ -710,6 +716,56 @@ class TestGetTrafficDemoRoads:
         get_traffic_demo_roads(cid)
         cache_file = os.path.join(roads_dir, f"city_{cid}.json")
         assert not os.path.isfile(cache_file), "Empty GeoJSON must not be persisted to disk"
+
+
+# ─── _roads_cache_path (path-traversal guard) ─────────────────────────────────
+
+class TestRoadsCachePath:
+    """Security tests: _roads_cache_path must not allow path traversal."""
+
+    def test_normal_city_id_returns_path_inside_dir(self, monkeypatch, tmp_path):
+        roads_dir = str(tmp_path / "roads_cache")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        path = _roads_cache_path(42)
+        assert path.startswith(os.path.normpath(roads_dir))
+        assert path.endswith("city_42.json")
+
+    def test_zero_city_id_is_accepted(self, monkeypatch, tmp_path):
+        roads_dir = str(tmp_path / "roads_cache")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        path = _roads_cache_path(0)
+        assert path.endswith("city_0.json")
+
+    def test_negative_city_id_is_accepted(self, monkeypatch, tmp_path):
+        """Negative integers are valid identifiers and must stay inside the cache dir."""
+        roads_dir = str(tmp_path / "roads_cache")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+        path = _roads_cache_path(-1)
+        assert os.path.normpath(roads_dir) in path
+        assert path.endswith("city_-1.json")
+
+    def test_path_traversal_guard_raises_for_escape(self, monkeypatch, tmp_path):
+        """The ValueError guard fires when a crafted path would escape ROADS_CACHE_DIR.
+
+        Since city_id is int, a standard integer cannot produce '../' sequences via
+        the format string.  This test verifies the guard by patching os.path.join
+        to simulate what would happen if the composed path tried to escape the dir.
+        """
+        roads_dir = str(tmp_path / "roads_cache")
+        monkeypatch.setattr(app_module, 'ROADS_CACHE_DIR', roads_dir)
+
+        original_join = os.path.join
+
+        def malicious_join(base, *parts):
+            # Simulate a crafted path that escapes the base directory
+            if parts and "city_" in str(parts[0]):
+                return original_join(base, "..", "etc", "passwd")
+            return original_join(base, *parts)
+
+        import unittest.mock as mock
+        with mock.patch("os.path.join", side_effect=malicious_join):
+            with pytest.raises(ValueError, match="would escape"):
+                _roads_cache_path(99)
 
 
 # ─── _load_bundled_roads ──────────────────────────────────────────────────────
