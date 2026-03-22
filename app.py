@@ -1414,16 +1414,8 @@ def _roads_cache_path(city_id: int) -> str:
 def _load_roads_from_disk(city_id: int) -> dict | None:
     """Load GeoJSON from disk cache if the file exists and is not stale.
     Returns the GeoJSON dict on success, None if missing or expired."""
-    # Build the path locally: int() guarantees no path-separator characters,
-    # normpath removes any remaining traversal sequences, and the startswith
-    # guard ensures the result stays inside ROADS_CACHE_DIR.
-    # Because the filename is always "city_<integer>.json", path can never
-    # equal safe_dir itself, so a simple startswith(safe_dir + sep) suffices.
-    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
-    path = os.path.normpath(os.path.join(safe_dir, f"city_{int(city_id)}.json"))
-    if not path.startswith(safe_dir + os.sep):
-        return None
     try:
+        path = _roads_cache_path(city_id)
         if not os.path.isfile(path):
             return None
         age = time.time() - os.path.getmtime(path)
@@ -1431,6 +1423,8 @@ def _load_roads_from_disk(city_id: int) -> dict | None:
             return None
         with open(path, "r", encoding="utf-8") as fh:
             return _json.load(fh)
+    except ValueError:
+        return None
     except Exception:
         logging.warning("_load_roads_from_disk: failed to read cache for city_id=%s", city_id,
                         exc_info=True)
@@ -1439,14 +1433,9 @@ def _load_roads_from_disk(city_id: int) -> dict | None:
 
 def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
     """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
-    # Build the path locally: int() guarantees no path-separator characters,
-    # normpath removes any remaining traversal sequences, and the startswith
-    # guard ensures the result stays inside ROADS_CACHE_DIR.
-    # Because the filename is always "city_<integer>.json", path can never
-    # equal safe_dir itself, so a simple startswith(safe_dir + sep) suffices.
-    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
-    path = os.path.normpath(os.path.join(safe_dir, f"city_{int(city_id)}.json"))
-    if not path.startswith(safe_dir + os.sep):
+    try:
+        path = _roads_cache_path(city_id)
+    except ValueError:
         logging.warning("_save_roads_to_disk: refusing unsafe path for city_id=%s", city_id)
         return
     try:
@@ -3683,6 +3672,11 @@ def api_audio_upload():
         return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}'}), 400
     os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    # Verify destination stays inside AUDIO_UPLOAD_DIR (prevent path traversal)
+    real_dest = os.path.realpath(dest)
+    real_dir = os.path.realpath(AUDIO_UPLOAD_DIR)
+    if os.path.commonpath([real_dir, real_dest]) != real_dir:
+        return jsonify({'error': 'Invalid filename.'}), 400
     f.save(dest)
     log_event(current_user.username, f"Uploaded audio file: {safe_name}")
     return jsonify({'ok': True, 'filename': safe_name}), 201

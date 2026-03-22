@@ -938,12 +938,16 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
 
     Two-layer SSRF defence:
 
-    1. For plain HTTP requests, when *resolved_ip* is supplied (the pre-validated
-       IP returned by :func:`_check_dns`), the hostname in the URL is replaced
-       with that IP address and the original hostname is preserved in the ``Host``
-       header.  This means the value passed to the underlying HTTP library is
-       constructed from a *server-side-resolved* IP rather than the raw
-       user-supplied string, breaking the user-controlled URL taint chain.
+    1. The hostname in the URL is always replaced with a *server-resolved* IP
+       address before the request is made (either the pre-validated *resolved_ip*
+       passed by the caller, or one resolved freshly inside this function).  The
+       original hostname is preserved in the ``Host`` header for virtual-host
+       routing.  This ensures the value passed to the underlying HTTP library is
+       never directly user-controlled, breaking the full-SSRF taint chain.
+
+       If the caller passes no *resolved_ip* and DNS resolution fails here, the
+       function returns an error result rather than falling back to the raw
+       user-supplied URL.
 
     2. A :class:`_SSRFGuardAdapter` is mounted on the session for both
        ``http://`` and ``https://`` so that the destination IP is re-validated
@@ -982,13 +986,29 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
         _original_hostname = _parsed.hostname or ""
         request_headers: Dict[str, str] = {"User-Agent": _UA}
 
-        if resolved_ip and _original_hostname:
+        # Determine the IP to use in the request URL.  Prefer the pre-validated
+        # *resolved_ip* passed by the caller; if it is absent, resolve the
+        # hostname here so the request always targets a server-determined IP
+        # rather than the raw user-supplied hostname.
+        _effective_ip: Optional[str] = resolved_ip
+        if not _effective_ip and _original_hostname:
+            try:
+                addr_info = socket.getaddrinfo(_original_hostname, None)
+                if not addr_info:
+                    raise socket.gaierror(f"No addresses returned for '{_original_hostname}'")
+                _effective_ip = addr_info[0][4][0]
+            except (socket.gaierror, OSError, IndexError) as _gai_err:
+                result["error"] = f"DNS resolution failed: {_gai_err}"
+                result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
+                return result
+
+        if _effective_ip and _original_hostname:
             # Build a new netloc with the validated IP, preserving the port.
             _port = _parsed.port
-            if ":" in resolved_ip:          # IPv6 literal — must be bracketed
-                _ip_netloc = f"[{resolved_ip}]"
+            if ":" in _effective_ip:        # IPv6 literal — must be bracketed
+                _ip_netloc = f"[{_effective_ip}]"
             else:
-                _ip_netloc = resolved_ip
+                _ip_netloc = _effective_ip
             if _port:
                 _ip_netloc = f"{_ip_netloc}:{_port}"
             request_url = urlunparse((
@@ -1009,11 +1029,14 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
             # raw IP address in the request_url.
             if _parsed.scheme == "https":
                 _https_guard = _SSRFGuardAdapter(
-                    pre_resolved_ip=resolved_ip,
+                    pre_resolved_ip=_effective_ip,
                     pre_resolved_hostname=_original_hostname,
                 )
                 _session.mount("https://", _https_guard)
         else:
+            # URL has no hostname component (e.g. a bare IP literal was
+            # supplied without a scheme — highly unusual).  Use as-is; the
+            # _SSRFGuardAdapter mounted above will validate the destination.
             request_url = url
 
         # RFC-1918 private addresses are intentionally allowed because many IPTV
