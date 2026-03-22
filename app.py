@@ -16,7 +16,7 @@ import datetime
 import requests
 import time
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse, urljoin, urlunparse
+from urllib.parse import urlparse, urljoin
 import socket
 import ipaddress
 import logging
@@ -3158,7 +3158,7 @@ def is_valid_stream_url(url: str) -> bool:
     """
     if not isinstance(url, str):
         return False
-    if not _STREAM_URL_RE.match(url):
+    if not _STREAM_URL_RE.fullmatch(url):
         return False
     try:
         parsed = urlparse(url)
@@ -3180,7 +3180,7 @@ def is_valid_instance_id(instance_id: str) -> bool:
     This prevents command-line injection when the value is forwarded to a
     subprocess argument.
     """
-    return bool(_INSTANCE_ID_RE.match(instance_id))
+    return bool(_INSTANCE_ID_RE.fullmatch(instance_id))
 
 @app.route('/api/start_stream', methods=['POST'])
 @login_required
@@ -3200,26 +3200,19 @@ def api_start_stream():
 
     if not url:
         return jsonify({"ok": False, "error": "missing url"}), 400
-    # Validate url against the strict allowlist regex and urlparse.
-    # Reconstruct the URL from parsed components so the value reaching
-    # subprocess is composed from the parser output rather than the
-    # raw user-provided string (breaks the taint chain for CWE-078/088).
-    if not is_valid_stream_url(url):
+    # Validate URL with the strict allowlist regex (inline fullmatch acts as a
+    # barrier guard for CodeQL's taint analysis: CWE-078 / CWE-088).
+    if not _STREAM_URL_RE.fullmatch(url):
         return jsonify({"ok": False, "error": "invalid url"}), 400
     _url_parsed = urlparse(url)
-    safe_url = urlunparse((
-        _url_parsed.scheme, _url_parsed.netloc, _url_parsed.path,
-        _url_parsed.params, _url_parsed.query, _url_parsed.fragment,
-    ))
-    # Validate instance id and extract the safe portion from the regex match
-    # object so the value used in the subprocess argument list is not the
-    # original tainted variable (breaks the taint chain for CWE-078/088).
-    _instance_match = _INSTANCE_ID_RE.match(instance)
-    if not _instance_match:
+    if _url_parsed.scheme not in ("http", "https") or not _url_parsed.netloc:
+        return jsonify({"ok": False, "error": "invalid url"}), 400
+    # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
+    # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
+    if not _INSTANCE_ID_RE.fullmatch(instance):
         return jsonify({"ok": False, "error": "invalid instance id"}), 400
-    safe_instance = _instance_match.group(0)
 
-    cmd = ["sudo", PLAY_SCRIPT, safe_url, safe_instance]
+    cmd = ["sudo", PLAY_SCRIPT, url, instance]
     if hide_cursor:
         cmd.append("hide")
 
@@ -3240,7 +3233,7 @@ def api_start_stream():
         for ch in cached_channels:
             ch_url = ch.get('url') or ''
             ch_tvg = ch.get('tvg_id') or ''
-            if ch_url and ch_url == safe_url:
+            if ch_url and ch_url == url:
                 resolved_tvg = ch_tvg
                 resolved_url = ch_url
                 break
@@ -3248,7 +3241,7 @@ def api_start_stream():
             for ch in cached_channels:
                 ch_url = ch.get('url') or ''
                 ch_tvg = ch.get('tvg_id') or ''
-                if ch_url and ch_url in safe_url:
+                if ch_url and ch_url in url:
                     resolved_tvg = ch_tvg
                     resolved_url = ch_url
                     break
@@ -3257,17 +3250,17 @@ def api_start_stream():
             CURRENTLY_PLAYING = resolved_tvg
         else:
             # If client provided a meaningful instance id (not default) use it; otherwise store the URL
-            if safe_instance and safe_instance != INSTANCE_ID:
-                CURRENTLY_PLAYING = safe_instance
+            if instance and instance != INSTANCE_ID:
+                CURRENTLY_PLAYING = instance
             else:
-                CURRENTLY_PLAYING = safe_url
+                CURRENTLY_PLAYING = url
 
     except Exception:
         # On any error just fall back to storing the URL so status has something
-        CURRENTLY_PLAYING = safe_url
+        CURRENTLY_PLAYING = url
 
-    log_event(current_user.username, f"Requested start_stream {safe_url} (id={safe_instance}, hide_cursor={hide_cursor})")
-    return jsonify({"ok": True, "message": "started", "id": safe_instance})
+    log_event(current_user.username, f"Requested start_stream {url} (id={instance}, hide_cursor={hide_cursor})")
+    return jsonify({"ok": True, "message": "started", "id": instance})
 
 @app.route('/api/auto_refresh/status', methods=['GET'])
 @login_required
@@ -3342,15 +3335,12 @@ def api_stop_stream():
         data = request.get_json(force=True, silent=True) or {}
         instance = (data.get("id") or INSTANCE_ID).strip() or INSTANCE_ID
 
-        # Validate instance id and extract the safe portion from the regex match
-        # object so the value used in the subprocess argument list is not the
-        # original tainted variable (breaks the taint chain for CWE-078/088).
-        _instance_match = _INSTANCE_ID_RE.match(instance)
-        if not _instance_match:
+        # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
+        # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
+        if not _INSTANCE_ID_RE.fullmatch(instance):
             return jsonify({"ok": False, "error": "invalid instance id"}), 400
-        safe_instance = _instance_match.group(0)
 
-        cmd = ["sudo", STOP_SCRIPT, safe_instance]
+        cmd = ["sudo", STOP_SCRIPT, instance]
         try:
             subprocess.check_call(cmd, timeout=15)
         except subprocess.CalledProcessError as e:
@@ -3366,8 +3356,8 @@ def api_stop_stream():
         except Exception:
             CURRENTLY_PLAYING = None
 
-        log_event(current_user.username, f"Requested stop_stream (id={safe_instance})")
-        return jsonify({"ok": True, "message": "stopped", "id": safe_instance})
+        log_event(current_user.username, f"Requested stop_stream (id={instance})")
+        return jsonify({"ok": True, "message": "stopped", "id": instance})
 
     except Exception as e:
         logging.exception("Unexpected error in api_stop_stream: %s", e)
