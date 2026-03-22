@@ -3721,6 +3721,11 @@ def api_logo_upload():
     dest_name = f'{slug}_logo.{ext}'
     os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
+    # Verify destination stays inside LOGO_UPLOAD_DIR (prevent path traversal)
+    real_dest = os.path.realpath(dest)
+    real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
+    if os.path.commonpath([real_dir, real_dest]) != real_dir:
+        return jsonify({'error': 'Invalid filename.'}), 400
     f.save(dest)
     try:
         save_channel_custom_logo(tvg_id, dest_name)
