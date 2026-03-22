@@ -1034,10 +1034,17 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
                 )
                 _session.mount("https://", _https_guard)
         else:
-            # URL has no hostname component (e.g. a bare IP literal was
-            # supplied without a scheme — highly unusual).  Use as-is; the
-            # _SSRFGuardAdapter mounted above will validate the destination.
-            request_url = url
+            # No hostname could be determined from the URL and no pre-resolved
+            # IP was supplied.  Refuse to forward the raw user-supplied URL to
+            # the HTTP library, as doing so would create a full-SSRF taint path
+            # (the URL value is directly user-controlled with no server-side
+            # validation of the destination).
+            result["error"] = (
+                "Cannot probe URL: no hostname could be determined or resolved. "
+                "A validated destination IP address is required."
+            )
+            result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
+            return result
 
         # RFC-1918 private addresses are intentionally allowed because many IPTV
         # deployments run stream servers on a LAN.  This route is only reachable

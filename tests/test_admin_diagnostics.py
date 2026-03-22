@@ -3261,6 +3261,32 @@ class TestStreamDetectUnit:
         )
         assert not session_called["called"], "HTTP session.get must not be called"
 
+    def test_fetch_partial_no_hostname_returns_error_without_http_request(self):
+        """When the URL has no hostname and no resolved_ip is supplied,
+        _fetch_partial must return an error without making any HTTP request.
+        This prevents a full-SSRF taint path where the raw user-supplied URL
+        would otherwise be passed directly to the HTTP library."""
+        from unittest.mock import patch
+        from utils.stream_detect import _fetch_partial
+
+        session_called = {"called": False}
+
+        class FakeSession:
+            def mount(self, *a, **kw):
+                pass
+
+            def get(self, *a, **kw):
+                session_called["called"] = True
+                raise AssertionError("HTTP request must NOT be made when there is no hostname")
+
+        with patch("utils.stream_detect._req.Session", return_value=FakeSession()):
+            # A URL that parses to an empty hostname (scheme + empty host)
+            result = _fetch_partial("http:///no-hostname-path", resolved_ip=None)
+
+        assert result["ok"] is False, "Result must not be ok when there is no hostname"
+        assert result["error"] is not None, "An error message must be set"
+        assert not session_called["called"], "HTTP session.get must not be called when hostname is absent"
+
 
 class TestStreamDetectEndpoint:
     """Integration tests for the /admin/diagnostics/stream-detect endpoint."""
