@@ -42,20 +42,12 @@ class TestAddTunerValidation:
     def test_duplicate_name_prevention(self):
         """Test that duplicate tuner names are rejected."""
         # Add a tuner first
-        with patch('app.requests.head') as mock_head:
-            mock_response = Mock()
-            mock_response.raise_for_status = Mock()
-            mock_head.return_value = mock_response
-            
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
             app_module.add_tuner("TestTuner", "http://example.com/epg.xml", "http://example.com/playlist.m3u")
         
         # Try to add duplicate
         with pytest.raises(ValueError, match="Tuner 'TestTuner' already exists"):
-            with patch('app.requests.head') as mock_head:
-                mock_response = Mock()
-                mock_response.raise_for_status = Mock()
-                mock_head.return_value = mock_response
-                
+            with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
                 app_module.add_tuner("TestTuner", "http://example.com/epg2.xml", "http://example.com/playlist2.m3u")
     
     def test_m3u_url_required(self):
@@ -77,32 +69,23 @@ class TestAddTunerValidation:
     def test_xml_url_must_be_http_or_https_if_provided(self):
         """Test that XML URL must start with http:// or https:// if provided."""
         with pytest.raises(ValueError, match="XML URL must start with http:// or https://"):
-            with patch('app.requests.head') as mock_head:
-                mock_response = Mock()
-                mock_response.raise_for_status = Mock()
-                mock_head.return_value = mock_response
-                
-                app_module.add_tuner("TestTuner", "ftp://example.com/epg.xml", "http://example.com/playlist.m3u")
+            app_module.add_tuner("TestTuner", "ftp://example.com/epg.xml", "http://example.com/playlist.m3u")
     
     def test_xml_url_can_be_empty(self):
         """Test that XML URL can be empty or whitespace."""
-        with patch('app.requests.head') as mock_head:
-            mock_response = Mock()
-            mock_response.raise_for_status = Mock()
-            mock_head.return_value = mock_response
-            
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
             # Should not raise an error
             app_module.add_tuner("TestTuner1", "", "http://example.com/playlist.m3u")
             app_module.add_tuner("TestTuner2", "   ", "http://example.com/playlist2.m3u")
     
     def test_url_reachability_check(self):
-        """Test that unreachable URLs are rejected."""
-        import requests
-        with patch('app.requests.head') as mock_head:
-            mock_head.side_effect = requests.RequestException("Connection refused")
-            
-            with pytest.raises(ValueError, match="M3U URL unreachable"):
-                app_module.add_tuner("TestTuner", "http://example.com/epg.xml", "http://unreachable.example.com/playlist.m3u")
+        """Test that valid external URLs are accepted without making HTTP requests."""
+        # No HTTP request is made; URL passes format and IP validation
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
+            app_module.add_tuner("TestTuner", "http://example.com/epg.xml", "http://example.com/playlist.m3u")
+        
+        tuners = app_module.get_tuners()
+        assert "TestTuner" in tuners
     
     def test_localhost_blocked(self):
         """Test that localhost URLs are blocked to prevent SSRF."""
@@ -117,13 +100,23 @@ class TestAddTunerValidation:
         with pytest.raises(ValueError, match="M3U URL cannot point to link-local"):
             app_module.add_tuner("LinkLocalTuner", "http://example.com/epg.xml", "http://169.254.169.254/latest/meta-data/")
     
+    def test_private_ip_ranges_blocked(self):
+        """Test that private IP ranges are blocked to prevent SSRF."""
+        # 10.0.0.0/8
+        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
+            app_module.add_tuner("PrivateTuner1", "http://example.com/epg.xml", "http://10.0.0.1/playlist.m3u")
+        
+        # 172.16.0.0/12
+        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
+            app_module.add_tuner("PrivateTuner2", "http://example.com/epg.xml", "http://172.16.0.1/playlist.m3u")
+        
+        # 192.168.0.0/16
+        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
+            app_module.add_tuner("PrivateTuner3", "http://example.com/epg.xml", "http://192.168.1.100/playlist.m3u")
+    
     def test_successful_tuner_addition(self):
         """Test successful tuner addition with valid inputs."""
-        with patch('app.requests.head') as mock_head:
-            mock_response = Mock()
-            mock_response.raise_for_status = Mock()
-            mock_head.return_value = mock_response
-            
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
             app_module.add_tuner("ValidTuner", "http://example.com/epg.xml", "http://example.com/playlist.m3u")
             
             # Verify tuner was added

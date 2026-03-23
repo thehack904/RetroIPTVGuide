@@ -2927,6 +2927,366 @@ class TestStreamDetectUnit:
         assert "ts" in st.lower() or "mpeg" in st.lower()
         assert conf in ("medium", "low")
 
+    # ------------------------------------------------------------------
+    # _addr_is_restricted helper
+    # ------------------------------------------------------------------
+
+    def test_addr_is_restricted_loopback_v4(self):
+        """127.0.0.1 is flagged as loopback."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("127.0.0.1") is not None
+
+    def test_addr_is_restricted_loopback_v6(self):
+        """::1 is flagged as loopback."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("::1") is not None
+
+    def test_addr_is_restricted_link_local_v4(self):
+        """169.254.1.1 is flagged as link-local."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("169.254.1.1") is not None
+
+    def test_addr_is_restricted_link_local_v6(self):
+        """fe80::1 is flagged as link-local."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("fe80::1") is not None
+
+    def test_addr_is_restricted_ipv4_mapped_loopback(self):
+        """::ffff:127.0.0.1 (IPv4-mapped loopback) is flagged."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("::ffff:127.0.0.1") is not None
+
+    def test_addr_is_restricted_private_rfc1918_allowed(self):
+        """192.168.1.1 (RFC-1918) is intentionally NOT restricted."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("192.168.1.1") is None
+
+    def test_addr_is_restricted_public_ip_allowed(self):
+        """A routable public IP is not restricted."""
+        from utils.stream_detect import _addr_is_restricted
+        assert _addr_is_restricted("1.2.3.4") is None
+
+    # ------------------------------------------------------------------
+    # _check_ssrf_risk — DNS resolution for hostnames
+    # ------------------------------------------------------------------
+
+    def test_check_ssrf_risk_hostname_resolving_to_loopback_blocked(self, monkeypatch):
+        """A hostname that resolves to 127.0.0.1 must be blocked."""
+        import socket
+        from urllib.parse import urlparse
+        from utils.stream_detect import _check_ssrf_risk
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        parsed = urlparse("http://evil.example.com/stream")
+        err = _check_ssrf_risk(parsed)
+        assert err is not None
+        assert "127.0.0.1" in err or "Loopback" in err or "restricted" in err
+
+    def test_check_ssrf_risk_hostname_resolving_to_link_local_blocked(self, monkeypatch):
+        """A hostname that resolves to a link-local address must be blocked."""
+        import socket
+        from urllib.parse import urlparse
+        from utils.stream_detect import _check_ssrf_risk
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("169.254.1.1", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        parsed = urlparse("http://evil.example.com/stream")
+        err = _check_ssrf_risk(parsed)
+        assert err is not None
+        assert "169.254.1.1" in err or "link-local" in err or "restricted" in err
+
+    def test_check_ssrf_risk_hostname_resolving_to_rfc1918_allowed(self, monkeypatch):
+        """A hostname resolving to an RFC-1918 address is intentionally allowed."""
+        import socket
+        from urllib.parse import urlparse
+        from utils.stream_detect import _check_ssrf_risk
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("192.168.1.100", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+        parsed = urlparse("http://lan-stream.local/live.m3u8")
+        err = _check_ssrf_risk(parsed)
+        assert err is None
+
+    def test_check_ssrf_risk_dns_failure_does_not_block(self, monkeypatch):
+        """DNS resolution failure in _check_ssrf_risk does not block (fails gracefully)."""
+        import socket
+        from urllib.parse import urlparse
+        from utils.stream_detect import _check_ssrf_risk
+
+        def raise_gaierror(*args, **kwargs):
+            raise socket.gaierror("name not found")
+
+        monkeypatch.setattr(socket, "getaddrinfo", raise_gaierror)
+        parsed = urlparse("http://nonexistent.example.com/stream")
+        err = _check_ssrf_risk(parsed)
+        # DNS failure → allow through; the HTTP fetch will surface the error
+        assert err is None
+
+    # ------------------------------------------------------------------
+    # _SSRFGuardAdapter — DNS rebinding prevention
+    # ------------------------------------------------------------------
+
+    def test_ssrf_guard_adapter_blocks_loopback_at_connect_time(self, monkeypatch):
+        """_SSRFGuardAdapter raises InvalidURL when resolved IP is loopback."""
+        import socket
+        from unittest.mock import MagicMock
+        from requests import Request, Session
+        from requests.exceptions import InvalidURL
+        from utils.stream_detect import _SSRFGuardAdapter
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("127.0.0.1", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+        adapter = _SSRFGuardAdapter()
+        prepared = Request("GET", "http://rebind.example.com/stream").prepare()
+        with pytest.raises(InvalidURL):
+            adapter.send(prepared)
+
+    def test_ssrf_guard_adapter_allows_public_ip(self, monkeypatch):
+        """_SSRFGuardAdapter calls super().send() for a safe public IP."""
+        import socket
+        from unittest.mock import MagicMock, patch
+        from requests import Request
+        from utils.stream_detect import _SSRFGuardAdapter
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(socket.AF_INET, socket.SOCK_STREAM, 0, "", ("1.2.3.4", 0))]
+
+        monkeypatch.setattr(socket, "getaddrinfo", fake_getaddrinfo)
+
+        adapter = _SSRFGuardAdapter()
+        prepared = Request("GET", "http://stream.example.com/live.m3u8").prepare()
+
+        mock_response = MagicMock()
+        with patch.object(adapter.__class__.__bases__[0], "send", return_value=mock_response):
+            result = adapter.send(prepared)
+        assert result is mock_response
+
+    # ------------------------------------------------------------------
+    # _fetch_partial — IP-URL reconstruction for HTTP
+    # ------------------------------------------------------------------
+
+    def test_fetch_partial_http_uses_resolved_ip_in_url(self, monkeypatch):
+        """For http:// URLs with resolved_ip, _fetch_partial rewrites the URL
+        to use the IP and sets the Host header to the original hostname."""
+        import socket
+        from unittest.mock import MagicMock, patch
+        from utils.stream_detect import _fetch_partial
+
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"Content-Type": "application/vnd.apple.mpegurl"}
+
+            def iter_content(self, chunk_size=8192):
+                return iter([b"#EXTM3U\n"])
+
+            def raise_for_status(self):
+                pass
+
+        def fake_session_get(url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers", {})
+            return FakeResponse()
+
+        fake_session = MagicMock()
+        fake_session.get.side_effect = fake_session_get
+
+        with patch("utils.stream_detect._req.Session", return_value=fake_session):
+            result = _fetch_partial(
+                "http://stream.example.com:8080/live.m3u8",
+                resolved_ip="1.2.3.4",
+            )
+
+        assert result["ok"] is True
+        # The URL should use the resolved IP, not the original hostname.
+        assert "1.2.3.4" in captured.get("url", ""), (
+            f"Expected IP in URL, got: {captured.get('url')}"
+        )
+        assert "stream.example.com" not in captured.get("url", ""), (
+            f"Hostname should NOT appear in URL, got: {captured.get('url')}"
+        )
+        # The original hostname must be preserved in the Host header.
+        host_header = captured.get("headers", {}).get("Host", "")
+        assert host_header == "stream.example.com:8080", (
+            f"Expected original hostname in Host header, got: {host_header!r}"
+        )
+
+    def test_fetch_partial_https_uses_resolved_ip_in_url(self, monkeypatch):
+        """For https:// URLs with resolved_ip, _fetch_partial rewrites the URL
+        to use the IP (same as HTTP) and sets the Host header to the original
+        hostname.  TLS SNI and cert verification are handled by the
+        _IPPinningHTTPSPool via _SSRFGuardAdapter."""
+        from unittest.mock import MagicMock, patch
+        from utils.stream_detect import _fetch_partial
+
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"Content-Type": "application/vnd.apple.mpegurl"}
+
+            def iter_content(self, chunk_size=8192):
+                return iter([b"#EXTM3U\n"])
+
+            def raise_for_status(self):
+                pass
+
+        def fake_session_get(url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers", {})
+            return FakeResponse()
+
+        fake_session = MagicMock()
+        fake_session.get.side_effect = fake_session_get
+
+        with patch("utils.stream_detect._req.Session", return_value=fake_session):
+            result = _fetch_partial(
+                "https://stream.example.com/secure.m3u8",
+                resolved_ip="5.6.7.8",
+            )
+
+        assert result["ok"] is True
+        # For HTTPS, the URL should use the resolved IP, not the original hostname.
+        # TLS SNI and cert verification use the original hostname via _IPPinningHTTPSPool.
+        assert "5.6.7.8" in captured.get("url", ""), (
+            f"Expected IP in URL, got: {captured.get('url')}"
+        )
+        assert "stream.example.com" not in captured.get("url", ""), (
+            f"Hostname should NOT appear in URL, got: {captured.get('url')}"
+        )
+        # The original hostname must be preserved in the Host header.
+        host_header = captured.get("headers", {}).get("Host", "")
+        assert host_header == "stream.example.com", (
+            f"Expected original hostname in Host header, got: {host_header!r}"
+        )
+
+    def test_fetch_partial_no_resolved_ip_resolves_internally(self, monkeypatch):
+        """When resolved_ip is None, _fetch_partial must resolve the hostname
+        itself and use the resulting IP in the URL — never the raw user-supplied
+        hostname — to eliminate the full-SSRF taint path."""
+        import socket
+        from unittest.mock import MagicMock, patch
+        from utils.stream_detect import _fetch_partial
+
+        captured = {}
+
+        class FakeResponse:
+            status_code = 200
+            headers = {"Content-Type": "video/mp2t"}
+
+            def iter_content(self, chunk_size=8192):
+                return iter([b"\x47" * 188])
+
+            def raise_for_status(self):
+                pass
+
+        def fake_session_get(url, **kwargs):
+            captured["url"] = url
+            captured["headers"] = kwargs.get("headers", {})
+            return FakeResponse()
+
+        fake_session = MagicMock()
+        fake_session.get.side_effect = fake_session_get
+
+        # Simulate getaddrinfo returning a resolved IP for the hostname.
+        # getaddrinfo returns: [(family, type, proto, canonname, sockaddr), ...]
+        # where sockaddr for IPv4/IPv6 is (address, port[, flow, scope]).
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            return [(None, None, None, None, ("9.8.7.6", 0))]
+
+        with patch("utils.stream_detect._req.Session", return_value=fake_session), \
+             patch("utils.stream_detect.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            result = _fetch_partial(
+                "http://stream.example.com/live.m3u8",
+                resolved_ip=None,
+            )
+
+        assert result["ok"] is True
+        # The URL must use the server-resolved IP, never the original hostname.
+        assert "9.8.7.6" in captured.get("url", ""), (
+            f"Expected resolved IP in URL, got: {captured.get('url')}"
+        )
+        assert "stream.example.com" not in captured.get("url", ""), (
+            f"Hostname MUST NOT appear in URL (SSRF risk), got: {captured.get('url')}"
+        )
+        # The original hostname must be preserved in the Host header.
+        host_header = captured.get("headers", {}).get("Host", "")
+        assert host_header == "stream.example.com", (
+            f"Expected original hostname in Host header, got: {host_header!r}"
+        )
+
+    def test_fetch_partial_no_resolved_ip_dns_failure_returns_error(self, monkeypatch):
+        """When resolved_ip is None and internal DNS resolution fails,
+        _fetch_partial must return an error result without making any HTTP
+        request (no fallback to raw user-supplied URL)."""
+        import socket
+        from unittest.mock import MagicMock, patch
+        from utils.stream_detect import _fetch_partial
+
+        session_called = {"called": False}
+
+        class FakeSession:
+            def mount(self, *a, **kw):
+                pass
+
+            def get(self, *a, **kw):
+                session_called["called"] = True
+                raise AssertionError("HTTP request must NOT be made when DNS fails")
+
+        def fake_getaddrinfo(host, port, *args, **kwargs):
+            raise socket.gaierror("Name or service not known")
+
+        with patch("utils.stream_detect._req.Session", return_value=FakeSession()), \
+             patch("utils.stream_detect.socket.getaddrinfo", side_effect=fake_getaddrinfo):
+            result = _fetch_partial(
+                "http://unresolvable.example.invalid/live.m3u8",
+                resolved_ip=None,
+            )
+
+        assert result["ok"] is False, "Result must not be ok when DNS fails"
+        assert result["error"] is not None, "An error message must be set"
+        assert "DNS" in result["error"] or "resolution" in result["error"].lower(), (
+            f"Error message should mention DNS failure, got: {result['error']!r}"
+        )
+        assert not session_called["called"], "HTTP session.get must not be called"
+
+    def test_fetch_partial_no_hostname_returns_error_without_http_request(self):
+        """When the URL has no hostname and no resolved_ip is supplied,
+        _fetch_partial must return an error without making any HTTP request.
+        This prevents a full-SSRF taint path where the raw user-supplied URL
+        would otherwise be passed directly to the HTTP library."""
+        from unittest.mock import patch
+        from utils.stream_detect import _fetch_partial
+
+        session_called = {"called": False}
+
+        class FakeSession:
+            def mount(self, *a, **kw):
+                pass
+
+            def get(self, *a, **kw):
+                session_called["called"] = True
+                raise AssertionError("HTTP request must NOT be made when there is no hostname")
+
+        with patch("utils.stream_detect._req.Session", return_value=FakeSession()):
+            # A URL that parses to an empty hostname (scheme + empty host)
+            result = _fetch_partial("http:///no-hostname-path", resolved_ip=None)
+
+        assert result["ok"] is False, "Result must not be ok when there is no hostname"
+        assert result["error"] is not None, "An error message must be set"
+        assert not session_called["called"], "HTTP session.get must not be called when hostname is absent"
+
 
 class TestStreamDetectEndpoint:
     """Integration tests for the /admin/diagnostics/stream-detect endpoint."""
