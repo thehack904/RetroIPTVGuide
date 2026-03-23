@@ -76,6 +76,8 @@
                   <li><a href="{{ url_for('change_password') }}">Change Password</a></li>
                 </ul>
               </li>
+              <!-- About (visible to all users) -->
+              <li><a href="{{ url_for('about') }}">About</a></li>
               <!-- Administration (admin only) -->
               {% if current_user is defined and current_user.username == 'admin' %}
               <li class="separator"></li>
@@ -257,6 +259,9 @@
               <li role="none"><a role="menuitem" href="{{ url_for('change_password') }}">Change Password</a></li>
             </ul>
           </li>
+
+          <!-- About (visible to all users) -->
+          <li role="none"><a role="menuitem" href="{{ url_for('about') }}">About</a></li>
 
           {% if current_user is defined and current_user.username == 'admin' %}
           <!-- Administration (admin only) -->

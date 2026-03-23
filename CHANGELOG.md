@@ -6,6 +6,53 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.1 - 2026-03-22
+
+### Added
+- Added stricter client-side media URL sanitization in tuner playback logic, blocking unsafe protocols such as `javascript:`, `data:`, and `vbscript:`.
+- Added HTML escaping for guide summary and channel-name rendering to prevent unsafe content injection in the TV Guide UI.
+- Added path traversal protection for traffic demo road cache file generation.
+- Added strict stream URL validation and instance ID validation before invoking stream start/stop subprocesses.
+- Added filesystem boundary checks for uploaded audio files and custom logo uploads to prevent writes outside their intended upload directories.
+- Added expanded security-focused test coverage for:
+  - SSRF address filtering and DNS resolution behavior
+  - DNS rebinding protection in stream detection
+  - safe partial-fetch behavior using resolved IPs
+  - traffic demo cache path traversal protection
+  - tuner validation behavior under the new URL validation model
+- Added `tests/test_stream_command_injection.py`.
+
+### Changed
+- Refined traffic demo tests to validate the exact OpenStreetMap tile host instead of relying on a broad substring match.
+- Refined guide channel-name rendering to build DOM elements safely instead of injecting raw HTML.
+- Refined tuner validation tests to match the new hostname/IP validation flow instead of the previous HTTP reachability check.
+
+### Fixed
+- Removed the previous M3U URL reachability `HEAD` request during tuner creation and replaced it with hostname/IP-based validation, avoiding false negatives from servers that reject or mishandle `HEAD` requests.
+- Fixed tuner URL validation to explicitly reject private, reserved, unspecified, and multicast IP targets.
+- Fixed mobile navigation link handling to reject additional unsafe URI schemes beyond `javascript:`.
+- Fixed potential XSS exposure in guide summary rendering for program titles, descriptions, times, and fallback channel names.
+- Fixed potential XSS exposure when rendering channel logos and names in the guide.
+- Fixed potential path traversal risk in traffic demo disk cache path construction.
+- Fixed potential path traversal risk in uploaded audio file destinations.
+- Fixed potential path traversal risk in custom logo uploads by sanitizing `tvg_id`-derived filenames and verifying final destination paths.
+- Fixed potential command injection risk in stream start/stop endpoints by enforcing strict allowlists for stream URLs and instance IDs.
+- Fixed stream detection SSRF handling by:
+  - validating resolved addresses more thoroughly
+  - checking hostname DNS results for restricted targets
+  - adding DNS rebinding protection at connection time
+  - using the resolved IP directly for HTTP fetches while preserving the original `Host` header
+
+### Security
+- Hardened tuner URL validation against SSRF by blocking localhost, link-local, private, reserved, unspecified, and multicast targets.
+- Hardened stream detection against DNS rebinding and restricted-address access.
+- Hardened frontend rendering paths against XSS in guide summary and channel display.
+- Hardened media playback URL handling against unsafe protocol injection.
+- Hardened file upload and cache path handling against path traversal.
+- Hardened subprocess launch inputs for stream management against command injection.
+
+---
+
 ## v4.9.0 - 2026-03-15
 
 ### Added

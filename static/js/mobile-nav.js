@@ -148,7 +148,9 @@
 
       const href = (a.getAttribute('href') || '').trim();
       // Ignore anchors intended for JS handlers or toggles
-      if (!href || href === '#' || href.toLowerCase().startsWith('javascript:')) return;
+      const hrefLower = href.toLowerCase();
+      const blockedSchemes = ['javascript:', 'data:', 'vbscript:'];
+      if (!href || href === '#' || blockedSchemes.some(scheme => hrefLower.startsWith(scheme))) return;
 
       // Close the mobile nav if open
       if (window.mobileNavControl && typeof window.mobileNavControl.close === 'function') {

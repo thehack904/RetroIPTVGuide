@@ -727,6 +727,15 @@ function playChannel(url, cid, name) {
     }
 }
 
+function escapeHTML(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function updateSummary(cid, fallbackName) {
     const summary = document.getElementById('summary');
     const now = new Date();
@@ -745,11 +754,11 @@ function updateSummary(cid, fallbackName) {
         const desc = currentProg.dataset.desc || '';
         const start = new Date(currentProg.dataset.start);
         const stop = new Date(currentProg.dataset.stop);
-        summary.innerHTML = `<h3>${title}</h3>
-                             <p>${desc}</p>
-                             <p>${start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} - ${stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p>`;
+        summary.innerHTML = `<h3>${escapeHTML(title)}</h3>
+                             <p>${escapeHTML(desc)}</p>
+                             <p>${escapeHTML(start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))} - ${escapeHTML(stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))}</p>`;
     } else {
-        summary.innerHTML = `<h3>${fallbackName}</h3><p>No Program Info</p>`;
+        summary.innerHTML = `<h3>${escapeHTML(fallbackName)}</h3><p>No Program Info</p>`;
     }
 
     // After summary content changes, re-run layout-sensitive code
@@ -957,7 +966,16 @@ function applyThemeGuide(theme){
       document.querySelectorAll(".chan-col .chan-name").forEach(el=>{
         const name = el.dataset.name || "Channel";
         const logo = el.dataset.logo;
-        el.innerHTML = logo ? `<img src="${logo}" alt=""><span>${name}</span>` : `<span>${name}</span>`;
+        el.textContent = '';
+        if (logo) {
+          const img = document.createElement('img');
+          img.src = logo;
+          img.alt = '';
+          el.appendChild(img);
+        }
+        const span = document.createElement('span');
+        span.textContent = name;
+        el.appendChild(span);
       });
       document.querySelectorAll(".grid-row,.chan-col").forEach(r => r.style.height = "");
     }

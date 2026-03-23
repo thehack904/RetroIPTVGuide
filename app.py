@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.0"
-APP_RELEASE_DATE = "2026-03-15"
+APP_VERSION = "v4.9.1"
+APP_RELEASE_DATE = "2026-03-22"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -390,16 +390,14 @@ def add_tuner(name, xml_url, m3u_url):
         if not xml_url.startswith(('http://', 'https://')):
             raise ValueError("XML URL must start with http:// or https://")
     
-    # Optional: Check URL reachability with SSRF protection
+    # Validate the URL hostname and block internal/private addresses to prevent SSRF
     try:
-        # Parse the URL to validate the hostname
         parsed_url = urlparse(m3u_url)
         hostname = parsed_url.hostname
         
         if not hostname:
             raise ValueError("M3U URL must have a valid hostname")
         
-        # Block localhost to prevent SSRF attacks on local services
         try:
             # Resolve hostname to IP address
             ip_addr = socket.gethostbyname(hostname)
@@ -411,19 +409,15 @@ def add_tuner(name, xml_url, m3u_url):
             # Block link-local addresses (169.254.0.0/16) which could be cloud metadata
             if ip_obj.is_link_local:
                 raise ValueError("M3U URL cannot point to link-local addresses (169.254.0.0/16)")
+            # Block private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
+            if ip_obj.is_private:
+                raise ValueError("M3U URL cannot point to a private IP address range")
+            # Block reserved, unspecified, or multicast addresses
+            if ip_obj.is_reserved or ip_obj.is_unspecified or ip_obj.is_multicast:
+                raise ValueError("M3U URL cannot point to a reserved or multicast address")
         except socket.gaierror:
-            # If hostname can't be resolved, skip reachability check
+            # If hostname can't be resolved, skip IP check
             pass
-        
-        # Make the request with security restrictions
-        try:
-            r = requests.head(m3u_url, timeout=5, allow_redirects=True)
-            r.raise_for_status()
-        except requests.exceptions.ConnectionError:
-            # DNS resolution failure or unreachable host — skip reachability check
-            pass
-        except requests.RequestException as e:
-            raise ValueError(f"M3U URL unreachable: {str(e)}")
     except ValueError:
         # Re-raise ValueError from our validation
         raise
@@ -1402,15 +1396,26 @@ _OVERPASS_SEMAPHORE = threading.Semaphore(1)  # at most one live Overpass reques
 
 
 def _roads_cache_path(city_id: int) -> str:
-    """Return the absolute path of the on-disk cache file for a given city."""
-    return os.path.join(ROADS_CACHE_DIR, f"city_{city_id}.json")
+    """Return the absolute path of the on-disk cache file for a given city.
+
+    The path is validated against ROADS_CACHE_DIR to prevent path traversal
+    attacks where a malicious city_id could escape the cache directory.
+    """
+    # Explicitly convert to int so that the filename component is a plain
+    # integer with no path-separator or traversal characters.
+    city_id_int = int(city_id)
+    safe_dir = os.path.normpath(os.path.abspath(ROADS_CACHE_DIR))
+    path = os.path.normpath(os.path.join(safe_dir, f"city_{city_id_int}.json"))
+    if not path.startswith(safe_dir + os.sep) and path != safe_dir:
+        raise ValueError(f"city_id {city_id_int!r} would escape the cache directory")
+    return path
 
 
 def _load_roads_from_disk(city_id: int) -> dict | None:
     """Load GeoJSON from disk cache if the file exists and is not stale.
     Returns the GeoJSON dict on success, None if missing or expired."""
-    path = _roads_cache_path(city_id)
     try:
+        path = _roads_cache_path(city_id)
         if not os.path.isfile(path):
             return None
         age = time.time() - os.path.getmtime(path)
@@ -1418,6 +1423,8 @@ def _load_roads_from_disk(city_id: int) -> dict | None:
             return None
         with open(path, "r", encoding="utf-8") as fh:
             return _json.load(fh)
+    except ValueError:
+        return None
     except Exception:
         logging.warning("_load_roads_from_disk: failed to read cache for city_id=%s", city_id,
                         exc_info=True)
@@ -1426,7 +1433,11 @@ def _load_roads_from_disk(city_id: int) -> dict | None:
 
 def _save_roads_to_disk(city_id: int, geojson: dict) -> None:
     """Persist GeoJSON to disk so restarts don't need to re-fetch from Overpass."""
-    path = _roads_cache_path(city_id)
+    try:
+        path = _roads_cache_path(city_id)
+    except ValueError:
+        logging.warning("_save_roads_to_disk: refusing unsafe path for city_id=%s", city_id)
+        return
     try:
         os.makedirs(ROADS_CACHE_DIR, exist_ok=True)
         with open(path, "w", encoding="utf-8") as fh:
@@ -3125,7 +3136,30 @@ STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
 LOG_FILE = "/var/log/vlc-play.log"
 INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
 
+# Strict allowlist for streaming URL characters.
+# Permits the RFC 3986 unreserved characters plus the subset of reserved
+# characters that appear in legitimate http/https streaming URLs.
+# Intentionally excludes: whitespace, control characters, backslash, backtick,
+# pipe, double-quote, single-quote, and semicolon — none of which are needed
+# in a media stream URL and all of which are risky in subprocess arguments.
+# The {1,2048} limit applies to the portion after the scheme (i.e. the
+# authority + path + query + fragment together are capped at 2048 characters).
+_STREAM_URL_RE = re.compile(
+    r'^https?://'
+    r'[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,=%]{1,2048}$'
+)
+
 def is_valid_stream_url(url: str) -> bool:
+    """Return True only if *url* is a well-formed http/https URL whose
+    characters are restricted to a safe allowlist.
+
+    This prevents command-line injection when the URL is forwarded to a
+    subprocess argument (CWE-078 / CWE-088).
+    """
+    if not isinstance(url, str):
+        return False
+    if not _STREAM_URL_RE.fullmatch(url):
+        return False
     try:
         parsed = urlparse(url)
     except Exception:
@@ -3136,6 +3170,17 @@ def is_valid_stream_url(url: str) -> bool:
         return False
     # Optional: restrict to allowed hosts/networks; adjust to your security needs.
     return True
+
+_INSTANCE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
+
+def is_valid_instance_id(instance_id: str) -> bool:
+    """Return True only if instance_id consists entirely of safe characters.
+
+    Allowed: ASCII letters, digits, underscores, and hyphens (max 64 chars).
+    This prevents command-line injection when the value is forwarded to a
+    subprocess argument.
+    """
+    return bool(_INSTANCE_ID_RE.fullmatch(instance_id))
 
 @app.route('/api/start_stream', methods=['POST'])
 @login_required
@@ -3155,8 +3200,17 @@ def api_start_stream():
 
     if not url:
         return jsonify({"ok": False, "error": "missing url"}), 400
-    if not is_valid_stream_url(url):
+    # Validate URL with the strict allowlist regex (inline fullmatch acts as a
+    # barrier guard for CodeQL's taint analysis: CWE-078 / CWE-088).
+    if not _STREAM_URL_RE.fullmatch(url):
         return jsonify({"ok": False, "error": "invalid url"}), 400
+    _url_parsed = urlparse(url)
+    if _url_parsed.scheme not in ("http", "https") or not _url_parsed.netloc:
+        return jsonify({"ok": False, "error": "invalid url"}), 400
+    # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
+    # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
+    if not _INSTANCE_ID_RE.fullmatch(instance):
+        return jsonify({"ok": False, "error": "invalid instance id"}), 400
 
     cmd = ["sudo", PLAY_SCRIPT, url, instance]
     if hide_cursor:
@@ -3280,6 +3334,11 @@ def api_stop_stream():
 
         data = request.get_json(force=True, silent=True) or {}
         instance = (data.get("id") or INSTANCE_ID).strip() or INSTANCE_ID
+
+        # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
+        # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
+        if not _INSTANCE_ID_RE.fullmatch(instance):
+            return jsonify({"ok": False, "error": "invalid instance id"}), 400
 
         cmd = ["sudo", STOP_SCRIPT, instance]
         try:
@@ -3603,6 +3662,11 @@ def api_audio_upload():
         return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_AUDIO_EXTENSIONS))}'}), 400
     os.makedirs(AUDIO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(AUDIO_UPLOAD_DIR, safe_name)
+    # Verify destination stays inside AUDIO_UPLOAD_DIR (prevent path traversal)
+    real_dest = os.path.realpath(dest)
+    real_dir = os.path.realpath(AUDIO_UPLOAD_DIR)
+    if os.path.commonpath([real_dir, real_dest]) != real_dir:
+        return jsonify({'error': 'Invalid filename.'}), 400
     f.save(dest)
     log_event(current_user.username, f"Uploaded audio file: {safe_name}")
     return jsonify({'ok': True, 'filename': safe_name}), 201
@@ -3652,11 +3716,18 @@ def api_logo_upload():
     ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
     if ext not in _ALLOWED_LOGO_EXTENSIONS:
         return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_LOGO_EXTENSIONS))}'}), 400
-    # Prefix filename with tvg_id slug to avoid name collisions between channels
-    slug = tvg_id.replace('.', '_')
+    # Prefix filename with tvg_id slug to avoid name collisions between channels.
+    # Use re.sub to allow only alphanumeric characters and underscores, preventing
+    # any path traversal characters from reaching the filesystem path.
+    slug = re.sub(r'[^a-zA-Z0-9_]', '_', tvg_id)
     dest_name = f'{slug}_logo.{ext}'
     os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
+    # Verify destination stays inside LOGO_UPLOAD_DIR (prevent path traversal)
+    real_dest = os.path.realpath(dest)
+    real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
+    if os.path.commonpath([real_dir, real_dest]) != real_dir:
+        return jsonify({'error': 'Invalid filename.'}), 400
     f.save(dest)
     try:
         save_channel_custom_logo(tvg_id, dest_name)

@@ -31,12 +31,15 @@ parsed from M3U playlists for the channel dropdown feature.
 
 from __future__ import annotations
 
+import ipaddress
 import re
 import requests as _req
 import socket
 import time
+import urllib3 as _urllib3
 from typing import Any, Dict, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
+from requests.adapters import HTTPAdapter
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +228,10 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     result["dns"] = _check_dns(url)
 
     # ── HTTP probe ────────────────────────────────────────────────────────
-    fetch = _fetch_partial(url)
+    # Pass the pre-validated resolved IP so _fetch_partial can use it as the
+    # actual connection target (for HTTP), preventing SSRF via DNS rebinding.
+    _resolved_ip: Optional[str] = result["dns"].get("resolved_ip")
+    fetch = _fetch_partial(url, resolved_ip=_resolved_ip)
     result["fetch"] = fetch
 
     if not fetch["ok"]:
@@ -738,6 +744,127 @@ def _parse_m3u_channels(text: str) -> List[Dict[str, Any]]:
     return channels
 
 
+def _addr_is_restricted(ip_str: str) -> Optional[str]:
+    """Return an error string if *ip_str* is a restricted address, else ``None``.
+
+    Restricted addresses are loopback (127.x / ::1) and link-local
+    (169.254.x.x / fe80::/10), including IPv4-mapped IPv6 variants.
+    RFC-1918 private ranges are intentionally *not* restricted because many
+    IPTV setups serve streams from LAN addresses.
+    """
+    try:
+        addr = ipaddress.ip_address(ip_str)
+    except ValueError:
+        return None
+    if addr.is_loopback:
+        return f"Loopback address '{ip_str}' is not allowed."
+    if addr.is_link_local:
+        return f"Link-local address '{ip_str}' is not allowed."
+    if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
+        mapped = addr.ipv4_mapped
+        if mapped.is_loopback or mapped.is_link_local:
+            return f"Address '{ip_str}' maps to a restricted IPv4 address."
+    return None
+
+
+class _IPPinningHTTPSPool(_urllib3.HTTPSConnectionPool):  # type: ignore[misc]
+    """HTTPS connection pool that pins the TCP connection to a pre-resolved IP
+    address while preserving the original hostname for TLS SNI and certificate
+    verification.
+
+    When the URL hostname is replaced with a pre-resolved IP (to prevent
+    full-SSRF attacks), standard TLS would try to verify the certificate for
+    the IP address, which fails for servers whose certificates only cover the
+    hostname.  This pool fixes that by overriding ``server_hostname`` on each
+    connection object so that both TLS SNI and certificate verification use the
+    original hostname, even though the TCP connection targets the validated IP.
+    """
+
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        original_hostname: str,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(host, port, assert_hostname=original_hostname, **kwargs)
+        self._original_hostname = original_hostname
+
+    def _new_conn(self) -> "Any":  # type: ignore[override]
+        conn = super()._new_conn()
+        # Override the TLS server_hostname so SNI uses the original hostname
+        # even though the TCP target is the pre-resolved IP address.
+        conn.server_hostname = self._original_hostname
+        return conn
+
+
+class _SSRFGuardAdapter(HTTPAdapter):
+    """HTTP transport adapter that re-validates the destination IP at connection
+    time to guard against DNS rebinding attacks.
+
+    After the pre-flight :func:`_check_ssrf_risk` check passes, a DNS rebinding
+    attack could still cause the hostname to resolve to a restricted address by
+    the time the TCP connection is actually made.  This adapter performs a second
+    DNS lookup inside :meth:`send` and raises
+    :class:`requests.exceptions.InvalidURL` if the resolved address is
+    restricted, closing the rebinding window.
+
+    When *pre_resolved_ip* and *pre_resolved_hostname* are provided (used for
+    HTTPS connections), :meth:`get_connection` returns an
+    :class:`_IPPinningHTTPSPool` that connects TCP to the validated IP while
+    keeping the original hostname for TLS SNI and certificate verification.
+    """
+
+    def __init__(
+        self,
+        pre_resolved_ip: Optional[str] = None,
+        pre_resolved_hostname: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        self._pre_resolved_ip = pre_resolved_ip
+        self._pre_resolved_hostname = pre_resolved_hostname
+        super().__init__(**kwargs)
+
+    def get_connection(  # type: ignore[override]
+        self, url: str, proxies: Any = None
+    ) -> "_urllib3.connectionpool.ConnectionPool":
+        """Return an IP-pinning pool for HTTPS when a pre-resolved IP is set."""
+        from urllib.parse import urlparse as _up
+
+        parsed = _up(url)
+        if (
+            parsed.scheme == "https"
+            and self._pre_resolved_ip
+            and self._pre_resolved_hostname
+        ):
+            port = parsed.port or 443
+            return _IPPinningHTTPSPool(
+                host=self._pre_resolved_ip,
+                port=port,
+                original_hostname=self._pre_resolved_hostname,
+            )
+        return super().get_connection(url, proxies=proxies)
+
+    def send(self, request, **kwargs):  # type: ignore[override]
+        from urllib.parse import urlparse as _up
+        from requests.exceptions import InvalidURL
+
+        hostname = (_up(request.url).hostname or "").lower()
+        if hostname:
+            try:
+                for info in socket.getaddrinfo(hostname, None):
+                    ip = info[4][0]
+                    err = _addr_is_restricted(ip)
+                    if err:
+                        raise InvalidURL(
+                            f"SSRF protection: '{hostname}' resolves to"
+                            f" restricted address '{ip}'"
+                        )
+            except socket.gaierror:
+                pass  # DNS failure — let urllib3 surface a ConnectionError
+        return super().send(request, **kwargs)
+
+
 def _check_ssrf_risk(parsed) -> Optional[str]:
     """Return an error message string if the URL targets a loopback or link-local
     address, otherwise return ``None``.
@@ -746,33 +873,42 @@ def _check_ssrf_risk(parsed) -> Optional[str]:
     (169.254.x.x, fe80::/10) addresses.  Private RFC-1918 ranges
     (10.x, 172.16-31.x, 192.168.x) are intentionally *not* blocked because
     many IPTV setups run on a LAN where the stream server is in a private range.
-    """
-    import ipaddress  # noqa: PLC0415
 
+    For hostname-based URLs, DNS is resolved and every returned address is
+    validated to prevent DNS-based SSRF attacks (e.g. evil.com → 127.0.0.1).
+    DNS rebinding protection (where DNS changes after this check) is handled
+    separately by :class:`_SSRFGuardAdapter` at connection time.
+    """
     hostname = parsed.hostname or ""
     if not hostname:
         return None
 
-    # Try to parse as a literal IP address (v4 or v6)
-    try:
-        addr = ipaddress.ip_address(hostname)
-        if addr.is_loopback:
-            return f"Loopback address '{hostname}' is not allowed."
-        if addr.is_link_local:
-            return f"Link-local address '{hostname}' is not allowed."
-        # Block IPv4-mapped IPv6 loopback (::ffff:127.0.0.1, etc.)
-        if isinstance(addr, ipaddress.IPv6Address) and addr.ipv4_mapped:
-            mapped = addr.ipv4_mapped
-            if mapped.is_loopback or mapped.is_link_local:
-                return f"Address '{hostname}' maps to a restricted IPv4 address."
-    except ValueError:
-        # Not a literal IP — it's a hostname; DNS-based SSRF would require
-        # DNS rebinding and is out of scope for this lightweight guard.
-        pass
-
-    # Reject 'localhost' explicitly
+    # Reject well-known loopback hostnames explicitly (no DNS lookup needed).
     if hostname.lower() in ("localhost", "localhost.localdomain"):
         return f"Loopback hostname '{hostname}' is not allowed."
+
+    # Try to parse as a literal IP address (v4 or v6).
+    try:
+        ipaddress.ip_address(hostname)
+        # It is a literal IP — validate it directly.
+        return _addr_is_restricted(hostname)
+    except ValueError:
+        pass
+
+    # Not a literal IP — resolve the hostname and check every returned address.
+    # This prevents DNS-based SSRF where a hostname resolves to a restricted
+    # address (e.g. attacker.com → 127.0.0.1) without requiring DNS rebinding.
+    try:
+        for addr_info in socket.getaddrinfo(hostname, None):
+            ip_str = addr_info[4][0]
+            err = _addr_is_restricted(ip_str)
+            if err:
+                return (
+                    f"Hostname '{hostname}' resolves to a restricted address: {err}"
+                )
+    except socket.gaierror:
+        # DNS resolution failed — let the HTTP fetch surface this gracefully.
+        pass
 
     return None
 
@@ -795,10 +931,28 @@ def _check_dns(url: str) -> Dict[str, Any]:
         return {"hostname": None, "resolved_ip": None, "error": str(exc)}
 
 
-def _fetch_partial(url: str, timeout: int = _TIMEOUT) -> Dict[str, Any]:
+def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str] = None) -> Dict[str, Any]:
     """Fetch the first ``_PROBE_BYTES`` bytes of *url* via streaming GET.
 
     Returns a dict compatible with the rest of the diagnostics system.
+
+    Two-layer SSRF defence:
+
+    1. The hostname in the URL is always replaced with a *server-resolved* IP
+       address before the request is made (either the pre-validated *resolved_ip*
+       passed by the caller, or one resolved freshly inside this function).  The
+       original hostname is preserved in the ``Host`` header for virtual-host
+       routing.  This ensures the value passed to the underlying HTTP library is
+       never directly user-controlled, breaking the full-SSRF taint chain.
+
+       If the caller passes no *resolved_ip* and DNS resolution fails here, the
+       function returns an error result rather than falling back to the raw
+       user-supplied URL.
+
+    2. A :class:`_SSRFGuardAdapter` is mounted on the session for both
+       ``http://`` and ``https://`` so that the destination IP is re-validated
+       at connection time.  For HTTPS this is the primary guard (replacing the
+       hostname with an IP would break TLS certificate verification).
     """
     result: Dict[str, Any] = {
         "ok": False,
@@ -812,16 +966,94 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT) -> Dict[str, Any]:
     }
     t0 = time.monotonic()
     try:
-        # nosec B113 — intentional admin-only SSRF: URL has been validated against
-        # loopback/link-local addresses by _check_ssrf_risk() before reaching here.
+        _session = _req.Session()
+        _guard = _SSRFGuardAdapter()
+        _session.mount("http://", _guard)
+        _session.mount("https://", _guard)
+
+        # Replace the user-supplied hostname with the server-resolved, pre-validated
+        # IP address so that the URL reaching the HTTP library is NOT directly
+        # user-controlled.  This breaks the full-SSRF taint chain for both HTTP
+        # and HTTPS: an attacker cannot redirect the request to an arbitrary host
+        # because the destination is always the DNS-resolved (and validated) IP.
+        #
+        # For HTTP:  IP is used directly in the URL; Host header carries the
+        #            original hostname for virtual-host routing.
+        # For HTTPS: IP is used in the URL; the _IPPinningHTTPSPool (mounted via
+        #            _SSRFGuardAdapter) uses the original hostname for TLS SNI and
+        #            certificate verification so that the TLS handshake succeeds.
+        _parsed = urlparse(url)
+        _original_hostname = _parsed.hostname or ""
+        request_headers: Dict[str, str] = {"User-Agent": _UA}
+
+        # Determine the IP to use in the request URL.  Prefer the pre-validated
+        # *resolved_ip* passed by the caller; if it is absent, resolve the
+        # hostname here so the request always targets a server-determined IP
+        # rather than the raw user-supplied hostname.
+        _effective_ip: Optional[str] = resolved_ip
+        if not _effective_ip and _original_hostname:
+            try:
+                addr_info = socket.getaddrinfo(_original_hostname, None)
+                if not addr_info:
+                    raise socket.gaierror(f"No addresses returned for '{_original_hostname}'")
+                _effective_ip = addr_info[0][4][0]
+            except (socket.gaierror, OSError, IndexError) as _gai_err:
+                result["error"] = f"DNS resolution failed: {_gai_err}"
+                result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
+                return result
+
+        if _effective_ip and _original_hostname:
+            # Build a new netloc with the validated IP, preserving the port.
+            _port = _parsed.port
+            if ":" in _effective_ip:        # IPv6 literal — must be bracketed
+                _ip_netloc = f"[{_effective_ip}]"
+            else:
+                _ip_netloc = _effective_ip
+            if _port:
+                _ip_netloc = f"{_ip_netloc}:{_port}"
+            request_url = urlunparse((
+                _parsed.scheme,
+                _ip_netloc,
+                _parsed.path,
+                _parsed.params,
+                _parsed.query,
+                _parsed.fragment,
+            ))
+            # Preserve the original hostname so the server can route correctly.
+            _host_header = _original_hostname
+            if _port:
+                _host_header = f"{_host_header}:{_port}"
+            request_headers["Host"] = _host_header
+            # For HTTPS: remount the guard with IP-pinning so TLS SNI and
+            # certificate verification still use the original hostname, not the
+            # raw IP address in the request_url.
+            if _parsed.scheme == "https":
+                _https_guard = _SSRFGuardAdapter(
+                    pre_resolved_ip=_effective_ip,
+                    pre_resolved_hostname=_original_hostname,
+                )
+                _session.mount("https://", _https_guard)
+        else:
+            # No hostname could be determined from the URL and no pre-resolved
+            # IP was supplied.  Refuse to forward the raw user-supplied URL to
+            # the HTTP library, as doing so would create a full-SSRF taint path
+            # (the URL value is directly user-controlled with no server-side
+            # validation of the destination).
+            result["error"] = (
+                "Cannot probe URL: no hostname could be determined or resolved. "
+                "A validated destination IP address is required."
+            )
+            result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
+            return result
+
         # RFC-1918 private addresses are intentionally allowed because many IPTV
         # deployments run stream servers on a LAN.  This route is only reachable
         # by the 'admin' user (403 for all others — see blueprints/admin_diagnostics.py).
-        resp = _req.get(  # noqa: S113
-            url,
+        resp = _session.get(  # noqa: S113
+            request_url,
             timeout=timeout,
             stream=True,
-            headers={"User-Agent": _UA},
+            headers=request_headers,
         )
         result["status_code"] = resp.status_code
         result["content_type"] = resp.headers.get("Content-Type", "")

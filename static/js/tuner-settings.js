@@ -241,9 +241,30 @@
     }
   }
 
+  // Validate that a media URL uses an allowed protocol before use.
+  // Requires an absolute URL — relative and protocol-relative URLs are rejected.
+  function sanitizeMediaUrl(url) {
+    if (!url || typeof url !== 'string') return null;
+    try {
+      const parsed = new URL(url);
+      const allowed = ['http:', 'https:', 'rtmp:', 'rtmps:', 'rtsp:', 'udp:', 'rtp:'];
+      if (!allowed.includes(parsed.protocol)) {
+        log('sanitizeMediaUrl: blocked unsafe protocol', parsed.protocol);
+        return null;
+      }
+      return parsed.href;
+    } catch (e) {
+      log('sanitizeMediaUrl: invalid or relative url', url, e);
+      return null;
+    }
+  }
+
   // Attempt to play url using common players or <video> element
   async function playChannel(url, meta) {
     if (!url) return log('playChannel: no url');
+    const safeUrl = sanitizeMediaUrl(url);
+    if (!safeUrl) { log('playChannel: url blocked by sanitizer', url); return false; }
+    url = safeUrl;
     log('playChannel requested', url, meta || '');
     try {
       // If there's an HLS player exposed (hls.js instance) on window.hlsPlayer or window.hls
