@@ -3716,8 +3716,10 @@ def api_logo_upload():
     ext = safe_name.rsplit('.', 1)[-1].lower() if '.' in safe_name else ''
     if ext not in _ALLOWED_LOGO_EXTENSIONS:
         return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_LOGO_EXTENSIONS))}'}), 400
-    # Prefix filename with tvg_id slug to avoid name collisions between channels
-    slug = tvg_id.replace('.', '_')
+    # Prefix filename with tvg_id slug to avoid name collisions between channels.
+    # Use re.sub to allow only alphanumeric characters and underscores, preventing
+    # any path traversal characters from reaching the filesystem path.
+    slug = re.sub(r'[^a-zA-Z0-9_]', '_', tvg_id)
     dest_name = f'{slug}_logo.{ext}'
     os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
