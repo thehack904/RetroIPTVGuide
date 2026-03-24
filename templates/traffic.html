@@ -650,15 +650,33 @@
 
   // ── DOM helpers ───────────────────────────────────────────────────────────
   function esc(s) {
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
   function buildIncidentItem(inc) {
-    return '<div class="tf-incident-item" data-sev="'+esc(inc.severity)+'">'+
-      '<div class="tf-incident-icon">'+(inc.icon||'\u26a0')+'</div>'+
-      '<div class="tf-incident-text">'+
-        '<div class="tf-incident-title">'+esc(inc.title)+'</div>'+
-        '<div class="tf-incident-road">'+esc(inc.road)+' '+esc(inc.direction)+'</div>'+
-      '</div></div>';
+    var item = document.createElement('div');
+    item.className = 'tf-incident-item';
+    item.setAttribute('data-sev', String(inc.severity || ''));
+
+    var iconDiv = document.createElement('div');
+    iconDiv.className = 'tf-incident-icon';
+    iconDiv.textContent = inc.icon || '\u26a0';
+    item.appendChild(iconDiv);
+
+    var textDiv = document.createElement('div');
+    textDiv.className = 'tf-incident-text';
+
+    var titleDiv = document.createElement('div');
+    titleDiv.className = 'tf-incident-title';
+    titleDiv.textContent = String(inc.title || '');
+    textDiv.appendChild(titleDiv);
+
+    var roadDiv = document.createElement('div');
+    roadDiv.className = 'tf-incident-road';
+    roadDiv.textContent = String(inc.road || '') + ' ' + String(inc.direction || '');
+    textDiv.appendChild(roadDiv);
+
+    item.appendChild(textDiv);
+    return item.outerHTML;
   }
 
   // ── Build / update ────────────────────────────────────────────────────────

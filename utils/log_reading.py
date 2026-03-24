@@ -14,10 +14,13 @@ from __future__ import annotations
 import glob as _glob
 import html
 import io
+import logging
 import os
 import re
 import zipfile
 from typing import Any, Dict, List, Tuple
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Resource limits
@@ -122,7 +125,8 @@ def read_log(log_key: str, max_lines: int = MAX_LINES) -> Tuple[List[str], str]:
                     break
         return lines, ""
     except (PermissionError, OSError) as exc:
-        return [], f"Could not read log: {exc}"
+        logger.error("Could not read log file %s: %s", path, exc)
+        return [], "Log file could not be read."
 
 
 def tail_log(log_key: str, n: int = TAIL_LINES) -> Tuple[List[str], str]:
@@ -142,7 +146,8 @@ def tail_log(log_key: str, n: int = TAIL_LINES) -> Tuple[List[str], str]:
         lines = _tail_file(path, n)
         return [_safe_line(ln) for ln in lines], ""
     except (PermissionError, OSError) as exc:
-        return [], f"Could not read log: {exc}"
+        logger.error("Could not tail log file %s: %s", path, exc)
+        return [], "Log file could not be read."
 
 
 def _tail_file(path: str, n: int) -> List[str]:
@@ -192,7 +197,8 @@ def get_log_download_data(log_key: str) -> Tuple[bytes | None, str]:
                 buf.write(safe.encode("utf-8", errors="replace"))
         return buf.getvalue(), ""
     except (PermissionError, OSError) as exc:
-        return None, f"Could not read log: {exc}"
+        logger.error("Could not read log file for download %s: %s", path, exc)
+        return None, "Log file could not be read."
 
 
 def _build_bundle_viewer_html(
