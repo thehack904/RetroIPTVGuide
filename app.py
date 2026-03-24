@@ -214,8 +214,18 @@ def _safe_next_url(raw: str) -> str:
     target has no scheme or host component — i.e. it is a relative path on
     the same origin.  Backslashes are normalised to forward slashes first
     because some browsers treat them as path separators.
+
+    Also rejects any string that starts with '//' (before or after normalisation)
+    to prevent protocol-relative redirect bypasses.  For example:
+      - '////evil.com' → urlparse gives path='//evil.com' (empty netloc) but the
+        normalised string still starts with '//', so it is rejected.
+      - '///evil.com'  → starts with '//' in the raw string, rejected.
+      - '//evil.com'   → urlparse gives netloc='evil.com', also rejected.
     """
     raw = (raw or '').strip().replace('\\', '/')
+    # Reject anything whose text or parsed netloc/scheme would redirect off-site.
+    if raw.startswith('//'):
+        return ''
     parsed = urlparse(raw)
     if not parsed.scheme and not parsed.netloc:
         return raw
@@ -2779,7 +2789,8 @@ def set_tuner(name):
 
     # Try to redirect back to where the user came from, falling back to guide.
     # Only same-origin paths are followed to prevent open redirect (CWE-601).
-    # Extract just the path+query from the Referer and verify same-origin before using it.
+    # Extract just the path+query from the Referer, verify same-origin, then
+    # pass through _safe_next_url as a final guard against protocol-relative paths.
     dest = url_for('guide')
     _raw_ref = request.referrer or ''
     if _raw_ref:
@@ -2790,13 +2801,13 @@ def set_tuner(name):
                 _ref_parsed.scheme in ('http', 'https')
                 and _ref_parsed.netloc == _host_parsed.netloc
             ):
-                # Same origin: use only the path (with leading slash) and query.
-                _safe_path = _ref_parsed.path or '/'
-                if not _safe_path.startswith('/'):
-                    _safe_path = '/' + _safe_path
-                dest = _safe_path
+                # Same origin: extract relative path+query then sanitize.
+                _rel = _ref_parsed.path or '/'
+                if not _rel.startswith('/'):
+                    _rel = '/' + _rel
                 if _ref_parsed.query:
-                    dest += '?' + _ref_parsed.query
+                    _rel += '?' + _ref_parsed.query
+                dest = _safe_next_url(_rel) or url_for('guide')
         except Exception:  # noqa: BLE001
             pass
     return redirect(dest)
