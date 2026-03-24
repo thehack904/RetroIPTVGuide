@@ -12,6 +12,7 @@ run_config_checks()        – aggregate runner (includes dependency + security 
 
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 import sys
@@ -19,6 +20,8 @@ import time
 import socket
 from typing import Any, Dict, List
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -60,17 +63,19 @@ def check_user_accounts(db_path: str) -> Dict[str, Any]:
             "remediation": "" if users else "No user accounts exist. Run the application to initialise the default admin account.",
         }
     except sqlite3.OperationalError as exc:
+        logger.error("Could not read users table in %s: %s", db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Could not read users table: {exc}",
+            "detail": "Could not read users table. Check application logs for details.",
             "users": [],
             "never_logged_in": [],
             "remediation": "Check that the users database has been initialised.",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("User account check failed for %s: %s", db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"User account check failed: {type(exc).__name__}: {exc}",
+            "detail": "User account check failed. Check application logs for details.",
             "users": [],
             "never_logged_in": [],
             "remediation": "Check database integrity.",
@@ -98,9 +103,10 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
             for key, value in cur.fetchall():
                 settings[key] = value
     except Exception as exc:  # noqa: BLE001
+        logger.error("Cannot read virtual channel settings from %s: %s", tuner_db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Cannot read virtual channel settings: {type(exc).__name__}: {exc}",
+            "detail": "Cannot read virtual channel settings. Check application logs for details.",
             "channels": [],
             "remediation": "Check tuners.db integrity.",
         }
@@ -221,9 +227,10 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
             for key, value in cur.fetchall():
                 settings[key] = value
     except Exception as exc:  # noqa: BLE001
+        logger.error("Cannot read settings from %s: %s", tuner_db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Cannot read settings: {type(exc).__name__}: {exc}",
+            "detail": "Cannot read settings. Check application logs for details.",
             "services": [],
             "remediation": "Check tuners.db integrity.",
         }
@@ -385,7 +392,8 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
             try:
                 result["resolved_ip"] = socket.getaddrinfo(hostname, None)[0][4][0]
             except socket.gaierror as dns_err:
-                result["error"] = f"DNS failed for '{hostname}': {dns_err}"
+                logger.debug("DNS resolution failed for '%s': %s", hostname, dns_err)
+                result["error"] = "DNS resolution failed. Check application logs for details."
                 return result
 
         t0 = time.monotonic()
@@ -401,10 +409,12 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
-            result["error"] = f"{type(exc).__name__}: {exc}"
+            logger.debug("Service probe failed for %s: %s", url, exc, exc_info=True)
+            result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
-        result["error"] = f"URL probe setup failed: {type(exc).__name__}: {exc}"
+        logger.debug("URL probe setup failed for %s: %s", url, exc, exc_info=True)
+        result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result
 
@@ -509,7 +519,8 @@ def check_system_resources() -> Dict[str, Any]:
                 except Exception:  # noqa: BLE001
                     req_checks.append({"package": pkg_name, "required": req_line, "installed": "NOT FOUND", "ok": False})
         except Exception as exc:  # noqa: BLE001
-            req_checks.append({"error": f"Could not read requirements.txt: {exc}"})
+            logger.error("Could not read requirements.txt: %s", exc, exc_info=True)
+            req_checks.append({"error": "Could not read requirements.txt. Check application logs for details."})
     else:
         req_checks.append({"note": "requirements.txt not found relative to app root."})
 

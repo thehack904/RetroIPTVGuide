@@ -206,6 +206,22 @@ def validate_tuner_url(url, label="Tuner"):
         logging.exception("validate_tuner_url error for %s: %s", label, e)
         flash(f"⚠️ Validation error for {label}. Please check the value and try again.", "warning")
 
+
+def _safe_next_url(raw: str) -> str:
+    """Return *raw* if it is a safe, same-site relative URL; otherwise return ''.
+
+    Guards against open-redirect attacks (CWE-601) by ensuring the redirect
+    target has no scheme or host component — i.e. it is a relative path on
+    the same origin.  Backslashes are normalised to forward slashes first
+    because some browsers treat them as path separators.
+    """
+    raw = (raw or '').strip().replace('\\', '/')
+    parsed = urlparse(raw)
+    if not parsed.scheme and not parsed.netloc:
+        return raw
+    return ''
+
+
 # ------------------- User Model -------------------
 class User(UserMixin):
     def __init__(self, id, username, password_hash, last_login=None):
@@ -2442,13 +2458,8 @@ def login():
     """
     # If already authenticated, redirect to next or guide
     if getattr(current_user, "is_authenticated", False):
-        raw_next = request.args.get('next') or request.form.get('next') or ''
-        if raw_next:
-            raw_next = raw_next.replace('\\', '/')
-            _p = urlparse(raw_next)
-            if _p.scheme or _p.netloc:
-                raw_next = ''
-        return redirect(raw_next or url_for('guide'))
+        safe_next = _safe_next_url(request.args.get('next') or request.form.get('next') or '')
+        return redirect(safe_next or url_for('guide'))
 
     if request.method == 'POST':
         username = request.form.get('username', '')
@@ -2467,13 +2478,8 @@ def login():
             log_event(username, "Logged in")
 
             # Determine next redirect target (prefer POSTed next, then query param)
-            raw_next = request.form.get('next') or request.args.get('next') or ''
-            if raw_next:
-                raw_next = raw_next.replace('\\', '/')
-                _p = urlparse(raw_next)
-                if _p.scheme or _p.netloc:
-                    raw_next = ''
-            return redirect(raw_next or url_for('guide'))
+            safe_next = _safe_next_url(request.form.get('next') or request.args.get('next') or '')
+            return redirect(safe_next or url_for('guide'))
         else:
             log_event(username if username else "unknown", "Failed login attempt")
             error = 'Invalid username or password'
@@ -2773,21 +2779,26 @@ def set_tuner(name):
 
     # Try to redirect back to where the user came from, falling back to guide.
     # Only same-origin paths are followed to prevent open redirect (CWE-601).
-    _raw_ref = (request.referrer or '').replace('\\', '/')
+    # Extract just the path+query from the Referer and verify same-origin before using it.
     dest = url_for('guide')
+    _raw_ref = request.referrer or ''
     if _raw_ref:
-        _ref_parsed = urlparse(_raw_ref)
-        if not _ref_parsed.scheme and not _ref_parsed.netloc:
-            # Already a relative path — use as-is
-            dest = _raw_ref
-        elif _ref_parsed.scheme in ('http', 'https'):
-            # Absolute URL: only follow if same-origin; reconstruct as relative path
-            # to drop scheme/host and prevent the tainted external URL from being used.
-            _host_netloc = urlparse(request.host_url).netloc
-            if _ref_parsed.netloc == _host_netloc:
-                from urllib.parse import urlunparse as _urlunparse  # noqa: PLC0415
-                dest = _urlunparse(('', '', _ref_parsed.path, _ref_parsed.params,
-                                    _ref_parsed.query, ''))
+        try:
+            _ref_parsed = urlparse(_raw_ref)
+            _host_parsed = urlparse(request.host_url)
+            if (
+                _ref_parsed.scheme in ('http', 'https')
+                and _ref_parsed.netloc == _host_parsed.netloc
+            ):
+                # Same origin: use only the path (with leading slash) and query.
+                _safe_path = _ref_parsed.path or '/'
+                if not _safe_path.startswith('/'):
+                    _safe_path = '/' + _safe_path
+                dest = _safe_path
+                if _ref_parsed.query:
+                    dest += '?' + _ref_parsed.query
+        except Exception:  # noqa: BLE001
+            pass
     return redirect(dest)
 
 

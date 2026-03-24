@@ -13,6 +13,7 @@ that the admin diagnostics UI can display to answer:
 from __future__ import annotations
 
 import html
+import logging
 import re
 import requests as _req
 import socket
@@ -21,6 +22,8 @@ import time
 import xml.etree.ElementTree as ET
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -38,13 +41,14 @@ def parse_tuner_with_trace(tuner_name: str, tuner_db_path: str) -> Dict[str, Any
     try:
         tuner_cfg = _load_tuner_config(tuner_name, tuner_db_path)
     except Exception as exc:  # noqa: BLE001
+        logger.error("Could not load tuner config for '%s': %s", tuner_name, exc, exc_info=True)
         return {
             "tuner_name": tuner_name,
             "tuner_type": "unknown",
-            "error": f"Could not load tuner config: {type(exc).__name__}: {exc}",
+            "error": "Could not load tuner config. Check application logs for details.",
             "m3u": None,
             "xmltv": None,
-            "issues": [str(exc)],
+            "issues": ["Could not load tuner configuration. See application logs for details."],
             "warnings": [],
         }
 
@@ -121,7 +125,8 @@ def _trace_m3u(url: str) -> Dict[str, Any]:
     try:
         text = raw.decode("utf-8", errors="replace")
     except Exception as exc:  # noqa: BLE001
-        trace["issues"].append(f"Could not decode response as UTF-8: {exc}")
+        logger.debug("Could not decode M3U response as UTF-8: %s", exc)
+        trace["issues"].append("Could not decode response as UTF-8. Check application logs for details.")
         return trace
 
     trace["parse"] = _analyse_m3u_text(text)
@@ -320,9 +325,10 @@ def _analyse_xmltv_bytes(raw: bytes) -> Dict[str, Any]:
         result["valid_xml"] = True
         result["root_tag"] = root.tag
     except ET.ParseError as exc:
+        logger.debug("Invalid XML in XMLTV response: %s", exc)
         result["issues"].append(
-            f"Invalid XML: {exc}. "
-            "The XMLTV data is malformed and cannot be parsed."
+            "Invalid XML: the XMLTV data is malformed and cannot be parsed. "
+            "Check application logs for details."
         )
         return result
 
@@ -544,10 +550,12 @@ def _check_dns(url: str) -> Dict[str, Any]:
         ip = socket.getaddrinfo(hostname, None)[0][4][0]
         return {"hostname": hostname, "resolved_ip": ip, "error": None}
     except socket.gaierror as exc:
+        logger.debug("DNS resolution failed for %s: %s", url, exc)
         return {"hostname": urlparse(url).hostname, "resolved_ip": None,
-                "error": f"DNS resolution failed: {exc}"}
+                "error": "DNS resolution failed."}
     except Exception as exc:  # noqa: BLE001
-        return {"hostname": None, "resolved_ip": None, "error": str(exc)}
+        logger.debug("URL lookup failed for %s: %s", url, exc)
+        return {"hostname": None, "resolved_ip": None, "error": "URL lookup failed. Check application logs for details."}
 
 
 def _fetch_url(url: str, timeout: int = 15) -> Dict[str, Any]:
@@ -584,7 +592,8 @@ def _fetch_url(url: str, timeout: int = 15) -> Dict[str, Any]:
         result["raw_bytes"] = raw
         result["ok"] = True
     except Exception as exc:  # noqa: BLE001
-        result["error"] = f"{type(exc).__name__}: {exc}"
+        logger.debug("HTTP fetch failed for %s: %s", url, exc, exc_info=True)
+        result["error"] = "Fetch failed. Check application logs for details."
         result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
 
     return result
