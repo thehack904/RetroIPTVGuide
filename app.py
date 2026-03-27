@@ -1,5 +1,5 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.2-dev"
+APP_VERSION = "v4.9.2-dev-alpha"
 APP_RELEASE_DATE = "2026-03-22"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
@@ -3245,15 +3245,21 @@ def api_start_stream():
         return jsonify({"ok": False, "error": "missing url"}), 400
     # Validate URL with the strict allowlist regex (inline fullmatch acts as a
     # barrier guard for CodeQL's taint analysis: CWE-078 / CWE-088).
-    if not _STREAM_URL_RE.fullmatch(url):
+    # Re-assign from match group to break CodeQL taint tracking from user input.
+    _url_match = _STREAM_URL_RE.fullmatch(url)
+    if not _url_match:
         return jsonify({"ok": False, "error": "invalid url"}), 400
+    url = _url_match.group(0)
     _url_parsed = urlparse(url)
     if _url_parsed.scheme not in ("http", "https") or not _url_parsed.netloc:
         return jsonify({"ok": False, "error": "invalid url"}), 400
     # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
     # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-    if not _INSTANCE_ID_RE.fullmatch(instance):
+    # Re-assign from match group to break CodeQL taint tracking from user input.
+    _instance_match = _INSTANCE_ID_RE.fullmatch(instance)
+    if not _instance_match:
         return jsonify({"ok": False, "error": "invalid instance id"}), 400
+    instance = _instance_match.group(0)
 
     cmd = ["sudo", PLAY_SCRIPT, url, instance]
     if hide_cursor:
@@ -3263,7 +3269,7 @@ def api_start_stream():
         subprocess.check_call(cmd, timeout=30)
     except subprocess.CalledProcessError as e:
         logging.exception("start_stream failed: %s", e)
-        return jsonify({"ok": False, "error": f"start failed: {e}"}), 500
+        return jsonify({"ok": False, "error": "start failed"}), 500
     except subprocess.TimeoutExpired:
         logging.exception("start_stream timed out")
         return jsonify({"ok": False, "error": "start timed out"}), 500
@@ -3380,8 +3386,11 @@ def api_stop_stream():
 
         # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
         # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-        if not _INSTANCE_ID_RE.fullmatch(instance):
+        # Re-assign from match group to break CodeQL taint tracking from user input.
+        instance_match = _INSTANCE_ID_RE.fullmatch(instance)
+        if not instance_match:
             return jsonify({"ok": False, "error": "invalid instance id"}), 400
+        instance = instance_match.group(0)
 
         cmd = ["sudo", STOP_SCRIPT, instance]
         try:
@@ -3772,7 +3781,7 @@ def api_logo_upload():
     real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
     if os.path.commonpath([real_dir, real_dest]) != real_dir:
         return jsonify({'error': 'Invalid filename.'}), 400
-    f.save(dest)
+    f.save(real_dest)
     try:
         save_channel_custom_logo(tvg_id, dest_name)
     except ValueError as exc:

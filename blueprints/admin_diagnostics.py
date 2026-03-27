@@ -345,10 +345,14 @@ def diagnostics_dependencies():
     _require_admin()
     from utils.dependency_check import check_external_binaries, check_python_packages
 
-    return jsonify({
-        "external_binaries": check_external_binaries(),
-        "python_packages": check_python_packages(),
-    })
+    try:
+        return jsonify({
+            "external_binaries": check_external_binaries(),
+            "python_packages": check_python_packages(),
+        })
+    except Exception:
+        logger.exception("Dependency check failed")
+        return jsonify({"error": "Dependency check failed due to an internal error."}), 500
 
 
 @admin_diagnostics_bp.route("/conflicts", methods=["GET"])

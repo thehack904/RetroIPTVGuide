@@ -2526,6 +2526,21 @@ class TestDependencyCheck:
         resp = client.get("/admin/diagnostics/dependencies")
         assert resp.status_code in (302, 401, 403)
 
+    def test_dependencies_endpoint_returns_generic_error_on_exception(self, client, isolated_db, monkeypatch):
+        """Exceptions in dependency checks must not expose stack traces to the caller."""
+        login(client)
+
+        import utils.dependency_check as dep_check
+        monkeypatch.setattr(dep_check, "check_external_binaries", lambda: (_ for _ in ()).throw(RuntimeError("internal detail")))
+
+        resp = client.get("/admin/diagnostics/dependencies")
+        assert resp.status_code == 500
+        data = json.loads(resp.data)
+        assert "error" in data
+        # The response must NOT contain the raw exception message or a traceback
+        assert "internal detail" not in resp.data.decode()
+        assert "Traceback" not in resp.data.decode()
+
 
 # ===========================================================================
 # Tests: utils.conflict_detector
