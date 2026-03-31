@@ -153,13 +153,30 @@ def record_environment() -> None:
 
 
 def record_import_error(module_name: str, exc: Exception) -> None:
-    """Record a failed module import with the exception message."""
-    import traceback
-    tb = traceback.format_exc()
+    """Record a failed module import.
+
+    A short, non-sensitive description is stored in the in-memory event ring
+    (which may be returned to admin users via the diagnostics API).  The full
+    traceback is written only to the startup log file so it stays server-side.
+    """
+    import logging as _logging
+    import traceback as _traceback
+
+    # Log the full traceback server-side (to Python logging / startup.log file).
+    _logging.getLogger(__name__).error(
+        "Failed to import '%s': %s",
+        module_name,
+        exc,
+        exc_info=True,
+    )
+
+    # Store only the exception type — not the message or traceback — in the
+    # in-memory event that may be serialised and returned to the browser.
+    # The full traceback is already captured server-side via logging above.
     record_startup_event(
         "error",
         "import_error",
-        f"Failed to import '{module_name}': {type(exc).__name__}: {exc}\n{tb}",
+        f"Failed to import '{module_name}': {type(exc).__name__}. Check application logs for details.",
     )
 
 

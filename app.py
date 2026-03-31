@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.1"
-APP_RELEASE_DATE = "2026-03-22"
+APP_VERSION = "v4.9.2"
+APP_RELEASE_DATE = "2026-03-30"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -107,8 +107,8 @@ app.secret_key = os.urandom(24)  # replace with a fixed key in production
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 
-DATABASE = 'users.db'
-TUNER_DB = 'tuners.db'
+DATABASE = os.path.join(DATA_DIR, 'users.db')
+TUNER_DB = os.path.join(DATA_DIR, 'tuners.db')
 ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
 ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'data', 'roads')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
@@ -203,7 +203,34 @@ def validate_tuner_url(url, label="Tuner"):
                 flash(f"⚠️ {label} hostname '{host}' could not be resolved. Consider using IP instead.", "warning")
 
     except Exception as e:
-        flash(f"⚠️ Validation error for {label}: {str(e)}", "warning")
+        logging.exception("validate_tuner_url error for %s: %s", label, e)
+        flash(f"⚠️ Validation error for {label}. Please check the value and try again.", "warning")
+
+
+def _safe_next_url(raw: str) -> str:
+    """Return *raw* if it is a safe, same-site relative URL; otherwise return ''.
+
+    Guards against open-redirect attacks (CWE-601) by ensuring the redirect
+    target has no scheme or host component — i.e. it is a relative path on
+    the same origin.  Backslashes are normalised to forward slashes first
+    because some browsers treat them as path separators.
+
+    Also rejects any string that starts with '//' (before or after normalisation)
+    to prevent protocol-relative redirect bypasses.  For example:
+      - '////evil.com' → urlparse gives path='//evil.com' (empty netloc) but the
+        normalised string still starts with '//', so it is rejected.
+      - '///evil.com'  → starts with '//' in the raw string, rejected.
+      - '//evil.com'   → urlparse gives netloc='evil.com', also rejected.
+    """
+    raw = (raw or '').strip().replace('\\', '/')
+    # Reject anything whose text or parsed netloc/scheme would redirect off-site.
+    if raw.startswith('//'):
+        return ''
+    parsed = urlparse(raw)
+    if not parsed.scheme and not parsed.netloc:
+        return raw
+    return ''
+
 
 # ------------------- User Model -------------------
 class User(UserMixin):
@@ -379,16 +406,17 @@ def add_tuner(name, xml_url, m3u_url):
     if name in tuners:
         raise ValueError(f"Tuner '{name}' already exists")
     
+    # Validate XML URL
+    if not xml_url or not xml_url.strip():
+        raise ValueError("XML URL cannot be empty")
+    if not xml_url.startswith(('http://', 'https://')):
+        raise ValueError("XML URL must start with http:// or https://")
+
     # Validate M3U URL
     if not m3u_url or not m3u_url.strip():
-        raise ValueError("M3U URL is required")
+        raise ValueError("M3U URL cannot be empty")
     if not m3u_url.startswith(('http://', 'https://')):
         raise ValueError("M3U URL must start with http:// or https://")
-    
-    # Validate XML URL if provided
-    if xml_url and xml_url.strip():
-        if not xml_url.startswith(('http://', 'https://')):
-            raise ValueError("XML URL must start with http:// or https://")
     
     # Validate the URL hostname and block internal/private addresses to prevent SSRF
     try:
@@ -2440,10 +2468,8 @@ def login():
     """
     # If already authenticated, redirect to next or guide
     if getattr(current_user, "is_authenticated", False):
-        next_url = request.args.get('next') or request.form.get('next') or url_for('guide')
-        if next_url and not is_safe_url(next_url):
-            return abort(400)
-        return redirect(next_url)
+        safe_next = _safe_next_url(request.args.get('next') or request.form.get('next') or '')
+        return redirect(safe_next or url_for('guide'))
 
     if request.method == 'POST':
         username = request.form.get('username', '')
@@ -2462,10 +2488,8 @@ def login():
             log_event(username, "Logged in")
 
             # Determine next redirect target (prefer POSTed next, then query param)
-            next_url = request.form.get('next') or request.args.get('next') or url_for('guide')
-            if next_url and not is_safe_url(next_url):
-                return abort(400)
-            return redirect(next_url)
+            safe_next = _safe_next_url(request.form.get('next') or request.args.get('next') or '')
+            return redirect(safe_next or url_for('guide'))
         else:
             log_event(username if username else "unknown", "Failed login attempt")
             error = 'Invalid username or password'
@@ -2477,6 +2501,7 @@ def login():
     return render_template('login.html', next=next_url)
 
 @app.route('/_debug/vlcinfo', methods=['GET'])
+@login_required
 def _debug_vlcinfo():
     """
     Debug helper: returns last launch args and running vlc/cvlc processes.
@@ -2486,13 +2511,15 @@ def _debug_vlcinfo():
     try:
         info['last_launch'] = vlc_control.last_launch_info() if vlc_control else None
     except Exception as e:
-        info['last_launch_error'] = str(e)
+        logging.exception("_debug_vlcinfo last_launch error: %s", e)
+        info['last_launch_error'] = 'error retrieving launch info'
     try:
         # list vlc/cvlc processes (ps output)
         out = subprocess.check_output(['ps','-o','pid,cmd','-C','cvlc','-C','vlc'], stderr=subprocess.DEVNULL).decode(errors='ignore')
         info['processes'] = out.strip()
     except Exception as e:
-        info['processes_error'] = str(e)
+        logging.exception("_debug_vlcinfo processes error: %s", e)
+        info['processes_error'] = 'error retrieving process info'
     return jsonify(info)
 
 @app.route('/_debug/current', methods=['GET'])
@@ -2747,7 +2774,7 @@ def set_tuner(name):
     tuners = get_tuners()
     if name not in tuners:
         flash(f"Tuner '{name}' does not exist.", "warning")
-        return redirect(request.referrer or url_for('change_tuner'))
+        return redirect(url_for('change_tuner'))
 
     # Update current tuner
     set_current_tuner(name)
@@ -2760,13 +2787,29 @@ def set_tuner(name):
     log_event(current_user.username, f"Quick switched active tuner to {name}")
     flash(f"Active tuner switched to {name}", "success")
 
-    # Try to redirect back to where the user came from, falling back to guide
-    dest = request.referrer or url_for('guide')
-    try:
-        if not is_safe_url(dest):
-            dest = url_for('guide')
-    except Exception:
-        dest = url_for('guide')
+    # Try to redirect back to where the user came from, falling back to guide.
+    # Only same-origin paths are followed to prevent open redirect (CWE-601).
+    # Extract just the path+query from the Referer, verify same-origin, then
+    # pass through _safe_next_url as a final guard against protocol-relative paths.
+    dest = url_for('guide')
+    _raw_ref = request.referrer or ''
+    if _raw_ref:
+        try:
+            _ref_parsed = urlparse(_raw_ref)
+            _host_parsed = urlparse(request.host_url)
+            if (
+                _ref_parsed.scheme in ('http', 'https')
+                and _ref_parsed.netloc == _host_parsed.netloc
+            ):
+                # Same origin: extract relative path+query then sanitize.
+                _rel = _ref_parsed.path or '/'
+                if not _rel.startswith('/'):
+                    _rel = '/' + _rel
+                if _ref_parsed.query:
+                    _rel += '?' + _ref_parsed.query
+                dest = _safe_next_url(_rel) or url_for('guide')
+        except Exception:  # noqa: BLE001
+            pass
     return redirect(dest)
 
 
@@ -3202,15 +3245,21 @@ def api_start_stream():
         return jsonify({"ok": False, "error": "missing url"}), 400
     # Validate URL with the strict allowlist regex (inline fullmatch acts as a
     # barrier guard for CodeQL's taint analysis: CWE-078 / CWE-088).
-    if not _STREAM_URL_RE.fullmatch(url):
+    # Re-assign from match group to break CodeQL taint tracking from user input.
+    _url_match = _STREAM_URL_RE.fullmatch(url)
+    if not _url_match:
         return jsonify({"ok": False, "error": "invalid url"}), 400
+    url = _url_match.group(0)
     _url_parsed = urlparse(url)
     if _url_parsed.scheme not in ("http", "https") or not _url_parsed.netloc:
         return jsonify({"ok": False, "error": "invalid url"}), 400
     # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
     # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-    if not _INSTANCE_ID_RE.fullmatch(instance):
+    # Re-assign from match group to break CodeQL taint tracking from user input.
+    _instance_match = _INSTANCE_ID_RE.fullmatch(instance)
+    if not _instance_match:
         return jsonify({"ok": False, "error": "invalid instance id"}), 400
+    instance = _instance_match.group(0)
 
     cmd = ["sudo", PLAY_SCRIPT, url, instance]
     if hide_cursor:
@@ -3220,7 +3269,7 @@ def api_start_stream():
         subprocess.check_call(cmd, timeout=30)
     except subprocess.CalledProcessError as e:
         logging.exception("start_stream failed: %s", e)
-        return jsonify({"ok": False, "error": f"start failed: {e}"}), 500
+        return jsonify({"ok": False, "error": "start failed"}), 500
     except subprocess.TimeoutExpired:
         logging.exception("start_stream timed out")
         return jsonify({"ok": False, "error": "start timed out"}), 500
@@ -3283,7 +3332,7 @@ def api_auto_refresh_status():
         })
     except Exception as e:
         logging.exception("api_auto_refresh_status failed: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/user_prefs', methods=['GET'])
@@ -3337,18 +3386,21 @@ def api_stop_stream():
 
         # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
         # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-        if not _INSTANCE_ID_RE.fullmatch(instance):
+        # Re-assign from match group to break CodeQL taint tracking from user input.
+        instance_match = _INSTANCE_ID_RE.fullmatch(instance)
+        if not instance_match:
             return jsonify({"ok": False, "error": "invalid instance id"}), 400
+        instance = instance_match.group(0)
 
         cmd = ["sudo", STOP_SCRIPT, instance]
         try:
             subprocess.check_call(cmd, timeout=15)
         except subprocess.CalledProcessError as e:
             logging.exception("stop_stream helper failed: %s", e)
-            return jsonify({"ok": False, "error": f"stop failed: {e}", "trace": str(e)}), 500
+            return jsonify({"ok": False, "error": "stop failed"}), 500
         except subprocess.TimeoutExpired as e:
             logging.exception("stop_stream helper timed out: %s", e)
-            return jsonify({"ok": False, "error": "stop timed out", "trace": str(e)}), 500
+            return jsonify({"ok": False, "error": "stop timed out"}), 500
 
         # Clear server-side playback marker after stop completes
         try:
@@ -3361,7 +3413,7 @@ def api_stop_stream():
 
     except Exception as e:
         logging.exception("Unexpected error in api_stop_stream: %s", e)
-        return jsonify({"ok": False, "error": "unexpected server error", "trace": str(e)}), 500
+        return jsonify({"ok": False, "error": "unexpected server error"}), 500
 
 @app.route('/api/tail_logs', methods=['GET'])
 @login_required
@@ -3379,7 +3431,7 @@ def api_tail_logs():
         return jsonify({"ok": True, "lines": lines})
     except Exception as e:
         logging.exception("tail_logs failed: %s", e)
-        return jsonify({"ok": False, "error": str(e), "lines": []}), 500
+        return jsonify({"ok": False, "error": "Internal server error", "lines": []}), 500
 
 # ------------------- Existing vlc_control-backed endpoints kept below -------------------
 # (Your previous /api/play, /api/stop, /api/next, etc. are preserved.)
@@ -3529,7 +3581,8 @@ def api_traffic_demo_city_update(city_id):
         save_traffic_demo_city(city_id, enabled, weight)
         return jsonify({'ok': True})
     except Exception as exc:
-        return jsonify({'ok': False, 'error': str(exc)}), 500
+        logging.exception("api_traffic_demo_city_update failed for city_id=%s: %s", city_id, exc)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
 
 
 @app.route('/api/traffic/demo/enable_all', methods=['POST'])
@@ -3717,10 +3770,13 @@ def api_logo_upload():
     if ext not in _ALLOWED_LOGO_EXTENSIONS:
         return jsonify({'error': f'Unsupported file type. Allowed: {", ".join(sorted(_ALLOWED_LOGO_EXTENSIONS))}'}), 400
     # Prefix filename with tvg_id slug to avoid name collisions between channels.
-    # Use re.sub to allow only alphanumeric characters and underscores, preventing
-    # any path traversal characters from reaching the filesystem path.
+    # Use re.sub to allow only alphanumeric characters and underscores, then
+    # apply secure_filename to eliminate any remaining special characters and
+    # break the taint chain from user-controlled tvg_id to the filesystem path.
     slug = re.sub(r'[^a-zA-Z0-9_]', '_', tvg_id)
-    dest_name = f'{slug}_logo.{ext}'
+    dest_name = secure_filename(f'{slug}_logo.{ext}')
+    if not dest_name:
+        return jsonify({'error': 'Invalid filename.'}), 400
     os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
     dest = os.path.join(LOGO_UPLOAD_DIR, dest_name)
     # Verify destination stays inside LOGO_UPLOAD_DIR (prevent path traversal)
@@ -3728,11 +3784,12 @@ def api_logo_upload():
     real_dir = os.path.realpath(LOGO_UPLOAD_DIR)
     if os.path.commonpath([real_dir, real_dest]) != real_dir:
         return jsonify({'error': 'Invalid filename.'}), 400
-    f.save(dest)
+    f.save(real_dest)
     try:
         save_channel_custom_logo(tvg_id, dest_name)
     except ValueError as exc:
-        return jsonify({'error': str(exc)}), 400
+        logging.warning("api_logo_upload: invalid logo for %s: %s", tvg_id, exc)
+        return jsonify({'error': 'Invalid logo file.'}), 400
     log_event(current_user.username, f"Uploaded logo for {tvg_id}: {dest_name}")
     return jsonify({'ok': True, 'filename': dest_name, 'url': f'/static/logos/virtual/{dest_name}'}), 201
 
@@ -3828,9 +3885,8 @@ def api_play():
         return jsonify({'status': 'playing', 'url': url, 'volume': vol_int})
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/stop', methods=['POST'])
+        logging.exception("api_play failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 @login_required
 def api_stop():
     global CURRENTLY_PLAYING
@@ -3842,7 +3898,8 @@ def api_stop():
         log_event(current_user.username, "Stopped playback")
         return jsonify({'status': 'stopped'})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("api_stop failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/next', methods=['POST'])
 @login_required
@@ -3854,7 +3911,8 @@ def api_next():
         log_event(current_user.username, "Sent VLC next")
         return jsonify({'status': 'ok', 'resp': resp})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("api_next failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/prev', methods=['POST'])
 @login_required
@@ -3866,7 +3924,8 @@ def api_prev():
         log_event(current_user.username, "Sent VLC prev")
         return jsonify({'status': 'ok', 'resp': resp})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("api_prev failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/status', methods=['GET'])
 @login_required
@@ -3943,7 +4002,7 @@ def api_status():
         })
     except Exception as e:
         logging.exception("api_status error: %s", e)
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'error': 'Internal server error'}), 500
 
 # ------------------- ADDED ROUTE: current_program -------------------
 @app.route('/api/current_program', methods=['GET'])
@@ -4019,7 +4078,7 @@ def api_current_program():
             })
     except Exception as e:
         logging.exception("api_current_program error: %s", e)
-        return jsonify({"ok": False, "error": str(e)}), 500
+        return jsonify({"ok": False, "error": "Internal server error"}), 500
 # ------------------- END ADDED ROUTE -------------------
 
 @app.route('/api/volume/<int:value>', methods=['POST'])
@@ -4033,9 +4092,8 @@ def api_set_volume(value):
         log_event(current_user.username, f"Set volume {v}")
         return jsonify({'status': 'ok', 'volume': v, 'resp': resp})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@app.route('/api/volume_up', methods=['POST'])
+        logging.exception("api_set_volume failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 @login_required
 def api_volume_up():
     if vlc_control is None:
@@ -4045,7 +4103,8 @@ def api_volume_up():
         log_event(current_user.username, "Volume up")
         return jsonify({'status': 'ok', 'resp': resp})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("api_volume_up failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/api/volume_down', methods=['POST'])
 @login_required
@@ -4057,7 +4116,8 @@ def api_volume_down():
         log_event(current_user.username, "Volume down")
         return jsonify({'status': 'ok', 'resp': resp})
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        logging.exception("api_volume_down failed: %s", e)
+        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/logs', methods=['GET'], endpoint='view_logs')
 @login_required
@@ -4116,7 +4176,7 @@ SLOT_MINUTES = 30
 
 # ------------------- Main -------------------
 def ensure_default_tuner():
-    conn = sqlite3.connect('tuners.db')
+    conn = sqlite3.connect(TUNER_DB)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM tuners")
     count = c.fetchone()[0]
@@ -4238,7 +4298,7 @@ def api_guide_snapshot():
         return jsonify(payload)
     except Exception as e:
         logging.exception("api_guide_snapshot failed: %s", e)
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @app.route('/api/theme_snapshot', methods=['GET'])

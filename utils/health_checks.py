@@ -12,6 +12,7 @@ troubleshooting (see bug #203, #70).
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import socket
@@ -19,6 +20,8 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -42,9 +45,10 @@ def check_db(db_path: str) -> Dict[str, Any]:
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("Database connection failed for %s: %s", abs_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Connection failed: {type(exc).__name__}: {exc}. Path: {abs_path}",
+            "detail": f"Connection failed. Check application logs for details. Path: {abs_path}",
             "path": abs_path,
             "size_bytes": size_bytes,
             "exists": exists,
@@ -83,9 +87,10 @@ def check_schema(db_path: str) -> Dict[str, Any]:
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("Schema check failed for %s: %s", db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Schema check failed: {type(exc).__name__}: {exc}",
+            "detail": "Schema check failed. Check application logs for details.",
             "tables_found": [],
             "tables_missing": sorted(required),
             "remediation": "See database check for more information.",
@@ -112,9 +117,10 @@ def check_tuners(tuner_db_path: str) -> Dict[str, Any]:
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("Tuner database error for %s: %s", tuner_db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Tuner database error: {type(exc).__name__}: {exc}",
+            "detail": "Tuner database error. Check application logs for details.",
             "count": 0,
             "remediation": "Check that tuners.db exists and is readable.",
         }
@@ -147,9 +153,10 @@ def check_xmltv(tuner_db_path: str) -> Dict[str, Any]:
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("XMLTV check failed for %s: %s", tuner_db_path, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"XMLTV check failed: {type(exc).__name__}: {exc}",
+            "detail": "XMLTV check failed. Check application logs for details.",
             "remediation": "Check tuner database integrity.",
         }
 
@@ -185,9 +192,10 @@ def check_disk_space(data_dir: str, warn_threshold_mb: int = 500) -> Dict[str, A
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
+        logger.error("Could not check disk space for %s: %s", data_dir, exc, exc_info=True)
         return {
             "status": "WARN",
-            "detail": f"Could not check disk space: {type(exc).__name__}: {exc}",
+            "detail": "Could not check disk space. Check application logs for details.",
             "free_mb": None,
             "total_mb": None,
             "remediation": "Verify that DATA_DIR is mounted correctly.",
@@ -207,9 +215,10 @@ def check_write_permissions(data_dir: str) -> Dict[str, Any]:
             "remediation": "",
         }
     except (PermissionError, OSError) as exc:
+        logger.error("Cannot write to DATA_DIR %s: %s", data_dir, exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Cannot write to DATA_DIR: {exc}",
+            "detail": "Cannot write to data directory. Check application logs for details.",
             "remediation": (
                 f"Grant the application process write access to {data_dir}. "
                 "Check directory ownership and permissions."
@@ -256,7 +265,8 @@ def _probe_url(url: str, timeout: int = 8) -> Dict[str, Any]:
                 resolved = socket.getaddrinfo(hostname, None, socket.AF_UNSPEC, socket.SOCK_STREAM)
                 result["resolved_ip"] = resolved[0][4][0] if resolved else None
             except socket.gaierror as dns_err:
-                result["error"] = f"DNS resolution failed for '{hostname}': {dns_err}"
+                logger.debug("DNS resolution failed for %s: %s", hostname, dns_err)
+                result["error"] = f"DNS resolution failed for '{hostname}'"
                 return result
 
         t0 = time.monotonic()
@@ -275,12 +285,15 @@ def _probe_url(url: str, timeout: int = 8) -> Dict[str, Any]:
             result["response_time_ms"] = elapsed
             result["error"] = f"Connection timed out after {timeout}s (server at {result.get('resolved_ip') or hostname or 'unknown'} did not respond)"
         except _requests.exceptions.ConnectionError as conn_err:
-            result["error"] = f"Connection error: {conn_err}"
+            logger.debug("Connection error probing %s: %s", url, conn_err)
+            result["error"] = "Connection error. Check application logs for details."
         except Exception as exc:  # noqa: BLE001
-            result["error"] = f"{type(exc).__name__}: {exc}"
+            logger.debug("Unexpected error probing %s: %s", url, exc, exc_info=True)
+            result["error"] = "Unexpected probe error. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
-        result["error"] = f"URL probe failed: {type(exc).__name__}: {exc}"
+        logger.debug("URL probe failed for %s: %s", url, exc, exc_info=True)
+        result["error"] = "URL probe failed. Check application logs for details."
 
     return result
 
@@ -328,7 +341,8 @@ def check_tuner_connectivity(tuner_db_path: str) -> List[Dict[str, Any]]:
                 pass
 
     except Exception as exc:  # noqa: BLE001
-        return [{"error": f"Cannot read tuner database: {type(exc).__name__}: {exc}"}]
+        logger.error("Cannot read tuner database %s: %s", tuner_db_path, exc, exc_info=True)
+        return [{"error": "Cannot read tuner database. Check application logs for details."}]
 
     for name, xml_url, m3u_url, tuner_type, sources_json in rows:
         entry: Dict[str, Any] = {
@@ -432,7 +446,8 @@ def check_file_system(db_path: str, tuner_db_path: str, data_dir: str) -> Dict[s
                     "is_dir": os.path.isdir(full),
                 })
         except Exception as exc:
-            entries.append({"error": str(exc)})
+            logger.debug("Directory listing failed for %s: %s", path, exc)
+            entries.append({"error": "Directory listing failed. Check application logs for details."})
         return entries
 
     return {
@@ -527,8 +542,9 @@ def check_cache_state(tuner_db_path: str) -> Dict[str, Any]:
         }
 
     except Exception as exc:  # noqa: BLE001
+        logger.error("Could not read cache state: %s", exc, exc_info=True)
         return {
-            "error": f"Could not read cache state: {type(exc).__name__}: {exc}",
+            "error": "Could not read cache state. Check application logs for details.",
             "active_tuner": None,
             "channel_count": 0,
             "epg_channel_count": 0,

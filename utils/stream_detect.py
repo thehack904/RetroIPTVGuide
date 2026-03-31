@@ -32,6 +32,7 @@ parsed from M3U playlists for the channel dropdown feature.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import re
 import requests as _req
 import socket
@@ -40,6 +41,8 @@ import urllib3 as _urllib3
 from typing import Any, Dict, List, Optional
 from urllib.parse import urlparse, urlunparse
 from requests.adapters import HTTPAdapter
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -922,13 +925,15 @@ def _check_dns(url: str) -> Dict[str, Any]:
         ip = socket.getaddrinfo(hostname, None)[0][4][0]
         return {"hostname": hostname, "resolved_ip": ip, "error": None}
     except socket.gaierror as exc:
+        logger.debug("DNS resolution failed for %s: %s", url, exc)
         return {
             "hostname": urlparse(url).hostname,
             "resolved_ip": None,
-            "error": f"DNS resolution failed: {exc}",
+            "error": "DNS resolution failed.",
         }
     except (OSError, ValueError) as exc:
-        return {"hostname": None, "resolved_ip": None, "error": str(exc)}
+        logger.debug("DNS/URL lookup failed for %s: %s", url, exc)
+        return {"hostname": None, "resolved_ip": None, "error": "URL lookup failed. Check application logs for details."}
 
 
 def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str] = None) -> Dict[str, Any]:
@@ -1071,13 +1076,16 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
         result["raw_bytes"] = raw
         result["ok"] = True
     except ImportError as exc:
-        result["error"] = f"requests library not installed: {exc}"
+        logger.error("requests library not available: %s", exc)
+        result["error"] = "requests library not installed. Check server dependencies."
         result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
     except OSError as exc:
-        result["error"] = f"{type(exc).__name__}: {exc}"
+        logger.debug("Stream fetch OS error for %s: %s", url, exc, exc_info=True)
+        result["error"] = "Network error while fetching stream. Check application logs for details."
         result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
     except Exception as exc:  # noqa: BLE001 – requests raises many types (HTTPError, Timeout, etc.)
-        result["error"] = f"{type(exc).__name__}: {exc}"
+        logger.debug("Stream fetch failed for %s: %s", url, exc, exc_info=True)
+        result["error"] = "Stream fetch failed. Check application logs for details."
         result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
 
     return result

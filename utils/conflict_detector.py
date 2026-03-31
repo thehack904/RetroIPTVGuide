@@ -20,8 +20,11 @@ Public API
 
 from __future__ import annotations
 
+import logging
 from collections import defaultdict
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 def detect_channel_conflicts() -> Dict[str, Any]:
@@ -60,10 +63,11 @@ def detect_channel_conflicts() -> Dict[str, Any]:
         channels: List[Dict[str, Any]] = list(
             getattr(app_module, "cached_channels", []) or []
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
+        logger.exception("Could not access channel cache")
         return {
             "status": "ERROR",
-            "detail": f"Could not access channel cache: {type(exc).__name__}: {exc}",
+            "detail": "Could not access channel cache. See server logs for details.",
             "duplicate_names": [],
             "duplicate_tvg_ids": [],
             "duplicate_urls": [],

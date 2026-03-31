@@ -1290,6 +1290,15 @@ document.addEventListener('DOMContentLoaded', () => {
   tvNavScript.src = "{{ url_for('static', filename='js/tv-remote-nav.js') }}";
   document.body.appendChild(tvNavScript);
 
+  // Prevent the Fire TV (Silk Browser) screen saver from appearing while the
+  // guide is active and no full-screen video is playing.
+  var wakeLockScript = document.createElement('script');
+  wakeLockScript.src = "{{ url_for('static', filename='js/wake-lock.js') }}";
+  // Expose the static root so wake-lock.js can resolve its fallback video URL
+  // without relying on hard-coded paths that may differ across deployments.
+  wakeLockScript.dataset.staticRoot = "{{ url_for('static', filename='js/wake-lock.js') }}".replace('/js/wake-lock.js', '');
+  document.body.appendChild(wakeLockScript);
+
   const linksContainer = document.querySelector(".header .links");
   if (linksContainer){
     // SETTINGS dropdown for TV/remote mode

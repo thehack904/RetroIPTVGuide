@@ -6,6 +6,45 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.2 - 2026-03-30
+
+### Added
+- Added stricter internal error handling for diagnostics endpoints so dependency-check failures return sanitized error responses instead of raw exception details.
+- Added new test coverage for:
+  - redirect safety handling
+  - wake-lock behavior on the guide page
+  - diagnostics dependency endpoint failure handling
+- Added:
+  - `tests/test_url_redirect_safety.py`
+  - `tests/test_wake_lock.py`
+
+### Changed
+- Moved `users.db` and `tuners.db` to use the configured data directory instead of fixed local filenames, improving persistence behavior for container and mounted-data deployments.
+- Added `RETROIPTV_DATA_DIR=/app/config` to the Docker environment to better support persistent app data in containerized installs.
+- Updated tuner creation validation so XMLTV URLs are now required and must be valid `http://` or `https://` URLs.
+- Hardened login and post-login redirect handling to only allow safe same-site relative redirect targets.
+- Hardened quick tuner switching redirect behavior to ignore unsafe referrers and fall back safely to the guide.
+- Updated diagnostics, health-check, tuner-diagnostics, conflict-detection, log-reading, startup, stream-detection, and security utility modules to log detailed failures server-side while returning safer, generic browser-facing error messages.
+- Refined traffic incident rendering to build DOM content more safely instead of relying on raw HTML string assembly.
+
+### Fixed
+- Fixed an open-redirect risk in login flow handling by sanitizing `next` redirect targets.
+- Fixed an open-redirect risk in active tuner quick-switch flow by validating and reducing referrer redirects to safe same-origin paths only.
+- Fixed diagnostics responses that could expose raw internal exception details to the browser.
+- Fixed multiple diagnostics and validation helpers to avoid leaking stack traces, raw exception messages, DNS errors, filesystem errors, log-read failures, and fetch failures directly in UI/API responses.
+- Fixed unsafe debug endpoint exposure by requiring authentication for debug information.
+- Fixed traffic incident escaping to also handle double quotes more safely in rendered attributes and content.
+- Fixed several stream-control and diagnostics API responses to return sanitized generic error messages instead of raw exception details.
+
+### Security
+- Hardened redirect handling against open-redirect attacks in login and tuner switching flows.
+- Hardened admin diagnostics, startup diagnostics, tuner diagnostics, stream detection, health checks, dependency checks, log readers, conflict detection, and related utility modules to reduce sensitive error disclosure.
+- Hardened debug endpoint access by requiring authentication for diagnostic information.
+- Hardened frontend traffic rendering against unsafe content injection.
+- Hardened guide usage on Fire TV / Android TV devices by keeping the guide active without requiring user interaction to prevent idle screen interruption.
+
+---
+
 ## v4.9.1 - 2026-03-22
 
 ### Added

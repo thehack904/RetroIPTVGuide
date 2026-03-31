@@ -23,10 +23,13 @@ Public API
 
 from __future__ import annotations
 
+import logging
 import math
 import sqlite3
 import string
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -116,10 +119,11 @@ def _check_admin_password_hash(db_path: str) -> Dict[str, Any]:
                 "SELECT password FROM users WHERE username = 'admin' LIMIT 1"
             ).fetchone()
     except Exception as exc:  # noqa: BLE001
+        logger.error("Could not read admin password hash: %s", exc, exc_info=True)
         return {
             "name": "admin_password_hash",
             "status": "WARN",
-            "detail": f"Could not read admin password hash: {type(exc).__name__}: {exc}",
+            "detail": "Could not read admin password hash. Check application logs for details.",
             "remediation": "Check database integrity.",
         }
 

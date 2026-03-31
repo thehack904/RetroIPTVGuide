@@ -12,9 +12,12 @@ Public API
 
 from __future__ import annotations
 
+import logging
 import shutil
 import sys
 from typing import Any, Dict, List
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -142,9 +145,10 @@ def check_python_packages() -> Dict[str, Any]:
                 if ln.strip() and not ln.startswith("#") and not ln.startswith("-")
             ]
     except OSError as exc:
+        logger.error("Cannot read requirements.txt: %s", exc, exc_info=True)
         return {
             "status": "FAIL",
-            "detail": f"Cannot read requirements.txt: {exc}",
+            "detail": "Cannot read requirements.txt. Check application logs for details.",
             "remediation": "Check file permissions on requirements.txt.",
             "packages": [],
             "python_version": sys.version.split()[0],
