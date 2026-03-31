@@ -527,6 +527,36 @@
     if (now.wind)              details.push(`- Wind: ${now.wind}`);
     if (now.feels_like != null) details.push(`- Feels Like: ${now.feels_like}°`);
 
+    // ── Not configured ──────────────────────────────────────────
+    if (now.condition === 'Not Configured') {
+      frame.innerHTML = `
+        <div class="wx-header">
+          <div class="wx-header-title">
+            <span>RetroIPTV</span>
+            <span class="wx-icon-header">${iconSvg('partly_cloudy', Math.round(fw * 0.055))}</span>
+            <span>Weather</span>
+          </div>
+          <div class="wx-header-subtitle">Local Forecast</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;gap:clamp(8px,1.5vw,20px);padding:1em;text-align:center;">
+          <div>${iconSvg('partly_cloudy', iconLg)}</div>
+          <div style="font-size:clamp(12px,2vw,26px);font-weight:900;letter-spacing:0.1em;
+                      text-transform:uppercase;color:#90c8ff;">No Location Configured</div>
+          <div style="font-size:clamp(9px,1.2vw,15px);color:#8098c0;max-width:26em;line-height:1.5;">
+            Add a Zip Code or Latitude&nbsp;/&nbsp;Longitude in
+            Virtual Weather Channel Settings.
+          </div>
+        </div>
+        <div class="wx-ticker-bar">
+          <div class="wx-ticker-label">Breaking News:</div>
+          <div class="wx-ticker-scroll">
+            <span class="wx-ticker-track">No location configured \u2022 </span>
+          </div>
+        </div>`;
+      return;
+    }
+
     const html = `
       <!-- Header -->
       <div class="wx-header">

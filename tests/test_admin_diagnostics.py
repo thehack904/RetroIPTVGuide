@@ -38,13 +38,13 @@ def isolated_db(tmp_path, monkeypatch):
     app.config["DIAG_TUNER_DB"]   = tuners_db
 
     # Also patch the log_reading allowlist so it points to the temp dir
+    # Note: "activity" is no longer a flat-file log; it is stored in SQLite.
     from utils import log_reading
     monkeypatch.setattr(
         log_reading, "ALLOWED_LOGS",
         {
-            "app":      os.path.join(data_dir, "logs", "retroiptvguide.log"),
-            "activity": os.path.join(data_dir, "logs", "activity.log"),
-            "startup":  os.path.join(data_dir, "logs", "startup.log"),
+            "app":     os.path.join(data_dir, "logs", "retroiptvguide.log"),
+            "startup": os.path.join(data_dir, "logs", "startup.log"),
         },
     )
 
@@ -409,6 +409,247 @@ class TestLogReadingUtils:
         lines, err = log_reading.read_log("big")
         # Should not exceed MAX_LINES + 1 (the truncation message)
         assert len(lines) <= log_reading.MAX_LINES + 1
+
+
+# ---------------------------------------------------------------------------
+# Tests: SQLite activity log
+# ---------------------------------------------------------------------------
+
+class TestActivityLogSQLite:
+    """Tests for log_event() → SQLite and the /admin/diagnostics/activity-logs endpoint."""
+
+    def test_log_event_writes_to_db(self, isolated_db):
+        """log_event() should insert a row into activity_logs."""
+        import sqlite3 as _sqlite3
+        from app import log_event
+        log_event("testuser", "did something")
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            row = conn.execute(
+                "SELECT username, action FROM activity_logs WHERE username='testuser'"
+            ).fetchone()
+        assert row is not None
+        assert row[0] == "testuser"
+        assert row[1] == "did something"
+
+    def test_log_event_multiple_writes(self, isolated_db):
+        """Multiple log_event() calls should each produce a row."""
+        import sqlite3 as _sqlite3
+        from app import log_event
+        log_event("alice", "action1")
+        log_event("alice", "action2")
+        log_event("bob", "action3")
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM activity_logs"
+            ).fetchone()[0]
+        # login events from init_db/add_user may add rows; just check >= 3
+        assert count >= 3
+
+    def test_view_logs_reads_from_db(self, client, isolated_db):
+        """GET /logs should return entries from activity_logs table."""
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            conn.execute(
+                "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+                ("admin", "Test action from DB", "2026-01-01 12:00:00"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/logs")
+        assert resp.status_code == 200
+        assert b"Test action from DB" in resp.data
+
+    def test_view_logs_shows_entry_count(self, client, isolated_db):
+        """The /logs page should show entry count, not bytes."""
+        login(client)
+        resp = client.get("/logs")
+        assert resp.status_code == 200
+        assert b"entries" in resp.data or b"entry" in resp.data
+
+    def test_clear_logs_deletes_from_db(self, client, isolated_db):
+        """POST /clear_logs should delete all rows from activity_logs."""
+        import sqlite3 as _sqlite3
+        from app import log_event
+        log_event("admin", "test entry before clear")
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            before = conn.execute("SELECT COUNT(*) FROM activity_logs").fetchone()[0]
+        assert before >= 1
+        login(client)
+        resp = client.post("/clear_logs", follow_redirects=True)
+        assert resp.status_code == 200
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            after = conn.execute("SELECT COUNT(*) FROM activity_logs").fetchone()[0]
+        # After clear, only the "Cleared activity logs" entry from log_event remains
+        assert after <= 1
+
+    def test_activity_logs_endpoint_returns_json(self, client, isolated_db):
+        """GET /admin/diagnostics/activity-logs should return valid JSON."""
+        login(client)
+        resp = client.get("/admin/diagnostics/activity-logs")
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert "lines" in data
+        assert "count" in data
+        assert "error" in data
+
+    def test_activity_logs_endpoint_returns_entries(self, client, isolated_db):
+        """Activity log endpoint should return rows in 'user | action | ts' format."""
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            conn.execute(
+                "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+                ("alice", "logged in", "2026-01-01 10:00:00"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/activity-logs")
+        data = json.loads(resp.data)
+        assert data["count"] >= 1
+        # At least one line should be in "user | action | ts" format
+        has_pipe = any(" | " in line for line in data["lines"])
+        assert has_pipe
+
+    def test_activity_logs_endpoint_non_admin_forbidden(self, client, isolated_db):
+        """Non-admin users should not access the activity-logs endpoint."""
+        login(client, "regular", "regpass")
+        resp = client.get("/admin/diagnostics/activity-logs")
+        assert resp.status_code == 403
+
+    def test_activity_logs_endpoint_unauthenticated_redirect(self, client, isolated_db):
+        """Unauthenticated requests should be redirected."""
+        resp = client.get("/admin/diagnostics/activity-logs")
+        assert resp.status_code in (302, 401)
+
+    def test_read_activity_log_from_db(self, isolated_db):
+        """read_activity_log_from_db() should return HTML-escaped lines."""
+        import sqlite3 as _sqlite3
+        from utils.log_reading import read_activity_log_from_db
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            conn.execute(
+                "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+                ("user1", "did <something>", "2026-01-01 12:00:00"),
+            )
+            conn.commit()
+        lines, err = read_activity_log_from_db(app_module.DATABASE)
+        assert err == ""
+        matching = [ln for ln in lines if "user1" in ln]
+        assert matching
+        # HTML special characters must be escaped
+        assert "<something>" not in matching[-1]
+        assert "&lt;something&gt;" in matching[-1]
+
+    def test_migration_imports_flat_file(self, tmp_path, monkeypatch):
+        """_migrate_activity_log() should import entries from the legacy flat file."""
+        import sqlite3 as _sqlite3
+        users_db = str(tmp_path / "migrate_test.db")
+        log_path = str(tmp_path / "activity.log")
+        # Write a flat-file with 3 entries
+        with open(log_path, "w") as fh:
+            fh.write("admin | Logged in | 2026-01-01 10:00:00\n")
+            fh.write("alice | Changed password | 2026-01-02 11:00:00\n")
+            fh.write("bob | Logged out | 2026-01-03 12:00:00\n")
+        monkeypatch.setattr(app_module, "DATABASE", users_db)
+        monkeypatch.setattr(app_module, "LOG_PATH", log_path)
+        app_module.init_db()
+        with _sqlite3.connect(users_db, timeout=5) as conn:
+            rows = conn.execute(
+                "SELECT username, action, timestamp FROM activity_logs ORDER BY id"
+            ).fetchall()
+        assert len(rows) == 3
+        assert rows[0] == ("admin", "Logged in", "2026-01-01 10:00:00")
+        assert rows[2] == ("bob", "Logged out", "2026-01-03 12:00:00")
+        # Original file should be renamed atomically before reading
+        assert not os.path.exists(log_path)
+        assert os.path.exists(log_path + ".migrated")
+
+    def test_migration_idempotent_no_double_import(self, tmp_path, monkeypatch):
+        """Running init_db() twice should not duplicate migrated entries."""
+        import sqlite3 as _sqlite3
+        users_db = str(tmp_path / "idempotent_test.db")
+        log_path = str(tmp_path / "activity.log")
+        with open(log_path, "w") as fh:
+            fh.write("admin | Action A | 2026-01-01 10:00:00\n")
+        monkeypatch.setattr(app_module, "DATABASE", users_db)
+        monkeypatch.setattr(app_module, "LOG_PATH", log_path)
+        app_module.init_db()
+        # Second call should not re-import (file has been renamed)
+        app_module.init_db()
+        with _sqlite3.connect(users_db, timeout=5) as conn:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM activity_logs WHERE action='Action A'"
+            ).fetchone()[0]
+        assert count == 1
+
+    def test_migration_no_file_is_noop(self, tmp_path, monkeypatch):
+        """init_db() with no activity.log should be a clean no-op."""
+        import sqlite3 as _sqlite3
+        users_db = str(tmp_path / "noop_test.db")
+        log_path = str(tmp_path / "nonexistent_activity.log")
+        monkeypatch.setattr(app_module, "DATABASE", users_db)
+        monkeypatch.setattr(app_module, "LOG_PATH", log_path)
+        app_module.init_db()  # Should not raise
+        with _sqlite3.connect(users_db, timeout=5) as conn:
+            count = conn.execute("SELECT COUNT(*) FROM activity_logs").fetchone()[0]
+        assert count == 0
+
+    def test_log_event_self_heals_when_table_missing(self, tmp_path, monkeypatch):
+        """log_event() should auto-create the table (via init_db) if it is missing."""
+        import sqlite3 as _sqlite3
+        users_db = str(tmp_path / "heal_test.db")
+        log_path = str(tmp_path / "activity.log")
+        monkeypatch.setattr(app_module, "DATABASE", users_db)
+        monkeypatch.setattr(app_module, "LOG_PATH", log_path)
+        # Create the DB with only the users table (simulating an old installation)
+        with _sqlite3.connect(users_db) as conn:
+            conn.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT)")
+            conn.commit()
+        # Calling log_event should trigger self-heal (calls init_db internally)
+        app_module.log_event("admin", "self-heal test")
+        with _sqlite3.connect(users_db, timeout=5) as conn:
+            row = conn.execute(
+                "SELECT username, action FROM activity_logs WHERE action='self-heal test'"
+            ).fetchone()
+        assert row is not None
+        assert row[0] == "admin"
+
+    def test_migration_returns_count(self, tmp_path, monkeypatch):
+        """_migrate_activity_log() should return the number of rows imported."""
+        import sqlite3 as _sqlite3
+        users_db = str(tmp_path / "count_test.db")
+        log_path = str(tmp_path / "activity.log")
+        with open(log_path, "w") as fh:
+            fh.write("u1 | a1 | 2026-01-01 10:00:00\n")
+            fh.write("u2 | a2 | 2026-01-01 11:00:00\n")
+        monkeypatch.setattr(app_module, "DATABASE", users_db)
+        monkeypatch.setattr(app_module, "LOG_PATH", log_path)
+        # Set up DB with activity_logs table
+        with _sqlite3.connect(users_db) as conn:
+            conn.execute(
+                "CREATE TABLE activity_logs "
+                "(id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, "
+                " action TEXT NOT NULL, timestamp TEXT NOT NULL)"
+            )
+            conn.commit()
+        with _sqlite3.connect(users_db) as conn:
+            count = app_module._migrate_activity_log(conn)
+        assert count == 2
+
+    def test_support_bundle_includes_activity_log(self, client, isolated_db):
+        """Support bundle ZIP should contain logs/activity.log exported from SQLite."""
+        import sqlite3 as _sqlite3
+        with _sqlite3.connect(app_module.DATABASE, timeout=5) as conn:
+            conn.execute(
+                "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+                ("admin", "bundle test action", "2026-01-01 12:00:00"),
+            )
+            conn.commit()
+        login(client)
+        resp = client.get("/admin/diagnostics/support")
+        assert resp.status_code == 200
+        zf = zipfile.ZipFile(io.BytesIO(resp.data))
+        assert "logs/activity.log" in zf.namelist()
+        content = zf.read("logs/activity.log").decode("utf-8")
+        assert "bundle test action" in content
 
 
 # ---------------------------------------------------------------------------

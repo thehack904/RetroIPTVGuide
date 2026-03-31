@@ -69,7 +69,6 @@ def configure_allowed_logs(data_dir: str) -> None:
     """
     log_dir = os.path.join(data_dir, "logs")
     ALLOWED_LOGS["app"] = os.path.join(log_dir, "retroiptvguide.log")
-    ALLOWED_LOGS["activity"] = os.path.join(log_dir, "activity.log")
     ALLOWED_LOGS["startup"] = os.path.join(log_dir, "startup.log")
 
 
@@ -199,6 +198,54 @@ def get_log_download_data(log_key: str) -> Tuple[bytes | None, str]:
     except (PermissionError, OSError) as exc:
         logger.error("Could not read log file for download %s: %s", path, exc)
         return None, "Log file could not be read."
+
+
+def read_activity_log_from_db(
+    db_path: str,
+    max_rows: int = MAX_LINES,
+) -> Tuple[List[str], str]:
+    """Return up to *max_rows* HTML-escaped activity-log lines from the SQLite DB.
+
+    Each line is formatted as ``"username | action | timestamp"`` (HTML-escaped)
+    so that callers can parse it the same way as the legacy flat-file format.
+
+    Parameters
+    ----------
+    db_path:
+        Filesystem path to the users SQLite database that contains the
+        ``activity_logs`` table.
+    max_rows:
+        Maximum number of rows to return.  Capped at ``MAX_LINES``.
+
+    Returns
+    -------
+    (lines, error_message)
+        *lines* is a list of safe, HTML-escaped strings.
+        *error_message* is ``""`` on success or a human-readable description.
+    """
+    import sqlite3 as _sqlite3
+
+    max_rows = min(max_rows, MAX_LINES)
+    try:
+        with _sqlite3.connect(db_path, timeout=5) as conn:
+            cur = conn.execute(
+                "SELECT username, action, timestamp FROM activity_logs ORDER BY id ASC LIMIT ?",
+                (max_rows,),
+            )
+            rows = cur.fetchall()
+    except _sqlite3.OperationalError as exc:
+        # Table doesn't exist yet (fresh DB before first init_db call)
+        logger.warning("read_activity_log_from_db: %s", exc)
+        return [], "Activity log table not found."
+    except Exception as exc:  # noqa: BLE001
+        logger.error("read_activity_log_from_db: %s", exc, exc_info=True)
+        return [], "Could not read activity log database."
+
+    lines: List[str] = []
+    for username, action, timestamp in rows:
+        raw = f"{username} | {action} | {timestamp}"
+        lines.append(_safe_line(raw))
+    return lines, ""
 
 
 def _build_bundle_viewer_html(
@@ -338,6 +385,7 @@ def build_support_bundle(
     system_data: dict,
     extra: "dict | None" = None,
     include: "set[str] | None" = None,
+    db_path: "str | None" = None,
 ) -> bytes:
     """Create an in-memory ZIP support bundle.
 
@@ -347,7 +395,7 @@ def build_support_bundle(
     - system.json
     - Any additional JSON files passed via ``extra`` (e.g. tuners.json)
     - Application log (+ available rotated copies)
-    - activity.log (+ available rotated copies)
+    - Activity log exported from the SQLite database (when *db_path* is provided)
 
     All content is sanitized before being written:
     * IP addresses (IPv4 and IPv6) → ``[IP-REDACTED]``
@@ -357,7 +405,7 @@ def build_support_bundle(
     * Secret key=value patterns (token=, password=, …) → ``***``
 
     Nothing outside the strict ``ALLOWED_LOGS`` allowlist is included for
-    log files.
+    flat-file logs.
 
     Parameters
     ----------
@@ -377,6 +425,10 @@ def build_support_bundle(
         available sections and log files are included, preserving the original
         behaviour.  Passing an empty set produces a bundle with only
         ``index.html``.
+    db_path:
+        Optional filesystem path to the users SQLite database.  When provided,
+        the ``activity_logs`` table is exported as ``logs/activity.log`` in the
+        ZIP bundle.
     """
     import json
     from datetime import datetime, timezone
@@ -463,6 +515,19 @@ def build_support_bundle(
                     log_texts[os.path.basename(candidate)] = content
                 except (PermissionError, OSError):
                     pass  # skip unreadable files silently
+
+        # --- activity log from SQLite ---
+        if db_path and _should_include("logs/activity"):
+            try:
+                raw_lines, _err = read_activity_log_from_db(db_path, max_rows=MAX_LINES)
+                # raw_lines are already HTML-escaped; undo that for plain-text export
+                plain_lines = [html.unescape(ln) + "\n" for ln in raw_lines]
+                sanitized_activity = [_sanitize_log_line(ln) for ln in plain_lines]
+                content = "".join(sanitized_activity)
+                zf.writestr("logs/activity.log", content)
+                log_texts["activity.log"] = content
+            except Exception:  # noqa: BLE001
+                pass  # skip if export fails
 
         # --- index.html — self-contained viewer ---
         viewer_html = _build_bundle_viewer_html(generated_at, sections, log_texts)

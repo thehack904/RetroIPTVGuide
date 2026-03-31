@@ -638,6 +638,12 @@ body.light .toggle-slider { background: rgba(0,0,0,0.18); }
 }
 .channel-order-item:hover { background: color-mix(in srgb, var(--input-bg) 70%, var(--primary-color) 8%); }
 .channel-order-item.dragging { opacity: 0.5; cursor: grabbing; }
+.channel-order-item--pinned {
+  cursor: default;
+  border-style: dashed;
+  opacity: 0.8;
+}
+.channel-order-item--pinned:hover { background: var(--input-bg); }
 .order-num {
   min-width: 20px;
   font-size: 0.82rem;
@@ -650,6 +656,11 @@ body.light .toggle-slider { background: rgba(0,0,0,0.18); }
   font-size: 1rem;
   color: var(--muted-color);
   cursor: grab;
+}
+.drag-handle--pinned {
+  cursor: default;
+  font-size: 0.95rem;
+  opacity: 0.7;
 }
 .channel-order-save-row {
   display: flex;

@@ -1,0 +1,528 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV NASA Imagery</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #03061a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer 16:9 frame ─────────────────────────────────────── */
+    .nasa-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: #000;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* CRT scanline overlay */
+    .nasa-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.06) 3px,
+        rgba(0,0,0,0.06) 4px
+      );
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    .nasa-header {
+      background: linear-gradient(90deg, #0c0e1a 0%, #0d1a3a 50%, #0c0e1a 100%);
+      border-bottom: 3px solid #1a4aaa;
+      padding: 0 clamp(12px, 2vw, 24px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(44px, 7.5vw, 90px);
+      z-index: 5;
+    }
+
+    .nasa-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+    }
+
+    .nasa-icon {
+      font-size: clamp(20px, 3.5vw, 48px);
+      line-height: 1;
+    }
+
+    .nasa-brand {
+      font-size: clamp(16px, 2.8vw, 38px);
+      font-weight: 400;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+    }
+
+    .nasa-brand strong { font-weight: 900; color: #fff; }
+
+    .nasa-header-right {
+      text-align: right;
+    }
+
+    .nasa-cycle-label {
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .nasa-updated {
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 700;
+      color: #6080c0;
+      margin-top: 0.15em;
+    }
+
+    /* ── Image area ───────────────────────────────────────────── */
+    .nasa-image-wrap {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+    }
+
+    .nasa-backdrop {
+      position: absolute;
+      inset: 0;
+      background-size: cover;
+      background-position: center;
+      filter: blur(22px) brightness(0.25) saturate(1.8);
+      transform: scale(1.1);
+      z-index: 0;
+    }
+
+    .nasa-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+      position: relative;
+      z-index: 1;
+      transition: opacity 0.7s ease;
+    }
+
+    .nasa-img.loading { opacity: 0; }
+
+    /* ── Dot indicators ──────────────────────────────────────── */
+    .nasa-dots {
+      position: absolute;
+      top: clamp(6px, 1vw, 14px);
+      right: clamp(8px, 1.2vw, 18px);
+      display: flex;
+      gap: clamp(4px, 0.6vw, 8px);
+      z-index: 5;
+    }
+
+    .nasa-dot {
+      width: clamp(6px, 0.9vw, 12px);
+      height: clamp(6px, 0.9vw, 12px);
+      border-radius: 50%;
+      background: rgba(255,255,255,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+      transition: background 0.3s;
+    }
+
+    .nasa-dot.active {
+      background: #ffd700;
+      box-shadow: 0 0 5px #ffd70099;
+      border-color: #ffd700;
+    }
+
+    /* ── Info overlay ─────────────────────────────────────────── */
+    .nasa-info {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: linear-gradient(0deg,
+        rgba(0,0,0,0.92) 0%,
+        rgba(0,0,0,0.65) 60%,
+        transparent 100%);
+      padding: clamp(16px, 4vw, 50px) clamp(12px, 2vw, 28px) clamp(8px, 1.4vw, 18px);
+      z-index: 3;
+    }
+
+    .nasa-img-title {
+      font-size: clamp(13px, 2.2vw, 30px);
+      font-weight: 900;
+      letter-spacing: 0.02em;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+      margin-bottom: clamp(3px, 0.4vw, 6px);
+    }
+
+    .nasa-img-meta {
+      font-size: clamp(9px, 1.2vw, 16px);
+      font-weight: 700;
+      color: #90b8f8;
+      letter-spacing: 0.04em;
+      margin-bottom: clamp(3px, 0.5vw, 8px);
+    }
+
+    .nasa-img-desc {
+      font-size: clamp(9px, 1.1vw, 14px);
+      font-weight: 400;
+      color: #d0deff;
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      max-width: 85%;
+      max-height: 12em;
+      transition: opacity 0.8s ease, max-height 1.0s ease 0.6s, margin-top 1.0s ease 0.6s;
+    }
+
+    .nasa-img-desc.fading {
+      opacity: 0;
+      max-height: 0;
+      margin-top: 0;
+    }
+
+    .nasa-header {
+      transition: opacity 0.8s ease, height 0.8s ease 0.4s, padding 0.8s ease 0.4s, border-bottom-width 0.8s ease 0.4s;
+    }
+
+    .nasa-header.faded {
+      opacity: 0;
+      pointer-events: none;
+      height: 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+      border-bottom-width: 0 !important;
+      overflow: hidden;
+    }
+
+    /* ── Progress bar ─────────────────────────────────────────── */
+    .nasa-progress-wrap {
+      height: clamp(3px, 0.4vw, 6px);
+      background: rgba(255,255,255,0.1);
+      flex-shrink: 0;
+      overflow: hidden;
+      z-index: 5;
+    }
+
+    .nasa-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #1a6aff, #00c8ff);
+      transition: width 0.5s linear;
+    }
+
+    /* ── Ticker ───────────────────────────────────────────────── */
+    .nasa-ticker-bar {
+      background: #04091f;
+      border-top: 2px solid #1a4aaa;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(22px, 3.5vw, 44px);
+      z-index: 5;
+    }
+
+    .nasa-ticker-label {
+      background: linear-gradient(90deg, #0d1a3a, #1a3a7a);
+      color: #ffd700;
+      font-size: clamp(8px, 1.2vw, 16px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0 clamp(8px, 1.2vw, 18px);
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #1a4aaa;
+    }
+
+    .nasa-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .nasa-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(8px, 1.2vw, 16px);
+      font-weight: 700;
+      color: #a8c8ff;
+      animation: nasa-scroll 40s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes nasa-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── No-data / loading ────────────────────────────────────── */
+    .nasa-loading {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(8px, 1.5vw, 20px);
+      background: radial-gradient(ellipse at center, #0a1a40 0%, #03061a 100%);
+    }
+
+    .nasa-loading-icon {
+      font-size: clamp(32px, 6vw, 80px);
+      animation: nasa-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes nasa-pulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50%       { opacity: 1.0; transform: scale(1.08); }
+    }
+
+    .nasa-loading-text {
+      font-size: clamp(10px, 1.5vw, 20px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #3a5aaa;
+    }
+
+    .nasa-loading-hint {
+      font-size: clamp(8px, 1.1vw, 14px);
+      color: #263a6a;
+      max-width: 28em;
+      text-align: center;
+      line-height: 1.55;
+    }
+  </style>
+</head>
+<body>
+<div class="nasa-frame" id="nasaFrame">
+  <div class="nasa-header">
+    <div class="nasa-header-left">
+      <span class="nasa-icon">&#127760;</span>
+      <span class="nasa-brand">RetroIPTV <strong>NASA</strong></span>
+    </div>
+    <div class="nasa-header-right">
+      <div class="nasa-cycle-label" id="nasaCycleLabel">Loading&hellip;</div>
+      <div class="nasa-updated" id="nasaUpdated"></div>
+    </div>
+  </div>
+  <div id="nasaBodyWrap" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
+  <div class="nasa-loading" id="nasaBody">
+    <div class="nasa-loading-icon">&#128301;</div>
+    <div class="nasa-loading-text">Loading NASA Images&hellip;</div>
+  </div>
+  </div>
+  <div class="nasa-progress-wrap">
+    <div class="nasa-progress-bar" id="nasaProgress" style="width:0%"></div>
+  </div>
+  <div class="nasa-ticker-bar">
+    <div class="nasa-ticker-label">NASA APOD:</div>
+    <div class="nasa-ticker-scroll">
+      <span class="nasa-ticker-track" id="nasaTicker">Astronomy Picture of the Day &bull; </span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var _refreshTimer  = null;
+  var _descFaded     = false;
+  var _descFadeTimer = null;
+
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDate(d) {
+    try {
+      return new Date(d + 'T12:00:00').toLocaleDateString('en-US', {
+        year: 'numeric', month: 'long', day: 'numeric'
+      });
+    } catch (e) { return d || ''; }
+  }
+
+  function buildDots(imageCount, imageIndex) {
+    var html = '';
+    for (var i = 0; i < Math.min(imageCount, 15); i++) {
+      html += '<div class="nasa-dot' + (i === imageIndex ? ' active' : '') + '"></div>';
+    }
+    return html;
+  }
+
+  function renderImage(data) {
+    // Cancel any pending fade timer from the previous render
+    if (_descFadeTimer !== null) { clearTimeout(_descFadeTimer); _descFadeTimer = null; }
+
+    var frame      = document.getElementById('nasaFrame');
+    var img        = data.image;
+    var imageCount = data.image_count  || 0;
+    var imageIndex = data.image_index  || 0;
+    var total      = data.total_images || 0;
+    var spi        = data.seconds_per_image || 180;
+    var interval   = data.interval || '15';
+    var msUntil    = data.ms_until_next || (spi * 1000);
+    var updated    = data.updated || '';
+
+    // Header
+    var cycleLabel = interval + '-Minute Cycle \u2022 ' + spi + 's per Image';
+    var cycleLabelEl = document.getElementById('nasaCycleLabel');
+    var updatedEl    = document.getElementById('nasaUpdated');
+    var headerEl     = document.getElementById('nasaFrame') && document.querySelector('.nasa-header');
+
+    if (cycleLabelEl) cycleLabelEl.textContent = cycleLabel;
+    if (updatedEl) updatedEl.textContent = updated
+      ? 'Updated: ' + new Date(updated).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+      : '';
+
+    // Restore header visibility when a new image loads (unless already faded permanently)
+    if (headerEl && !_descFaded) { headerEl.classList.remove('faded'); }
+
+    // Ticker
+    var tickBase = img
+      ? esc(img.title || '') + ' \u2014 ' + formatDate(img.date || '') +
+        ' \u2022 Image ' + (imageIndex + 1) + ' of ' + total +
+        ' \u2022 ' + interval + '-Min Cycle \u2022 '
+      : 'NASA Astronomy Picture of the Day \u2022 ';
+    document.getElementById('nasaTicker').innerHTML = tickBase.repeat(3);
+
+    // No image case
+    if (!img) {
+      document.getElementById('nasaBodyWrap').innerHTML =
+        '<div class="nasa-loading">' +
+        '<div class="nasa-loading-icon">&#128301;</div>' +
+        '<div class="nasa-loading-text">No Images Available</div>' +
+        '<div class="nasa-loading-hint">NASA Astronomy Pictures of the Day are temporarily unavailable. Check Virtual Channels settings or try again shortly.</div>' +
+        '</div>';
+      return;
+    }
+
+    var imgUrl  = img.url    || '';
+    var hdUrl   = img.hdurl  || img.url || '';
+    var title   = img.title  || 'Astronomy Picture of the Day';
+    var dateStr = formatDate(img.date || '');
+    var credit  = img.copyright ? '\u00a9 ' + esc(img.copyright) : 'NASA / Public Domain';
+    var desc    = (img.explanation || '').substring(0, 420);
+
+    var bodyHtml =
+      '<div class="nasa-image-wrap">' +
+        '<div class="nasa-backdrop" style="background-image:url(\'' + esc(imgUrl) + '\')"></div>' +
+        '<img class="nasa-img loading" id="nasaImg" src="' + esc(hdUrl) + '" alt="' + esc(title) + '">' +
+        '<div class="nasa-dots">' + buildDots(imageCount, imageIndex) + '</div>' +
+        '<div class="nasa-info">' +
+          '<div class="nasa-img-title">' + esc(title) + '</div>' +
+          '<div class="nasa-img-meta">' + dateStr + ' &nbsp;&bull;&nbsp; ' + credit + '</div>' +
+          (desc ? '<div class="nasa-img-desc">' + esc(desc) + '</div>' : '') +
+        '</div>' +
+      '</div>';
+
+    document.getElementById('nasaBodyWrap').innerHTML = bodyHtml;
+
+    // Fade-in image when loaded
+    setTimeout(function () {
+      var imgEl = document.getElementById('nasaImg');
+      if (!imgEl) return;
+      function showImg() { imgEl.classList.remove('loading'); }
+      if (imgEl.complete && imgEl.naturalWidth) { showImg(); }
+      else {
+        imgEl.addEventListener('load', showImg);
+        imgEl.addEventListener('error', showImg);
+      }
+    }, 0);
+
+    // Progress bar animation
+    var slotElapsed = spi - (msUntil / 1000);
+    var pct = Math.max(0, Math.min(100, (slotElapsed / spi) * 100));
+    var progressEl = document.getElementById('nasaProgress');
+    if (progressEl) {
+      progressEl.style.transition = 'none';
+      progressEl.style.width = pct.toFixed(1) + '%';
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          progressEl.style.transition = 'width ' + (msUntil / 1000).toFixed(1) + 's linear';
+          progressEl.style.width = '100%';
+        });
+      });
+    }
+
+    // ── Description & header fade-out after 30 s (wall-clock aware) ────────
+    // If the user tunes in mid-slot (elapsed > 30 s), fade immediately.
+    var descEl2   = document.querySelector('.nasa-img-desc');
+    var headerEl2 = document.querySelector('.nasa-header');
+    var fadeDelay = Math.max(0, 30000 - slotElapsed * 1000);
+    if (_descFaded || fadeDelay === 0) {
+      _descFaded = true;
+      if (descEl2)   { descEl2.classList.add('fading'); }
+      if (headerEl2) { headerEl2.classList.add('faded'); }
+    } else {
+      _descFadeTimer = setTimeout(function () {
+        _descFadeTimer = null;
+        _descFaded = true;
+        var dEl = document.querySelector('.nasa-img-desc');
+        var hEl = document.querySelector('.nasa-header');
+        if (dEl) { dEl.classList.add('fading'); }
+        if (hEl) { hEl.classList.add('faded'); }
+      }, fadeDelay);
+    }
+  }
+
+  function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    fetch('/api/nasa', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        renderImage(data);
+        var msUntil = (data.ms_until_next > 0) ? data.ms_until_next : 60 * 1000;
+        _refreshTimer = setTimeout(load, msUntil);
+      })
+      .catch(function (e) {
+        console.warn('[NASA] load failed:', e);
+        document.getElementById('nasaCycleLabel').textContent = 'Error loading data';
+        _refreshTimer = setTimeout(load, 60 * 1000);
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

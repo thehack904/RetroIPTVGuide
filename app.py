@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.2"
-APP_RELEASE_DATE = "2026-03-30"
+APP_VERSION = "v4.9.3-dev"
+APP_RELEASE_DATE = "2026-03-22"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -24,13 +24,6 @@ import subprocess
 from datetime import datetime, timezone, timedelta, date
 import threading
 
-# New import: vlc control helper (optional - keep existing integration compatibility)
-try:
-    import vlc_control
-except Exception as e:
-    vlc_control = None
-    # Log the import failure so we can see why it failed when the app starts
-    # logging.exception("Failed to import vlc_control: %s", e)
 
 # Pillow is used to stitch OSM map tiles into the static basemap PNGs for the
 # traffic demo.  It is optional — without it the browser falls back to Leaflet.
@@ -114,6 +107,7 @@ ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'st
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
 LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
+ICON_PACK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual', 'icon_pack')
 _ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
 
 login_manager = LoginManager()
@@ -162,17 +156,24 @@ def startup_status_public():
     })
 
 # ------------------- Activity Log -------------------
+# LOG_PATH is kept for legacy reference and to derive the logs directory path.
 LOG_PATH = os.path.join(DATA_DIR, "logs", "activity.log")
 
 def log_event(user, action):
     ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-        with open(LOG_PATH, "a") as f:
-            f.write(f"{user} | {action} | {ts}\n")
-    except (PermissionError, OSError) as e:
-        # Log to stderr if file logging fails
-        print(f"Warning: Could not write to log file: {e}", file=sys.stderr)
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            conn.execute(
+                "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+                (user, action, ts),
+            )
+            conn.commit()
+    except sqlite3.OperationalError:
+        # Table may not exist on older installs where init_db() hasn't run yet — auto-heal.
+        init_db()
+        log_event(user, action)
+    except Exception as e:  # noqa: BLE001
+        print(f"Warning: Could not write activity log to DB: {e}", file=sys.stderr)
 
 # ------------------- URL Validation -------------------
 def validate_tuner_url(url, label="Tuner"):
@@ -241,6 +242,61 @@ class User(UserMixin):
         self.last_login = last_login
 
 # ------------------- Init DBs -------------------
+def _migrate_activity_log(conn):
+    """Import entries from the legacy activity.log flat file into the activity_logs table.
+
+    The rename from ``activity.log`` → ``activity.log.migrated`` is performed
+    **first** (before any reads), so the operation is effectively atomic in
+    multi-worker deployments: only the worker that wins the rename proceeds
+    to import; all others see that the source file is gone and skip.
+
+    Returns the number of rows imported (0 if nothing to migrate).
+    """
+    if not os.path.isfile(LOG_PATH):
+        return 0
+    migrated_path = LOG_PATH + ".migrated"
+
+    # Fast-path: already migrated on a previous run.
+    if os.path.isfile(migrated_path):
+        return 0
+
+    # Atomically claim the file.  On POSIX, os.rename is atomic; if the file
+    # was already renamed by another worker, OSError is raised and we bail out.
+    # We check for the sentinel above as a fast-path to avoid a redundant rename
+    # attempt on every subsequent startup.
+    try:
+        os.rename(LOG_PATH, migrated_path)
+    except OSError:
+        # Another process already renamed it, or a permission error occurred.
+        return 0
+
+    rows = []
+    skipped = 0
+    try:
+        with open(migrated_path, "r", encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                parts = line.strip().split(" | ")
+                if len(parts) == 3:
+                    rows.append((parts[0], parts[1], parts[2]))
+                elif line.strip():
+                    skipped += 1
+    except OSError:
+        return 0
+
+    if skipped:
+        print(
+            f"Warning: _migrate_activity_log: skipped {skipped} malformed line(s) from {LOG_PATH}",
+            file=sys.stderr,
+        )
+    if rows:
+        conn.executemany(
+            "INSERT INTO activity_logs (username, action, timestamp) VALUES (?, ?, ?)",
+            rows,
+        )
+        conn.commit()
+    return len(rows)
+
+
 def init_db():
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL;")
@@ -249,6 +305,11 @@ def init_db():
                      (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT UNIQUE, password TEXT, last_login TEXT)''')
         c.execute('''CREATE TABLE IF NOT EXISTS user_preferences
                      (username TEXT PRIMARY KEY, prefs TEXT)''')
+        c.execute('''CREATE TABLE IF NOT EXISTS activity_logs
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      username TEXT NOT NULL,
+                      action TEXT NOT NULL,
+                      timestamp TEXT NOT NULL)''')
         conn.commit()
 
         # Add last_login column if it doesn't exist (for existing databases)
@@ -264,6 +325,20 @@ def init_db():
             conn.commit()
         except sqlite3.OperationalError:
             pass
+
+        # Migrate entries from the legacy activity.log flat file (one-time migration).
+        migrated_count = _migrate_activity_log(conn)
+        if migrated_count > 0:
+            try:
+                from utils.startup_diag import record_startup_event as _rse
+                _rse(
+                    "info",
+                    "activity_log_migration",
+                    f"Imported {migrated_count} entr{'y' if migrated_count == 1 else 'ies'} "
+                    f"from legacy activity.log into SQLite activity_logs table.",
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
 def add_user(username, password):
     password_hash = generate_password_hash(password)
@@ -319,7 +394,7 @@ def init_tuners_db():
         # and the per-channel test_text keys for all virtual channels.  This clears any
         # stale "This is test Text!" values that were stored during early development.
         c.execute("DELETE FROM settings WHERE key='overlay.test_text'")
-        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status', 'virtual.traffic'):
+        for _ch_id in ('virtual.news', 'virtual.weather', 'virtual.status', 'virtual.traffic', 'virtual.updates', 'virtual.sports', 'virtual.nasa'):
             c.execute("DELETE FROM settings WHERE key=?",
                       (f"overlay.{_ch_id}.test_text",))
         conn.commit()
@@ -775,6 +850,61 @@ VIRTUAL_CHANNELS = [
         'overlay_type': 'traffic',
         'overlay_refresh_seconds': 120,
     },
+    {
+        'name': 'Updates & Announcements',
+        'logo': '/static/logos/virtual/updates.svg',
+        'url': '',
+        'tvg_id': 'virtual.updates',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/updates.mp4',
+        'overlay_type': 'updates',
+        'overlay_refresh_seconds': 1800,
+    },
+    {
+        'name': 'Sports Scores',
+        'logo': '/static/logos/virtual/sports.svg',
+        'url': '',
+        'tvg_id': 'virtual.sports',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/sports.mp4',
+        'overlay_type': 'sports',
+        'overlay_refresh_seconds': 60,
+    },
+    {
+        'name': 'NASA Imagery',
+        'logo': '/static/logos/virtual/nasa.svg',
+        'url': '',
+        'tvg_id': 'virtual.nasa',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/nasa.mp4',
+        'overlay_type': 'nasa',
+        'overlay_refresh_seconds': 900,
+    },
+    {
+        'name': 'Channel Mix',
+        'logo': '/static/logos/virtual/channel_mix.svg',
+        'url': '',
+        'tvg_id': 'virtual.channel_mix',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '',
+        'overlay_type': 'channel_mix',
+        'overlay_refresh_seconds': 30,
+    },
+    {
+        'name': 'On This Day',
+        'logo': '/static/logos/virtual/on_this_day.svg',
+        'url': '',
+        'tvg_id': 'virtual.on_this_day',
+        'is_virtual': True,
+        'playback_mode': 'local_loop',
+        'loop_asset': '/static/loops/on_this_day.mp4',
+        'overlay_type': 'on_this_day',
+        'overlay_refresh_seconds': 30,
+    },
 ]
 
 def get_virtual_channel_settings():
@@ -964,6 +1094,570 @@ def save_news_feed_url(url):
     compatibility; prefer :func:`save_news_feed_urls` for new code.
     """
     save_news_feed_urls([url])
+
+
+# ── Sports channel: available leagues ────────────────────────────────────────
+SPORTS_LEAGUES = [
+    {'id': 'nfl',   'name': 'NFL Football',       'sport': 'football',   'league_slug': 'nfl',                     'emoji': '🏈'},
+    {'id': 'nba',   'name': 'NBA Basketball',     'sport': 'basketball', 'league_slug': 'nba',                     'emoji': '🏀'},
+    {'id': 'mlb',   'name': 'MLB Baseball',       'sport': 'baseball',   'league_slug': 'mlb',                     'emoji': '⚾'},
+    {'id': 'nhl',   'name': 'NHL Hockey',         'sport': 'hockey',     'league_slug': 'nhl',                     'emoji': '🏒'},
+    {'id': 'mls',   'name': 'MLS Soccer',         'sport': 'soccer',     'league_slug': 'usa.1',                   'emoji': '⚽'},
+    {'id': 'ncaaf', 'name': 'College Football',   'sport': 'football',   'league_slug': 'college-football',        'emoji': '🏈'},
+    {'id': 'ncaab', 'name': 'College Basketball', 'sport': 'basketball', 'league_slug': 'mens-college-basketball', 'emoji': '🏀'},
+]
+
+_SPORTS_LEAGUE_BY_ID = {lg['id']: lg for lg in SPORTS_LEAGUES}
+
+
+def get_sports_mode():
+    """Return the sports channel display mode: 'scores' (default) or 'rss'."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='sports.mode'")
+            row = c.fetchone()
+            if row and row[0] in ('rss', 'scores'):
+                return row[0]
+    except Exception:
+        logging.exception("get_sports_mode failed")
+    return 'scores'
+
+
+def save_sports_mode(mode):
+    """Persist sports channel display mode ('rss' or 'scores')."""
+    if mode not in ('rss', 'scores'):
+        raise ValueError(f"Invalid sports mode: {mode!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', ?)", (mode,))
+            conn.commit()
+    except Exception:
+        logging.exception("save_sports_mode failed")
+        raise
+
+
+def get_sports_feed_urls():
+    """Return list of configured RSS/Atom sports feed URLs (up to 6, non-empty strings).
+
+    Reads numbered keys ``sports.rss_url_1`` … ``sports.rss_url_6``.
+    """
+    urls = []
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for i in range(1, 7):
+                c.execute("SELECT value FROM settings WHERE key=?", (f'sports.rss_url_{i}',))
+                row = c.fetchone()
+                if row and row[0]:
+                    urls.append(row[0])
+    except Exception:
+        logging.exception("get_sports_feed_urls failed")
+    return urls
+
+
+def save_sports_feed_urls(urls):
+    """Persist up to 6 RSS/Atom sports feed URLs.
+
+    ``urls`` is an iterable of URL strings (may be empty or contain blanks which
+    are silently skipped after stripping).  Raises ``ValueError`` for any URL
+    with an invalid scheme.
+    """
+    validated = []
+    for raw in list(urls)[:6]:
+        url = str(raw).strip()
+        if url:
+            parsed = urlparse(url)
+            if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+                raise ValueError(f"Invalid feed URL: {url!r}. Must be an http or https URL with a valid hostname.")
+            validated.append(url)
+        else:
+            validated.append('')
+    while len(validated) < 6:
+        validated.append('')
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for i, url in enumerate(validated, 1):
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f'sports.rss_url_{i}', url))
+            conn.commit()
+    except Exception:
+        logging.exception("save_sports_feed_urls failed")
+        raise
+
+
+def get_sports_config():
+    """Return sports channel configuration dict:
+        {
+            'mode':    'scores' | 'rss',
+            'leagues': {league_id: bool, ...},
+        }
+    Defaults: mode='scores', NFL/NBA/MLB/NHL enabled.
+    """
+    mode = get_sports_mode()
+    league_defaults = {lg['id']: lg['id'] in ('nfl', 'nba', 'mlb', 'nhl') for lg in SPORTS_LEAGUES}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for lg_id in league_defaults:
+                c.execute("SELECT value FROM settings WHERE key=?", (f'sports.league.{lg_id}',))
+                row = c.fetchone()
+                if row is not None:
+                    league_defaults[lg_id] = row[0] == '1'
+    except Exception:
+        logging.exception("get_sports_config failed")
+    return {'mode': mode, 'leagues': league_defaults}
+
+
+def save_sports_config(cfg):
+    """Persist sports league enabled states.  cfg maps league_id -> bool."""
+    valid_ids = {lg['id'] for lg in SPORTS_LEAGUES}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for lg_id, enabled in cfg.items():
+                if lg_id not in valid_ids:
+                    continue
+                c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                          (f'sports.league.{lg_id}', '1' if enabled else '0'))
+            conn.commit()
+    except Exception:
+        logging.exception("save_sports_config failed")
+        raise
+
+
+def fetch_espn_scoreboard(sport, league_slug):
+    """Fetch today's scoreboard from ESPN's public API.
+
+    Returns a list of game dicts:
+        {home_team, home_abbr, home_score,
+         away_team, away_abbr, away_score,
+         status_text, status_state, clock}
+
+    ``status_state`` is one of: 'pre' (scheduled), 'in' (live), 'post' (final).
+    Returns an empty list on any error.
+    """
+    url = f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_slug}/scoreboard'
+    try:
+        resp = requests.get(url, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        logging.exception("fetch_espn_scoreboard failed for %s/%s", sport, league_slug)
+        return []
+
+    games = []
+    for event in data.get('events', []):
+        competitions = event.get('competitions', [])
+        if not competitions:
+            continue
+        comp = competitions[0]
+        status = event.get('status', {})
+        status_type = status.get('type', {})
+        raw_state = status_type.get('state', 'pre')   # 'pre' | 'in' | 'post'
+        clock_str  = status.get('displayClock', '')
+        period_str = status_type.get('description', '')
+
+        home = {'team': '', 'abbr': '', 'score': ''}
+        away = {'team': '', 'abbr': '', 'score': ''}
+        for comp_team in comp.get('competitors', []):
+            side = 'home' if comp_team.get('homeAway') == 'home' else 'away'
+            team_info = comp_team.get('team', {})
+            target = home if side == 'home' else away
+            target['team']  = team_info.get('displayName', team_info.get('name', ''))
+            target['abbr']  = team_info.get('abbreviation', '')
+            target['score'] = comp_team.get('score', '')
+
+        if raw_state == 'pre':
+            # For pre-game, show the scheduled start time in Eastern Time
+            start_date_str = event.get('date', '')
+            try:
+                start_utc = datetime.fromisoformat(start_date_str.replace('Z', '+00:00'))
+                try:
+                    from zoneinfo import ZoneInfo
+                    et_zone = ZoneInfo('America/New_York')
+                    start_local = start_utc.astimezone(et_zone)
+                    tz_label = 'EDT' if start_local.utcoffset().seconds // 3600 == 20 else 'EST'
+                except Exception:
+                    # zoneinfo unavailable — fall back to fixed UTC-5 offset
+                    start_local = start_utc - timedelta(hours=5)
+                    tz_label = 'ET'
+                clock_str = start_local.strftime('%-I:%M %p ') + tz_label
+            except Exception:
+                clock_str = ''
+            status_text = clock_str or 'Scheduled'
+        elif raw_state == 'in':
+            status_text = period_str or clock_str or 'Live'
+        else:
+            status_text = 'Final'
+
+        games.append({
+            'home_team':   home['team'],
+            'home_abbr':   home['abbr'],
+            'home_score':  home['score'],
+            'away_team':   away['team'],
+            'away_abbr':   away['abbr'],
+            'away_score':  away['score'],
+            'status_text': status_text,
+            'status_state': raw_state,
+            'clock':       clock_str,
+        })
+    return games
+
+
+# ── NASA Imagery channel helpers ──────────────────────────────────────────────
+
+# Module-level APOD image cache.
+# Structure: { cache_key: (List[Dict], float) }
+#   cache_key  = "{interval}:{image_count}:{api_key}"
+#   List[Dict] = raw APOD image objects from the NASA API
+#   float      = unix timestamp when the cache was populated
+_NASA_APOD_CACHE: dict = {}
+
+
+def get_nasa_interval():
+    """Return the NASA image-display interval in minutes: '15' or '30'. Default '15'."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='nasa.interval'")
+            row = c.fetchone()
+            if row and row[0] in ('15', '30'):
+                return row[0]
+    except Exception:
+        logging.exception("get_nasa_interval failed")
+    return '15'
+
+
+def save_nasa_interval(interval):
+    """Persist NASA image-display interval ('15' or '30' minutes)."""
+    if interval not in ('15', '30'):
+        raise ValueError(f"Invalid NASA interval: {interval!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('nasa.interval', ?)",
+                (interval,)
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_nasa_interval failed")
+
+
+def get_nasa_api_key():
+    """Return the configured NASA API key, or 'DEMO_KEY' as default."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='nasa.api_key'")
+            row = c.fetchone()
+            if row and row[0]:
+                return row[0].strip()
+    except Exception:
+        logging.exception("get_nasa_api_key failed")
+    return 'DEMO_KEY'
+
+
+def save_nasa_api_key(api_key):
+    """Persist NASA API key (empty string resets to DEMO_KEY)."""
+    api_key = (api_key or '').strip()
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES ('nasa.api_key', ?)",
+                (api_key,)
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_nasa_api_key failed")
+
+
+def get_nasa_image_count():
+    """Return the number of APOD images to cycle (1–15). Default 5 for 15-min, 10 for 30-min.
+
+    The stored value is a plain integer string.  The per-image display time is
+    automatically calculated as ``cycle_minutes * 60 / image_count`` seconds,
+    so the full cycle always fills the selected cycle duration:
+        15-min / 5 images  → 180 s (3 min) per image
+        15-min / 15 images →  60 s (1 min) per image
+        30-min / 10 images → 180 s (3 min) per image
+        30-min / 15 images → 120 s (2 min) per image
+    """
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='nasa.image_count'")
+            row = c.fetchone()
+            if row:
+                val = int(row[0])
+                if 1 <= val <= 15:
+                    return val
+    except Exception:
+        logging.exception("get_nasa_image_count failed")
+    # Sensible defaults: 5 for 15-min mode, 10 for 30-min mode.  Since the
+    # interval is read separately, return a single global default here; the
+    # caller picks the right contextual default if needed.
+    return None   # None → caller uses interval-specific default
+
+
+def save_nasa_image_count(count):
+    """Persist NASA image count (1–15, or None to reset to the interval default)."""
+    if count is not None:
+        count = int(count)
+        if not (1 <= count <= 15):
+            raise ValueError(f"Invalid NASA image count: {count!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            if count is None:
+                conn.execute("DELETE FROM settings WHERE key='nasa.image_count'")
+            else:
+                conn.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES ('nasa.image_count', ?)",
+                    (str(count),)
+                )
+            conn.commit()
+    except Exception:
+        logging.exception("save_nasa_image_count failed")
+
+
+def get_nasa_config():
+    """Return NASA channel configuration dict.
+
+    ``image_count`` is the resolved count (interval-specific default applied when
+    no override has been stored).
+    ``seconds_per_image`` is derived automatically from cycle_minutes / image_count.
+    """
+    interval = get_nasa_interval()
+    cycle_minutes = int(interval)
+    raw_count = get_nasa_image_count()
+    # Apply interval-specific defaults (5 for 15-min, 10 for 30-min)
+    if raw_count is None:
+        image_count = 5 if cycle_minutes == 15 else 10
+    else:
+        image_count = raw_count
+    seconds_per_image = (cycle_minutes * 60) // image_count
+    return {
+        'interval':          interval,
+        'image_count':       image_count,
+        'seconds_per_image': seconds_per_image,
+        'api_key':           get_nasa_api_key(),
+    }
+
+
+def _fetch_nasa_apod_images(count, api_key='DEMO_KEY'):
+    """Fetch *count* random APOD images from the NASA API.
+
+    Returns a list of image dicts (``media_type == 'image'`` only).
+    Returns an empty list on any error so the overlay degrades gracefully.
+    """
+    url = (
+        f'https://api.nasa.gov/planetary/apod'
+        f'?api_key={api_key}&count={count}&thumbs=true'
+    )
+    try:
+        resp = requests.get(url, timeout=15)
+        if resp.status_code == 200:
+            data = resp.json()
+            images = [
+                d for d in (data if isinstance(data, list) else [data])
+                if d.get('media_type') == 'image'
+            ]
+            return images
+        logging.warning("NASA APOD API returned %s", resp.status_code)
+    except Exception:
+        logging.exception("_fetch_nasa_apod_images failed")
+    return []
+
+
+# ── On This Day channel helpers ───────────────────────────────────────────────
+
+# Sources that the On This Day channel can pull from.
+# Each entry describes a Wikipedia REST API sub-endpoint.
+ON_THIS_DAY_SOURCES = [
+    {
+        'id':            'wikipedia_events',
+        'label':         'Wikipedia \u2014 Historical Events',
+        'category':      'event',
+        'api_type':      'events',
+        'wiki_section':  'Events',
+    },
+    {
+        'id':            'wikipedia_births',
+        'label':         'Wikipedia \u2014 Notable Births',
+        'category':      'birth',
+        'api_type':      'births',
+        'wiki_section':  'Births',
+    },
+    {
+        'id':            'wikipedia_deaths',
+        'label':         'Wikipedia \u2014 Notable Deaths',
+        'category':      'death',
+        'api_type':      'deaths',
+        'wiki_section':  'Deaths',
+    },
+]
+
+# Module-level cache for Wikipedia On This Day events.
+# Structure: { (api_type, month, day): (List[Dict], float) }
+#   List[Dict] = normalised event dicts
+#   float      = unix timestamp when the cache was populated
+_ON_THIS_DAY_CACHE: dict = {}
+
+# How long to keep the cache before re-fetching (6 hours)
+_ON_THIS_DAY_CACHE_TTL = 6 * 3600
+
+# Seconds each event is displayed (wall-clock aligned)
+_ON_THIS_DAY_SECONDS_PER_EVENT = 30
+
+
+def get_on_this_day_source_enabled(source_id):
+    """Return True if the given On This Day source is enabled (default: True)."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?",
+                      (f'on_this_day.source.{source_id}.enabled',))
+            row = c.fetchone()
+            if row is None:
+                return True
+            return row[0] != '0'
+    except Exception:
+        logging.exception("get_on_this_day_source_enabled failed")
+        return True
+
+
+def save_on_this_day_source_enabled(source_id, enabled):
+    """Persist the enabled state for an On This Day source."""
+    valid_ids = {s['id'] for s in ON_THIS_DAY_SOURCES}
+    if source_id not in valid_ids:
+        raise ValueError(f"Unknown On This Day source: {source_id!r}")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (f'on_this_day.source.{source_id}.enabled', '1' if enabled else '0'),
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_on_this_day_source_enabled failed")
+        raise
+
+
+def get_on_this_day_custom_events(source_id):
+    """Return the list of custom events for the given source (empty list by default).
+
+    Each event is a dict: {'year': str, 'text': str, 'category': str}.
+    """
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key=?",
+                      (f'on_this_day.custom.{source_id}',))
+            row = c.fetchone()
+            if row is None:
+                return []
+            return _json.loads(row[0]) or []
+    except Exception:
+        logging.exception("get_on_this_day_custom_events failed")
+        return []
+
+
+def save_on_this_day_custom_events(source_id, events):
+    """Persist custom events for the given source.
+
+    ``events`` must be a list of dicts with at least 'year' and 'text' keys.
+    """
+    valid_ids = {s['id'] for s in ON_THIS_DAY_SOURCES}
+    if source_id not in valid_ids:
+        raise ValueError(f"Unknown On This Day source: {source_id!r}")
+    if not isinstance(events, list):
+        raise ValueError("events must be a list")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                (f'on_this_day.custom.{source_id}', _json.dumps(events)),
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_on_this_day_custom_events failed")
+        raise
+
+
+def get_on_this_day_config():
+    """Return a config dict describing all On This Day sources and their state.
+
+    Returns a dict with:
+      sources           – list of source dicts (id, label, category, enabled,
+                          custom_events, wiki_url)
+      seconds_per_event – how long each event is displayed
+    """
+    now = datetime.now(timezone.utc)
+    enriched = []
+    for src in ON_THIS_DAY_SOURCES:
+        enriched.append({
+            **src,
+            'enabled':       get_on_this_day_source_enabled(src['id']),
+            'custom_events': get_on_this_day_custom_events(src['id']),
+            'wiki_url': (
+                f"https://en.wikipedia.org/api/rest_v1/feed/onthisday"
+                f"/{src['api_type']}/{now.month:02d}/{now.day:02d}"
+            ),
+        })
+    return {
+        'sources':           enriched,
+        'seconds_per_event': _ON_THIS_DAY_SECONDS_PER_EVENT,
+    }
+
+
+def _fetch_on_this_day_from_wikipedia(api_type, month, day):
+    """Fetch On This Day events from the Wikipedia REST API (with 6-hour cache).
+
+    Returns a list of normalised event dicts:
+      {'year': str, 'text': str, 'category': str}
+
+    Returns an empty list on any error so the overlay degrades gracefully.
+    """
+    global _ON_THIS_DAY_CACHE
+    cache_key = (api_type, month, day)
+    cached = _ON_THIS_DAY_CACHE.get(cache_key)
+    now_ts = time.time()
+    if cached:
+        events, cached_at = cached
+        if now_ts - cached_at < _ON_THIS_DAY_CACHE_TTL:
+            return events
+
+    url = (
+        f"https://en.wikipedia.org/api/rest_v1/feed/onthisday"
+        f"/{api_type}/{month:02d}/{day:02d}"
+    )
+    try:
+        resp = requests.get(url, timeout=15, headers={
+            'User-Agent': 'RetroIPTVGuide/1.0 (https://github.com/thehack904/RetroIPTVGuide)',
+            'Accept': 'application/json',
+        })
+        if resp.status_code == 200:
+            data = resp.json()
+            raw_list = data.get(api_type, [])
+            category_map = {'events': 'event', 'births': 'birth', 'deaths': 'death'}
+            category = category_map.get(api_type, api_type)
+            events = []
+            for item in raw_list:
+                year = str(item.get('year', ''))
+                text = item.get('text', '').strip()
+                if year and text:
+                    events.append({'year': year, 'text': text, 'category': category})
+            _ON_THIS_DAY_CACHE[cache_key] = (events, now_ts)
+            return events
+        logging.warning("Wikipedia On This Day API returned %s for %s", resp.status_code, url)
+    except Exception:
+        logging.exception("_fetch_on_this_day_from_wikipedia failed for %s", url)
+    return []
+
 
 def get_current_feed_state(feed_count):
     """Return ``(feed_index, ms_until_next_feed, elapsed_in_slot_ms)`` driven entirely by wall-clock time.
@@ -2011,11 +2705,74 @@ def list_audio_files():
 
 # Default logo paths for each virtual channel (used to restore after a reset)
 _DEFAULT_CHANNEL_LOGOS = {
-    'virtual.news':    '/static/logos/virtual/news.svg',
-    'virtual.weather': '/static/logos/virtual/weather.svg',
-    'virtual.status':  '/static/logos/virtual/status.svg',
-    'virtual.traffic': '/static/logos/virtual/traffic.svg',
+    'virtual.news':         '/static/logos/virtual/news.svg',
+    'virtual.weather':      '/static/logos/virtual/weather.svg',
+    'virtual.status':       '/static/logos/virtual/status.svg',
+    'virtual.traffic':      '/static/logos/virtual/traffic.svg',
+    'virtual.updates':      '/static/logos/virtual/updates.svg',
+    'virtual.sports':       '/static/logos/virtual/sports.svg',
+    'virtual.nasa':         '/static/logos/virtual/nasa.svg',
+    'virtual.channel_mix':  '/static/logos/virtual/channel_mix.svg',
+    'virtual.on_this_day':  '/static/logos/virtual/on_this_day.svg',
 }
+
+# Icon pack logo paths (stored in static/logos/virtual/icon_pack/)
+_ICON_PACK_LOGOS = {
+    'virtual.news':         '/static/logos/virtual/icon_pack/news.png',
+    'virtual.weather':      '/static/logos/virtual/icon_pack/weather.png',
+    'virtual.status':       '/static/logos/virtual/icon_pack/status.png',
+    'virtual.traffic':      '/static/logos/virtual/icon_pack/traffic.png',
+    'virtual.updates':      '/static/logos/virtual/icon_pack/updates.png',
+    'virtual.sports':       '/static/logos/virtual/icon_pack/sports.png',
+    'virtual.nasa':         '/static/logos/virtual/icon_pack/nasa.png',
+    'virtual.channel_mix':  '/static/logos/virtual/icon_pack/channel_mix.png',
+    'virtual.on_this_day':  '/static/logos/virtual/icon_pack/on_this_day.png',
+}
+
+
+def get_use_icon_pack():
+    """Return True if the icon pack is enabled for virtual channel logos."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='virtual_channel.use_icon_pack'")
+            row = c.fetchone()
+            return row[0] == '1' if row else False
+    except Exception:
+        logging.exception("get_use_icon_pack failed")
+        return False
+
+
+def set_use_icon_pack(enabled):
+    """Persist the icon pack preference (True = use icon pack, False = use default SVG logos)."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                      ('virtual_channel.use_icon_pack', '1' if enabled else '0'))
+            conn.commit()
+    except Exception:
+        logging.exception("set_use_icon_pack failed")
+        raise
+
+
+def _resolve_channel_logo(tvg_id, default_logo, custom_filename, use_icon_pack):
+    """Return the effective logo URL for a channel, applying priority:
+    1. User-uploaded custom logo (highest priority)
+    2. Icon pack logo (when enabled and file exists on disk)
+    3. Default SVG logo (fallback)
+    """
+    if custom_filename:
+        return f'/static/logos/virtual/{custom_filename}'
+    if use_icon_pack:
+        pack_url = _ICON_PACK_LOGOS.get(tvg_id)
+        if pack_url:
+            filename = pack_url.rsplit('/', 1)[-1]
+            abs_path = os.path.join(ICON_PACK_DIR, filename)
+            if os.path.isfile(abs_path):
+                return pack_url
+    return default_logo
+
 
 def get_channel_custom_logo(tvg_id):
     """Return the custom logo filename for a virtual channel, or '' if none is set."""
@@ -2391,8 +3148,110 @@ def get_virtual_channel_order():
         logging.exception("get_virtual_channel_order failed")
     return None
 
+# ------------------- Channel Mix -------------------
+
+_CHANNEL_MIX_VALID_IDS = frozenset(
+    ch['tvg_id'] for ch in VIRTUAL_CHANNELS if ch['tvg_id'] != 'virtual.channel_mix'
+)
+
+def get_channel_mix_config():
+    """Return the Channel Mix configuration.
+
+    Returns a dict with:
+      - 'name': display name (str, defaults to 'Channel Mix')
+      - 'channels': list of dicts with 'tvg_id' and 'duration_minutes' (int)
+    """
+    result = {'name': 'Channel Mix', 'channels': []}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='channel_mix.name'")
+            row = c.fetchone()
+            if row and row[0]:
+                result['name'] = row[0]
+            c.execute("SELECT value FROM settings WHERE key='channel_mix.channels'")
+            row = c.fetchone()
+            if row and row[0]:
+                channels = _json.loads(row[0])
+                valid = []
+                for entry in channels:
+                    if entry.get('tvg_id') in _CHANNEL_MIX_VALID_IDS:
+                        minutes = int(entry.get('duration_minutes', 120))
+                        minutes = max(1, min(minutes, 1440))
+                        valid.append({'tvg_id': entry['tvg_id'], 'duration_minutes': minutes})
+                result['channels'] = valid
+    except Exception:
+        logging.exception("get_channel_mix_config failed, using defaults")
+    return result
+
+def save_channel_mix_config(config):
+    """Persist Channel Mix configuration.
+
+    config must be a dict with optional 'name' (str) and 'channels' list.
+    Each channel entry must have 'tvg_id' (one of the non-mix virtual channels)
+    and 'duration_minutes' (int, 1–1440).
+    """
+    name = str(config.get('name', '')).strip()
+    if not name:
+        name = 'Channel Mix'
+    if len(name) > 120:
+        raise ValueError("Channel Mix name must be 120 characters or fewer")
+    channels = config.get('channels', [])
+    validated = []
+    for entry in channels:
+        tvg_id = str(entry.get('tvg_id', '')).strip()
+        if tvg_id not in _CHANNEL_MIX_VALID_IDS:
+            raise ValueError(f"Invalid channel ID for Channel Mix: {tvg_id!r}")
+        minutes = int(entry.get('duration_minutes', 120))
+        if minutes < 1 or minutes > 1440:
+            raise ValueError(f"duration_minutes must be 1–1440, got {minutes}")
+        validated.append({'tvg_id': tvg_id, 'duration_minutes': minutes})
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('channel_mix.name', ?)", (name,))
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('channel_mix.channels', ?)",
+                      (_json.dumps(validated),))
+            conn.commit()
+    except ValueError:
+        raise
+    except Exception:
+        logging.exception("save_channel_mix_config failed")
+        raise
+
+def _get_active_channel_mix_slot(channels):
+    """Return (active_tvg_id, seconds_remaining) for the channel mix based on wall-clock time.
+
+    Uses Unix timestamp modulo the total cycle duration so all viewers are
+    always in sync regardless of when they tuned in.  Returns (None, 0) when
+    no channels are configured.
+    """
+    if not channels:
+        return None, 0
+    total_seconds = sum(ch['duration_minutes'] * 60 for ch in channels)
+    if total_seconds == 0:
+        return None, 0
+    offset = int(time.time()) % total_seconds
+    elapsed = 0
+    for ch in channels:
+        slot_seconds = ch['duration_minutes'] * 60
+        if offset < elapsed + slot_seconds:
+            return ch['tvg_id'], elapsed + slot_seconds - offset
+        elapsed += slot_seconds
+    # Fallback (should not happen, but defend against floating-point edge cases)
+    return channels[0]['tvg_id'], channels[0]['duration_minutes'] * 60
+
+
+
 def save_virtual_channel_order(order):
-    """Persist virtual channel order.  order is a list of tvg_id strings."""
+    """Persist virtual channel order.  order is a list of tvg_id strings.
+    Channel Mix is always moved to the end before saving so it remains last
+    regardless of what the caller supplies."""
+    # Enforce Channel Mix last: remove it from wherever it sits, then re-append
+    without_mix = [tid for tid in order if tid != 'virtual.channel_mix']
+    if 'virtual.channel_mix' in order:
+        without_mix.append('virtual.channel_mix')
+    order = without_mix
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -2405,33 +3264,50 @@ def save_virtual_channel_order(order):
 
 def get_virtual_channels():
     """Return the list of virtual channel definitions in the user-defined order.
-    Any channel that has a custom logo uploaded will have its logo field updated."""
+    Logo priority: custom upload > icon pack (when enabled) > default SVG.
+    Channel Mix is always pinned as the last channel regardless of saved order or
+    future additions to VIRTUAL_CHANNELS."""
     import copy
     channels = copy.deepcopy(VIRTUAL_CHANNELS)
-    # Apply custom logos where set
+    use_icon_pack = get_use_icon_pack()
+    # Apply effective logos
     for ch in channels:
         custom = get_channel_custom_logo(ch['tvg_id'])
-        if custom:
-            ch['logo'] = f'/static/logos/virtual/{custom}'
+        ch['logo'] = _resolve_channel_logo(ch['tvg_id'], ch['logo'], custom, use_icon_pack)
     order = get_virtual_channel_order()
     if order:
         id_to_ch = {ch['tvg_id']: ch for ch in channels}
-        ordered = [id_to_ch[tvg_id] for tvg_id in order if tvg_id in id_to_ch]
-        # append any channels not present in the saved order (e.g. newly added)
-        seen = set(order)
+        # Build ordered list excluding Channel Mix (pinned last)
+        ordered = [id_to_ch[tvg_id] for tvg_id in order
+                   if tvg_id in id_to_ch and tvg_id != 'virtual.channel_mix']
+        # Append any channels not present in the saved order (e.g. newly added),
+        # still excluding Channel Mix
+        seen = set(order) | {'virtual.channel_mix'}
         ordered += [ch for ch in channels if ch['tvg_id'] not in seen]
+        # Always append Channel Mix last
+        if 'virtual.channel_mix' in id_to_ch:
+            ordered.append(id_to_ch['virtual.channel_mix'])
         return ordered
-    return channels
+    # Default VIRTUAL_CHANNELS order: ensure Channel Mix is still last
+    non_mix, mix = [], []
+    for ch in channels:
+        (mix if ch['tvg_id'] == 'virtual.channel_mix' else non_mix).append(ch)
+    return non_mix + mix
 
 def get_virtual_epg(grid_start, hours_span=6):
     """Generate synthetic EPG entries for virtual channels spanning the grid window."""
     epg = {}
     grid_end = grid_start + timedelta(hours=hours_span)
     programs_by_tvg_id = {
-        'virtual.news':    'News Now',
-        'virtual.weather': 'Local Weather',
-        'virtual.status':  'System Status',
-        'virtual.traffic': 'Traffic Now',
+        'virtual.news':        'News Now',
+        'virtual.weather':     'Local Weather',
+        'virtual.status':      'System Status',
+        'virtual.traffic':     'Traffic Now',
+        'virtual.updates':     'Updates & Announcements',
+        'virtual.sports':      'Sports Scores',
+        'virtual.nasa':        'NASA Imagery',
+        'virtual.channel_mix': 'Channel Mix',
+        'virtual.on_this_day': 'On This Day',
     }
     for tvg_id, title in programs_by_tvg_id.items():
         slots = []
@@ -2500,27 +3376,6 @@ def login():
     next_url = request.args.get('next') or ''
     return render_template('login.html', next=next_url)
 
-@app.route('/_debug/vlcinfo', methods=['GET'])
-@login_required
-def _debug_vlcinfo():
-    """
-    Debug helper: returns last launch args and running vlc/cvlc processes.
-    This is safe to keep but can be removed once debugging is done.
-    """
-    info = {}
-    try:
-        info['last_launch'] = vlc_control.last_launch_info() if vlc_control else None
-    except Exception as e:
-        logging.exception("_debug_vlcinfo last_launch error: %s", e)
-        info['last_launch_error'] = 'error retrieving launch info'
-    try:
-        # list vlc/cvlc processes (ps output)
-        out = subprocess.check_output(['ps','-o','pid,cmd','-C','cvlc','-C','vlc'], stderr=subprocess.DEVNULL).decode(errors='ignore')
-        info['processes'] = out.strip()
-    except Exception as e:
-        logging.exception("_debug_vlcinfo processes error: %s", e)
-        info['processes_error'] = 'error retrieving process info'
-    return jsonify(info)
 
 @app.route('/_debug/current', methods=['GET'])
 @login_required
@@ -2858,7 +3713,7 @@ def virtual_channels():
                     'bg_color': request.form.get('ch_bg_color', '').strip(),
                     'test_text': request.form.get('ch_test_text', '').strip(),
                 }
-                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic'):
+                if tvg_id in ('virtual.weather', 'virtual.news', 'virtual.traffic', 'virtual.sports', 'virtual.nasa', 'virtual.on_this_day'):
                     appearance = {'text_color': '', 'bg_color': '', 'test_text': ''}
                 try:
                     save_channel_overlay_appearance(tvg_id, appearance)
@@ -2881,6 +3736,79 @@ def virtual_channels():
                             'rotation_seconds': request.form.get('ch_traffic_rotation_seconds', '120').strip(),
                         }
                         save_traffic_demo_config(demo_cfg)
+                    if tvg_id == 'virtual.updates':
+                        updates_cfg = {
+                            'show_beta': request.form.get('ch_updates_show_beta') == '1',
+                        }
+                        save_updates_config(updates_cfg)
+                    if tvg_id == 'virtual.sports':
+                        sports_mode = request.form.get('ch_sports_mode', 'scores').strip()
+                        if sports_mode not in ('rss', 'scores'):
+                            sports_mode = 'scores'
+                        save_sports_mode(sports_mode)
+                        rss_urls = [request.form.get(f'ch_sports_rss_url_{i}', '').strip()
+                                    for i in range(1, 7)]
+                        save_sports_feed_urls(rss_urls)
+                        sports_cfg = {lg['id']: request.form.get(f'ch_sports_league_{lg["id"]}') == '1'
+                                      for lg in SPORTS_LEAGUES}
+                        save_sports_config(sports_cfg)
+                    if tvg_id == 'virtual.nasa':
+                        nasa_interval = request.form.get('ch_nasa_interval', '15').strip()
+                        if nasa_interval not in ('15', '30'):
+                            nasa_interval = '15'
+                        save_nasa_interval(nasa_interval)
+                        nasa_count_raw = request.form.get('ch_nasa_image_count', '').strip()
+                        if nasa_count_raw:
+                            save_nasa_image_count(int(nasa_count_raw))
+                        else:
+                            save_nasa_image_count(None)
+                    if tvg_id == 'virtual.channel_mix':
+                        mix_name = request.form.get('ch_mix_name', '').strip()
+                        mix_channels = []
+                        for src_ch in VIRTUAL_CHANNELS:
+                            src_id = src_ch['tvg_id']
+                            if src_id not in _CHANNEL_MIX_VALID_IDS:
+                                continue
+                            if request.form.get(f'cm_ch_{src_id}') == '1':
+                                dur_raw = request.form.get(f'cm_dur_{src_id}', '120').strip()
+                                try:
+                                    minutes = max(1, min(int(dur_raw), 1440))
+                                except (ValueError, TypeError):
+                                    minutes = 120
+                                mix_channels.append({'tvg_id': src_id, 'duration_minutes': minutes})
+                        try:
+                            save_channel_mix_config({'name': mix_name, 'channels': mix_channels})
+                        except ValueError as exc:
+                            flash(str(exc), "warning")
+                    if tvg_id == 'virtual.on_this_day':
+                        for src in ON_THIS_DAY_SOURCES:
+                            sid = src['id']
+                            enabled = request.form.get(f'ch_otd_source_{sid}') == '1'
+                            save_on_this_day_source_enabled(sid, enabled)
+                            # Parse custom events (one per line: "YEAR: text")
+                            raw_custom = request.form.get(f'ch_otd_custom_{sid}', '').strip()
+                            custom_events = []
+                            for line in raw_custom.splitlines():
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                if ':' in line:
+                                    year_part, _, text_part = line.partition(':')
+                                    year_part = year_part.strip()
+                                    text_part = text_part.strip()
+                                    if year_part and text_part:
+                                        custom_events.append({
+                                            'year':     year_part,
+                                            'text':     text_part,
+                                            'category': src['category'],
+                                        })
+                                else:
+                                    custom_events.append({
+                                        'year':     '',
+                                        'text':     line,
+                                        'category': src['category'],
+                                    })
+                            save_on_this_day_custom_events(sid, custom_events)
                     music_file = request.form.get('ch_music_file', '').strip()
                     save_channel_music_file(tvg_id, music_file)
                     log_event(current_user.username, f"Updated overlay appearance for {tvg_id}")
@@ -2907,8 +3835,17 @@ def virtual_channels():
         weather_config=get_weather_config(),
         traffic_demo_config=get_traffic_demo_config(),
         traffic_demo_cities=get_traffic_demo_cities(),
+        updates_config=get_updates_config(),
+        sports_config=get_sports_config(),
+        sports_feed_urls=get_sports_feed_urls(),
+        SPORTS_LEAGUES=SPORTS_LEAGUES,
+        nasa_config=get_nasa_config(),
+        channel_mix_config=get_channel_mix_config(),
+        on_this_day_config=get_on_this_day_config(),
         audio_files=audio_files,
         channel_music_files=channel_music_files,
+        use_icon_pack=get_use_icon_pack(),
+        icon_pack_logos=_ICON_PACK_LOGOS,
     )
 
 
@@ -3170,146 +4107,6 @@ def crt():
     """
     return render_template('crt.html')
 
-# ------------------- New playback/control API endpoints (VLC/mpv wrapper usage) -------------------
-# NOTE: these new endpoints complement your existing vlc_control-backed endpoints.
-# remote.html will call these endpoints to invoke the root-owned helper scripts via sudo.
-
-PLAY_SCRIPT = "/usr/local/bin/vlc-play.sh"
-STOP_SCRIPT = "/usr/local/bin/vlc-stop.sh"
-LOG_FILE = "/var/log/vlc-play.log"
-INSTANCE_ID = "default"  # single-instance default; adapt if you support multiple instances
-
-# Strict allowlist for streaming URL characters.
-# Permits the RFC 3986 unreserved characters plus the subset of reserved
-# characters that appear in legitimate http/https streaming URLs.
-# Intentionally excludes: whitespace, control characters, backslash, backtick,
-# pipe, double-quote, single-quote, and semicolon — none of which are needed
-# in a media stream URL and all of which are risky in subprocess arguments.
-# The {1,2048} limit applies to the portion after the scheme (i.e. the
-# authority + path + query + fragment together are capped at 2048 characters).
-_STREAM_URL_RE = re.compile(
-    r'^https?://'
-    r'[A-Za-z0-9\-._~:/?#\[\]@!$&()*+,=%]{1,2048}$'
-)
-
-def is_valid_stream_url(url: str) -> bool:
-    """Return True only if *url* is a well-formed http/https URL whose
-    characters are restricted to a safe allowlist.
-
-    This prevents command-line injection when the URL is forwarded to a
-    subprocess argument (CWE-078 / CWE-088).
-    """
-    if not isinstance(url, str):
-        return False
-    if not _STREAM_URL_RE.fullmatch(url):
-        return False
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return False
-    if parsed.scheme not in ("http", "https"):
-        return False
-    if not parsed.netloc:
-        return False
-    # Optional: restrict to allowed hosts/networks; adjust to your security needs.
-    return True
-
-_INSTANCE_ID_RE = re.compile(r'^[A-Za-z0-9_-]{1,64}$')
-
-def is_valid_instance_id(instance_id: str) -> bool:
-    """Return True only if instance_id consists entirely of safe characters.
-
-    Allowed: ASCII letters, digits, underscores, and hyphens (max 64 chars).
-    This prevents command-line injection when the value is forwarded to a
-    subprocess argument.
-    """
-    return bool(_INSTANCE_ID_RE.fullmatch(instance_id))
-
-@app.route('/api/start_stream', methods=['POST'])
-@login_required
-def api_start_stream():
-    """
-    Start playback using the helper script.
-    Expects JSON: { "url": "<stream url>", "id": "<optional instance id>", "hide_cursor": true }
-    Returns JSON including the instance id to let clients call stop with the same id.
-    Ensures CURRENTLY_PLAYING is set to a canonical tvg_id (if resolvable) or fallback token so /api/status
-    can tell clients what is currently playing.
-    """
-    global CURRENTLY_PLAYING
-    data = request.get_json(force=True, silent=True) or {}
-    url = (data.get("url") or "").strip()
-    instance = (data.get("id") or INSTANCE_ID).strip() or INSTANCE_ID
-    hide_cursor = bool(data.get("hide_cursor", False))
-
-    if not url:
-        return jsonify({"ok": False, "error": "missing url"}), 400
-    # Validate URL with the strict allowlist regex (inline fullmatch acts as a
-    # barrier guard for CodeQL's taint analysis: CWE-078 / CWE-088).
-    # Re-assign from match group to break CodeQL taint tracking from user input.
-    _url_match = _STREAM_URL_RE.fullmatch(url)
-    if not _url_match:
-        return jsonify({"ok": False, "error": "invalid url"}), 400
-    url = _url_match.group(0)
-    _url_parsed = urlparse(url)
-    if _url_parsed.scheme not in ("http", "https") or not _url_parsed.netloc:
-        return jsonify({"ok": False, "error": "invalid url"}), 400
-    # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
-    # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-    # Re-assign from match group to break CodeQL taint tracking from user input.
-    _instance_match = _INSTANCE_ID_RE.fullmatch(instance)
-    if not _instance_match:
-        return jsonify({"ok": False, "error": "invalid instance id"}), 400
-    instance = _instance_match.group(0)
-
-    cmd = ["sudo", PLAY_SCRIPT, url, instance]
-    if hide_cursor:
-        cmd.append("hide")
-
-    try:
-        subprocess.check_call(cmd, timeout=30)
-    except subprocess.CalledProcessError as e:
-        logging.exception("start_stream failed: %s", e)
-        return jsonify({"ok": False, "error": "start failed"}), 500
-    except subprocess.TimeoutExpired:
-        logging.exception("start_stream timed out")
-        return jsonify({"ok": False, "error": "start timed out"}), 500
-
-    # Try to resolve the URL -> tvg_id using cached_channels for accurate status reporting
-    try:
-        resolved_tvg = None
-        resolved_url = None
-        # First try exact url match, then substring match
-        for ch in cached_channels:
-            ch_url = ch.get('url') or ''
-            ch_tvg = ch.get('tvg_id') or ''
-            if ch_url and ch_url == url:
-                resolved_tvg = ch_tvg
-                resolved_url = ch_url
-                break
-        if not resolved_tvg:
-            for ch in cached_channels:
-                ch_url = ch.get('url') or ''
-                ch_tvg = ch.get('tvg_id') or ''
-                if ch_url and ch_url in url:
-                    resolved_tvg = ch_tvg
-                    resolved_url = ch_url
-                    break
-
-        if resolved_tvg:
-            CURRENTLY_PLAYING = resolved_tvg
-        else:
-            # If client provided a meaningful instance id (not default) use it; otherwise store the URL
-            if instance and instance != INSTANCE_ID:
-                CURRENTLY_PLAYING = instance
-            else:
-                CURRENTLY_PLAYING = url
-
-    except Exception:
-        # On any error just fall back to storing the URL so status has something
-        CURRENTLY_PLAYING = url
-
-    log_event(current_user.username, f"Requested start_stream {url} (id={instance}, hide_cursor={hide_cursor})")
-    return jsonify({"ok": True, "message": "started", "id": instance})
 
 @app.route('/api/auto_refresh/status', methods=['GET'])
 @login_required
@@ -3366,75 +4163,6 @@ def api_user_prefs_post():
     save_user_prefs(current_user.username, data)
     return jsonify({"status": "ok", "prefs": get_user_prefs(current_user.username)})
 
-@app.route('/api/stop_stream', methods=['POST'])
-@login_required
-def api_stop_stream():
-    """
-    Stop playback using the helper stop script and clear CURRENTLY_PLAYING so /api/status reports nothing playing.
-    Expects JSON: { "id": "<optional instance id>" }
-    """
-    global CURRENTLY_PLAYING
-    try:
-        logging.info("api_stop_stream called by user=%s remote_addr=%s headers=%s body=%s",
-                     getattr(current_user, 'username', 'anonymous'),
-                     request.remote_addr,
-                     {k: v for k, v in request.headers.items()},
-                     request.get_data(as_text=True))
-
-        data = request.get_json(force=True, silent=True) or {}
-        instance = (data.get("id") or INSTANCE_ID).strip() or INSTANCE_ID
-
-        # Validate instance id with inline fullmatch (barrier guard for CWE-078/088).
-        # fullmatch requires the *entire* string to match, so no unsafe suffix is possible.
-        # Re-assign from match group to break CodeQL taint tracking from user input.
-        instance_match = _INSTANCE_ID_RE.fullmatch(instance)
-        if not instance_match:
-            return jsonify({"ok": False, "error": "invalid instance id"}), 400
-        instance = instance_match.group(0)
-
-        cmd = ["sudo", STOP_SCRIPT, instance]
-        try:
-            subprocess.check_call(cmd, timeout=15)
-        except subprocess.CalledProcessError as e:
-            logging.exception("stop_stream helper failed: %s", e)
-            return jsonify({"ok": False, "error": "stop failed"}), 500
-        except subprocess.TimeoutExpired as e:
-            logging.exception("stop_stream helper timed out: %s", e)
-            return jsonify({"ok": False, "error": "stop timed out"}), 500
-
-        # Clear server-side playback marker after stop completes
-        try:
-            CURRENTLY_PLAYING = None
-        except Exception:
-            CURRENTLY_PLAYING = None
-
-        log_event(current_user.username, f"Requested stop_stream (id={instance})")
-        return jsonify({"ok": True, "message": "stopped", "id": instance})
-
-    except Exception as e:
-        logging.exception("Unexpected error in api_stop_stream: %s", e)
-        return jsonify({"ok": False, "error": "unexpected server error"}), 500
-
-@app.route('/api/tail_logs', methods=['GET'])
-@login_required
-def api_tail_logs():
-    """
-    Return the last N lines of the helper log so remote.html can display them.
-    """
-    N = 200
-    if not os.path.exists(LOG_FILE):
-        return jsonify({"ok": False, "error": "log missing", "lines": []}), 200
-    try:
-        out = subprocess.check_output(["tail", "-n", str(N), LOG_FILE], stderr=subprocess.STDOUT, timeout=5)
-        text = out.decode("utf-8", errors="replace")
-        lines = text.splitlines()
-        return jsonify({"ok": True, "lines": lines})
-    except Exception as e:
-        logging.exception("tail_logs failed: %s", e)
-        return jsonify({"ok": False, "error": "Internal server error", "lines": []}), 500
-
-# ------------------- Existing vlc_control-backed endpoints kept below -------------------
-# (Your previous /api/play, /api/stop, /api/next, etc. are preserved.)
 @app.route('/api/channels', methods=['GET'])
 @login_required
 def api_channels():
@@ -3522,6 +4250,281 @@ def status_page():
     """Retro TV system status overlay page."""
     log_event(current_user.username, "Loaded status page")
     return render_template('status.html')
+
+@app.route('/sports')
+@login_required
+def sports_page():
+    """Retro TV sports scores overlay page."""
+    log_event(current_user.username, "Loaded sports page")
+    return render_template('sports.html')
+
+@app.route('/api/sports', methods=['GET'])
+@login_required
+def api_sports():
+    """Sports overlay data endpoint.
+
+    Branches on the configured mode:
+    * ``'rss'``    — returns RSS/Atom headlines from up to 6 user-supplied feeds,
+                     cycling wall-clock aligned the same way as /api/news.
+    * ``'scores'`` — returns today's game scores from ESPN's public scoreboard API,
+                     cycling through enabled leagues every 60 s (wall-clock aligned).
+
+    Both modes include ``mode``, ``ms_until_next``, and ``updated`` in the response.
+    """
+    sports_cfg = get_sports_config()
+    mode = sports_cfg.get('mode', 'scores')
+    music_filename = get_channel_music_file('virtual.sports')
+    music_file = f'/static/audio/{music_filename}' if music_filename else ''
+    _now_ts = datetime.now(timezone.utc).timestamp()
+
+    if mode == 'rss':
+        feeds = get_sports_feed_urls()
+        feed_count = len(feeds)
+        refresh_ms = int((30 * 60 * 1000) / feed_count) if feed_count else 5 * 60 * 1000
+        feed_index, ms_until_next_feed, elapsed_in_slot_ms = get_current_feed_state(feed_count)
+        slot_start = datetime.now(timezone.utc) - timedelta(milliseconds=elapsed_in_slot_ms)
+        headlines = fetch_rss_headlines(feeds[feed_index]) if feeds else []
+        return jsonify({
+            'mode':              'rss',
+            'updated':           slot_start.isoformat(),
+            'headlines':         headlines,
+            'feed_count':        feed_count,
+            'feed_index':        feed_index,
+            'refresh_ms':        refresh_ms,
+            'ms_until_next':     ms_until_next_feed,
+            'music_file':        music_file,
+        })
+
+    # scores mode — cycle through enabled leagues every 60 s
+    _cycle_seconds = 60
+    enabled_league_ids = [lg_id for lg_id, on in sports_cfg.get('leagues', {}).items() if on]
+    # Preserve SPORTS_LEAGUES ordering
+    enabled_leagues = [lg for lg in SPORTS_LEAGUES if lg['id'] in set(enabled_league_ids)]
+    league_count = len(enabled_leagues)
+    if league_count == 0:
+        return jsonify({
+            'mode':          'scores',
+            'updated':       datetime.now(timezone.utc).isoformat(),
+            'league':        None,
+            'games':         [],
+            'ms_until_next': _cycle_seconds * 1000,
+            'music_file':    music_file,
+        })
+
+    slot_seconds = _cycle_seconds
+    block_seconds = slot_seconds * league_count
+    elapsed_in_block = _now_ts % block_seconds
+    league_index = int(elapsed_in_block // slot_seconds)
+    ms_until_next = int((slot_seconds - (elapsed_in_block % slot_seconds)) * 1000)
+    slot_start_ts = _now_ts - (elapsed_in_block % slot_seconds)
+    slot_start = datetime.fromtimestamp(slot_start_ts, tz=timezone.utc)
+
+    current_league = enabled_leagues[league_index % league_count]
+    games = fetch_espn_scoreboard(current_league['sport'], current_league['league_slug'])
+    return jsonify({
+        'mode':          'scores',
+        'updated':       slot_start.isoformat(),
+        'league':        current_league,
+        'league_index':  league_index,
+        'league_count':  league_count,
+        'games':         games,
+        'ms_until_next': ms_until_next,
+        'music_file':    music_file,
+    })
+
+
+@app.route('/nasa')
+@login_required
+def nasa_page():
+    """Retro TV NASA imagery overlay page."""
+    log_event(current_user.username, "Loaded nasa page")
+    return render_template('nasa.html')
+
+
+@app.route('/api/nasa', methods=['GET'])
+@login_required
+def api_nasa():
+    """NASA Imagery overlay data endpoint.
+
+    Fetches APOD images from the NASA API and rotates through them on a
+    wall-clock-aligned schedule so all viewers see the same image at any
+    given moment.
+
+    Cycle logic
+    -----------
+    * cycle_seconds  = interval_minutes × 60  (900 or 1800)
+    * slot_seconds   = cycle_seconds ÷ image_count  (always an integer)
+    * image_index    = floor((now_ts % cycle_seconds) ÷ slot_seconds)
+    * ms_until_next  = remaining ms in the current slot
+
+    Examples:
+        15-min /  5 images → 180 s (3 min) per image
+        15-min / 15 images →  60 s (1 min) per image
+        30-min / 10 images → 180 s (3 min) per image
+        30-min / 15 images → 120 s (2 min) per image
+
+    Images are cached for one full cycle so we make at most one NASA API
+    call per cycle regardless of how many clients are tuned to the channel.
+    """
+    global _NASA_APOD_CACHE
+    nasa_cfg = get_nasa_config()
+    interval = nasa_cfg['interval']
+    image_count = nasa_cfg['image_count']
+    seconds_per_image = nasa_cfg['seconds_per_image']
+    api_key = nasa_cfg['api_key']
+    music_filename = get_channel_music_file('virtual.nasa')
+    music_file = f'/static/audio/{music_filename}' if music_filename else ''
+
+    cycle_seconds = int(interval) * 60  # 900 or 1800
+
+    _now_ts = datetime.now(timezone.utc).timestamp()
+
+    # Cache key encodes every setting that affects which images we show, so a
+    # change in the admin panel takes effect on the very next cycle boundary.
+    cache_key = f'{interval}:{image_count}:{api_key}'
+    cached = _NASA_APOD_CACHE.get(cache_key)
+    images: list = []
+    if cached:
+        imgs, cached_at = cached
+        # Keep the cache alive for one full cycle so we don't re-fetch mid-cycle.
+        if _now_ts - cached_at < cycle_seconds:
+            images = imgs
+    if not images:
+        fetched = _fetch_nasa_apod_images(image_count, api_key)
+        if fetched:
+            images = fetched
+            _NASA_APOD_CACHE[cache_key] = (images, _now_ts)
+
+    elapsed_in_cycle = _now_ts % cycle_seconds
+    image_index = int(elapsed_in_cycle / seconds_per_image)
+    # Guard against floating-point overshoot at cycle boundaries
+    image_index = min(image_index, image_count - 1)
+    ms_until_next = int((seconds_per_image - (elapsed_in_cycle % seconds_per_image)) * 1000)
+    slot_start_ts = _now_ts - (elapsed_in_cycle % seconds_per_image)
+    slot_start = datetime.fromtimestamp(slot_start_ts, tz=timezone.utc)
+
+    current_image = images[image_index % len(images)] if images else None
+
+    return jsonify({
+        'interval':          interval,
+        'image_count':       image_count,
+        'seconds_per_image': seconds_per_image,
+        'image':             current_image,
+        'image_index':       image_index,
+        'total_images':      len(images),
+        'ms_until_next':     ms_until_next,
+        'updated':           slot_start.isoformat(),
+        'music_file':        music_file,
+    })
+
+
+@app.route('/on_this_day')
+@login_required
+def on_this_day_page():
+    """Retro TV On This Day overlay page."""
+    log_event(current_user.username, "Loaded on_this_day page")
+    return render_template('on_this_day.html')
+
+
+@app.route('/api/on_this_day', methods=['GET'])
+@login_required
+def api_on_this_day():
+    """On This Day overlay data endpoint.
+
+    Collects historical events, births, and deaths from the Wikipedia REST API
+    (or user-supplied custom entries when a source is disabled) and rotates
+    through them on a wall-clock-aligned schedule so all viewers see the same
+    event at the same moment.
+
+    Cycle logic
+    -----------
+    * seconds_per_event = _ON_THIS_DAY_SECONDS_PER_EVENT  (30 s)
+    * event_index       = floor((now_ts % (event_count × 30)) ÷ 30)
+    * ms_until_next     = remaining ms in the current 30-second slot
+
+    Events are cached for _ON_THIS_DAY_CACHE_TTL (6 hours) per Wikipedia
+    source/month/day so we make at most one Wikipedia API call per 6-hour
+    window regardless of how many clients are tuned to the channel.
+    """
+    now = datetime.now(timezone.utc)
+    month = now.month
+    day   = now.day
+    now_ts = now.timestamp()
+
+    month_name = now.strftime('%B')
+    date_label = f"{month_name} {now.day}"
+
+    music_filename = get_channel_music_file('virtual.on_this_day')
+    music_file = f'/static/audio/{music_filename}' if music_filename else ''
+
+    # Gather events from all enabled sources (or custom events for disabled ones)
+    all_events: list = []
+    source_info = {}
+    for src in ON_THIS_DAY_SOURCES:
+        sid = src['id']
+        enabled = get_on_this_day_source_enabled(sid)
+        wiki_url = (
+            f"https://en.wikipedia.org/api/rest_v1/feed/onthisday"
+            f"/{src['api_type']}/{month:02d}/{day:02d}"
+        )
+        source_info[sid] = {
+            'enabled':       enabled,
+            'label':         src['label'],
+            'category':      src['category'],
+            'wiki_url':      wiki_url,
+            'wiki_page_url': (
+                f"https://en.wikipedia.org/wiki/{month_name}_{day}"
+                f"#{src['wiki_section']}"
+            ),
+        }
+        if enabled:
+            fetched = _fetch_on_this_day_from_wikipedia(src['api_type'], month, day)
+            all_events.extend(fetched)
+        else:
+            custom = get_on_this_day_custom_events(sid)
+            all_events.extend(custom)
+
+    event_count = len(all_events)
+    if event_count == 0:
+        return jsonify({
+            'month':             month,
+            'day':               day,
+            'date_label':        date_label,
+            'events':            [],
+            'event':             None,
+            'event_index':       0,
+            'event_count':       0,
+            'seconds_per_event': _ON_THIS_DAY_SECONDS_PER_EVENT,
+            'ms_until_next':     _ON_THIS_DAY_SECONDS_PER_EVENT * 1000,
+            'sources':           source_info,
+            'music_file':        music_file,
+        })
+
+    cycle_seconds = event_count * _ON_THIS_DAY_SECONDS_PER_EVENT
+    elapsed_in_cycle = now_ts % cycle_seconds
+    event_index = int(elapsed_in_cycle / _ON_THIS_DAY_SECONDS_PER_EVENT)
+    event_index = min(event_index, event_count - 1)
+    ms_until_next = int(
+        (_ON_THIS_DAY_SECONDS_PER_EVENT - (elapsed_in_cycle % _ON_THIS_DAY_SECONDS_PER_EVENT))
+        * 1000
+    )
+
+    current_event = all_events[event_index]
+
+    return jsonify({
+        'month':             month,
+        'day':               day,
+        'date_label':        date_label,
+        'events':            all_events,
+        'event':             current_event,
+        'event_index':       event_index,
+        'event_count':       event_count,
+        'seconds_per_event': _ON_THIS_DAY_SECONDS_PER_EVENT,
+        'ms_until_next':     ms_until_next,
+        'sources':           source_info,
+        'music_file':        music_file,
+    })
+
 
 @app.route('/api/weather', methods=['GET'])
 @login_required
@@ -3689,6 +4692,208 @@ def api_virtual_status():
         "ms_until_next": 30000,
     })
 
+# ─── Updates / Announcements virtual channel ──────────────────────────────────
+
+_GITHUB_REPO = "thehack904/RetroIPTVGuide"
+_GITHUB_RELEASES_URL = f"https://api.github.com/repos/{_GITHUB_REPO}/releases"
+_UPDATES_CACHE_TTL = 1800   # 30 minutes
+_updates_cache: dict = {"data": None, "fetched_at": 0.0}
+_updates_cache_lock = threading.Lock()
+
+
+def _fetch_github_releases() -> list:
+    """Fetch releases from the GitHub API, returning a list of dicts.
+    Returns an empty list on any error so the channel degrades gracefully."""
+    try:
+        resp = requests.get(
+            _GITHUB_RELEASES_URL,
+            timeout=8,
+            headers={
+                "User-Agent": "RetroIPTVGuide/1.0",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        resp.raise_for_status()
+        releases = resp.json()
+        if not isinstance(releases, list):
+            return []
+        result = []
+        for rel in releases[:10]:
+            result.append({
+                "tag":        str(rel.get("tag_name", "")),
+                "name":       str(rel.get("name", "") or rel.get("tag_name", "")),
+                "body":       str(rel.get("body", "") or ""),
+                "prerelease": bool(rel.get("prerelease", False)),
+                "draft":      bool(rel.get("draft", False)),
+                "published":  str(rel.get("published_at", "") or ""),
+                "url":        str(rel.get("html_url", "")),
+            })
+        return result
+    except Exception:
+        logging.warning("Failed to fetch GitHub releases for updates channel", exc_info=True)
+        return []
+
+
+def _get_cached_releases() -> list:
+    """Return cached GitHub releases, refreshing when the TTL has expired."""
+    with _updates_cache_lock:
+        now = time.time()
+        if _updates_cache["data"] is None or (now - _updates_cache["fetched_at"]) > _UPDATES_CACHE_TTL:
+            releases = _fetch_github_releases()
+            _updates_cache["data"] = releases
+            _updates_cache["fetched_at"] = now
+        return _updates_cache["data"]
+
+
+def get_updates_config() -> dict:
+    """Return updates channel configuration.
+
+    Keys
+    ----
+    show_beta : bool  — whether pre-release / beta GitHub releases are shown
+                        on the Updates & Announcements channel (default True).
+    """
+    defaults = {"show_beta": "1"}
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            for key in defaults:
+                c.execute("SELECT value FROM settings WHERE key=?", (f"updates.{key}",))
+                row = c.fetchone()
+                if row is not None:
+                    defaults[key] = row[0]
+    except Exception:
+        logging.exception("get_updates_config failed, using defaults")
+    return {"show_beta": defaults["show_beta"] == "1"}
+
+
+def save_updates_config(cfg: dict) -> None:
+    """Persist updates channel configuration."""
+    show_beta = bool(cfg.get("show_beta", True))
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("updates.show_beta", "1" if show_beta else "0"),
+            )
+            conn.commit()
+    except Exception:
+        logging.exception("save_updates_config failed")
+        raise
+
+
+@app.route('/api/virtual/updates', methods=['GET'])
+@login_required
+def api_virtual_updates():
+    """Return version update and release-notes data for the Updates & Announcements virtual channel.
+
+    Pulls from the GitHub releases API (cached 30 min).  Falls back to showing
+    the current APP_VERSION when the API is unreachable.
+    Pre-releases are included only when the show_beta setting is enabled."""
+    cfg = get_updates_config()
+    show_beta = cfg["show_beta"]
+    all_releases = _get_cached_releases()
+
+    # Filter out pre-releases when show_beta is disabled
+    releases = [r for r in all_releases if not r["draft"] and (show_beta or not r["prerelease"])]
+
+    # Latest non-draft, non-filtered release is the one featured prominently.
+    latest = releases[0] if releases else None
+
+    # Build ticker from (filtered) release tag names + dates
+    ticker_parts = []
+    for r in releases:
+        date_str = ''
+        if r.get("published"):
+            try:
+                pub = datetime.fromisoformat(r["published"].replace('Z', '+00:00'))
+                date_str = ' \u2014 ' + pub.strftime('%b %d, %Y')
+            except Exception:
+                pass
+        if r["prerelease"]:
+            label = "\u26A0\uFE0F Beta: " + r["tag"] + date_str
+        else:
+            label = "Release " + r["tag"] + date_str
+        ticker_parts.append(label)
+    if not ticker_parts:
+        ticker_parts = [f"Current version: {APP_VERSION}"]
+
+    now_ts = time.time()
+    fetched_at = _updates_cache.get("fetched_at", 0.0)
+    elapsed = now_ts - fetched_at if fetched_at > 0 else _UPDATES_CACHE_TTL
+    ms_until_next = max(0, int((_UPDATES_CACHE_TTL - elapsed) * 1000))
+
+    return jsonify({
+        "updated":      datetime.now(timezone.utc).isoformat(),
+        "app_version":  APP_VERSION,
+        "latest":       latest,
+        "releases":     releases,
+        "ticker":       ticker_parts,
+        "repo":         _GITHUB_REPO,
+        "show_beta":    show_beta,
+        "ms_until_next": ms_until_next,
+    })
+
+
+@app.route('/api/channel_mix', methods=['GET'])
+@login_required
+def api_channel_mix():
+    """Return the current active channel in the Channel Mix based on wall-clock time.
+
+    The active channel is determined by cycling through the configured channels
+    in order, each playing for its configured duration.  All viewers always see
+    the same active channel at the same moment (wall-clock-aligned scheduling).
+
+    Response JSON:
+      name               – display name of the mix (str)
+      active_type        – overlay_type of the currently-active channel, or null
+      active_name        – display name of the currently-active channel, or null
+      active_tvg_id      – tvg_id of the currently-active channel, or null
+      seconds_remaining  – seconds until the next channel switch (int)
+      total_cycle_seconds – total cycle length in seconds (int)
+      channels           – list of configured channel dicts (tvg_id, name,
+                           overlay_type, duration_minutes)
+    """
+    cfg = get_channel_mix_config()
+    mix_channels = cfg['channels']
+
+    # Build a lookup of tvg_id → channel metadata from VIRTUAL_CHANNELS
+    ch_meta = {ch['tvg_id']: ch for ch in VIRTUAL_CHANNELS}
+
+    enriched = []
+    for entry in mix_channels:
+        meta = ch_meta.get(entry['tvg_id'], {})
+        enriched.append({
+            'tvg_id':           entry['tvg_id'],
+            'name':             meta.get('name', entry['tvg_id']),
+            'overlay_type':     meta.get('overlay_type', ''),
+            'duration_minutes': entry['duration_minutes'],
+        })
+
+    active_tvg_id, seconds_remaining = _get_active_channel_mix_slot(mix_channels)
+    active_meta = ch_meta.get(active_tvg_id, {}) if active_tvg_id else {}
+    total_cycle_seconds = sum(ch['duration_minutes'] * 60 for ch in mix_channels)
+
+    return jsonify({
+        'name':               cfg['name'],
+        'active_type':        active_meta.get('overlay_type') if active_tvg_id else None,
+        'active_name':        active_meta.get('name') if active_tvg_id else None,
+        'active_tvg_id':      active_tvg_id,
+        'seconds_remaining':  seconds_remaining,
+        'total_cycle_seconds': total_cycle_seconds,
+        'channels':           enriched,
+    })
+
+
+@app.route('/updates')
+@login_required
+def updates_page():
+    """Retro TV updates & announcements overlay page."""
+    log_event(current_user.username, "Loaded updates page")
+    return render_template('updates.html')
+
+
 # ─── Audio upload / management routes ────────────────────────────────────────
 
 @app.route('/api/audio/files', methods=['GET'])
@@ -3797,7 +5002,7 @@ def api_logo_upload():
 @app.route('/api/logo/reset/<tvg_id>', methods=['POST'])
 @login_required
 def api_logo_reset(tvg_id):
-    """Reset a virtual channel's logo to the built-in default."""
+    """Reset a virtual channel's logo to the built-in default (or icon pack if enabled)."""
     if current_user.username != 'admin':
         return jsonify({'error': 'Admin access required.'}), 403
     valid_ids = {ch['tvg_id'] for ch in VIRTUAL_CHANNELS}
@@ -3808,8 +5013,41 @@ def api_logo_reset(tvg_id):
     except Exception:
         return jsonify({'error': 'Failed to reset logo.'}), 500
     log_event(current_user.username, f"Reset logo for {tvg_id} to default")
-    default_url = _DEFAULT_CHANNEL_LOGOS.get(tvg_id, '')
-    return jsonify({'ok': True, 'url': default_url})
+    effective_url = _resolve_channel_logo(
+        tvg_id,
+        _DEFAULT_CHANNEL_LOGOS.get(tvg_id, ''),
+        '',
+        get_use_icon_pack(),
+    )
+    return jsonify({'ok': True, 'url': effective_url})
+
+
+@app.route('/api/virtual/icon_pack', methods=['GET', 'POST'])
+@login_required
+def api_virtual_icon_pack():
+    """GET: return current icon pack state. POST: toggle or set the icon pack preference."""
+    if request.method == 'GET':
+        return jsonify({'enabled': get_use_icon_pack()})
+    # POST
+    if current_user.username != 'admin':
+        return jsonify({'error': 'Admin access required.'}), 403
+    data = request.get_json(silent=True) or {}
+    if 'enabled' not in data:
+        return jsonify({'error': 'Missing "enabled" field.'}), 400
+    enabled = bool(data['enabled'])
+    try:
+        set_use_icon_pack(enabled)
+    except Exception:
+        return jsonify({'error': 'Failed to save icon pack setting.'}), 500
+    log_event(current_user.username, f"Icon pack {'enabled' if enabled else 'disabled'}")
+    # Build effective logo map so the browser can refresh previews immediately
+    logos = {}
+    for ch in VIRTUAL_CHANNELS:
+        custom = get_channel_custom_logo(ch['tvg_id'])
+        logos[ch['tvg_id']] = _resolve_channel_logo(
+            ch['tvg_id'], ch['logo'], custom, enabled
+        )
+    return jsonify({'ok': True, 'enabled': enabled, 'logos': logos})
 
 
 @app.route('/api/overlay/settings', methods=['GET'])
@@ -3822,189 +5060,6 @@ def api_overlay_settings():
         return jsonify(get_channel_overlay_appearance(channel))
     return jsonify(get_overlay_appearance())
 
-@app.route('/api/play', methods=['POST'])
-@login_required
-def api_play():
-    """
-    Start playback. Accepts JSON or form data with:
-      - url: direct stream URL
-      - tvg_id: channel id (will be resolved using cached_channels)
-      - playlist_index: integer index into the current tuner M3U (0-based)
-      - volume: optional 0-512 default volume for this session
-    """
-    global CURRENTLY_PLAYING
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-
-    data = request.get_json(silent=True) or request.form or {}
-    url = data.get('url')
-    tvg_id = data.get('tvg_id')
-    playlist_index = data.get('playlist_index')
-    try:
-        # Playlist mode: launch current tuner's M3U and start at specified index
-        if playlist_index is not None and playlist_index != "":
-            try:
-                playlist_index = int(playlist_index)
-            except:
-                return jsonify({'error': 'playlist_index must be an integer'}), 400
-            tuners = get_tuners()
-            current = get_current_tuner()
-            if not current or current not in tuners:
-                return jsonify({'error': 'No active tuner configured'}), 400
-            playlist_path = tuners[current]['m3u']
-            vlc_control.stop_player()
-            vlc_control.start_player(playlist_path, volume=vlc_control.VLC_VOLUME_DEFAULT, playlist_mode=True, playlist_start=playlist_index)
-            CURRENTLY_PLAYING = f"playlist:{playlist_path}@{playlist_index}"
-            log_event(current_user.username, f"Started playlist {playlist_path} index {playlist_index}")
-            return jsonify({'status': 'playing', 'mode': 'playlist', 'playlist': playlist_path, 'index': playlist_index})
-
-        # Resolve tvg_id -> url if needed
-        if tvg_id and not url:
-            target = None
-            for ch in cached_channels:
-                if ch.get('tvg_id') == tvg_id:
-                    target = ch.get('url')
-                    break
-            if not target:
-                return jsonify({'error': f'Unknown tvg_id: {tvg_id}'}), 404
-            url = target
-
-        if not url:
-            return jsonify({'error': 'Missing url/tvg_id/playlist_index'}), 400
-
-        volume = data.get('volume', getattr(vlc_control, 'VLC_VOLUME_DEFAULT', 320))
-        try:
-            vol_int = int(volume)
-        except:
-            vol_int = getattr(vlc_control, 'VLC_VOLUME_DEFAULT', 320)
-
-        vlc_control.stop_player()
-        vlc_control.start_player(url, volume=vol_int, playlist_mode=False)
-        CURRENTLY_PLAYING = url
-        log_event(current_user.username, f"Started playback of {url}")
-        return jsonify({'status': 'playing', 'url': url, 'volume': vol_int})
-
-    except Exception as e:
-        logging.exception("api_play failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-@login_required
-def api_stop():
-    global CURRENTLY_PLAYING
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        vlc_control.stop_player()
-        CURRENTLY_PLAYING = None
-        log_event(current_user.username, "Stopped playback")
-        return jsonify({'status': 'stopped'})
-    except Exception as e:
-        logging.exception("api_stop failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/next', methods=['POST'])
-@login_required
-def api_next():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.next_track()
-        log_event(current_user.username, "Sent VLC next")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        logging.exception("api_next failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/prev', methods=['POST'])
-@login_required
-def api_prev():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.prev_track()
-        log_event(current_user.username, "Sent VLC prev")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        logging.exception("api_prev failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/status', methods=['GET'])
-@login_required
-def api_status():
-    """
-    Returns simple server-side status and VLC RC raw status.
-    Added: current_tvg_id and current_channel_url when resolvable so clients
-    can immediately identify the playing channel without probing.
-    """
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        raw = vlc_control.get_status()
-        lower = raw.lower() if isinstance(raw, str) else ""
-        state = "unknown"
-        if "state: playing" in lower or "state: play" in lower:
-            state = "playing"
-        elif "state: paused" in lower:
-            state = "paused"
-        elif "state: stopped" in lower:
-            state = "stopped"
-
-        # Attempt to resolve the currently playing tvg_id and channel url.
-        current_tvg_id = None
-        current_channel_url = None
-
-        # CURRENTLY_PLAYING may be a URL, an instance id, or other token.
-        # Try to match it against cached_channels first by url, then tvg_id.
-        try:
-            if CURRENTLY_PLAYING:
-                candidate = str(CURRENTLY_PLAYING)
-                for ch in cached_channels:
-                    if not ch:
-                        continue
-                    ch_url = ch.get('url') or ''
-                    ch_tvg = ch.get('tvg_id') or ''
-                    # exact URL match
-                    if ch_url and ch_url == candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-                    # URL substring (helper may include args)
-                    if ch_url and candidate and ch_url in candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-                    # tvg_id equality
-                    if ch_tvg and ch_tvg == candidate:
-                        current_tvg_id = ch_tvg
-                        current_channel_url = ch_url
-                        break
-        except Exception:
-            current_tvg_id = None
-            current_channel_url = None
-
-        # Fallback: attempt to match a globally stored lastInstanceId to channel tvg_id
-        try:
-            last_inst = globals().get('lastInstanceId', None)
-            if not current_tvg_id and last_inst:
-                for ch in cached_channels:
-                    if ch.get('tvg_id') == last_inst:
-                        current_tvg_id = last_inst
-                        current_channel_url = ch.get('url')
-                        break
-        except Exception:
-            pass
-
-        return jsonify({
-            'now_playing': CURRENTLY_PLAYING,
-            'current_tvg_id': current_tvg_id,
-            'current_channel_url': current_channel_url,
-            'vlc_state': state,
-            'raw_status': raw
-        })
-    except Exception as e:
-        logging.exception("api_status error: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-
-# ------------------- ADDED ROUTE: current_program -------------------
 @app.route('/api/current_program', methods=['GET'])
 @login_required
 def api_current_program():
@@ -4079,45 +5134,6 @@ def api_current_program():
     except Exception as e:
         logging.exception("api_current_program error: %s", e)
         return jsonify({"ok": False, "error": "Internal server error"}), 500
-# ------------------- END ADDED ROUTE -------------------
-
-@app.route('/api/volume/<int:value>', methods=['POST'])
-@login_required
-def api_set_volume(value):
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        v = max(0, min(512, int(value)))
-        resp = vlc_control.set_volume(v)
-        log_event(current_user.username, f"Set volume {v}")
-        return jsonify({'status': 'ok', 'volume': v, 'resp': resp})
-    except Exception as e:
-        logging.exception("api_set_volume failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-@login_required
-def api_volume_up():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.vol_up(32)
-        log_event(current_user.username, "Volume up")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        logging.exception("api_volume_up failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
-
-@app.route('/api/volume_down', methods=['POST'])
-@login_required
-def api_volume_down():
-    if vlc_control is None:
-        return jsonify({'error': 'vlc_control helper not available on server'}), 500
-    try:
-        resp = vlc_control.vol_down(32)
-        log_event(current_user.username, "Volume down")
-        return jsonify({'status': 'ok', 'resp': resp})
-    except Exception as e:
-        logging.exception("api_volume_down failed: %s", e)
-        return jsonify({'error': 'Internal server error'}), 500
 
 @app.route('/logs', methods=['GET'], endpoint='view_logs')
 @login_required
@@ -4128,30 +5144,31 @@ def view_logs():
 
     log_event(current_user.username, "Accessed logs page")
     entries = []
-    log_size = 0
+    entry_count = 0
 
-    if os.path.exists(LOG_PATH):
-        log_size = os.path.getsize(LOG_PATH)
-        with open(LOG_PATH, "r") as f:
-            for line in f:
-                parts = line.strip().split(" | ")
-                if len(parts) == 3:
-                    user, action, timestamp = parts
-                    log_type = "security" if any(
-                        x in action.lower() for x in
-                        ["unauthorized", "revoked", "failed", "denied"]
-                    ) else "activity"
-                    entries.append((user, action, timestamp, log_type))
-                else:
-                    entries.append(("system", line.strip(), "", "activity"))
-    else:
-        entries = [("system", "No log file found.", "", "activity")]
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "SELECT username, action, timestamp FROM activity_logs ORDER BY id ASC"
+            )
+            for row in c.fetchall():
+                user, action, timestamp = row
+                log_type = "security" if any(
+                    x in action.lower() for x in
+                    ["unauthorized", "revoked", "failed", "denied"]
+                ) else "activity"
+                entries.append((user, action, timestamp, log_type))
+        entry_count = len(entries)
+    except Exception as e:  # noqa: BLE001
+        logging.exception("view_logs: failed to read activity_logs: %s", e)
+        entries = [("system", "Error reading log database.", "", "activity")]
 
     return render_template(
         "logs.html",
         entries=entries,
         current_tuner=get_current_tuner(),
-        log_size=log_size
+        entry_count=entry_count
     )
 
 
@@ -4163,8 +5180,15 @@ def clear_logs():
         flash("Unauthorized access.")
         return redirect(url_for('guide'))
 
-    open(LOG_PATH, "w").close()  # clear the file
-    log_event("admin", "Cleared log file")
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            conn.execute("DELETE FROM activity_logs")
+            conn.commit()
+    except Exception as e:  # noqa: BLE001
+        logging.exception("clear_logs: failed to clear activity_logs: %s", e)
+        flash("⚠️ Failed to clear logs.")
+        return redirect(url_for('admin_diagnostics.diagnostics_index', tab='activity'))
+    log_event("admin", "Cleared activity logs")
     flash("🧹 Logs cleared successfully.")
     return redirect(url_for('admin_diagnostics.diagnostics_index', tab='activity'))
 

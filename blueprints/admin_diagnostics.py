@@ -123,6 +123,28 @@ def diagnostics_logs():
     return jsonify({"lines": lines, "error": error, "key": key, "count": len(lines)})
 
 
+@admin_diagnostics_bp.route("/activity-logs", methods=["GET"])
+@login_required
+def diagnostics_activity_logs():
+    """Return activity log entries from the SQLite database as JSON.
+
+    Returns JSON ``{lines, error, count}`` where each line is formatted as
+    ``"username | action | timestamp"`` (HTML-escaped), matching the legacy
+    flat-file format so that existing client-side parsers continue to work.
+    """
+    _require_admin()
+    from utils.log_reading import read_activity_log_from_db, MAX_LINES
+
+    _, db_path, _, _, _ = _get_config()
+    try:
+        n = min(int(request.args.get("n", MAX_LINES)), MAX_LINES)
+    except (ValueError, TypeError):
+        n = MAX_LINES
+
+    lines, error = read_activity_log_from_db(db_path, max_rows=n)
+    return jsonify({"lines": lines, "error": error, "count": len(lines)})
+
+
 @admin_diagnostics_bp.route("/logs/tail", methods=["GET"])
 @login_required
 def diagnostics_logs_tail():
@@ -476,6 +498,7 @@ def diagnostics_support():
         _allowed_bundle_keys = {
             "health.json", "system.json", "tuners.json",
             "cache_state.json", "config.json", "startup.json",
+            "logs/activity",  # activity log exported from SQLite
         } | {f"logs/{k}" for k in ALLOWED_LOGS}
         include = {v for v in raw if v in _allowed_bundle_keys}
 
@@ -496,6 +519,7 @@ def diagnostics_support():
                 "startup.json": startup_data,
             },
             include=include,
+            db_path=db_path,
         )
     except Exception as exc:
         logger.exception("Failed to build support bundle: %s", exc)

@@ -135,12 +135,28 @@
         width: 100vw !important;
         height: 100vh !important;
         background: #000;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
     }
     #videoPlayerWrap:fullscreen #video,
     #videoPlayerWrap:-webkit-full-screen #video {
         width: 100% !important;
         height: 100% !important;
         object-fit: cover;
+    }
+    /* Maintain 16:9 aspect ratio for the virtual overlay root in native fullscreen
+       so channel_mix and other overlay-only channels are not stretched.
+       Width is capped at 1280px (max 720px tall) to match standalone-page letterboxing.
+       Height is computed explicitly to avoid aspect-ratio browser inconsistencies. */
+    #videoPlayerWrap:fullscreen #virtual-overlay-root,
+    #videoPlayerWrap:-webkit-full-screen #virtual-overlay-root {
+        width: min(1280px, 100vw, calc(100vh * 16 / 9));
+        height: min(720px, 100vh, calc(100vw * 9 / 16));
+        inset: auto;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
     }
     /* VC fullscreen overlay – shows the actual /news or /weather page in an iframe */
     #vcFsOverlay {
@@ -484,7 +500,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // Overlay types that have a dedicated standalone page we can iframe in.
     // ?embedded=1 tells those pages to suppress their own audio (parent already plays it).
-    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1', traffic: '/traffic?embedded=1', status: '/status?embedded=1' };
+    const VC_PAGE_URL = { news: '/news?embedded=1', weather: '/weather?embedded=1', traffic: '/traffic?embedded=1', status: '/status?embedded=1', updates: '/updates?embedded=1', sports: '/sports?embedded=1', nasa: '/nasa?embedded=1', on_this_day: '/on_this_day?embedded=1' };
 
     function fsElement() {
         return document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -533,12 +549,20 @@ document.addEventListener('DOMContentLoaded', function () {
         } else if (fsElement()) {
             _exitVcFs();
         } else {
-            const pageUrl = VC_PAGE_URL[_vcCurrentOverlayType];
+            // For channel_mix, resolve to the active sub-channel's standalone page so the
+            // fullscreen view is visually identical to opening that channel directly.
+            let overlayType = _vcCurrentOverlayType;
+            if (overlayType === 'channel_mix') {
+                const overlayRoot = document.getElementById('virtual-overlay-root');
+                const subType = overlayRoot && overlayRoot.dataset.cmActiveType;
+                if (subType) overlayType = subType;
+            }
+            const pageUrl = VC_PAGE_URL[overlayType];
             if (pageUrl) {
-                // news/weather: iframe the dedicated standalone page (looks identical to /news, /weather)
+                // iframe the dedicated standalone page (looks identical to the channel's own fullscreen)
                 openVcFsOverlay(pageUrl);
             } else {
-                // Fallback for overlay types without a standalone page (e.g. 'status')
+                // Fallback for overlay types without a standalone page
                 const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
                 if (req) {
                     const p = req.call(wrap);
@@ -599,6 +623,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.addEventListener('fullscreenchange', onFsChange);
     document.addEventListener('webkitfullscreenchange', onFsChange);
+
+    // When Channel Mix switches to a new sub-channel while the fullscreen iframe
+    // is open, swap the iframe src so the display advances automatically —
+    // no need for the user to exit and re-enter fullscreen.
+    document.addEventListener('vc-cm-switched', function (e) {
+        if (!isOverlayFsActive()) return;
+        const pageUrl = VC_PAGE_URL[e.detail && e.detail.activeType];
+        if (!pageUrl) return;
+        const iframe = document.getElementById('vcFsIframe');
+        const fullUrl = location.origin + pageUrl;
+        if (iframe && iframe.src !== fullUrl) {
+            iframe.src = fullUrl;
+        }
+    });
 
     // Auto-hide: show button on mouse activity over the player wrap, hide after idle
     if (wrap) {
@@ -1368,6 +1406,11 @@ document.addEventListener('DOMContentLoaded', () => {
 <script src="{{ url_for('static', filename='overlays/weather.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/status.js') }}"></script>
 <script src="{{ url_for('static', filename='overlays/traffic.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/updates.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/sports.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/nasa.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/channel_mix.js') }}"></script>
+<script src="{{ url_for('static', filename='overlays/on_this_day.js') }}"></script>
 
 </div><!-- #appZoomRoot -->
 

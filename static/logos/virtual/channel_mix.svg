@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256">
+  <rect width="100%" height="100%" fill="#111"/>
+  <text x="50%" y="44%" font-family="Arial, Helvetica, sans-serif" font-size="36" fill="#eee" text-anchor="middle">CHANNEL</text>
+  <text x="50%" y="66%" font-family="Arial, Helvetica, sans-serif" font-size="36" fill="#eee" text-anchor="middle">MIX</text>
+</svg>

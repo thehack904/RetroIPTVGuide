@@ -60,6 +60,24 @@
                   Uptime, CPU, Memory
                 {% elif ch.tvg_id == 'virtual.traffic' %}
                   Mode: {{ 'Admin Rotation' if traffic_demo_config.mode != 'random_pack' else 'Random Pack' }}&nbsp;&nbsp;Interval: {{ traffic_demo_config.rotation_seconds or '120' }}s
+                {% elif ch.tvg_id == 'virtual.updates' %}
+                  GitHub Release Notes{% if updates_config.show_beta %} &amp; Beta Alerts{% endif %}
+                {% elif ch.tvg_id == 'virtual.sports' %}
+                  {% if sports_config.mode == 'rss' %}
+                    {% set feed_count = sports_feed_urls | select | list | length %}
+                    RSS Mode: {{ feed_count }} Feed{{ '' if feed_count == 1 else 's' }}
+                  {% else %}
+                    {% set league_count = sports_config.leagues.values() | select | list | length %}
+                    Scores Mode &mdash; {{ league_count }} League{{ '' if league_count == 1 else 's' }}
+                  {% endif %}
+                {% elif ch.tvg_id == 'virtual.nasa' %}
+                  {{ nasa_config.image_count }} Image{{ '' if nasa_config.image_count == 1 else 's' }} &mdash; {{ nasa_config.seconds_per_image }}s each &mdash; {{ nasa_config.interval }}-Min Cycle
+                {% elif ch.tvg_id == 'virtual.on_this_day' %}
+                  {% set otd_enabled = on_this_day_config.sources | selectattr('enabled') | list | length %}
+                  {{ otd_enabled }} Source{{ '' if otd_enabled == 1 else 's' }} Enabled &mdash; {{ on_this_day_config.seconds_per_event }}s/Event
+                {% elif ch.tvg_id == 'virtual.channel_mix' %}
+                  {% set mix_count = channel_mix_config.channels | length %}
+                  {{ mix_count }} Channel{{ '' if mix_count == 1 else 's' }} &mdash; {{ channel_mix_config.name }}
                 {% else %}
                   {{ ch.overlay_type | title }}
                 {% endif %}
@@ -233,6 +251,419 @@
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
               {% endif %}
+              {% if ch.tvg_id == 'virtual.updates' %}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <div style="padding:8px 10px; background:rgba(0,30,10,0.55);
+                            border:1px solid #20a040; border-radius:4px;">
+                  <span style="display:inline-block; background:#22cc44; color:#041008; font-weight:700;
+                               font-size:0.8em; letter-spacing:0.07em; text-transform:uppercase;
+                               padding:0.2em 0.55em; border-radius:3px; margin-right:6px;
+                               vertical-align:middle;">Live</span><span style="color:#c8ffda; font-size:0.88em; line-height:1.6; vertical-align:middle;">
+                    &#128640; Release notes are pulled automatically from the
+                    <strong style="color:#fff;">GitHub repository</strong> and cached for 30 minutes.
+                    The channel always shows the latest published release.
+                  </span>
+                </div>
+              </div>
+              <div class="vc-prefs-field" style="align-items:center; gap:10px; display:flex; flex-wrap:wrap;">
+                <label class="toggle-switch" title="Show pre-release / beta versions on this channel">
+                  <input type="checkbox"
+                         name="ch_updates_show_beta"
+                         value="1"
+                         class="toggle-input"
+                         id="updatesShowBetaToggle"
+                         {% if updates_config.show_beta %}checked{% endif %}>
+                  <span class="toggle-slider"></span>
+                </label>
+                <span>
+                  Show Beta / Pre-release versions
+                  <span class="muted small" style="margin-left:4px;">
+                    &mdash; when enabled, pre-releases are shown with a
+                    <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
+                                 font-size:0.75em; letter-spacing:0.07em; text-transform:uppercase;
+                                 padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                    badge; when disabled, only stable releases appear.
+                  </span>
+                </span>
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px; flex-basis:100%; width:100%;">
+                <a href="/updates" target="_blank" class="btn-link small">&#128640; Preview Updates Page &#8599;</a>
+                <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+              </div>
+
+              <!-- Beta info modal — admin page only, triggered when beta toggle is turned ON -->
+              <div id="betaInfoModal" role="dialog" aria-modal="true" aria-labelledby="betaModalTitle"
+                   style="display:none; position:fixed; inset:0; z-index:9000;
+                          background:rgba(0,0,0,0.65); backdrop-filter:blur(3px);
+                          align-items:center; justify-content:center;">
+                <div style="background:#0e1a3a; border:2px solid #ffd700; border-radius:8px;
+                            max-width:460px; width:90%; padding:28px 28px 22px; box-shadow:0 8px 32px rgba(0,0,0,0.7);
+                            position:relative;">
+                  <div style="display:flex; align-items:flex-start; gap:14px; margin-bottom:16px;">
+                    <span style="font-size:2em; line-height:1; flex-shrink:0;">&#9888;&#65039;</span>
+                    <div>
+                      <h3 id="betaModalTitle" style="margin:0 0 6px; font-size:1.05em; font-weight:900;
+                                                     letter-spacing:0.04em; text-transform:uppercase;
+                                                     color:#ffd700;">Beta Versions Enabled</h3>
+                      <p style="margin:0; font-size:0.88em; color:#c8d8ff; line-height:1.55;">
+                        You have enabled <strong style="color:#ffd700;">pre-release / beta</strong>
+                        versions on the Updates &amp; Announcements channel.
+                      </p>
+                    </div>
+                  </div>
+                  <ul style="margin:0 0 18px 1.1em; padding:0; font-size:0.85em; color:#a8c8ff;
+                              line-height:1.7; list-style:disc;">
+                    <li>Beta releases may contain <strong style="color:#fff;">incomplete features</strong>
+                        or <strong style="color:#fff;">known bugs</strong>.</li>
+                    <li>They are intended for testing and feedback &mdash; <strong style="color:#fff;">not
+                        for production use</strong>.</li>
+                    <li>Beta info will appear on this channel with a
+                        <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
+                                     font-size:0.78em; letter-spacing:0.07em; text-transform:uppercase;
+                                     padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                        badge.</li>
+                    <li>Disable this toggle at any time to return to <strong style="color:#fff;">stable
+                        releases only</strong>.</li>
+                  </ul>
+                  <div style="text-align:right;">
+                    <button id="betaModalDismiss"
+                            style="background:#ffd700; color:#0a0e2a; border:none; border-radius:5px;
+                                   padding:9px 22px; font-size:0.9em; font-weight:900;
+                                   letter-spacing:0.05em; text-transform:uppercase; cursor:pointer;">
+                      Got It
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <script>
+              (function () {
+                var toggle = document.getElementById('updatesShowBetaToggle');
+                var modal  = document.getElementById('betaInfoModal');
+                var dismiss = document.getElementById('betaModalDismiss');
+                if (!toggle || !modal || !dismiss) return;
+
+                function handleEscape(e) {
+                  if (e.key === 'Escape') { closeModal(); }
+                }
+                function openModal() {
+                  modal.style.display = 'flex';
+                  dismiss.focus();
+                  document.addEventListener('keydown', handleEscape);
+                }
+                function closeModal() {
+                  modal.style.display = 'none';
+                  toggle.focus();
+                  document.removeEventListener('keydown', handleEscape);
+                }
+
+                toggle.addEventListener('change', function () {
+                  if (toggle.checked) { openModal(); }
+                });
+
+                dismiss.addEventListener('click', closeModal);
+
+                // Close on backdrop click
+                modal.addEventListener('click', function (e) {
+                  if (e.target === modal) { closeModal(); }
+                });
+              })();
+              </script>
+              {% endif %}
+              {% if ch.tvg_id == 'virtual.sports' %}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label>Display Mode</label>
+                <div class="form-row form-row-inline" style="gap:16px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="ch_sports_mode" value="scores"
+                           class="sp-mode-radio"
+                           {% if sports_config.mode != 'rss' %}checked{% endif %}>
+                    <span>&#127942; Live Scores <span class="muted small">(ESPN scoreboard by league)</span></span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="ch_sports_mode" value="rss"
+                           class="sp-mode-radio"
+                           {% if sports_config.mode == 'rss' %}checked{% endif %}>
+                    <span>&#128240; RSS News Feeds <span class="muted small">(custom feed URLs)</span></span>
+                  </label>
+                </div>
+              </div>
+              <!-- Scores section -->
+              <div class="vc-prefs-field vc-prefs-field-wide sp-scores-section"
+                   style="width:100%;flex-basis:100%;{% if sports_config.mode == 'rss' %}display:none;{% endif %}">
+                <label>&#127942; Leagues to Display <span class="muted small">(cycles through enabled leagues every 60 s)</span></label>
+                <div style="display:flex; flex-wrap:wrap; gap:10px 20px; margin-top:6px;">
+                  {% for lg in SPORTS_LEAGUES %}
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="checkbox"
+                           name="ch_sports_league_{{ lg.id }}"
+                           value="1"
+                           {% if sports_config.leagues.get(lg.id, false) %}checked{% endif %}>
+                    <span>{{ lg.emoji }} {{ lg.name }}</span>
+                  </label>
+                  {% endfor %}
+                </div>
+              </div>
+              <!-- RSS section -->
+              <div class="vc-prefs-field vc-prefs-field-wide sp-rss-section"
+                   style="width:100%;flex-basis:100%;{% if sports_config.mode != 'rss' %}display:none;{% endif %}">
+                <label>Sports RSS/Atom Feeds <span class="muted small">(up to 6 &mdash; cycles every {{ (1800 // [(sports_feed_urls|default([])|length), 1]|max) }} s)</span></label>
+                {% for i in range(1, 7) %}
+                <div class="form-row form-row-inline" style="gap:4px; align-items:center; margin-bottom:4px;">
+                  <span class="muted small" style="min-width:1.6em; text-align:right;">{{ i }}.</span>
+                  <input type="url" name="ch_sports_rss_url_{{ i }}"
+                         value="{{ sports_feed_urls[i-1] if sports_feed_urls|length >= i else '' }}"
+                         placeholder="https://feeds.example.com/sports{{ i }}.xml"
+                         maxlength="500" style="flex:1;">
+                </div>
+                {% endfor %}
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                <a href="/sports" target="_blank" class="btn-link small">&#127942; Preview Sports Page &#8599;</a>
+                <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+              </div>
+              <script>
+              (function() {
+                var radios = document.querySelectorAll('input.sp-mode-radio[name="ch_sports_mode"]');
+                function toggleSections() {
+                  var mode = document.querySelector('input.sp-mode-radio[name="ch_sports_mode"]:checked');
+                  var isRss = mode && mode.value === 'rss';
+                  document.querySelectorAll('.sp-scores-section').forEach(function(el) { el.style.display = isRss ? 'none' : ''; });
+                  document.querySelectorAll('.sp-rss-section').forEach(function(el)   { el.style.display = isRss ? '' : 'none'; });
+                }
+                radios.forEach(function(r) { r.addEventListener('change', toggleSections); });
+              })();
+              </script>
+              {% endif %}
+              {% if ch.tvg_id == 'virtual.nasa' %}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label>Cycle Duration</label>
+                <div class="form-row form-row-inline" style="gap:16px; align-items:center;">
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="ch_nasa_interval" value="15"
+                           class="nasa-interval-radio"
+                           {% if nasa_config.interval == '15' %}checked{% endif %}>
+                    <span>&#8987; 15-Minute Cycle <span class="muted small">(default 5 images &times; 3 min each)</span></span>
+                  </label>
+                  <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                    <input type="radio" name="ch_nasa_interval" value="30"
+                           class="nasa-interval-radio"
+                           {% if nasa_config.interval == '30' %}checked{% endif %}>
+                    <span>&#8987; 30-Minute Cycle <span class="muted small">(default 10 images &times; 3 min each)</span></span>
+                  </label>
+                </div>
+              </div>
+              <div class="vc-prefs-field">
+                <label>Number of Images
+                  <span class="muted small" id="nasa-count-hint" style="margin-left:4px;">(1&ndash;15)</span>
+                </label>
+                <div class="form-row form-row-inline" style="gap:10px; align-items:center;">
+                  <input type="range" name="ch_nasa_image_count" id="nasa-count-slider"
+                         min="1" max="15" step="1"
+                         value="{{ nasa_config.image_count }}"
+                         style="width:140px;">
+                  <span id="nasa-count-display" style="font-weight:700; min-width:3em;">
+                    {{ nasa_config.image_count }} img
+                  </span>
+                  <span id="nasa-spi-display" class="muted small"></span>
+                </div>
+                <p class="muted small" style="margin-top:4px;">
+                  Per-image time = cycle minutes &divide; image count.
+                  <br>15-min/15 imgs = 1 min each &bull; 30-min/15 imgs = 2 min each &bull; 15-min/5 imgs = 3 min each.
+                </p>
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                <a href="/nasa" target="_blank" class="btn-link small">&#127760; Preview NASA Page &#8599;</a>
+                <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+              </div>
+              <script>
+              (function() {
+                var slider   = document.getElementById('nasa-count-slider');
+                var display  = document.getElementById('nasa-count-display');
+                var spiDisp  = document.getElementById('nasa-spi-display');
+                var radios   = document.querySelectorAll('input.nasa-interval-radio[name="ch_nasa_interval"]');
+
+                function getInterval() {
+                  var r = document.querySelector('input.nasa-interval-radio[name="ch_nasa_interval"]:checked');
+                  return r ? parseInt(r.value, 10) : 15;
+                }
+
+                function updateDisplay() {
+                  var n = parseInt(slider.value, 10) || 1;
+                  var mins = getInterval();
+                  var spi = Math.floor((mins * 60) / n);
+                  display.textContent = n + ' img' + (n === 1 ? '' : 's');
+                  var spiLabel = spi >= 60 ? (Math.round(spi / 60) + ' min') : (spi + 's');
+                  spiDisp.textContent = '\u2192 ' + spiLabel + ' per image';
+                }
+
+                if (slider) {
+                  slider.addEventListener('input', updateDisplay);
+                  radios.forEach(function(r) { r.addEventListener('change', updateDisplay); });
+                  updateDisplay();
+                }
+              })();
+              </script>
+              {% endif %}
+              {% if ch.tvg_id == 'virtual.on_this_day' %}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <div style="padding:8px 10px; background:rgba(0,10,40,0.5);
+                            border:1px solid #4a70ff; border-radius:4px;">
+                  <span style="display:inline-block; background:#1640d4; color:#fff; font-weight:700;
+                               font-size:0.8em; letter-spacing:0.07em; text-transform:uppercase;
+                               padding:0.2em 0.55em; border-radius:3px; margin-right:6px;
+                               vertical-align:middle;">&#9203;&#128198;</span><span style="color:#c8d8ff; font-size:0.88em; line-height:1.6; vertical-align:middle;">
+                    Shows historical events, births, and deaths sourced from Wikipedia for today's date.
+                    Events cycle every {{ on_this_day_config.seconds_per_event }} seconds, wall-clock-aligned so all viewers see the same event.
+                  </span>
+                </div>
+              </div>
+
+              {# ── Sources disclosure ── #}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%; margin-top:6px;">
+                <button type="button" class="secondary small" id="otd-sources-toggle"
+                        aria-expanded="false" aria-controls="otd-sources-panel"
+                        style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                  <span id="otd-sources-arrow" style="display:inline-block; transition:transform 0.2s;">&#9650;</span>
+                  <span>Data Sources</span>
+                </button>
+              </div>
+
+              <div id="otd-sources-panel" style="width:100%; display:none;">
+                {% for src in on_this_day_config.sources %}
+                <div style="margin-bottom:14px; padding:10px 12px; background:rgba(0,6,20,0.5);
+                            border:1px solid rgba(74,112,255,0.3); border-radius:4px;">
+                  {# Source header row #}
+                  <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+                    <label class="toggle-switch" title="{{ src.label }} enabled">
+                      <input type="checkbox"
+                             class="toggle-input"
+                             name="ch_otd_source_{{ src.id }}"
+                             value="1"
+                             id="otd-src-toggle-{{ src.id }}"
+                             {{ 'checked' if src.enabled else '' }}>
+                      <span class="toggle-slider"></span>
+                    </label>
+                    <strong style="color:#c8d8ff; font-size:0.9em;">{{ src.label }}</strong>
+                    <span class="muted small" style="margin-left:auto;">
+                      <a href="{{ src.wiki_url }}"
+                         target="_blank" rel="noopener" class="btn-link small"
+                         title="Wikipedia API endpoint">API &#8599;</a>
+                    </span>
+                  </div>
+                  <p class="muted small" style="margin-bottom:6px; font-size:0.75em;">
+                    Source URL:
+                    <code style="font-size:0.9em; color:#90a8f0; word-break:break-all;">
+                      {{ src.wiki_url }}
+                    </code>
+                  </p>
+                  {# Custom entries (shown / always available for override) #}
+                  <div id="otd-custom-wrap-{{ src.id }}"
+                       style="{{ '' if not src.enabled else 'display:none;' }}">
+                    <label style="font-size:0.8em; color:#c0d0ff; display:block; margin-bottom:4px;">
+                      Custom Entries <span class="muted small">(one per line: <code>YEAR: description</code>)</span>
+                    </label>
+                    <textarea name="ch_otd_custom_{{ src.id }}"
+                              rows="4"
+                              placeholder="1969: Moon landing&#10;1492: Columbus sails"
+                              style="width:100%; max-width:520px; font-family:monospace; font-size:0.82em;
+                                     background:#050a20; color:#c8d8ff; border:1px solid #3058d8;
+                                     border-radius:3px; padding:6px 8px; resize:vertical;">{% for ev in src.custom_events %}{{ ev.year }}{{ ': ' + ev.text if ev.year else ev.text }}
+{% endfor %}</textarea>
+                    <p class="muted small" style="margin-top:3px; font-size:0.72em;">
+                      These entries replace Wikipedia data when the source is disabled.
+                    </p>
+                  </div>
+                </div>
+                {% endfor %}
+              </div>
+
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
+                <a href="/on_this_day" target="_blank" class="btn-link small">&#9203;&#128198; Preview On This Day Page &#8599;</a>
+                <span class="muted small" style="margin-left:8px;">Save settings first.</span>
+              </div>
+              <script>
+              (function() {
+                var toggleBtn  = document.getElementById('otd-sources-toggle');
+                var panel      = document.getElementById('otd-sources-panel');
+                var arrow      = document.getElementById('otd-sources-arrow');
+
+                if (toggleBtn) {
+                  toggleBtn.addEventListener('click', function() {
+                    var expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+                    toggleBtn.setAttribute('aria-expanded', String(!expanded));
+                    panel.style.display = expanded ? 'none' : 'block';
+                    arrow.style.transform = expanded ? '' : 'rotate(180deg)';
+                  });
+                }
+
+                // Show/hide custom textarea based on toggle state
+                {% for src in on_this_day_config.sources %}
+                (function() {
+                  var cb   = document.getElementById('otd-src-toggle-{{ src.id }}');
+                  var wrap = document.getElementById('otd-custom-wrap-{{ src.id }}');
+                  function syncWrap() {
+                    if (wrap) wrap.style.display = cb && cb.checked ? 'none' : '';
+                  }
+                  if (cb) { cb.addEventListener('change', syncWrap); syncWrap(); }
+                })();
+                {% endfor %}
+              })();
+              </script>
+              {% endif %}
+              {% if ch.tvg_id == 'virtual.channel_mix' %}
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <div style="padding:8px 10px; background:rgba(0,10,60,0.45);
+                            border:1px solid #4a70ff; border-radius:4px;">
+                  <span style="display:inline-block; background:#4a70ff; color:#fff; font-weight:700;
+                               font-size:0.8em; letter-spacing:0.07em; text-transform:uppercase;
+                               padding:0.2em 0.55em; border-radius:3px; margin-right:6px;
+                               vertical-align:middle;">&#127902;</span><span style="color:#c8d8ff; font-size:0.88em; line-height:1.6; vertical-align:middle;">
+                    Select which virtual channels to include and how long each plays.
+                    Channels cycle in order, wall-clock-aligned so all viewers see the same channel at the same moment.
+                  </span>
+                </div>
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label>Mix Name <span class="muted small">(shown in guide &amp; overlay badge; leave blank for &ldquo;Channel Mix&rdquo;)</span></label>
+                <input type="text" name="ch_mix_name"
+                       value="{{ channel_mix_config.name }}"
+                       placeholder="Channel Mix"
+                       maxlength="120" style="max-width:340px;">
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label>Channels &amp; Durations</label>
+                <div style="display:flex;flex-direction:column;gap:6px;margin-top:6px;">
+                  {% set mix_ch_map = {} %}
+                  {% for mc in channel_mix_config.channels %}{% set _ = mix_ch_map.update({mc.tvg_id: mc.duration_minutes}) %}{% endfor %}
+                  {% for src_ch in VIRTUAL_CHANNELS %}{% if src_ch.tvg_id != 'virtual.channel_mix' %}
+                  {% set is_selected = src_ch.tvg_id in mix_ch_map %}
+                  <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:rgba(0,10,60,0.3);border:1px solid {% if is_selected %}#4a70ff{% else %}#1a2860{% endif %};border-radius:4px;">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;flex:1;min-width:0;">
+                      <input type="checkbox"
+                             name="cm_ch_{{ src_ch.tvg_id }}"
+                             value="1"
+                             {% if is_selected %}checked{% endif %}
+                             style="flex-shrink:0;">
+                      {% if src_ch.logo %}<img src="{{ src_ch.logo }}" alt="" style="width:24px;height:24px;object-fit:contain;flex-shrink:0;">{% endif %}
+                      <span style="font-weight:700;color:#fff;">{{ src_ch.name }}</span>
+                    </label>
+                    <div style="display:flex;align-items:center;gap:5px;flex-shrink:0;">
+                      <input type="number"
+                             name="cm_dur_{{ src_ch.tvg_id }}"
+                             value="{{ mix_ch_map.get(src_ch.tvg_id, 120) }}"
+                             min="1" max="1440" step="1"
+                             style="width:5.5em;">
+                      <span class="muted small" style="white-space:nowrap;">min</span>
+                    </div>
+                  </div>
+                  {% endif %}{% endfor %}
+                </div>
+                <p class="muted small" style="margin-top:8px;">
+                  Duration range: 1&ndash;1440 minutes per channel.
+                  Unchecked channels are excluded from the mix.
+                </p>
+              </div>
+              {% endif %}
               <div class="vc-prefs-field vc-prefs-field-wide" style="align-self:flex-start;">
                 <label>&#128247; Channel Logo</label>
                 <div class="vc-logo-upload-section" data-tvg-id="{{ ch.tvg_id }}">
@@ -329,6 +760,58 @@
     </div><!-- /.vc-left -->
     <div class="vc-right">
 
+    <!-- Icon Pack -->
+    <section class="card vc-card" aria-labelledby="lbl-icon-pack">
+      <div class="card-head card-head-collapsible">
+        <button type="button" class="collapsible-toggle" id="btn-icon-pack-toggle"
+                aria-expanded="true"
+                aria-controls="icon-pack-body">
+          <span class="collapsible-arrow">&#9660;</span>
+          <h2 id="lbl-icon-pack" class="collapsible-heading">&#127912; Channel Icon Pack</h2>
+        </button>
+      </div>
+      <div class="card-body" id="icon-pack-body">
+        <p class="muted small" style="margin:0 0 10px;">
+          Enable the styled icon pack to use custom channel logos instead of the standard icons.
+          You can still upload your own logo per channel, which always takes priority.
+        </p>
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:12px;">
+          <label class="toggle-switch" title="{% if use_icon_pack %}Icon pack enabled{% else %}Icon pack disabled{% endif %}">
+            <input type="checkbox" id="icon-pack-toggle" class="toggle-input"
+                   {% if use_icon_pack %}checked{% endif %}>
+            <span class="toggle-slider"></span>
+          </label>
+          <span id="icon-pack-label" style="font-size:0.9em;">
+            {% if use_icon_pack %}Icon Pack <strong>Enabled</strong>{% else %}Icon Pack <strong>Disabled</strong> (using standard icons){% endif %}
+          </span>
+          <span id="icon-pack-status" class="muted small" aria-live="polite"></span>
+        </div>
+        <!-- Icon pack preview grid -->
+        <div id="icon-pack-grid" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:4px;">
+          {% for ch in VIRTUAL_CHANNELS %}
+          {% set pack_url = icon_pack_logos.get(ch.tvg_id) %}
+          {% if pack_url %}
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <img src="{{ pack_url }}" alt="{{ ch.name }}" title="{{ ch.name }}"
+                 style="width:56px; height:56px; object-fit:contain; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#0a0e2a; opacity:{% if use_icon_pack %}1{% else %}0.35{% endif %};"
+                 class="icon-pack-preview-img">
+            <span class="muted small" style="font-size:0.65em; text-align:center; max-width:60px; line-height:1.2;">{{ ch.name }}</span>
+          </div>
+          {% endif %}
+          {% endfor %}
+          {% set pack_url_otd = icon_pack_logos.get('virtual.on_this_day') %}
+          {% if pack_url_otd %}
+          <div style="display:flex; flex-direction:column; align-items:center; gap:3px;">
+            <img src="{{ pack_url_otd }}" alt="On This Day" title="On This Day (future channel)"
+                 style="width:56px; height:56px; object-fit:contain; border-radius:6px; border:1px solid rgba(255,255,255,0.1); background:#0a0e2a; opacity:{% if use_icon_pack %}1{% else %}0.35{% endif %};"
+                 class="icon-pack-preview-img">
+            <span class="muted small" style="font-size:0.65em; text-align:center; max-width:60px; line-height:1.2;">On This Day</span>
+          </div>
+          {% endif %}
+        </div>
+      </div>
+    </section>
+
     <!-- Channel Order -->
     <section class="card vc-card" aria-labelledby="lbl-channel-order">
       <div class="card-head">
@@ -339,12 +822,21 @@
       <div class="card-body">
         <ol class="channel-order-list" id="channel-order-list">
           {% for ch in VIRTUAL_CHANNELS %}
+          {% if ch.tvg_id == 'virtual.channel_mix' %}
+          <li class="channel-order-item channel-order-item--pinned" draggable="false" data-tvg-id="{{ ch.tvg_id }}">
+            <span class="order-num">{{ loop.index }}</span>
+            {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-sm">{% endif %}
+            <span class="order-name">{{ ch.name }}</span>
+            <span class="drag-handle drag-handle--pinned" title="Channel Mix is always last">&#128204;</span>
+          </li>
+          {% else %}
           <li class="channel-order-item" draggable="true" data-tvg-id="{{ ch.tvg_id }}">
             <span class="order-num">{{ loop.index }}</span>
             {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-sm">{% endif %}
             <span class="order-name">{{ ch.name }}</span>
             <span class="drag-handle" aria-hidden="true">&#8597;</span>
           </li>
+          {% endif %}
           {% endfor %}
         </ol>
         <div class="channel-order-save-row">
@@ -425,6 +917,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Icon Pack collapsible
+  const iconPackToggle = document.getElementById('btn-icon-pack-toggle');
+  const iconPackBody = document.getElementById('icon-pack-body');
+  if (iconPackToggle && iconPackBody) {
+    iconPackToggle.addEventListener('click', () => {
+      const expanded = iconPackToggle.getAttribute('aria-expanded') === 'true';
+      iconPackBody.hidden = expanded;
+      iconPackToggle.setAttribute('aria-expanded', String(!expanded));
+      const arrow = iconPackToggle.querySelector('.collapsible-arrow');
+      if (arrow) arrow.textContent = expanded ? '\u25B6' : '\u25BC';
+    });
+  }
+
   // Per-channel overlay prefs
   document.querySelectorAll('.vc-prefs-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -473,6 +978,55 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const saveBtn = document.getElementById('channel-order-save-btn');
     const saveStatus = document.getElementById('channel-order-save-status');
+
+    // Always keep Channel Mix pinned at the bottom of the list
+    function enforceMixLast() {
+      const mixItem = orderList.querySelector('.channel-order-item[data-tvg-id="virtual.channel_mix"]');
+      if (mixItem && mixItem !== orderList.lastElementChild) {
+        orderList.appendChild(mixItem);
+      }
+      // Renumber all items
+      orderList.querySelectorAll('.channel-order-item').forEach((item, i) => {
+        const num = item.querySelector('.order-num');
+        if (num) num.textContent = i + 1;
+      });
+    }
+
+    // Enforce on load in case server order differs
+    enforceMixLast();
+
+    if (orderList) {
+    let dragging = null;
+    orderList.addEventListener('dragstart', e => {
+      dragging = e.target.closest('.channel-order-item');
+      // Channel Mix must never be dragged
+      if (dragging && dragging.dataset.tvgId === 'virtual.channel_mix') {
+        e.preventDefault();
+        dragging = null;
+        return;
+      }
+      if (dragging) dragging.classList.add('dragging');
+    });
+    orderList.addEventListener('dragend', () => {
+      if (dragging) dragging.classList.remove('dragging');
+      dragging = null;
+      enforceMixLast();
+    });
+    orderList.addEventListener('dragover', e => {
+      e.preventDefault();
+      const over = e.target.closest('.channel-order-item');
+      // Never allow dropping onto or after Channel Mix
+      if (!over || over.dataset.tvgId === 'virtual.channel_mix') return;
+      if (dragging && over !== dragging) {
+        const rect = over.getBoundingClientRect();
+        const mid = rect.top + rect.height / 2;
+        if (e.clientY < mid) orderList.insertBefore(dragging, over);
+        else orderList.insertBefore(dragging, over.nextSibling);
+        // If that accidentally pushed past Channel Mix, enforceMixLast will fix it on dragend
+      }
+    });
+    }
+
     if (saveBtn) {
       saveBtn.addEventListener('click', () => {
         const ids = Array.from(orderList.querySelectorAll('.channel-order-item'))
@@ -752,6 +1306,62 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(function() { setLogoStatus('Reset request failed.', true); })
         .finally(function() { btn.disabled = false; });
+    });
+  });
+})();
+
+// Icon pack toggle
+(function() {
+  var toggle = document.getElementById('icon-pack-toggle');
+  var label = document.getElementById('icon-pack-label');
+  var statusEl = document.getElementById('icon-pack-status');
+  var previewImgs = document.querySelectorAll('.icon-pack-preview-img');
+  if (!toggle) return;
+
+  toggle.addEventListener('change', function() {
+    var enabled = toggle.checked;
+    statusEl.textContent = 'Saving\u2026';
+    statusEl.style.color = '';
+    fetch('/api/virtual/icon_pack', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({enabled: enabled}),
+      credentials: 'same-origin'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.ok) {
+        label.innerHTML = enabled
+          ? 'Icon Pack <strong>Enabled</strong>'
+          : 'Icon Pack <strong>Disabled</strong> (using standard icons)';
+        // Dim/brighten preview images
+        previewImgs.forEach(function(img) {
+          img.style.opacity = enabled ? '1' : '0.35';
+        });
+        // Reload channel logos in the enabled/disabled lists and order panel
+        if (data.logos) {
+          Object.entries(data.logos).forEach(function(entry) {
+            var tvgId = entry[0], url = entry[1];
+            document.querySelectorAll('img.vc-logo-lg, img.vc-logo-sm, img.vc-logo-preview').forEach(function(img) {
+              var parent = img.closest('[data-tvg-id="' + tvgId + '"]');
+              if (parent) img.src = url + '?t=' + Date.now();
+            });
+            var orderItem = document.querySelector('.channel-order-item[data-tvg-id="' + tvgId + '"] img.vc-logo-sm');
+            if (orderItem) orderItem.src = url + '?t=' + Date.now();
+          });
+        }
+        statusEl.textContent = '\u2713 Saved';
+        statusEl.style.color = '#7bffb0';
+      } else {
+        toggle.checked = !enabled;
+        statusEl.textContent = data.error || 'Failed to save.';
+        statusEl.style.color = '#ff7b7b';
+      }
+    })
+    .catch(function() {
+      toggle.checked = !enabled;
+      statusEl.textContent = 'Request failed.';
+      statusEl.style.color = '#ff7b7b';
     });
   });
 })();

@@ -61,7 +61,7 @@ def check_db(db_path: str) -> Dict[str, Any]:
 
 def check_schema(db_path: str) -> Dict[str, Any]:
     """Verify that expected tables exist in the users database."""
-    required = {"users", "user_preferences"}
+    required = {"users", "user_preferences", "activity_logs"}
     try:
         with sqlite3.connect(db_path, timeout=5) as conn:
             cur = conn.execute(

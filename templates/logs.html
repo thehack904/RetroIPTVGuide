@@ -8,7 +8,7 @@
 {% block content %}
 <div class="container-logs">
   <div class="box">
-    <h2>Activity Log ({{ log_size }} bytes)</h2>
+    <h2>Activity Log ({{ entry_count }} {{ 'entry' if entry_count == 1 else 'entries' }})</h2>
 
     <!-- Clear Logs button -->
     <form method="POST" action="{{ url_for('clear_logs') }}" class="clear-form">

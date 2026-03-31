@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV Updates &amp; Announcements</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #07124a;
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ────────────────────────────────────────────── */
+    .up-frame {
+      width: min(1280px, 100vw, calc(100vh * 16 / 9));
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1535cc 0%, #0c22a0 35%, #081870 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .up-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.05) 3px,
+        rgba(0,0,0,0.05) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .up-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 1.2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(48px, 8.5vw, 100px);
+    }
+
+    .up-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+    }
+
+    .up-icon-header {
+      font-size: clamp(24px, 4vw, 52px);
+      line-height: 1;
+    }
+
+    .up-brand {
+      font-size: clamp(18px, 3vw, 40px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .up-brand strong {
+      font-weight: 900;
+    }
+
+    .up-header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.1em;
+    }
+
+    .up-header-title {
+      font-size: clamp(18px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .up-header-updated {
+      font-size: clamp(11px, 1.5vw, 20px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    /* ── Body area ──────────────────────────────────────────────── */
+    .up-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 0.46fr;
+      gap: 0.5em;
+      padding: 0.55em 0.7em 0.35em;
+      min-height: 0;
+    }
+
+    /* ── Left (main) panel ──────────────────────────────────────── */
+    .up-main {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.6);
+    }
+
+    .up-report-label {
+      background: transparent;
+      padding: 0.28em 0.65em 0.12em;
+      font-size: clamp(11px, 1.6vw, 20px);
+      font-style: italic;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .up-headline-bar {
+      background: linear-gradient(90deg, #003399 0%, #0044cc 55%, #002277 100%);
+      padding: 0.3em 0.65em;
+    }
+
+    .up-headline-bar.beta {
+      background: linear-gradient(90deg, #886600 0%, #aa8800 55%, #775500 100%);
+    }
+
+    .up-headline-text {
+      font-size: clamp(13px, 2.1vw, 28px);
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #fff;
+      line-height: 1.15;
+    }
+
+    /* Version display area */
+    .up-main-content {
+      flex: 1;
+      background: rgba(8, 18, 80, 0.5);
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4em;
+      padding: 0.6em 1em;
+    }
+
+    .up-version-label {
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .up-version-number {
+      font-size: clamp(28px, 5.5vw, 72px);
+      font-weight: 900;
+      line-height: 1;
+      color: #fff;
+      letter-spacing: 0.02em;
+    }
+
+    .up-beta-badge {
+      display: inline-block;
+      background: #ffd700;
+      color: #0a0e2a;
+      font-size: clamp(8px, 1vw, 13px);
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 0.2em 0.6em;
+      border-radius: 3px;
+    }
+
+    .up-meta-row {
+      display: flex;
+      gap: clamp(1em, 3vw, 3em);
+      flex-wrap: wrap;
+      justify-content: center;
+      margin-top: 0.3em;
+    }
+
+    .up-meta-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.1em;
+    }
+
+    .up-meta-value {
+      font-size: clamp(11px, 1.6vw, 22px);
+      font-weight: 900;
+      color: #fff;
+    }
+
+    .up-meta-key {
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    /* Release notes summary */
+    .up-summary-box {
+      background: rgba(6, 20, 90, 0.85);
+      border-top: 2px solid #3a5ccc;
+      padding: 0.45em 0.75em;
+    }
+
+    .up-summary-text {
+      font-size: clamp(8px, 1.15vw, 15px);
+      font-weight: 400;
+      color: #e8eeff;
+      line-height: 1.5;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 3;
+      -webkit-box-orient: vertical;
+    }
+
+    /* ── Right sidebar (release notes) ──────────────────────────── */
+    .up-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
+    }
+
+    .up-notes-panel {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      background: rgba(8, 28, 120, 0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      min-height: 0;
+    }
+
+    .up-notes-label {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
+      padding: 0.28em 0.65em;
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+      flex-shrink: 0;
+    }
+
+    .up-notes-text {
+      flex: 1;
+      padding: 0.45em 0.65em;
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 400;
+      color: #e8eeff;
+      line-height: 1.5;
+      overflow-y: auto;
+    }
+
+    .up-notes-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(8px, 1.1vw, 14px);
+      color: #4a70ff;
+      padding: 0.5em;
+    }
+
+    .up-item-dot-panel {
+      width: clamp(28px, 4vw, 52px);
+      flex-shrink: 0;
+      background: rgba(4, 10, 60, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .up-item-dot {
+      width: clamp(10px, 1.4vw, 18px);
+      height: clamp(10px, 1.4vw, 18px);
+      border-radius: 50%;
+      background: #22cc44;
+      box-shadow: 0 0 clamp(4px, 0.8vw, 8px) #22cc4466;
+    }
+
+    .up-item-dot.beta { background: #ffaa00; box-shadow: 0 0 clamp(4px,0.8vw,8px) #ffaa0066; }
+
+    .up-item-text {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 0.25em 0.5em;
+      min-width: 0;
+    }
+
+    .up-item-label {
+      font-size: clamp(8px, 1.05vw, 13px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd700;
+      line-height: 1.2;
+    }
+
+    .up-item-value {
+      font-size: clamp(9px, 1.3vw, 17px);
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.3;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    /* ── Ticker bar ─────────────────────────────────────────────── */
+    .up-ticker-bar {
+      background: #04091f;
+      border-top: 2px solid #3a5ccc;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4.2vw, 50px);
+    }
+
+    .up-ticker-label {
+      background: #0a0e2a;
+      color: #ffd700;
+      font-size: clamp(10px, 1.5vw, 18px);
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.75em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #3a5ccc;
+    }
+
+    .up-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .up-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: up-scroll 300s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes up-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error state ─────────────────────────────────── */
+    .up-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #ffd700;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="up-frame" id="upFrame">
+  <div class="up-loading" id="upLoading">Loading updates&#8230;</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const TICKER_PX_PER_SEC = 40;
+  const SUMMARY_MAX       = 1000;
+  const FADE_MS           = 600;
+  let _refreshTimer = null;
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function formatDate(isoStr) {
+    if (!isoStr) return '';
+    try {
+      return new Date(isoStr).toLocaleDateString([], { year: 'numeric', month: 'short', day: 'numeric' });
+    } catch (e) { return ''; }
+  }
+
+  function formatLocalTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) { return isoStr; }
+  }
+
+  function trimBody(body) {
+    if (!body) return '';
+    // Strip markdown headings and bullet markers for a clean summary
+    const plain = body
+      .replace(/#{1,6}\s+/g, '')
+      .replace(/^\s*[-*+]\s+/gm, '')
+      .replace(/\r?\n+/g, ' ')
+      .trim();
+    return plain.length > SUMMARY_MAX ? plain.substring(0, SUMMARY_MAX) + '\u2026' : plain;
+  }
+
+  function build(data) {
+    const frame    = document.getElementById('upFrame');
+    const releases = Array.isArray(data.releases) ? data.releases : [];
+    const latest   = data.latest || (releases.length ? releases[0] : null);
+    const ticker   = Array.isArray(data.ticker) ? data.ticker : [];
+
+    // Ticker
+    const tickText = ticker.length
+      ? ticker.join(' \u2022 ') + ' \u2022 '
+      : 'Current version: ' + esc(data.app_version || '') + ' \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    // Main panel
+    const isBeta       = latest && latest.prerelease;
+    const headlineClass = 'up-headline-bar' + (isBeta ? ' beta' : '');
+    const headlineText  = isBeta
+      ? '\u26A0\uFE0F Beta Release \u2014 Testing in Progress'
+      : '\u2714\uFE0F Latest Release Available';
+    const summary = latest ? trimBody(latest.body) : '';
+    const releaseDate = latest ? formatDate(latest.published) : '';
+    const releaseName = latest ? latest.name : (data.app_version || '');
+    const releaseTag  = latest ? latest.tag : (data.app_version || '');
+
+    const metaItems = [];
+    if (releaseDate) {
+      metaItems.push(`<div class="up-meta-item"><div class="up-meta-value">${esc(releaseDate)}</div><div class="up-meta-key">Released</div></div>`);
+    }
+    if (releases.length > 0) {
+      metaItems.push(`<div class="up-meta-item"><div class="up-meta-value">${releases.length}</div><div class="up-meta-key">Releases</div></div>`);
+    }
+
+    // Right sidebar: release notes for the latest release
+    const sidebarHtml = summary
+      ? `<div class="up-notes-panel">
+          <div class="up-notes-label">Release Notes</div>
+          <div class="up-notes-text">${esc(summary)}</div>
+        </div>`
+      : '<div class="up-notes-panel"><div class="up-notes-label">Release Notes</div><div class="up-notes-empty">No notes available.</div></div>';
+
+    const html = `
+      <div class="up-header">
+        <div class="up-header-left">
+          <span class="up-icon-header">&#128640;</span>
+          <span class="up-brand">RetroIPTV <strong>Updates</strong></span>
+        </div>
+        <div class="up-header-right">
+          <div class="up-header-title">What&#8217;s New</div>
+          <div class="up-header-updated">Updated: ${formatLocalTime(data.updated)}</div>
+        </div>
+      </div>
+      <div class="up-body">
+        <div class="up-main">
+          <div class="up-report-label">Latest Release</div>
+          <div class="${esc(headlineClass)}">
+            <div class="up-headline-text">${esc(headlineText)}</div>
+          </div>
+          <div class="up-main-content">
+            <div class="up-version-label">
+              Latest Version${isBeta ? ' &nbsp;<span class="up-beta-badge">Beta</span>' : ''}
+            </div>
+            <div class="up-version-number">${esc(releaseTag || releaseName)}</div>
+            ${metaItems.length ? `<div class="up-meta-row">${metaItems.join('')}</div>` : ''}
+          </div>
+        </div>
+        <div class="up-sidebar">${sidebarHtml}</div>
+      </div>
+      <div class="up-ticker-bar">
+        <div class="up-ticker-label">Version History:</div>
+        <div class="up-ticker-scroll">
+          <span class="up-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    frame.style.transition = `opacity ${FADE_MS}ms ease`;
+    frame.style.opacity = '0';
+    requestAnimationFrame(function () {
+      frame.innerHTML = html;
+      requestAnimationFrame(function () {
+        frame.style.opacity = '1';
+        setTimeout(function () {
+          const track = frame.querySelector('.up-ticker-track');
+          if (track && track.offsetWidth > 0) {
+            const dur = (track.offsetWidth / TICKER_PX_PER_SEC).toFixed(1);
+            track.style.animationDuration = dur + 's';
+          }
+        }, 0);
+      });
+    });
+  }
+
+  async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    try {
+      const resp = await fetch('/api/virtual/updates');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      build(data);
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : 1800000;
+      _refreshTimer = setTimeout(load, msUntilNext);
+    } catch (e) {
+      const frame = document.getElementById('upFrame');
+      if (frame) frame.innerHTML = '<div class="up-loading">Unable to load updates.</div>';
+      _refreshTimer = setTimeout(load, 60000);
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

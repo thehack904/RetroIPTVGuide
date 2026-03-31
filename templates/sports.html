@@ -1,0 +1,697 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV Sports</title>
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #04091f;
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer frame ────────────────────────────────────────────── */
+    .sp-frame {
+      width: min(1280px, 100vw, calc(100vh * 16 / 9));
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1030c8 0%, #0a1a80 40%, #081060 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* subtle scanline vignette */
+    .sp-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.05) 3px,
+        rgba(0,0,0,0.05) 4px
+      );
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    /* ── Header bar ─────────────────────────────────────────────── */
+    .sp-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 1.2em;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(48px, 8.5vw, 100px);
+    }
+
+    .sp-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.35em;
+    }
+
+    .sp-icon {
+      font-size: clamp(24px, 4vw, 52px);
+      line-height: 1;
+    }
+
+    .sp-brand {
+      font-size: clamp(18px, 3vw, 40px);
+      font-weight: 400;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .sp-brand strong { font-weight: 900; }
+
+    .sp-header-right {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 0.1em;
+    }
+
+    .sp-header-title {
+      font-size: clamp(16px, 2.6vw, 36px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #fff;
+    }
+
+    .sp-header-sub {
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    /* ── Scores body ─────────────────────────────────────────────── */
+    .sp-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 0.5em 0.7em 0.3em;
+      gap: 0.35em;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    /* Grid of game cards */
+    .sp-grid {
+      flex: 1;
+      display: grid;
+      gap: 0.35em;
+      min-height: 0;
+    }
+
+    /* Dynamic columns: 1-2 games → 1 col, 3-4 → 2 cols, 5+ → 3 cols */
+    .sp-grid.cols-1 { grid-template-columns: 1fr; }
+    .sp-grid.cols-2 { grid-template-columns: 1fr 1fr; }
+    .sp-grid.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+    /* ── Game card ────────────────────────────────────────────────── */
+    .sp-game {
+      background: rgba(10,40,170,0.75);
+      border: 2px solid #3058d8;
+      border-radius: 4px;
+      display: flex;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      padding: 0.4em 0.7em;
+      min-height: 0;
+      overflow: hidden;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 10px rgba(0,0,0,0.5);
+    }
+
+    .sp-game-status {
+      font-size: clamp(8px, 1.1vw, 14px);
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      text-align: center;
+      margin-bottom: 0.2em;
+    }
+    .sp-game-status.live   { color: #ff6666; }
+    .sp-game-status.final  { color: #40c0ff; }
+    .sp-game-status.pre    { color: #ffd700; }
+
+    .sp-matchup {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4em;
+    }
+
+    .sp-team {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .sp-team-abbr {
+      font-size: clamp(11px, 1.7vw, 23px);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .sp-team-name {
+      font-size: clamp(7px, 0.9vw, 11px);
+      color: #c8d8ff;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 100%;
+    }
+
+    .sp-score-block {
+      display: flex;
+      align-items: center;
+      gap: 0.25em;
+      flex-shrink: 0;
+    }
+
+    .sp-score {
+      font-size: clamp(15px, 2.5vw, 34px);
+      font-weight: 900;
+      color: #fff;
+      min-width: 1.4em;
+      text-align: center;
+      line-height: 1;
+    }
+
+    .sp-score-sep {
+      font-size: clamp(11px, 1.7vw, 23px);
+      font-weight: 700;
+      color: #4a70ff;
+    }
+
+    /* ── No-games state ─────────────────────────────────────────── */
+    .sp-no-games {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: clamp(13px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    /* ── RSS mode: blue palette ─── */
+    .sp-rss-body {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 0.46fr;
+      gap: 0.5em;
+      padding: 0.55em 0.7em 0.35em;
+      min-height: 0;
+    }
+
+    .sp-rss-main {
+      display: flex;
+      flex-direction: column;
+      background: rgba(8,28,120,0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 3px 16px rgba(0,0,0,0.6);
+    }
+
+    .sp-rss-top-label {
+      background: transparent;
+      padding: 0.28em 0.65em 0.12em;
+      font-size: clamp(11px, 1.6vw, 20px);
+      font-style: italic;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .sp-rss-headline-bar {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 55%, #0d2aaa 100%);
+      padding: 0.3em 0.65em;
+    }
+
+    .sp-rss-headline-text {
+      font-size: clamp(13px, 2.1vw, 28px);
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #fff;
+      line-height: 1.15;
+    }
+
+    .sp-rss-image {
+      flex: 1;
+      background: #0a1a5a;
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .sp-rss-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .sp-rss-summary-box {
+      background: rgba(6,20,90,0.85);
+      border-top: 2px solid #3a5ccc;
+      padding: 0.5em 0.75em;
+    }
+
+    .sp-rss-summary-text {
+      font-size: clamp(9px, 1.25vw, 16px);
+      line-height: 1.5;
+      color: #e8eeff;
+    }
+
+    .sp-rss-sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35em;
+    }
+
+    .sp-rss-item {
+      flex: 1;
+      display: flex;
+      background: rgba(8,28,120,0.65);
+      border: 2px solid #3a5ccc;
+      border-radius: 3px;
+      overflow: hidden;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+      min-height: 0;
+    }
+
+    .sp-rss-item-img {
+      width: clamp(80px, 9.5vw, 130px);
+      flex-shrink: 0;
+      background: #071460;
+      overflow: hidden;
+    }
+
+    .sp-rss-item-img img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+
+    .sp-rss-item-text {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      padding: 0.3em 0.55em;
+    }
+
+    .sp-rss-item-title {
+      font-size: clamp(9px, 1.3vw, 17px);
+      font-weight: 700;
+      line-height: 1.3;
+      color: #fff;
+    }
+
+    /* ── Bottom ticker ──────────────────────────────────────────── */
+    .sp-ticker-bar {
+      background: #0a0e2a;
+      border-top: 2px solid #4a70ff;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(28px, 4.2vw, 50px);
+    }
+
+    .sp-ticker-label {
+      background: #0a0e2a;
+      color: #ffd700;
+      font-size: clamp(10px, 1.5vw, 18px);
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 0 0.75em;
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #4a70ff;
+    }
+
+    .sp-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .sp-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(10px, 1.35vw, 17px);
+      font-weight: 700;
+      color: #ffd700;
+      animation: sp-scroll 300s linear infinite;
+      padding-left: 100%;
+    }
+
+    @keyframes sp-scroll {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-100%); }
+    }
+
+    /* ── Loading / error ─────────────────────────────────────────── */
+    .sp-loading {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      font-size: clamp(14px, 2vw, 24px);
+      color: #90a8f0;
+      letter-spacing: 0.1em;
+    }
+  </style>
+</head>
+<body>
+<div class="sp-frame" id="spFrame">
+  <div class="sp-loading" id="spLoading">Loading sports&#8230;</div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  const FALLBACK_IMG    = 'data:image/svg+xml,%3Csvg xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22 viewBox%3D%220 0 160 90%22%3E%3Crect width%3D%22160%22 height%3D%2290%22 fill%3D%22%230a1e0a%22%2F%3E%3Ctext x%3D%2280%22 y%3D%2250%22 text-anchor%3D%22middle%22 font-family%3D%22Arial%22 font-size%3D%2212%22 fill%3D%22%232a6c2a%22%3ENo Image%3C%2Ftext%3E%3C%2Fsvg%3E';
+  const TICKER_PX_PER_SEC = 40;
+  const SUMMARY_MAX       = 220;
+  const FADE_MS           = 500;
+  let _refreshTimer = null;
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+
+  function imgTag(url, alt) {
+    const src = url && url.trim() ? esc(url) : FALLBACK_IMG;
+    return `<img src="${src}" alt="${esc(alt)}" onerror="this.src='${FALLBACK_IMG}'">`;
+  }
+
+  function formatTime(isoStr) {
+    try { return new Date(isoStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+    catch(e) { return ''; }
+  }
+
+  function formatDate() {
+    return new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' });
+  }
+
+  // ── Scores mode renderer ──────────────────────────────────────────────────
+  function buildScores(data) {
+    const league  = data.league  || null;
+    const games   = Array.isArray(data.games) ? data.games : [];
+
+    // Not configured: no leagues selected
+    if (!league) {
+      return `
+        <div class="sp-header">
+          <div class="sp-header-left">
+            <span class="sp-icon">&#127942;</span>
+            <span class="sp-brand">RetroIPTV <strong>Sports</strong></span>
+          </div>
+          <div class="sp-header-right">
+            <div class="sp-header-title">Scores</div>
+          </div>
+        </div>
+        <div class="sp-body">
+          <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+                      gap:clamp(8px,1.5vw,20px);padding:1em;text-align:center;">
+            <div style="font-size:clamp(36px,6vw,80px);">&#127942;</div>
+            <div style="font-size:clamp(12px,2vw,26px);font-weight:900;letter-spacing:0.1em;
+                        text-transform:uppercase;color:#4a70ff;">No Leagues Configured</div>
+            <div style="font-size:clamp(9px,1.2vw,15px);color:#304080;max-width:24em;line-height:1.5;">
+              Select leagues in Virtual Sports Channel Settings.
+            </div>
+          </div>
+        </div>
+        <div class="sp-ticker-bar">
+          <div class="sp-ticker-label">Scores:</div>
+          <div class="sp-ticker-scroll">
+            <span class="sp-ticker-track">No leagues configured \u2022 </span>
+          </div>
+        </div>`;
+    }
+
+    const emoji   = esc(league.emoji  || '🏆');
+    const name    = esc(league.name   || 'Sports');
+
+    // Scoreboard ticker text
+    const tickParts = games.length
+      ? games.map(g => {
+          const away = esc(g.away_abbr || g.away_team || '?');
+          const home = esc(g.home_abbr || g.home_team || '?');
+          const score = (g.status_state === 'pre')
+            ? `${esc(g.status_text)} \u2014 ${away} @ ${home}`
+            : `${away} ${esc(g.away_score)} \u2013 ${home} ${esc(g.home_score)} (${esc(g.status_text)})`;
+          return score;
+        }).join(' \u2022 ')
+      : 'No games scheduled today';
+    const tickRepeat = (tickParts + ' \u2022 ').repeat(3);
+
+    // Determine grid columns
+    const cols = games.length <= 2 ? 'cols-1'
+               : games.length <= 4 ? 'cols-2'
+               :                     'cols-3';
+
+    const gameCards = games.length ? games.map(g => {
+      const stateClass = g.status_state === 'in'   ? 'live'
+                       : g.status_state === 'post'  ? 'final'
+                       :                              'pre';
+      const statusLabel = g.status_state === 'in'   ? `\u25cf LIVE \u2014 ${esc(g.status_text)}`
+                        : g.status_state === 'post'  ? 'FINAL'
+                        :                              esc(g.status_text || 'Scheduled');
+      const awayScore = (g.status_state !== 'pre' && g.away_score !== '') ? esc(g.away_score) : '\u2013';
+      const homeScore = (g.status_state !== 'pre' && g.home_score !== '') ? esc(g.home_score) : '\u2013';
+      return `
+        <div class="sp-game">
+          <div class="sp-game-status ${stateClass}">${statusLabel}</div>
+          <div class="sp-matchup">
+            <div class="sp-team">
+              <div class="sp-team-abbr">${esc(g.away_abbr || g.away_team)}</div>
+              <div class="sp-team-name">${esc(g.away_team)}</div>
+            </div>
+            <div class="sp-score-block">
+              <div class="sp-score">${awayScore}</div>
+              <div class="sp-score-sep">@</div>
+              <div class="sp-score">${homeScore}</div>
+            </div>
+            <div class="sp-team">
+              <div class="sp-team-abbr">${esc(g.home_abbr || g.home_team)}</div>
+              <div class="sp-team-name">${esc(g.home_team)}</div>
+            </div>
+          </div>
+        </div>`;
+    }).join('') : `<div class="sp-no-games">No games scheduled today</div>`;
+
+    const html = `
+      <div class="sp-header">
+        <div class="sp-header-left">
+          <span class="sp-icon">${emoji}</span>
+          <span class="sp-brand">RetroIPTV <strong>Sports</strong></span>
+        </div>
+        <div class="sp-header-right">
+          <div class="sp-header-title">${name}</div>
+          <div class="sp-header-sub">${formatDate()}</div>
+        </div>
+      </div>
+      <div class="sp-body">
+        <div class="sp-grid ${cols}">${gameCards}</div>
+      </div>
+      <div class="sp-ticker-bar">
+        <div class="sp-ticker-label">Scores:</div>
+        <div class="sp-ticker-scroll">
+          <span class="sp-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    applyHtml(html);
+  }
+
+  // ── RSS mode renderer ─────────────────────────────────────────────────────
+  function buildRss(data) {
+    const feedCount = (data.feed_count != null) ? data.feed_count : -1;
+    const headlines = Array.isArray(data.headlines) ? data.headlines : [];
+    const top       = headlines[0] || null;
+
+    // Not configured: no RSS feeds set up
+    if (feedCount === 0) {
+      return `
+        <div class="sp-header">
+          <div class="sp-header-left">
+            <span class="sp-icon">&#127942;</span>
+            <span class="sp-brand">RetroIPTV <strong>Sports</strong></span>
+          </div>
+          <div class="sp-header-right">
+            <div class="sp-header-title">Sports News</div>
+          </div>
+        </div>
+        <div class="sp-rss-body">
+          <div class="sp-rss-main">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+                        gap:clamp(8px,1.5vw,20px);padding:1em;text-align:center;">
+              <div style="font-size:clamp(36px,6vw,80px);">&#127942;</div>
+              <div style="font-size:clamp(12px,2vw,26px);font-weight:900;letter-spacing:0.1em;
+                          text-transform:uppercase;color:#4a70ff;">No RSS Feeds Configured</div>
+              <div style="font-size:clamp(9px,1.2vw,15px);color:#304080;max-width:24em;line-height:1.5;">
+                Add sports feed URLs in Virtual Sports Channel Settings.
+              </div>
+            </div>
+          </div>
+          <div class="sp-rss-sidebar"></div>
+        </div>
+        <div class="sp-ticker-bar">
+          <div class="sp-ticker-label">Sports News:</div>
+          <div class="sp-ticker-scroll">
+            <span class="sp-ticker-track">No RSS feeds configured \u2022 </span>
+          </div>
+        </div>`;
+    }
+
+    const sideItems = headlines.slice(1, 6);
+    const tickItems = headlines.slice(0, 10);
+
+    const tickText = tickItems.length
+      ? tickItems.map(h => h.title).join(' \u2022 ') + ' \u2022 '
+      : 'No sports headlines available \u2022 ';
+    const tickRepeat = tickText.repeat(3);
+
+    const sideRows = [];
+    for (let i = 0; i < 5; i++) {
+      const h = sideItems[i];
+      sideRows.push(h
+        ? `<div class="sp-rss-item">
+             <div class="sp-rss-item-img">${imgTag(h.image, h.title)}</div>
+             <div class="sp-rss-item-text"><div class="sp-rss-item-title">${esc(h.title)}</div></div>
+           </div>`
+        : `<div class="sp-rss-item" style="opacity:.3"></div>`);
+    }
+
+    let mainHtml = '';
+    if (top) {
+      const raw = top.summary || '';
+      const summary = esc(raw.length > SUMMARY_MAX ? raw.substring(0, SUMMARY_MAX) + '\u2026' : raw);
+      mainHtml = `
+        <div class="sp-rss-top-label">Top Story</div>
+        <div class="sp-rss-headline-bar">
+          <div class="sp-rss-headline-text">${esc(top.title)}</div>
+        </div>
+        <div class="sp-rss-image">${imgTag(top.image, top.title)}</div>
+        ${summary ? `<div class="sp-rss-summary-box"><div class="sp-rss-summary-text">${summary}</div></div>` : ''}`;
+    } else {
+      mainHtml = `<div class="sp-loading" style="flex:1">No stories available.</div>`;
+    }
+
+    const html = `
+      <div class="sp-header">
+        <div class="sp-header-left">
+          <span class="sp-icon">🏆</span>
+          <span class="sp-brand">RetroIPTV <strong>Sports</strong></span>
+        </div>
+        <div class="sp-header-right">
+          <div class="sp-header-title">Latest Sports News</div>
+          <div class="sp-header-sub">Updated: ${data.updated ? formatTime(data.updated) : ''}</div>
+        </div>
+      </div>
+      <div class="sp-rss-body">
+        <div class="sp-rss-main">${mainHtml}</div>
+        <div class="sp-rss-sidebar">${sideRows.join('')}</div>
+      </div>
+      <div class="sp-ticker-bar">
+        <div class="sp-ticker-label">Sports News:</div>
+        <div class="sp-ticker-scroll">
+          <span class="sp-ticker-track">${tickRepeat}</span>
+        </div>
+      </div>`;
+
+    applyHtml(html);
+  }
+
+  // ── Fade-in helper ────────────────────────────────────────────────────────
+  function applyHtml(html) {
+    const frame = document.getElementById('spFrame');
+    frame.style.transition = `opacity ${FADE_MS}ms ease`;
+    frame.style.opacity = '0';
+    requestAnimationFrame(() => {
+      frame.innerHTML = html;
+      requestAnimationFrame(() => {
+        frame.style.opacity = '1';
+        setTimeout(() => {
+          const track = frame.querySelector('.sp-ticker-track');
+          if (track && track.offsetWidth > 0) {
+            const dur = (track.offsetWidth / TICKER_PX_PER_SEC).toFixed(1);
+            track.style.animationDuration = dur + 's';
+          }
+        }, 0);
+      });
+    });
+  }
+
+  // ── Main load/refresh loop ────────────────────────────────────────────────
+  async function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    try {
+      const resp = await fetch('/api/sports');
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const data = await resp.json();
+
+      if (data.mode === 'rss') {
+        buildRss(data);
+      } else {
+        buildScores(data);
+      }
+
+      const msUntilNext = (data.ms_until_next > 0) ? data.ms_until_next : 60 * 1000;
+      _refreshTimer = setTimeout(load, msUntilNext);
+    } catch (e) {
+      const frame = document.getElementById('spFrame');
+      frame.innerHTML = `<div class="sp-loading">Unable to load sports data.</div>`;
+      _refreshTimer = setTimeout(load, 60 * 1000);
+    }
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>
