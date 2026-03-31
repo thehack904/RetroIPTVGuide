@@ -103,6 +103,8 @@ jobs:
     name: 🧽 Cleanup old Docker Hub tags
     runs-on: ubuntu-latest
     needs: build-and-push
+    permissions:
+      contents: read
     env:
       USER: thehack904
       REPO: retroiptvguide
