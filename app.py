@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.2-dev-alpha"
-APP_RELEASE_DATE = "2026-03-22"
+APP_VERSION = "v4.9.2"
+APP_RELEASE_DATE = "2026-03-30"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -107,8 +107,8 @@ app.secret_key = os.urandom(24)  # replace with a fixed key in production
 app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 
 
-DATABASE = 'users.db'
-TUNER_DB = 'tuners.db'
+DATABASE = os.path.join(DATA_DIR, 'users.db')
+TUNER_DB = os.path.join(DATA_DIR, 'tuners.db')
 ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
 ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'data', 'roads')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
@@ -4173,7 +4173,7 @@ SLOT_MINUTES = 30
 
 # ------------------- Main -------------------
 def ensure_default_tuner():
-    conn = sqlite3.connect('tuners.db')
+    conn = sqlite3.connect(TUNER_DB)
     c = conn.cursor()
     c.execute("SELECT COUNT(*) FROM tuners")
     count = c.fetchone()[0]

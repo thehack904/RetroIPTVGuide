@@ -12,7 +12,8 @@ LABEL version="3.1.0"
 # --------------------------------------------
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
-    APP_HOME=/app
+    APP_HOME=/app \
+    RETROIPTV_DATA_DIR=/app/config
 
 WORKDIR $APP_HOME
 
