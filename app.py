@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
 APP_VERSION = "v4.9.3-dev"
-APP_RELEASE_DATE = "2026-03-22"
+APP_RELEASE_DATE = "2026-04-01"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -1622,7 +1622,6 @@ def _fetch_on_this_day_from_wikipedia(api_type, month, day):
 
     Returns an empty list on any error so the overlay degrades gracefully.
     """
-    global _ON_THIS_DAY_CACHE
     cache_key = (api_type, month, day)
     cached = _ON_THIS_DAY_CACHE.get(cache_key)
     now_ts = time.time()
@@ -4366,7 +4365,6 @@ def api_nasa():
     Images are cached for one full cycle so we make at most one NASA API
     call per cycle regardless of how many clients are tuned to the channel.
     """
-    global _NASA_APOD_CACHE
     nasa_cfg = get_nasa_config()
     interval = nasa_cfg['interval']
     image_count = nasa_cfg['image_count']

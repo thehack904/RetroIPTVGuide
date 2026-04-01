@@ -6,15 +6,49 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.3 - 2026-04-01
+
+
+### Added
+- Added new virtual channels:
+  - Updates / Announcements
+  - Sports
+  - NASA
+  - On This Day
+  - Channel Mix (composite virtual channel)
+- Added supporting assets for new virtual channels including logos, loop videos, overlay scripts, and standalone templates.
+- Added database-backed activity logging, replacing the previous flat-file `activity.log`.
+- Added new diagnostics endpoint support for querying activity logs from the database.
+- Added expanded test coverage for:
+  - virtual channel behavior and defaults
+  - Channel Mix logic and switching behavior
+  - database-backed activity logging
+
+### Changed
+- Refactored admin diagnostics and logging system to use SQLite-backed activity logs instead of file-based logging.
+- Enhanced Virtual Channels management UI to support configuration and status for all channels, including new additions.
+- Improved guide fullscreen behavior to support additional virtual channels and dynamic Channel Mix switching.
+- Updated overlay rendering and frontend handling for more consistent behavior across all virtual channel types.
+- Updated logs UI to display activity entries instead of raw file size.
+
+### Fixed
+- Fixed fullscreen rendering issues for virtual channels to ensure proper aspect ratio and prevent stretching.
+- Fixed guide behavior when switching between virtual channels, including Channel Mix updates.
+- Fixed empty/unconfigured states for News and Weather channels to provide clearer user feedback.
+- Fixed inconsistencies in activity log handling by standardizing on database-backed storage.
+
+### Security
+- Reduced exposure of sensitive log data by removing direct file-based activity log access.
+- Improved control over diagnostics log access through structured database queries.
+
+---
+
 ## v4.9.2 - 2026-03-30
+
 
 ### Added
 - Added stricter internal error handling for diagnostics endpoints so dependency-check failures return sanitized error responses instead of raw exception details.
-- Added new test coverage for:
-  - redirect safety handling
-  - wake-lock behavior on the guide page
-  - diagnostics dependency endpoint failure handling
-- Added:
+- Added new test coverage for redirect safety and wake-lock behavior:
   - `tests/test_url_redirect_safety.py`
   - `tests/test_wake_lock.py`
 
@@ -24,24 +58,28 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Updated tuner creation validation so XMLTV URLs are now required and must be valid `http://` or `https://` URLs.
 - Hardened login and post-login redirect handling to only allow safe same-site relative redirect targets.
 - Hardened quick tuner switching redirect behavior to ignore unsafe referrers and fall back safely to the guide.
-- Updated diagnostics, health-check, tuner-diagnostics, conflict-detection, log-reading, startup, stream-detection, and security utility modules to log detailed failures server-side while returning safer, generic browser-facing error messages.
+- Restricted the `/_debug/vlcinfo` debug endpoint to authenticated users only.
+- Updated diagnostics and health-check utilities to log detailed failures server-side while returning safer, generic browser-facing error messages.
 - Refined traffic incident rendering to build DOM content more safely instead of relying on raw HTML string assembly.
+- Updated GitHub Actions workflow permissions to use more restrictive `contents: read` settings where appropriate.
 
 ### Fixed
 - Fixed an open-redirect risk in login flow handling by sanitizing `next` redirect targets.
 - Fixed an open-redirect risk in active tuner quick-switch flow by validating and reducing referrer redirects to safe same-origin paths only.
 - Fixed diagnostics responses that could expose raw internal exception details to the browser.
-- Fixed multiple diagnostics and validation helpers to avoid leaking stack traces, raw exception messages, DNS errors, filesystem errors, log-read failures, and fetch failures directly in UI/API responses.
+- Fixed multiple diagnostics and validation helpers to avoid leaking stack traces, raw exception messages, DNS errors, filesystem errors, and fetch failures directly in UI/API responses.
 - Fixed unsafe debug endpoint exposure by requiring authentication for debug information.
-- Fixed traffic incident escaping to also handle double quotes more safely in rendered attributes and content.
-- Fixed several stream-control and diagnostics API responses to return sanitized generic error messages instead of raw exception details.
+- Fixed traffic incident escaping to also handle double quotes more safely in rendered attributes/content.
 
 ### Security
 - Hardened redirect handling against open-redirect attacks in login and tuner switching flows.
-- Hardened admin diagnostics, startup diagnostics, tuner diagnostics, stream detection, health checks, dependency checks, log readers, conflict detection, and related utility modules to reduce sensitive error disclosure.
+- Hardened admin diagnostics, startup diagnostics, tuner diagnostics, stream detection, health checks, dependency checks, log readers, and related utility modules to reduce sensitive error disclosure.
 - Hardened debug endpoint access by requiring authentication for diagnostic information.
 - Hardened frontend traffic rendering against unsafe content injection.
-- Hardened guide usage on Fire TV / Android TV devices by keeping the guide active without requiring user interaction to prevent idle screen interruption.
+
+### CI
+- Tightened GitHub Actions workflow permissions.
+- Limited `python-app.yml` push execution to `main`.
 
 ---
 
