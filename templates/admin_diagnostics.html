@@ -798,6 +798,30 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
           if(ch.traffic_config){
             issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
           }
+          if(ch.updates_config){
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Beta releases: '+(ch.updates_config.show_beta?'shown':'hidden')+'</div>';
+          }
+          if(ch.sports_config){
+            var sc=ch.sports_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(sc.mode)
+              +(sc.mode==='rss'?' &nbsp;('+sc.rss_feed_count+' feed(s))':'')+'</div>';
+          }
+          if(ch.nasa_config){
+            var nc=ch.nasa_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Interval: '+esc(nc.interval_minutes)+' min &nbsp;Images: '+esc(nc.image_count)
+              +(nc.using_demo_key?' &nbsp;<span style="color:#ff9900">DEMO_KEY</span>':'')+'</div>';
+          }
+          if(ch.channel_mix_config){
+            var mx=ch.channel_mix_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Name: '+esc(mx.name)+' &nbsp;Sub-channels: '+esc(mx.channel_count)+'</div>';
+          }
+          if(ch.on_this_day_config){
+            var ot=ch.on_this_day_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Sources: '+esc(ot.enabled_source_count)+'/'+esc(ot.total_source_count)+' enabled</div>';
+          }
           issues.forEach(function(iss){
             issHtml+='<div style="font-size:0.75rem;margin-top:0.2rem;color:'+(ch.config_ok?'#888':'#ff9900')+'">'+esc(iss)+'</div>';
           });

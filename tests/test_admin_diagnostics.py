@@ -705,6 +705,36 @@ class TestHealthChecks:
         assert "tables_found" in result
         assert "users" in result["tables_found"]
 
+    def test_check_schema_pass_includes_columns_missing_key(self, isolated_db):
+        from utils.health_checks import check_schema
+        result = check_schema(app_module.DATABASE)
+        assert result["status"] == "PASS"
+        assert "columns_missing" in result
+        assert result["columns_missing"] == []
+
+    def test_check_schema_warns_on_missing_columns(self, tmp_path):
+        """check_schema should return WARN when required columns are absent."""
+        import sqlite3 as _sqlite3
+        from utils.health_checks import check_schema
+
+        db = str(tmp_path / "legacy.db")
+        with _sqlite3.connect(db) as conn:
+            conn.execute(
+                "CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password TEXT)"
+            )
+            conn.execute("CREATE TABLE user_preferences (username TEXT PRIMARY KEY, prefs TEXT)")
+            conn.execute(
+                "CREATE TABLE activity_logs "
+                "(id INTEGER PRIMARY KEY, username TEXT, action TEXT, timestamp TEXT)"
+            )
+            conn.commit()
+
+        result = check_schema(db)
+        assert result["status"] == "WARN"
+        assert "columns_missing" in result
+        assert "must_change_password" in result["columns_missing"]
+        assert result["tables_missing"] == []
+
     def test_check_file_system_returns_db_paths(self, isolated_db):
         from utils.health_checks import check_file_system
         result = check_file_system(app_module.DATABASE, app_module.TUNER_DB, app_module.DATA_DIR)
@@ -920,8 +950,17 @@ class TestCheckVirtualChannels:
         result = check_virtual_channels(app_module.TUNER_DB)
         assert "channels" in result
         tvg_ids = [c["tvg_id"] for c in result["channels"]]
-        for expected in ("virtual.news", "virtual.weather", "virtual.status", "virtual.traffic"):
+        for expected in (
+            "virtual.news", "virtual.weather", "virtual.status", "virtual.traffic",
+            "virtual.updates", "virtual.sports", "virtual.nasa",
+            "virtual.channel_mix", "virtual.on_this_day",
+        ):
             assert expected in tvg_ids
+
+    def test_returns_nine_channels(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        assert len(result["channels"]) == 9
 
     def test_status_is_valid(self, isolated_db):
         from utils.app_config_diag import check_virtual_channels
@@ -955,6 +994,77 @@ class TestCheckVirtualChannels:
         for ch in result["channels"]:
             assert "enabled" in ch
             assert isinstance(ch["enabled"], bool)
+
+    def test_updates_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        updates = next(c for c in result["channels"] if c["tvg_id"] == "virtual.updates")
+        assert "updates_config" in updates
+        assert "show_beta" in updates["updates_config"]
+        assert isinstance(updates["updates_config"]["show_beta"], bool)
+
+    def test_sports_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        sports = next(c for c in result["channels"] if c["tvg_id"] == "virtual.sports")
+        assert "sports_config" in sports
+        assert "mode" in sports["sports_config"]
+        assert "rss_feed_count" in sports["sports_config"]
+
+    def test_sports_default_mode_is_scores(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        sports = next(c for c in result["channels"] if c["tvg_id"] == "virtual.sports")
+        assert sports["sports_config"]["mode"] == "scores"
+
+    def test_sports_rss_mode_no_feeds_warns(self, isolated_db):
+        """Sports in RSS mode with no feeds should set config_ok=False."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        sports = next(c for c in result["channels"] if c["tvg_id"] == "virtual.sports")
+        assert sports["config_ok"] is False
+        assert result["status"] == "WARN"
+
+    def test_nasa_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        nasa = next(c for c in result["channels"] if c["tvg_id"] == "virtual.nasa")
+        assert "nasa_config" in nasa
+        assert "interval_minutes" in nasa["nasa_config"]
+        assert "image_count" in nasa["nasa_config"]
+        assert "using_demo_key" in nasa["nasa_config"]
+
+    def test_nasa_default_uses_demo_key(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        nasa = next(c for c in result["channels"] if c["tvg_id"] == "virtual.nasa")
+        assert nasa["nasa_config"]["using_demo_key"] is True
+
+    def test_channel_mix_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        mix = next(c for c in result["channels"] if c["tvg_id"] == "virtual.channel_mix")
+        assert "channel_mix_config" in mix
+        assert "name" in mix["channel_mix_config"]
+        assert "channel_count" in mix["channel_mix_config"]
+
+    def test_on_this_day_config_included(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        otd = next(c for c in result["channels"] if c["tvg_id"] == "virtual.on_this_day")
+        assert "on_this_day_config" in otd
+        assert "enabled_source_count" in otd["on_this_day_config"]
+        assert "total_source_count" in otd["on_this_day_config"]
+
+    def test_on_this_day_default_all_sources_enabled(self, isolated_db):
+        from utils.app_config_diag import check_virtual_channels
+        result = check_virtual_channels(app_module.TUNER_DB)
+        otd = next(c for c in result["channels"] if c["tvg_id"] == "virtual.on_this_day")
+        cfg = otd["on_this_day_config"]
+        assert cfg["enabled_source_count"] == cfg["total_source_count"]
 
 
 class TestCheckExternalServices:
@@ -1143,6 +1253,110 @@ class TestCheckExternalServices:
         assert overpass is not None
         assert overpass["reachable"] is True
         assert overpass["status_code"] == 200
+
+    def test_espn_api_included_when_sports_enabled(self, isolated_db):
+        """ESPN API entry should be present when sports channel is enabled (default scores mode)."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        espn = next((s for s in result["services"] if s["id"] == "espn_api"), None)
+        assert espn is not None, "ESPN API entry should be present"
+        assert "espn" in espn["url"].lower()
+
+    def test_espn_api_not_probed_when_sports_disabled(self, isolated_db):
+        """When sports channel is disabled, ESPN API should be listed but not probed."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.sports.enabled", "0"),
+            )
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        espn = next((s for s in result["services"] if s["id"] == "espn_api"), None)
+        assert espn is not None
+        assert espn["reachable"] is None
+
+    def test_sports_rss_feed_included_in_rss_mode(self, isolated_db):
+        """In RSS mode with feeds configured, sports feeds should appear as services."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.rss_url_1', 'https://www.espn.com/espn/rss/news')")
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        sports_feed = next((s for s in result["services"] if s["id"] == "sports_feed_1"), None)
+        assert sports_feed is not None
+        assert "espn" in sports_feed["url"].lower()
+
+    def test_sports_rss_unconfigured_listed_in_rss_mode(self, isolated_db):
+        """In RSS mode with no feeds, a placeholder entry should appear."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        sports_feed = next((s for s in result["services"] if s["id"] == "sports_feed"), None)
+        assert sports_feed is not None
+        assert sports_feed["reachable"] is None
+
+    def test_nasa_api_included_when_nasa_enabled(self, isolated_db):
+        """NASA APOD API entry should be present when NASA channel is enabled (default)."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        nasa = next((s for s in result["services"] if s["id"] == "nasa_apod_api"), None)
+        assert nasa is not None, "NASA APOD API entry should be present"
+        assert nasa["url"] == "https://api.nasa.gov/planetary/apod"
+
+    def test_nasa_api_url_does_not_contain_api_key(self, isolated_db):
+        """The NASA API display URL should not contain the api_key parameter."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        nasa = next((s for s in result["services"] if s["id"] == "nasa_apod_api"), None)
+        assert nasa is not None
+        assert "api_key" not in (nasa.get("url") or "")
+
+    def test_nasa_api_not_probed_when_nasa_disabled(self, isolated_db):
+        """When NASA channel is disabled, NASA APOD API should be listed but not probed."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.nasa.enabled", "0"),
+            )
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        nasa = next((s for s in result["services"] if s["id"] == "nasa_apod_api"), None)
+        assert nasa is not None
+        assert nasa["reachable"] is None
+
+    def test_wikipedia_on_this_day_included_when_enabled(self, isolated_db):
+        """Wikipedia On This Day API entry should be present when channel is enabled (default)."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        wiki = next((s for s in result["services"] if s["id"] == "wikipedia_on_this_day"), None)
+        assert wiki is not None, "Wikipedia On This Day API entry should be present"
+        assert "wikipedia" in wiki["url"].lower()
+
+    def test_wikipedia_on_this_day_not_probed_when_disabled(self, isolated_db):
+        """When On This Day channel is disabled, Wikipedia API should be listed but not probed."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.on_this_day.enabled", "0"),
+            )
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        wiki = next((s for s in result["services"] if s["id"] == "wikipedia_on_this_day"), None)
+        assert wiki is not None
+        assert wiki["reachable"] is None
+
+    def test_no_secrets_in_response_includes_new_services(self, isolated_db):
+        """Response including NASA and sports services should not contain api_key."""
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        result_str = json.dumps(result)
+        assert "api_key" not in result_str
 
 
 class TestCheckSystemResources:

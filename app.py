@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.3-dev"
-APP_RELEASE_DATE = "2026-04-01"
+APP_VERSION = "v4.9.3-dev Beta 2"
+APP_RELEASE_DATE = "2026-04-02"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -235,11 +235,12 @@ def _safe_next_url(raw: str) -> str:
 
 # ------------------- User Model -------------------
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, last_login=None):
+    def __init__(self, id, username, password_hash, last_login=None, must_change_password=0):
         self.id = id
         self.username = username
         self.password_hash = password_hash
         self.last_login = last_login
+        self.must_change_password = bool(must_change_password)
 
 # ------------------- Init DBs -------------------
 def _migrate_activity_log(conn):
@@ -297,6 +298,30 @@ def _migrate_activity_log(conn):
     return len(rows)
 
 
+def _apply_users_schema_migrations(conn: sqlite3.Connection) -> None:
+    """Apply incremental column migrations to the ``users`` table.
+
+    Each statement is wrapped in its own try/except so that a column that
+    already exists (``OperationalError``) is silently skipped.  New columns
+    must be appended to the bottom of this function — never removed — so that
+    any older database is always brought forward to the latest schema.
+    """
+    _migrations = [
+        # v1 → v2: persisted last-login timestamp
+        'ALTER TABLE users ADD COLUMN last_login TEXT',
+        # v2 → v3: per-user tuner assignment
+        'ALTER TABLE users ADD COLUMN assigned_tuner TEXT',
+        # v3 → v4: force password change on first login
+        'ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0',
+    ]
+    for stmt in _migrations:
+        try:
+            conn.execute(stmt)
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # column already present — safe to skip
+
+
 def init_db():
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         conn.execute("PRAGMA journal_mode=WAL;")
@@ -312,19 +337,7 @@ def init_db():
                       timestamp TEXT NOT NULL)''')
         conn.commit()
 
-        # Add last_login column if it doesn't exist (for existing databases)
-        try:
-            c.execute('ALTER TABLE users ADD COLUMN last_login TEXT')
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass
-
-        # Add assigned_tuner column if it doesn't exist (for existing databases)
-        try:
-            c.execute('ALTER TABLE users ADD COLUMN assigned_tuner TEXT')
-            conn.commit()
-        except sqlite3.OperationalError:
-            pass
+        _apply_users_schema_migrations(conn)
 
         # Migrate entries from the legacy activity.log flat file (one-time migration).
         migrated_count = _migrate_activity_log(conn)
@@ -340,30 +353,30 @@ def init_db():
             except Exception:  # noqa: BLE001
                 pass
 
-def add_user(username, password):
+def add_user(username, password, must_change_password=0):
     password_hash = generate_password_hash(password)
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)', (username, password_hash))
+        c.execute('INSERT OR IGNORE INTO users (username, password, must_change_password) VALUES (?, ?, ?)', (username, password_hash, must_change_password))
         conn.commit()
 
 def get_user(username):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password, last_login FROM users WHERE username=?', (username,))
+        c.execute('SELECT id, username, password, last_login, must_change_password FROM users WHERE username=?', (username,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3])
+        return User(row[0], row[1], row[2], row[3], row[4])
     return None
 
 @login_manager.user_loader
 def load_user(user_id):
     with sqlite3.connect(DATABASE, timeout=10) as conn:
         c = conn.cursor()
-        c.execute('SELECT id, username, password, last_login FROM users WHERE id=?', (user_id,))
+        c.execute('SELECT id, username, password, last_login, must_change_password FROM users WHERE id=?', (user_id,))
         row = c.fetchone()
     if row:
-        return User(row[0], row[1], row[2], row[3])
+        return User(row[0], row[1], row[2], row[3], row[4])
     return None
 
 # ------------------- Tuner DB -------------------
@@ -3362,6 +3375,10 @@ def login():
             login_user(user, remember=remember)
             log_event(username, "Logged in")
 
+            # Force password change if required (e.g. first login)
+            if user.must_change_password:
+                return redirect(url_for('change_password'))
+
             # Determine next redirect target (prefer POSTed next, then query param)
             safe_next = _safe_next_url(request.form.get('next') or request.args.get('next') or '')
             return redirect(safe_next or url_for('guide'))
@@ -3409,6 +3426,7 @@ def revoke_user_sessions(username):
 @app.route('/change_password', methods=['GET','POST'])
 @login_required
 def change_password():
+    forced = current_user.must_change_password
     if request.method == 'POST':
         old = request.form['old_password']
         new = request.form['new_password']
@@ -3416,7 +3434,7 @@ def change_password():
         if user and check_password_hash(user.password_hash, old):
             with sqlite3.connect(DATABASE, timeout=10) as conn:
                 c = conn.cursor()
-                c.execute('UPDATE users SET password=? WHERE id=?',
+                c.execute('UPDATE users SET password=?, must_change_password=0 WHERE id=?',
                           (generate_password_hash(new), current_user.id))
                 conn.commit()
             log_event(current_user.username, "Changed password")
@@ -3425,7 +3443,7 @@ def change_password():
         else:
             log_event(current_user.username, "Failed password change attempt (invalid old password)")
             flash("Old password incorrect.")
-    return render_template("change_password.html", current_tuner=get_current_tuner())
+    return render_template("change_password.html", current_tuner=get_current_tuner(), forced=forced)
 
 @app.route('/add_user', methods=['GET','POST'])
 @login_required
@@ -4749,9 +4767,9 @@ def get_updates_config() -> dict:
     Keys
     ----
     show_beta : bool  — whether pre-release / beta GitHub releases are shown
-                        on the Updates & Announcements channel (default True).
+                        on the Updates & Announcements channel (default False).
     """
-    defaults = {"show_beta": "1"}
+    defaults = {"show_beta": "0"}
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -4767,7 +4785,7 @@ def get_updates_config() -> dict:
 
 def save_updates_config(cfg: dict) -> None:
     """Persist updates channel configuration."""
-    show_beta = bool(cfg.get("show_beta", True))
+    show_beta = bool(cfg.get("show_beta", False))
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -5637,7 +5655,7 @@ if __name__ == '__main__':
         _record_db_init("users.db", DATABASE, success=False, error=str(_dberr))
         raise
 
-    add_user('admin', 'strongpassword123')
+    add_user('admin', 'strongpassword123', must_change_password=1)
 
     try:
         init_tuners_db()

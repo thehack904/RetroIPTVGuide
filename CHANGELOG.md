@@ -6,8 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.9.3 - 2026-04-01
-
+## v4.9.3 - 2026-04-02
 
 ### Added
 - Added new virtual channels:
@@ -16,13 +15,19 @@ This project follows [Semantic Versioning](https://semver.org/).
   - NASA
   - On This Day
   - Channel Mix (composite virtual channel)
-- Added supporting assets for new virtual channels including logos, loop videos, overlay scripts, and standalone templates.
+- Added supporting assets for new virtual channels including logos, loop videos, overlay scripts, standalone templates, and icon packs.
 - Added database-backed activity logging, replacing the previous flat-file `activity.log`.
 - Added new diagnostics endpoint support for querying activity logs from the database.
+- Added `scripts/reset_admin_password.py` to reset the admin account password from the command line.
+- Added support for forcing the admin account to change its password on next login via a new `must_change_password` user flag.
+- Added automatic `users` table schema migration support for the new `must_change_password` column.
 - Added expanded test coverage for:
   - virtual channel behavior and defaults
   - Channel Mix logic and switching behavior
   - database-backed activity logging
+  - forced password change on login
+  - admin password reset workflow
+- Added forced-change notice styling and UI messaging to the change password page.
 
 ### Changed
 - Refactored admin diagnostics and logging system to use SQLite-backed activity logs instead of file-based logging.
@@ -30,16 +35,37 @@ This project follows [Semantic Versioning](https://semver.org/).
 - Improved guide fullscreen behavior to support additional virtual channels and dynamic Channel Mix switching.
 - Updated overlay rendering and frontend handling for more consistent behavior across all virtual channel types.
 - Updated logs UI to display activity entries instead of raw file size.
+- Updated login flow so users flagged with `must_change_password` are required to update their password before accessing the app.
+- Updated password change flow to clear the forced-reset flag after successful update.
+- Updated default admin bootstrap account to require a password change on first login.
+- Updated health checks and diagnostics to validate expected `users` table columns including:
+  - `last_login`
+  - `assigned_tuner`
+  - `must_change_password`
+- Updated default Updates channel behavior to hide prerelease/beta items by default.
+- Updated project documentation (`README.md`, `INSTALL.md`, `SECURITY.md`, `SECURITY_MODEL.md`, `ROADMAP.md`) to reflect current behavior and guidance.
 
 ### Fixed
 - Fixed fullscreen rendering issues for virtual channels to ensure proper aspect ratio and prevent stretching.
 - Fixed guide behavior when switching between virtual channels, including Channel Mix updates.
 - Fixed empty/unconfigured states for News and Weather channels to provide clearer user feedback.
 - Fixed inconsistencies in activity log handling by standardizing on database-backed storage.
+- Fixed admin password reset handling so CLI resets properly require a password change on next login.
+- Fixed first-login admin security by preventing continued use of default/bootstrap credentials.
+- Fixed change password UX to clearly indicate when a forced password update is required.
+- Fixed diagnostics schema validation to properly detect missing expected columns.
+- Fixed reset script behavior for partially initialized databases.
 
 ### Security
 - Reduced exposure of sensitive log data by removing direct file-based activity log access.
 - Improved control over diagnostics log access through structured database queries.
+- Hardened admin account recovery with a controlled reset flow requiring password change on next login.
+- Hardened default admin account handling to enforce credential rotation on first use.
+- Expanded schema validation to better detect incomplete or outdated database state.
+
+### Tests
+- Added `tests/test_forced_password_change.py`.
+- Expanded coverage around admin diagnostics and virtual channel behavior.
 
 ---
 

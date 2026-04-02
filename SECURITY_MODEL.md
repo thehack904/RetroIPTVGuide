@@ -24,6 +24,8 @@ Admin-only features include:
 - tuner management
 - diagnostics tools
 - configuration changes
+- Admin recovery requires filesystem access
+- No in-app password bypass exists (intentional security design)
 
 ---
 

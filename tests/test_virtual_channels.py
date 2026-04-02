@@ -973,10 +973,10 @@ class TestUpdatesPage:
 class TestUpdatesConfig:
     """Tests for get_updates_config / save_updates_config and the show_beta toggle."""
 
-    def test_default_show_beta_is_true(self):
+    def test_default_show_beta_is_false(self):
         from app import get_updates_config
         cfg = get_updates_config()
-        assert cfg["show_beta"] is True
+        assert cfg["show_beta"] is False
 
     def test_save_show_beta_false_and_reload(self):
         from app import get_updates_config, save_updates_config
@@ -995,10 +995,10 @@ class TestUpdatesConfig:
         assert "show_beta" in data
         assert isinstance(data["show_beta"], bool)
 
-    def test_api_show_beta_default_is_true(self, client):
+    def test_api_show_beta_default_is_false(self, client):
         login(client)
         data = client.get("/api/virtual/updates").get_json()
-        assert data["show_beta"] is True
+        assert data["show_beta"] is False
 
     def test_api_show_beta_false_excludes_prereleases(self, client):
         from app import save_updates_config, _updates_cache, _updates_cache_lock
