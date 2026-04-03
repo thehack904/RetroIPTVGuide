@@ -36,13 +36,13 @@ The project works particularly well alongside playout systems such as
 
 ## 🚀 Features
 
-• Classic **TV‑style grid guide** for IPTV playlists
-• **Virtual channels** (News, Weather, Traffic, System Status)
-• **Multiple IPTV sources** combined into a single guide
-• **Auto‑scroll channel navigation**
-• **Retro UI themes** inspired by classic TV guides
-• **TV‑optimized interface** for Android TV / Fire TV / browsers
-• **User management** and admin tools
+• Classic **TV‑style grid guide** for IPTV playlists\
+• **Virtual channels** (News, Weather, Traffic, System Status)\
+• **Multiple IPTV sources** combined into a single guide\
+• **Auto‑scroll channel navigation**\
+• **Retro UI themes** inspired by classic TV guides\
+• **TV‑optimized interface** for Android TV / Fire TV / browsers\
+• **User management** and admin tools\
 • **Local‑first architecture** with no cloud dependencies
 
 ------------------------------------------------------------------------
@@ -168,6 +168,6 @@ Contributions are welcome.
 
 ## Project Information
 
-Repository: https://github.com/thehack904/RetroIPTVGuide\
+Repository: https://github.com/thehack904/RetroIPTVGuide \
 License: CC BY‑NC‑SA 4.0\
 Maintainer: @thehack904
