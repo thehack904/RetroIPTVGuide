@@ -168,6 +168,6 @@ Contributions are welcome.
 
 ## Project Information
 
-Repository: https://github.com/thehack904/RetroIPTVGuide
-License: CC BY‑NC‑SA 4.0
+Repository: https://github.com/thehack904/RetroIPTVGuide\
+License: CC BY‑NC‑SA 4.0\
 Maintainer: @thehack904
