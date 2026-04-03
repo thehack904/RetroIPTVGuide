@@ -104,8 +104,7 @@ You will be required to change this password immediately on first login.
 
 ## 🔐 Admin Password Reset
 
-If you lose access to the admin account, see:
-👉 INSTALL.md → Admin Password Recovery
+If you lose access to the admin account, see: INSTALL.md → Admin Password Recovery
 
 ------------------------------------------------------------------------
 
