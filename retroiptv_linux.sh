@@ -192,7 +192,7 @@ install_linux(){
   echo "End time: $(date)"
   echo "Access at: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
+  echo "This application is intended for use on trusted local networks. Do not expose it directly to the public internet."
   echo "Installation complete!"
 }
 
