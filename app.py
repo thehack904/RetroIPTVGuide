@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.3-dev Beta 2"
-APP_RELEASE_DATE = "2026-04-02"
+APP_VERSION = "v4.9.3"
+APP_RELEASE_DATE = "2026-04-08"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user

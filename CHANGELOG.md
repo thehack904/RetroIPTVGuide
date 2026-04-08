@@ -6,7 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.9.3 - 2026-04-02
+## v4.9.3 - 2026-04-08
 
 ### Added
 - Added new virtual channels:
