@@ -586,13 +586,18 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
         "resolved_ip": None,
     }
 
+    # Strip query string and fragment for logging to avoid exposing API keys or tokens
+    # that may appear as query parameters (e.g. ?api_key=…).
+    parsed = urlparse(url)
+    _log_url = parsed._replace(query="", fragment="").geturl()
+    hostname = parsed.hostname
+
     try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
         if hostname:
             try:
                 result["resolved_ip"] = socket.getaddrinfo(hostname, None)[0][4][0]
             except socket.gaierror as dns_err:
+                # hostname is the bare domain name (e.g. api.nasa.gov) — no query parameters
                 logger.debug("DNS resolution failed for '%s': %s", hostname, dns_err)
                 result["error"] = "DNS resolution failed. Check application logs for details."
                 return result
@@ -610,11 +615,11 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
-            logger.debug("Service probe failed for %s: %s", url, exc, exc_info=True)
+            logger.debug("Service probe failed for %s: %s", _log_url, exc, exc_info=True)
             result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
-        logger.debug("URL probe setup failed for %s: %s", url, exc, exc_info=True)
+        logger.debug("URL probe setup failed for %s: %s", _log_url, exc, exc_info=True)
         result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result
