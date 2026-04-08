@@ -94,6 +94,11 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
     - Whether the weather channel has lat/lon/location configured
     - Whether the news channel has at least one RSS feed URL configured
     - Whether the traffic channel has demo mode or a configured city
+    - Sports channel mode and RSS feed configuration (if in RSS mode)
+    - NASA channel interval, image count, and API key status
+    - Channel Mix name and configured sub-channels
+    - On This Day enabled sources count
+    - Updates channel show_beta setting
     """
     # Read all relevant settings in one pass
     settings: Dict[str, str] = {}
@@ -112,10 +117,15 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
         }
 
     VIRTUAL_IDS = [
-        ("virtual.news",    "News Now"),
-        ("virtual.weather", "Weather Now"),
-        ("virtual.status",  "System Status"),
-        ("virtual.traffic", "Traffic Now"),
+        ("virtual.news",        "News Now"),
+        ("virtual.weather",     "Weather Now"),
+        ("virtual.status",      "System Status"),
+        ("virtual.traffic",     "Traffic Now"),
+        ("virtual.updates",     "Updates & Announcements"),
+        ("virtual.sports",      "Sports Now"),
+        ("virtual.nasa",        "NASA Imagery"),
+        ("virtual.channel_mix", "Channel Mix"),
+        ("virtual.on_this_day", "On This Day"),
     ]
 
     channels = []
@@ -177,6 +187,90 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
             demo_mode = settings.get("traffic_demo.mode", "demo").strip()
             entry["traffic_config"] = {"mode": demo_mode}
 
+        elif tvg_id == "virtual.updates":
+            show_beta = settings.get("updates.show_beta", "1") == "1"
+            entry["updates_config"] = {"show_beta": show_beta}
+
+        elif tvg_id == "virtual.sports":
+            mode = settings.get("sports.mode", "scores").strip() or "scores"
+            feed_urls = []
+            for i in range(1, 7):
+                val = settings.get(f"sports.rss_url_{i}", "").strip()
+                if val:
+                    feed_urls.append(val)
+            entry["sports_config"] = {"mode": mode, "rss_feed_count": len(feed_urls)}
+            if mode == "rss" and not feed_urls:
+                entry["config_ok"] = False
+                entry["config_issues"].append("Sports channel is in RSS mode but no RSS feed URLs are configured.")
+                if enabled:
+                    warnings.append(f"{name}: RSS mode selected but no feed URLs configured")
+            elif mode == "rss":
+                entry["config_issues"].append(f"RSS mode: {len(feed_urls)} feed(s) configured.")
+            else:
+                entry["config_issues"].append("Scores mode: uses ESPN live scoreboard API.")
+
+        elif tvg_id == "virtual.nasa":
+            interval = settings.get("nasa.interval", "15").strip() or "15"
+            if interval not in ("15", "30"):
+                interval = "15"
+            raw_count = settings.get("nasa.image_count", "").strip()
+            try:
+                image_count = int(raw_count) if raw_count else None
+            except (ValueError, TypeError):
+                image_count = None
+            if image_count is None:
+                image_count = 5 if interval == "15" else 10
+            api_key_raw = settings.get("nasa.api_key", "").strip()
+            using_demo_key = not api_key_raw
+            entry["nasa_config"] = {
+                "interval_minutes": interval,
+                "image_count": image_count,
+                "using_demo_key": using_demo_key,
+            }
+            if using_demo_key:
+                entry["config_issues"].append("Using DEMO_KEY — rate-limited to 30 requests/hour. Add a NASA API key for higher limits.")
+
+        elif tvg_id == "virtual.channel_mix":
+            import json as _json  # noqa: PLC0415
+            mix_name = settings.get("channel_mix.name", "").strip() or "Channel Mix"
+            raw_channels = settings.get("channel_mix.channels", "").strip()
+            mix_channel_count = 0
+            if raw_channels:
+                try:
+                    parsed = _json.loads(raw_channels)
+                    mix_channel_count = len([c for c in parsed if isinstance(c, dict) and c.get("tvg_id")])
+                except Exception:  # noqa: BLE001
+                    pass
+            entry["channel_mix_config"] = {
+                "name": mix_name,
+                "channel_count": mix_channel_count,
+            }
+            if mix_channel_count == 0:
+                entry["config_issues"].append("No sub-channels configured — mix will show a placeholder.")
+
+        elif tvg_id == "virtual.on_this_day":
+            ON_THIS_DAY_SOURCE_IDS = [
+                "wikipedia_events",
+                "wikipedia_births",
+                "wikipedia_deaths",
+            ]
+            enabled_sources = []
+            for sid in ON_THIS_DAY_SOURCE_IDS:
+                val = settings.get(f"on_this_day.source.{sid}.enabled", "1")
+                if val == "1":
+                    enabled_sources.append(sid)
+            entry["on_this_day_config"] = {
+                "enabled_source_count": len(enabled_sources),
+                "total_source_count": len(ON_THIS_DAY_SOURCE_IDS),
+            }
+            if not enabled_sources:
+                entry["config_ok"] = False
+                entry["config_issues"].append("No Wikipedia sources enabled — channel will only show custom entries.")
+                if enabled:
+                    warnings.append(f"{name}: no Wikipedia sources enabled")
+            else:
+                entry["config_issues"].append(f"{len(enabled_sources)}/{len(ON_THIS_DAY_SOURCE_IDS)} Wikipedia source(s) enabled.")
+
         channels.append(entry)
 
     status = "WARN" if warnings else "PASS"
@@ -204,6 +298,10 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     - Open-Meteo weather API (if lat/lon configured)
     - Each configured news RSS feed
     - Overpass API status (if the traffic virtual channel is enabled)
+    - ESPN Scoreboard API (if sports channel is enabled in scores mode)
+    - Sports RSS feeds (if sports channel is enabled in RSS mode)
+    - NASA APOD API (if NASA channel is enabled)
+    - Wikipedia On This Day API (if On This Day channel is enabled)
 
     The Overpass API probe has two layers:
     1. A live connectivity check against ``/api/status`` (lightweight, no
@@ -352,6 +450,109 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
             "note": "Traffic virtual channel is disabled — Overpass API not probed.",
         })
 
+    # --- Sports channel external services ---
+    sports_enabled = settings.get("virtual_channel.virtual.sports.enabled", "1") == "1"
+    sports_mode = settings.get("sports.mode", "scores").strip() or "scores"
+    if sports_enabled:
+        if sports_mode == "scores":
+            # Probe the ESPN Scoreboard API (a stable, public endpoint)
+            svc = _probe_service(
+                "espn_api",
+                "ESPN Scoreboard API (sports scores)",
+                "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+                timeout=10,
+            )
+            svc["note"] = (
+                "Used by the Sports channel in Scores mode to fetch live game data. "
+                "A failure here explains missing scores or empty sports overlays."
+            )
+            services.append(svc)
+        else:
+            # RSS mode — probe configured sports feed URLs
+            sports_feed_urls: List[str] = []
+            for i in range(1, 7):
+                val = settings.get(f"sports.rss_url_{i}", "").strip()
+                if val:
+                    sports_feed_urls.append(val)
+            if sports_feed_urls:
+                for idx, url in enumerate(sports_feed_urls, start=1):
+                    svc = _probe_service(f"sports_feed_{idx}", f"Sports RSS Feed {idx}", url)
+                    services.append(svc)
+            else:
+                services.append({
+                    "id": "sports_feed",
+                    "name": "Sports RSS Feed",
+                    "url": "(not configured)",
+                    "reachable": None,
+                    "status_code": None,
+                    "response_time_ms": None,
+                    "error": None,
+                    "note": "Sports channel is in RSS mode but no feed URLs are configured.",
+                })
+    else:
+        services.append({
+            "id": "espn_api",
+            "name": "ESPN Scoreboard API (sports scores)",
+            "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+            "reachable": None,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": None,
+            "note": "Sports virtual channel is disabled — ESPN API not probed.",
+        })
+
+    # --- NASA APOD API ---
+    nasa_enabled = settings.get("virtual_channel.virtual.nasa.enabled", "1") == "1"
+    if nasa_enabled:
+        nasa_api_key = settings.get("nasa.api_key", "").strip() or "DEMO_KEY"
+        nasa_probe_url = f"https://api.nasa.gov/planetary/apod?api_key={nasa_api_key}&count=1"
+        svc = _probe_service("nasa_apod_api", "NASA APOD API", nasa_probe_url, timeout=10)
+        # Sanitize displayed URL to avoid leaking the API key in diagnostic output
+        svc["url"] = "https://api.nasa.gov/planetary/apod"
+        svc["note"] = (
+            "Used by the NASA Imagery channel to fetch Astronomy Picture of the Day images. "
+            "A failure here explains empty or placeholder NASA imagery."
+        )
+        services.append(svc)
+    else:
+        services.append({
+            "id": "nasa_apod_api",
+            "name": "NASA APOD API",
+            "url": "https://api.nasa.gov/planetary/apod",
+            "reachable": None,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": None,
+            "note": "NASA Imagery virtual channel is disabled — NASA APOD API not probed.",
+        })
+
+    # --- Wikipedia On This Day API ---
+    on_this_day_enabled = settings.get("virtual_channel.virtual.on_this_day.enabled", "1") == "1"
+    if on_this_day_enabled:
+        import datetime as _dt  # noqa: PLC0415
+        _now = _dt.datetime.now(_dt.timezone.utc)
+        wiki_url = (
+            f"https://en.wikipedia.org/api/rest_v1/feed/onthisday"
+            f"/events/{_now.month:02d}/{_now.day:02d}"
+        )
+        svc = _probe_service("wikipedia_on_this_day", "Wikipedia On This Day API", wiki_url, timeout=10)
+        svc["note"] = (
+            "Used by the On This Day channel to fetch historical events from Wikipedia. "
+            "A failure here explains missing historical events in the overlay."
+        )
+        services.append(svc)
+    else:
+        services.append({
+            "id": "wikipedia_on_this_day",
+            "name": "Wikipedia On This Day API",
+            "url": "https://en.wikipedia.org/api/rest_v1/feed/onthisday/events",
+            "reachable": None,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": None,
+            "note": "On This Day virtual channel is disabled — Wikipedia API not probed.",
+        })
+
     failing = [s["name"] for s in services if s.get("reachable") is False]
     unconfigured = [s["name"] for s in services if s.get("reachable") is None]
     status = "FAIL" if failing else ("WARN" if unconfigured else "PASS")
@@ -385,13 +586,18 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
         "resolved_ip": None,
     }
 
+    # Strip query string and fragment for logging to avoid exposing API keys or tokens
+    # that may appear as query parameters (e.g. ?api_key=…).
+    parsed = urlparse(url)
+    _log_url = parsed._replace(query="", fragment="").geturl()
+    hostname = parsed.hostname
+
     try:
-        parsed = urlparse(url)
-        hostname = parsed.hostname
         if hostname:
             try:
                 result["resolved_ip"] = socket.getaddrinfo(hostname, None)[0][4][0]
             except socket.gaierror as dns_err:
+                # hostname is the bare domain name (e.g. api.nasa.gov) — no query parameters
                 logger.debug("DNS resolution failed for '%s': %s", hostname, dns_err)
                 result["error"] = "DNS resolution failed. Check application logs for details."
                 return result
@@ -409,11 +615,11 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
-            logger.debug("Service probe failed for %s: %s", url, exc, exc_info=True)
+            logger.debug("Service probe failed for %s: %s", _log_url, exc, exc_info=True)
             result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
-        logger.debug("URL probe setup failed for %s: %s", url, exc, exc_info=True)
+        logger.debug("URL probe setup failed for %s: %s", _log_url, exc, exc_info=True)
         result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result
