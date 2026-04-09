@@ -32,7 +32,7 @@ This allows the issue to be discussed privately before public disclosure.
 
 ### Alternative Method
 
-If GitHub Security Advisories cannot be used, you may open a GitHub Issue marked **Security** or contact the maintainer through the repository.
+If GitHub Security Advisories cannot be used, you may open a GitHub Issue labeled **Security (Public)** or contact the maintainer through the repository.
 
 Please include the following information when possible:
 
@@ -47,6 +47,9 @@ Please include the following information when possible:
 - Initial response: typically within **48–72 hours**
 - Investigation and confirmation: varies depending on severity
 - Fix timeline: addressed in the **next patch or minor release**
+
+Severity is evaluated based on impact, exploitability, and affected scope.
+Critical vulnerabilities will be prioritized for immediate patching.
 
 ### Responsible Disclosure
 
@@ -66,3 +69,25 @@ This policy covers vulnerabilities related to:
 - Configuration weaknesses
 
 Issues related to feature requests, installation problems, or general bugs should be reported through the normal GitHub **Issues** page.
+
+## Deployment Responsibility
+
+RetroIPTVGuide is designed for use within trusted or controlled network environments.
+
+Security of the deployment environment is the responsibility of the operator, including:
+- Network exposure (port forwarding, reverse proxies, VPN access)
+- Firewall configuration
+- Host system hardening
+
+Reports related solely to insecure deployment configurations (e.g., exposing the application directly to the public internet without additional protections) are considered out of scope unless a specific software vulnerability is identified.
+
+## Out of Scope
+
+The following are generally not considered security vulnerabilities:
+
+- Issues caused by insecure deployment configurations
+- Use of weak or default credentials after initial setup
+- Misconfigured reverse proxies, VPNs, or firewalls
+- Third-party IPTV content or playlist sources
+
+However, if a software flaw enables exploitation beyond expected behavior, it should still be reported.

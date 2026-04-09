@@ -3,7 +3,7 @@
 # License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 set -euo pipefail
-VERSION="4.9.2"
+VERSION="4.9.3"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
@@ -192,7 +192,7 @@ install_linux(){
   echo "End time: $(date)"
   echo "Access at: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "NOTE: This is a **BETA build**. Do not expose it directly to the public internet."
+  echo "This application is intended for use on trusted local networks. Do not expose it directly to the public internet."
   echo "Installation complete!"
 }
 

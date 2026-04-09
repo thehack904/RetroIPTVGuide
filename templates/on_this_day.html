@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RetroIPTV On This Day</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #050d2a;
+      color: #fff;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ── Outer 16:9 frame ─────────────────────────────────────── */
+    .otd-frame {
+      width: min(1280px, 100vw);
+      aspect-ratio: 16 / 9;
+      background: linear-gradient(160deg, #1030c8 0%, #0a1a80 40%, #081060 100%);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* CRT scanline overlay */
+    .otd-frame::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,0.06) 3px,
+        rgba(0,0,0,0.06) 4px
+      );
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    /* ── Header ───────────────────────────────────────────────── */
+    .otd-header {
+      background: linear-gradient(90deg, #0d2aaa 0%, #1640d4 50%, #0d2aaa 100%);
+      border-bottom: 3px solid #4a70ff;
+      padding: 0 clamp(12px, 2vw, 24px);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      height: clamp(44px, 7.5vw, 90px);
+      z-index: 5;
+    }
+
+    .otd-header-left {
+      display: flex;
+      align-items: center;
+      gap: 0.4em;
+    }
+
+    .otd-icon {
+      font-size: clamp(20px, 3.5vw, 48px);
+      line-height: 1;
+    }
+
+    .otd-brand {
+      font-size: clamp(16px, 2.8vw, 38px);
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #ffd700;
+    }
+
+    .otd-header-date {
+      font-size: clamp(12px, 2vw, 28px);
+      font-weight: 700;
+      color: #c8d8ff;
+      margin-left: 0.3em;
+    }
+
+    .otd-header-right {
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+    }
+
+    /* ── Body ──────────────────────────────────────────────────── */
+    .otd-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: clamp(12px, 2.5vw, 40px) clamp(16px, 3vw, 56px);
+      background: radial-gradient(ellipse at center, #0a2060 0%, #050d3a 100%);
+      min-height: 0;
+    }
+
+    .otd-year {
+      font-size: clamp(48px, 11vw, 140px);
+      font-weight: 900;
+      letter-spacing: 0.04em;
+      color: #ffd700;
+      text-shadow: 0 0 0.3em rgba(255,215,0,0.4), 0 2px 12px rgba(0,0,0,0.8);
+      line-height: 1;
+      margin-bottom: clamp(4px, 0.8vw, 12px);
+      text-align: center;
+    }
+
+    .otd-category-tag {
+      display: inline-block;
+      font-size: clamp(10px, 1.4vw, 18px);
+      font-weight: 900;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      padding: 0.25em 0.7em;
+      border-radius: 0.3em;
+      margin-bottom: clamp(8px, 1.5vw, 20px);
+    }
+
+    .otd-text {
+      font-size: clamp(14px, 2.4vw, 32px);
+      font-weight: 700;
+      text-align: center;
+      color: #d0e0ff;
+      line-height: 1.5;
+      text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+      max-width: 88%;
+      display: -webkit-box;
+      -webkit-line-clamp: 4;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .otd-counter {
+      font-size: clamp(9px, 1.1vw, 14px);
+      font-weight: 700;
+      color: #90a8f0;
+      letter-spacing: 0.06em;
+      margin-top: clamp(6px, 1.2vw, 16px);
+    }
+
+    /* ── Progress bar ─────────────────────────────────────────── */
+    .otd-progress-wrap {
+      height: clamp(3px, 0.4vw, 6px);
+      background: rgba(255,255,255,0.1);
+      flex-shrink: 0;
+      overflow: hidden;
+      z-index: 5;
+    }
+
+    .otd-progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #1a3aaa, #4a70ff);
+      transition: width 0.5s linear;
+    }
+
+    /* ── Ticker ───────────────────────────────────────────────── */
+    .otd-ticker-bar {
+      background: #0a0e2a;
+      border-top: 2px solid #4a70ff;
+      display: flex;
+      align-items: center;
+      overflow: hidden;
+      flex-shrink: 0;
+      height: clamp(22px, 3.5vw, 44px);
+      z-index: 5;
+    }
+
+    .otd-ticker-label {
+      background: #ffd700;
+      color: #0a0e2a;
+      font-size: clamp(8px, 1.2vw, 16px);
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0 clamp(8px, 1.2vw, 18px);
+      white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      flex-shrink: 0;
+      border-right: 2px solid #4a70ff;
+    }
+
+    .otd-ticker-scroll {
+      overflow: hidden;
+      flex: 1;
+      height: 100%;
+      display: flex;
+      align-items: center;
+    }
+
+    .otd-ticker-track {
+      display: inline-block;
+      white-space: nowrap;
+      font-size: clamp(8px, 1.2vw, 16px);
+      font-weight: 700;
+      color: #ffd700;
+      will-change: transform;
+    }
+
+    /* ── Loading / no-data ────────────────────────────────────── */
+    .otd-loading {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: clamp(8px, 1.5vw, 20px);
+      background: radial-gradient(ellipse at center, #0a2060 0%, #050d3a 100%);
+    }
+
+    .otd-loading-icon {
+      font-size: clamp(32px, 6vw, 80px);
+      animation: otd-pulse 2s ease-in-out infinite;
+    }
+
+    @keyframes otd-pulse {
+      0%, 100% { opacity: 0.6; transform: scale(1); }
+      50%       { opacity: 1.0; transform: scale(1.08); }
+    }
+
+    .otd-loading-text {
+      font-size: clamp(10px, 1.5vw, 20px);
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #6080c0;
+    }
+  </style>
+</head>
+<body>
+<div class="otd-frame" id="otdFrame">
+  <div class="otd-header">
+    <div class="otd-header-left">
+      <span class="otd-icon">&#128240;</span>
+      <span class="otd-brand">On This Day</span>
+      <span class="otd-header-date" id="otdHeaderDate">&hellip;</span>
+    </div>
+    <div class="otd-header-right" id="otdHeaderRight"></div>
+  </div>
+  <div class="otd-loading" id="otdBody">
+    <div class="otd-loading-icon">&#9203;</div>
+    <div class="otd-loading-text">Loading&hellip;</div>
+  </div>
+  <div class="otd-progress-wrap">
+    <div class="otd-progress-bar" id="otdProgress" style="width:0%"></div>
+  </div>
+  <div class="otd-ticker-bar">
+    <div class="otd-ticker-label">On This Day</div>
+    <div class="otd-ticker-scroll">
+      <span class="otd-ticker-track" id="otdTicker">Loading&hellip;</span>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var CATEGORY_COLORS = {
+    event: { bg: '#c8860a', text: '#fff', label: 'EVENT' },
+    birth: { bg: '#1a6a2a', text: '#fff', label: 'BORN' },
+    death: { bg: '#6a1a1a', text: '#fff', label: 'DIED' },
+  };
+
+  var _refreshTimer = null;
+
+  // ── Constant-speed ticker ─────────────────────────────────────────────────
+  var TICKER_PX_PER_S = 40;
+  var _tickerRaf      = null;
+
+  function _stopTicker() {
+    if (_tickerRaf !== null) { cancelAnimationFrame(_tickerRaf); _tickerRaf = null; }
+  }
+
+  function _startTicker() {
+    // If the loop is already running keep it going — the #otdTicker element is
+    // never removed from the DOM so the existing loop is still valid and we
+    // must not reset its position.
+    if (_tickerRaf !== null) return;
+    var trackEl  = document.getElementById('otdTicker');
+    var scrollEl = trackEl && trackEl.parentElement;
+    if (!trackEl || !scrollEl) return;
+    var viewW    = scrollEl.offsetWidth || 400;
+    var x        = viewW;
+    var lastTime = null;
+
+    function step(ts) {
+      if (!trackEl.isConnected) { _tickerRaf = null; return; }
+      if (lastTime === null) { lastTime = ts; }
+      var dt = (ts - lastTime) / 1000;
+      lastTime = ts;
+      x -= TICKER_PX_PER_S * dt;
+      var textW = trackEl.offsetWidth;
+      if (x <= -textW) { x = viewW; }
+      trackEl.style.transform = 'translateX(' + x.toFixed(2) + 'px)';
+      _tickerRaf = requestAnimationFrame(step);
+    }
+    _tickerRaf = requestAnimationFrame(step);
+  }
+
+  function esc(s) {
+    return String(s || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function render(data) {
+    var event      = data.event;
+    var eventCount = data.event_count  || 0;
+    var eventIndex = data.event_index  || 0;
+    var spe        = data.seconds_per_event || 30;
+    var dateLabel  = data.date_label   || '';
+    var msUntil    = data.ms_until_next || (spe * 1000);
+    var allEvents  = data.events || [];
+
+    // Header
+    document.getElementById('otdHeaderDate').textContent = dateLabel ? '\u2014 ' + dateLabel : '';
+    document.getElementById('otdHeaderRight').textContent =
+      eventCount > 0 ? (eventIndex + 1) + ' / ' + eventCount : '';
+
+    // Ticker
+    var tickParts = allEvents.slice(0, 20).map(function (ev) {
+      return '[' + (ev.year || '') + '] ' + (ev.text || '');
+    });
+    document.getElementById('otdTicker').innerHTML =
+      esc(tickParts.join(' \u2022 ') + ' \u2022 ');
+
+    if (!event) {
+      document.getElementById('otdBody').innerHTML =
+        '<div class="otd-loading-icon">&#9203;</div>' +
+        '<div class="otd-loading-text">No Events Available</div>';
+      return;
+    }
+
+    var cat    = event.category || 'event';
+    var colors = CATEGORY_COLORS[cat] || CATEGORY_COLORS.event;
+    var year   = event.year || '';
+    var text   = event.text || '';
+
+    var bodyHtml =
+      '<div class="otd-body" id="otdBody">' +
+        (year ? '<div class="otd-year">' + esc(year) + '</div>' : '') +
+        '<span class="otd-category-tag" style="background:' + colors.bg + ';color:' + colors.text + '">' +
+          esc(colors.label) + '</span>' +
+        '<div class="otd-text">' + esc(text) + '</div>' +
+        '<div class="otd-counter">Event ' + (eventIndex + 1) + ' of ' + eventCount + '</div>' +
+      '</div>';
+    document.getElementById('otdBody').outerHTML = bodyHtml;
+
+    // Progress bar
+    var slotElapsed = spe - (msUntil / 1000);
+    var pct = Math.max(0, Math.min(100, (slotElapsed / spe) * 100));
+    var progressEl = document.getElementById('otdProgress');
+    if (progressEl) {
+      progressEl.style.transition = 'none';
+      progressEl.style.width = pct.toFixed(1) + '%';
+      requestAnimationFrame(function () {
+        requestAnimationFrame(function () {
+          progressEl.style.transition = 'width ' + (msUntil / 1000).toFixed(1) + 's linear';
+          progressEl.style.width = '100%';
+        });
+      });
+    }
+  }
+
+  function load() {
+    if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+    fetch('/api/on_this_day', { credentials: 'same-origin' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.json();
+      })
+      .then(function (data) {
+        render(data);
+        _startTicker();
+        var msUntil = (data.ms_until_next > 0) ? data.ms_until_next : 30 * 1000;
+        _refreshTimer = setTimeout(load, msUntil);
+      })
+      .catch(function (e) {
+        console.warn('[OnThisDay] load failed:', e);
+        document.getElementById('otdHeaderDate').textContent = '';
+        _refreshTimer = setTimeout(load, 30 * 1000);
+      });
+  }
+
+  load();
+})();
+</script>
+</body>
+</html>

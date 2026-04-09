@@ -8,12 +8,18 @@ on:
       - feature/**
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 env:
   PYTHON_VERSION: "3.12"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python
@@ -29,6 +35,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     needs: build
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python

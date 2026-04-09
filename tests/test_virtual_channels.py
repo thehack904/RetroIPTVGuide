@@ -14,7 +14,8 @@ from app import (app, init_db, init_tuners_db, get_virtual_channels, get_virtual
                  get_overlay_appearance, save_overlay_appearance,
                  get_channel_overlay_appearance, save_channel_overlay_appearance,
                  get_all_channel_appearances,
-                 VIRTUAL_CHANNELS)
+                 get_channel_mix_config, save_channel_mix_config,
+                 VIRTUAL_CHANNELS, SPORTS_LEAGUES)
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -50,7 +51,7 @@ def login(client, username="testuser", password="testpass"):
 class TestGetVirtualChannels:
     def test_returns_three_channels(self):
         channels = get_virtual_channels()
-        assert len(channels) == 4
+        assert len(channels) == 9
 
     def test_all_have_is_virtual_true(self):
         for ch in get_virtual_channels():
@@ -61,6 +62,7 @@ class TestGetVirtualChannels:
         assert "virtual.news" in ids
         assert "virtual.weather" in ids
         assert "virtual.status" in ids
+        assert "virtual.nasa" in ids
 
     def test_each_has_required_keys(self):
         required = {"name", "logo", "url", "tvg_id", "is_virtual",
@@ -70,7 +72,11 @@ class TestGetVirtualChannels:
 
     def test_loop_assets_are_mp4_paths(self):
         for ch in get_virtual_channels():
-            assert ch["loop_asset"].endswith(".mp4")
+            # channel_mix uses no dedicated loop asset (overlay covers full screen)
+            if ch['tvg_id'] == 'virtual.channel_mix':
+                assert ch["loop_asset"] == ''
+            else:
+                assert ch["loop_asset"].endswith(".mp4")
 
     def test_returns_independent_copy(self):
         a = get_virtual_channels()
@@ -202,6 +208,11 @@ class TestChangeTunerVirtualChannels:
             "virtual.weather": False,
             "virtual.status": False,
             "virtual.traffic": False,
+            "virtual.updates": False,
+            "virtual.sports": False,
+            "virtual.nasa": False,
+            "virtual.channel_mix": False,
+            "virtual.on_this_day": False,
         })
         login(client, "admin", "adminpass")
         resp = client.post("/virtual_channels", data={
@@ -210,6 +221,11 @@ class TestChangeTunerVirtualChannels:
             "vc_virtual.weather": "1",
             "vc_virtual.status": "1",
             "vc_virtual.traffic": "1",
+            "vc_virtual.updates": "1",
+            "vc_virtual.sports": "1",
+            "vc_virtual.nasa": "1",
+            "vc_virtual.channel_mix": "1",
+            "vc_virtual.on_this_day": "1",
         }, follow_redirects=True)
         assert resp.status_code == 200
         settings = get_virtual_channel_settings()
@@ -805,3 +821,1322 @@ class TestNewsFeedCycling:
         assert idx == 0
         assert ms == 5 * 60 * 1000
         assert elapsed_ms == 0
+
+
+# ─── Updates & Announcements virtual channel ──────────────────────────────────
+
+class TestVirtualUpdatesChannel:
+    """Tests for the Updates & Announcements virtual channel."""
+
+    def test_updates_channel_in_virtual_channels(self):
+        ids = {ch["tvg_id"] for ch in get_virtual_channels()}
+        assert "virtual.updates" in ids
+
+    def test_updates_channel_has_required_keys(self):
+        ch = next(c for c in get_virtual_channels() if c["tvg_id"] == "virtual.updates")
+        required = {"name", "logo", "url", "tvg_id", "is_virtual",
+                    "playback_mode", "loop_asset", "overlay_type", "overlay_refresh_seconds"}
+        assert required.issubset(ch.keys())
+
+    def test_updates_channel_overlay_type(self):
+        ch = next(c for c in get_virtual_channels() if c["tvg_id"] == "virtual.updates")
+        assert ch["overlay_type"] == "updates"
+
+    def test_updates_channel_loop_asset_is_mp4(self):
+        ch = next(c for c in get_virtual_channels() if c["tvg_id"] == "virtual.updates")
+        assert ch["loop_asset"].endswith(".mp4")
+
+    def test_updates_channel_refresh_seconds(self):
+        ch = next(c for c in get_virtual_channels() if c["tvg_id"] == "virtual.updates")
+        assert ch["overlay_refresh_seconds"] == 1800
+
+    def test_updates_channel_in_epg(self):
+        from datetime import datetime, timezone
+        grid_start = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        epg = get_virtual_epg(grid_start, hours_span=3)
+        assert "virtual.updates" in epg
+        assert len(epg["virtual.updates"]) == 3
+
+    def test_updates_channel_enabled_by_default(self):
+        settings = get_virtual_channel_settings()
+        assert settings.get("virtual.updates") is True
+
+    def test_updates_channel_can_be_disabled(self):
+        save_virtual_channel_settings({"virtual.updates": False})
+        settings = get_virtual_channel_settings()
+        assert settings["virtual.updates"] is False
+
+    def test_total_virtual_channels_count(self):
+        channels = get_virtual_channels()
+        assert len(channels) == 9
+
+
+class TestApiVirtualUpdates:
+    """Tests for the /api/virtual/updates endpoint."""
+
+    def test_requires_login(self, client):
+        resp = client.get("/api/virtual/updates")
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get("/api/virtual/updates")
+        assert resp.status_code == 200
+
+    def test_response_has_expected_keys(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert "updated" in data
+        assert "app_version" in data
+        assert "releases" in data
+        assert "ticker" in data
+        assert "repo" in data
+        assert "ms_until_next" in data
+
+    def test_releases_is_list(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert isinstance(data["releases"], list)
+
+    def test_ticker_is_list_of_strings(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert isinstance(data["ticker"], list)
+        for entry in data["ticker"]:
+            assert isinstance(entry, str)
+
+    def test_app_version_in_response(self, client):
+        login(client)
+        import app as app_module
+        data = client.get("/api/virtual/updates").get_json()
+        assert data["app_version"] == app_module.APP_VERSION
+
+    def test_ms_until_next_is_positive(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert data["ms_until_next"] > 0
+
+    def test_repo_field_is_string(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert isinstance(data["repo"], str)
+        assert len(data["repo"]) > 0
+
+
+class TestUpdatesPage:
+    """Tests for the /updates standalone page."""
+
+    def test_requires_login(self, client):
+        resp = client.get("/updates")
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get("/updates")
+        assert resp.status_code == 200
+
+    def test_page_contains_updates_branding(self, client):
+        login(client)
+        html = client.get("/updates").data.decode()
+        assert "RetroIPTV" in html
+        assert "Updates" in html
+
+    def test_page_references_api_endpoint(self, client):
+        login(client)
+        html = client.get("/updates").data.decode()
+        assert "/api/virtual/updates" in html
+
+    def test_updates_channel_shown_in_virtual_channels_admin(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get("/virtual_channels")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "Updates" in html
+
+    def test_updates_channel_appears_in_guide_when_enabled(self, client):
+        save_virtual_channel_settings({"virtual.updates": True})
+        login(client, "admin", "adminpass")
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b"Updates" in resp.data
+
+    def test_updates_channel_absent_from_guide_when_disabled(self, client):
+        save_virtual_channel_settings({"virtual.updates": False})
+        login(client, "admin", "adminpass")
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b"Updates &amp; Announcements" not in resp.data
+
+
+# ─── Updates channel show_beta toggle ────────────────────────────────────────
+
+class TestUpdatesConfig:
+    """Tests for get_updates_config / save_updates_config and the show_beta toggle."""
+
+    def test_default_show_beta_is_false(self):
+        from app import get_updates_config
+        cfg = get_updates_config()
+        assert cfg["show_beta"] is False
+
+    def test_save_show_beta_false_and_reload(self):
+        from app import get_updates_config, save_updates_config
+        save_updates_config({"show_beta": False})
+        assert get_updates_config()["show_beta"] is False
+
+    def test_save_show_beta_true_and_reload(self):
+        from app import get_updates_config, save_updates_config
+        save_updates_config({"show_beta": False})
+        save_updates_config({"show_beta": True})
+        assert get_updates_config()["show_beta"] is True
+
+    def test_api_response_includes_show_beta_field(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert "show_beta" in data
+        assert isinstance(data["show_beta"], bool)
+
+    def test_api_show_beta_default_is_false(self, client):
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        assert data["show_beta"] is False
+
+    def test_api_show_beta_false_excludes_prereleases(self, client):
+        from app import save_updates_config, _updates_cache, _updates_cache_lock
+        # Inject a fake release list with one stable and one prerelease
+        fake_releases = [
+            {"tag": "v5.0.0", "name": "v5.0.0", "body": "Stable release",
+             "prerelease": False, "draft": False, "published": "2026-01-01T00:00:00Z", "url": ""},
+            {"tag": "v5.0.0-beta.1", "name": "v5.0.0-beta.1", "body": "Beta release",
+             "prerelease": True, "draft": False, "published": "2026-01-02T00:00:00Z", "url": ""},
+        ]
+        with _updates_cache_lock:
+            _updates_cache["data"] = fake_releases
+            _updates_cache["fetched_at"] = 9999999999.0  # far future → won't expire
+
+        save_updates_config({"show_beta": False})
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        tags = [r["tag"] for r in data["releases"]]
+        assert "v5.0.0" in tags
+        assert "v5.0.0-beta.1" not in tags
+
+    def test_api_show_beta_true_includes_prereleases(self, client):
+        from app import save_updates_config, _updates_cache, _updates_cache_lock
+        fake_releases = [
+            {"tag": "v5.0.0", "name": "v5.0.0", "body": "Stable",
+             "prerelease": False, "draft": False, "published": "2026-01-01T00:00:00Z", "url": ""},
+            {"tag": "v5.0.0-beta.1", "name": "v5.0.0-beta.1", "body": "Beta",
+             "prerelease": True, "draft": False, "published": "2026-01-02T00:00:00Z", "url": ""},
+        ]
+        with _updates_cache_lock:
+            _updates_cache["data"] = fake_releases
+            _updates_cache["fetched_at"] = 9999999999.0
+
+        save_updates_config({"show_beta": True})
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        tags = [r["tag"] for r in data["releases"]]
+        assert "v5.0.0" in tags
+        assert "v5.0.0-beta.1" in tags
+
+    def test_ticker_excludes_beta_tags_when_show_beta_false(self, client):
+        from app import save_updates_config, _updates_cache, _updates_cache_lock
+        fake_releases = [
+            {"tag": "v4.0.0", "name": "v4.0.0", "body": "",
+             "prerelease": False, "draft": False, "published": "2026-01-01T00:00:00Z", "url": ""},
+            {"tag": "v4.1.0-beta.1", "name": "v4.1.0-beta.1", "body": "",
+             "prerelease": True, "draft": False, "published": "2026-01-02T00:00:00Z", "url": ""},
+        ]
+        with _updates_cache_lock:
+            _updates_cache["data"] = fake_releases
+            _updates_cache["fetched_at"] = 9999999999.0
+
+        save_updates_config({"show_beta": False})
+        login(client)
+        data = client.get("/api/virtual/updates").get_json()
+        # Ticker should not contain the beta tag
+        joined = " ".join(data["ticker"])
+        assert "v4.1.0-beta.1" not in joined
+
+    def test_admin_can_save_show_beta_via_form(self, client):
+        from app import get_updates_config
+        login(client, "admin", "adminpass")
+        resp = client.post("/virtual_channels", data={
+            "action": "update_channel_overlay_appearance",
+            "tvg_id": "virtual.updates",
+            "ch_updates_show_beta": "1",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert get_updates_config()["show_beta"] is True
+
+    def test_admin_can_disable_show_beta_via_form(self, client):
+        from app import get_updates_config
+        login(client, "admin", "adminpass")
+        # Unchecked checkbox → no ch_updates_show_beta in POST data
+        resp = client.post("/virtual_channels", data={
+            "action": "update_channel_overlay_appearance",
+            "tvg_id": "virtual.updates",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert get_updates_config()["show_beta"] is False
+
+    def test_virtual_channels_page_shows_show_beta_toggle(self, client):
+        login(client, "admin", "adminpass")
+        html = client.get("/virtual_channels").data.decode()
+        assert "ch_updates_show_beta" in html
+        assert "Beta" in html
+
+
+# ─── Sports Channel helpers ───────────────────────────────────────────────────
+
+class TestSportsHelpers:
+    def test_get_sports_mode_default(self):
+        from app import get_sports_mode
+        assert get_sports_mode() == 'scores'
+
+    def test_save_and_reload_sports_mode(self):
+        from app import get_sports_mode, save_sports_mode
+        save_sports_mode('rss')
+        assert get_sports_mode() == 'rss'
+        save_sports_mode('scores')
+        assert get_sports_mode() == 'scores'
+
+    def test_invalid_sports_mode_raises(self):
+        from app import save_sports_mode
+        with pytest.raises(ValueError):
+            save_sports_mode('invalid')
+
+    def test_get_sports_config_has_mode_and_leagues(self):
+        from app import get_sports_config
+        cfg = get_sports_config()
+        assert 'mode' in cfg
+        assert 'leagues' in cfg
+        assert isinstance(cfg['leagues'], dict)
+
+    def test_sports_config_default_mode_is_scores(self):
+        from app import get_sports_config
+        assert get_sports_config()['mode'] == 'scores'
+
+    def test_sports_config_default_leagues_include_nfl_nba_mlb_nhl(self):
+        from app import get_sports_config
+        leagues = get_sports_config()['leagues']
+        assert leagues['nfl'] is True
+        assert leagues['nba'] is True
+        assert leagues['mlb'] is True
+        assert leagues['nhl'] is True
+
+    def test_save_and_reload_sports_config(self):
+        from app import get_sports_config, save_sports_config
+        save_sports_config({'nfl': False, 'nba': False, 'mlb': True, 'nhl': True,
+                            'mls': True, 'ncaaf': False, 'ncaab': False})
+        leagues = get_sports_config()['leagues']
+        assert leagues['nfl'] is False
+        assert leagues['mlb'] is True
+        assert leagues['mls'] is True
+
+    def test_get_sports_feed_urls_empty_by_default(self):
+        from app import get_sports_feed_urls
+        assert get_sports_feed_urls() == []
+
+    def test_save_and_reload_sports_feed_urls(self):
+        from app import get_sports_feed_urls, save_sports_feed_urls
+        save_sports_feed_urls(['https://www.espn.com/espn/rss/news', 'https://feeds.bbci.co.uk/sport/rss.xml'])
+        urls = get_sports_feed_urls()
+        assert 'https://www.espn.com/espn/rss/news' in urls
+        assert 'https://feeds.bbci.co.uk/sport/rss.xml' in urls
+
+    def test_save_sports_feed_urls_rejects_invalid_scheme(self):
+        from app import save_sports_feed_urls
+        with pytest.raises(ValueError):
+            save_sports_feed_urls(['ftp://invalid.com/feed'])
+
+    def test_save_sports_feed_urls_pads_to_six(self):
+        from app import get_sports_feed_urls, save_sports_feed_urls
+        save_sports_feed_urls(['https://www.espn.com/espn/rss/news'])
+        # get_sports_feed_urls only returns non-empty entries
+        assert len(get_sports_feed_urls()) == 1
+
+
+# ─── /api/sports ─────────────────────────────────────────────────────────────
+
+class TestApiSports:
+    def test_requires_login(self, client):
+        resp = client.get('/api/sports')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/api/sports')
+        assert resp.status_code == 200
+
+    def test_response_has_mode_field(self, client):
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert 'mode' in data
+        assert data['mode'] in ('scores', 'rss')
+
+    def test_response_has_ms_until_next(self, client):
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert 'ms_until_next' in data
+        assert isinstance(data['ms_until_next'], int)
+        assert data['ms_until_next'] > 0
+
+    def test_scores_mode_response_shape(self, client):
+        from app import save_sports_mode
+        save_sports_mode('scores')
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert data['mode'] == 'scores'
+        assert 'games' in data
+        assert isinstance(data['games'], list)
+
+    def test_rss_mode_response_shape(self, client):
+        from app import save_sports_mode
+        save_sports_mode('rss')
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert data['mode'] == 'rss'
+        assert 'headlines' in data
+        assert isinstance(data['headlines'], list)
+
+    def test_rss_mode_has_feed_count(self, client):
+        from app import save_sports_mode
+        save_sports_mode('rss')
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert 'feed_count' in data
+
+
+# ─── /sports page ─────────────────────────────────────────────────────────────
+
+class TestSportsPage:
+    def test_requires_login(self, client):
+        resp = client.get('/sports')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/sports')
+        assert resp.status_code == 200
+
+    def test_page_contains_sports_branding(self, client):
+        login(client)
+        html = client.get('/sports').data.decode()
+        assert 'RetroIPTV' in html
+        assert 'Sports' in html
+
+    def test_page_references_api_sports(self, client):
+        login(client)
+        html = client.get('/sports').data.decode()
+        assert '/api/sports' in html
+
+
+# ─── Channel count (now 6) ────────────────────────────────────────────────────
+
+class TestSportsChannelRegistration:
+    def test_virtual_sports_in_channel_list(self):
+        ids = {ch['tvg_id'] for ch in get_virtual_channels()}
+        assert 'virtual.sports' in ids
+
+    def test_channel_count_is_six(self):
+        assert len(get_virtual_channels()) == 9
+
+    def test_sports_channel_has_required_keys(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.sports')
+        required = {'name', 'logo', 'url', 'tvg_id', 'is_virtual',
+                    'playback_mode', 'loop_asset', 'overlay_type', 'overlay_refresh_seconds'}
+        assert required.issubset(ch.keys())
+
+    def test_sports_epg_entries_present(self):
+        now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        epg = get_virtual_epg(now, hours_span=2)
+        assert 'virtual.sports' in epg
+        assert len(epg['virtual.sports']) == 2
+
+    def test_admin_can_save_sports_mode_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.sports',
+            'ch_sports_mode': 'rss',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        from app import get_sports_mode
+        assert get_sports_mode() == 'rss'
+
+    def test_admin_can_save_sports_leagues_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.sports',
+            'ch_sports_mode': 'scores',
+            'ch_sports_league_mlb': '1',
+            'ch_sports_league_nba': '1',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        from app import get_sports_config
+        leagues = get_sports_config()['leagues']
+        assert leagues['mlb'] is True
+        assert leagues['nba'] is True
+        assert leagues['nfl'] is False   # not submitted → disabled
+
+    def test_virtual_channels_page_shows_sports_settings(self, client):
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'ch_sports_mode' in html
+        assert 'ch_sports_league_nfl' in html
+        assert 'ch_sports_rss_url_1' in html
+
+# ─── NASA helpers ─────────────────────────────────────────────────────────────
+
+class TestNasaHelpers:
+    def test_get_nasa_interval_default(self):
+        from app import get_nasa_interval
+        assert get_nasa_interval() == '15'
+
+    def test_save_and_reload_nasa_interval(self):
+        from app import get_nasa_interval, save_nasa_interval
+        save_nasa_interval('30')
+        assert get_nasa_interval() == '30'
+        save_nasa_interval('15')
+        assert get_nasa_interval() == '15'
+
+    def test_invalid_nasa_interval_raises(self):
+        from app import save_nasa_interval
+        with pytest.raises(ValueError):
+            save_nasa_interval('45')
+
+    def test_get_nasa_api_key_default(self):
+        from app import get_nasa_api_key
+        assert get_nasa_api_key() == 'DEMO_KEY'
+
+    def test_save_and_reload_nasa_api_key(self):
+        from app import get_nasa_api_key, save_nasa_api_key
+        save_nasa_api_key('mykey123')
+        assert get_nasa_api_key() == 'mykey123'
+        save_nasa_api_key('')
+        assert get_nasa_api_key() == 'DEMO_KEY'
+
+    def test_get_nasa_image_count_returns_none_by_default(self):
+        from app import get_nasa_image_count
+        assert get_nasa_image_count() is None
+
+    def test_save_and_reload_nasa_image_count(self):
+        from app import get_nasa_image_count, save_nasa_image_count
+        save_nasa_image_count(8)
+        assert get_nasa_image_count() == 8
+        save_nasa_image_count(None)
+        assert get_nasa_image_count() is None
+
+    def test_invalid_nasa_image_count_raises(self):
+        from app import save_nasa_image_count
+        with pytest.raises(ValueError):
+            save_nasa_image_count(16)
+        with pytest.raises(ValueError):
+            save_nasa_image_count(0)
+
+    def test_get_nasa_config_defaults_15min(self):
+        from app import get_nasa_config
+        cfg = get_nasa_config()
+        assert cfg['interval'] == '15'
+        assert cfg['image_count'] == 5          # default for 15-min
+        assert cfg['seconds_per_image'] == 180  # 900 / 5
+        assert cfg['api_key'] == 'DEMO_KEY'
+
+    def test_get_nasa_config_defaults_30min(self):
+        from app import get_nasa_config, save_nasa_interval
+        save_nasa_interval('30')
+        cfg = get_nasa_config()
+        assert cfg['interval'] == '30'
+        assert cfg['image_count'] == 10         # default for 30-min
+        assert cfg['seconds_per_image'] == 180  # 1800 / 10
+        save_nasa_interval('15')
+
+    def test_get_nasa_config_custom_count_15min(self):
+        from app import get_nasa_config, save_nasa_image_count
+        save_nasa_image_count(15)
+        cfg = get_nasa_config()
+        assert cfg['image_count'] == 15
+        assert cfg['seconds_per_image'] == 60   # 900 / 15 = 1 min each
+        save_nasa_image_count(None)
+
+    def test_get_nasa_config_custom_count_30min(self):
+        from app import get_nasa_config, save_nasa_interval, save_nasa_image_count
+        save_nasa_interval('30')
+        save_nasa_image_count(15)
+        cfg = get_nasa_config()
+        assert cfg['image_count'] == 15
+        assert cfg['seconds_per_image'] == 120  # 1800 / 15 = 2 min each
+        save_nasa_interval('15')
+        save_nasa_image_count(None)
+
+
+# ─── /api/nasa ────────────────────────────────────────────────────────────────
+
+class TestApiNasa:
+    def test_requires_login(self, client):
+        resp = client.get('/api/nasa')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/api/nasa')
+        assert resp.status_code == 200
+
+    def test_response_has_required_fields(self, client):
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        for field in ('interval', 'image_count', 'seconds_per_image',
+                      'image_index', 'total_images', 'ms_until_next', 'updated'):
+            assert field in data, f"Missing field: {field}"
+
+    def test_response_interval_is_valid(self, client):
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        assert data['interval'] in ('15', '30')
+
+    def test_response_ms_until_next_positive(self, client):
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        assert isinstance(data['ms_until_next'], int)
+        assert data['ms_until_next'] > 0
+
+    def test_response_image_count_matches_config(self, client):
+        from app import get_nasa_config
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        cfg = get_nasa_config()
+        assert data['image_count'] == cfg['image_count']
+
+    def test_response_seconds_per_image_matches_config(self, client):
+        from app import get_nasa_config
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        cfg = get_nasa_config()
+        assert data['seconds_per_image'] == cfg['seconds_per_image']
+
+    def test_30min_mode_response(self, client):
+        from app import save_nasa_interval
+        save_nasa_interval('30')
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        assert data['interval'] == '30'
+        assert data['image_count'] == 10        # 30-min default
+        assert data['seconds_per_image'] == 180 # 1800 / 10
+        save_nasa_interval('15')
+
+    def test_custom_count_reflected_in_response(self, client):
+        from app import save_nasa_image_count
+        save_nasa_image_count(15)
+        login(client)
+        data = client.get('/api/nasa').get_json()
+        assert data['image_count'] == 15
+        assert data['seconds_per_image'] == 60  # 900 / 15
+        save_nasa_image_count(None)
+
+
+# ─── /nasa page ───────────────────────────────────────────────────────────────
+
+class TestNasaPage:
+    def test_requires_login(self, client):
+        resp = client.get('/nasa')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/nasa')
+        assert resp.status_code == 200
+
+    def test_page_contains_nasa_branding(self, client):
+        login(client)
+        html = client.get('/nasa').data.decode()
+        assert 'RetroIPTV' in html
+        assert 'NASA' in html
+
+    def test_page_references_api_nasa(self, client):
+        login(client)
+        html = client.get('/nasa').data.decode()
+        assert '/api/nasa' in html
+
+
+# ─── NASA channel registration ────────────────────────────────────────────────
+
+class TestNasaChannelRegistration:
+    def test_virtual_nasa_in_channel_list(self):
+        ids = {ch['tvg_id'] for ch in get_virtual_channels()}
+        assert 'virtual.nasa' in ids
+
+    def test_channel_count_is_seven(self):
+        assert len(get_virtual_channels()) == 9
+
+    def test_nasa_channel_has_required_keys(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.nasa')
+        required = {'name', 'logo', 'url', 'tvg_id', 'is_virtual',
+                    'playback_mode', 'loop_asset', 'overlay_type', 'overlay_refresh_seconds'}
+        assert required.issubset(ch.keys())
+
+    def test_nasa_channel_overlay_type(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.nasa')
+        assert ch['overlay_type'] == 'nasa'
+
+    def test_nasa_epg_entries_present(self):
+        now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        epg = get_virtual_epg(now, hours_span=2)
+        assert 'virtual.nasa' in epg
+        assert len(epg['virtual.nasa']) == 2
+
+    def test_admin_can_save_nasa_interval_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.nasa',
+            'ch_nasa_interval': '30',
+            'ch_nasa_image_count': '10',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        from app import get_nasa_interval
+        assert get_nasa_interval() == '30'
+
+    def test_admin_can_save_nasa_image_count_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.nasa',
+            'ch_nasa_interval': '15',
+            'ch_nasa_image_count': '8',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        from app import get_nasa_image_count
+        assert get_nasa_image_count() == 8
+
+    def test_virtual_channels_page_shows_nasa_settings(self, client):
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'ch_nasa_interval' in html
+        assert 'ch_nasa_image_count' in html
+        # API key field intentionally removed from admin UI (uses DEMO_KEY silently)
+        assert 'ch_nasa_api_key' not in html
+
+
+# ─── Channel Mix helpers ──────────────────────────────────────────────────────
+
+class TestChannelMixConfig:
+    def test_defaults_return_empty_channels_and_name(self):
+        cfg = get_channel_mix_config()
+        assert cfg['name'] == 'Channel Mix'
+        assert cfg['channels'] == []
+
+    def test_save_and_reload_name(self):
+        save_channel_mix_config({'name': 'Info Mix', 'channels': []})
+        cfg = get_channel_mix_config()
+        assert cfg['name'] == 'Info Mix'
+
+    def test_save_and_reload_channels(self):
+        channels = [
+            {'tvg_id': 'virtual.news', 'duration_minutes': 120},
+            {'tvg_id': 'virtual.weather', 'duration_minutes': 60},
+        ]
+        save_channel_mix_config({'name': 'My Mix', 'channels': channels})
+        cfg = get_channel_mix_config()
+        assert len(cfg['channels']) == 2
+        assert cfg['channels'][0]['tvg_id'] == 'virtual.news'
+        assert cfg['channels'][0]['duration_minutes'] == 120
+        assert cfg['channels'][1]['tvg_id'] == 'virtual.weather'
+        assert cfg['channels'][1]['duration_minutes'] == 60
+
+    def test_blank_name_defaults_to_channel_mix(self):
+        save_channel_mix_config({'name': '', 'channels': []})
+        cfg = get_channel_mix_config()
+        assert cfg['name'] == 'Channel Mix'
+
+    def test_invalid_tvg_id_raises(self):
+        with pytest.raises(ValueError):
+            save_channel_mix_config({'name': 'x', 'channels': [
+                {'tvg_id': 'virtual.channel_mix', 'duration_minutes': 60}
+            ]})
+
+    def test_invalid_duration_raises(self):
+        with pytest.raises(ValueError):
+            save_channel_mix_config({'name': 'x', 'channels': [
+                {'tvg_id': 'virtual.news', 'duration_minutes': 0}
+            ]})
+        with pytest.raises(ValueError):
+            save_channel_mix_config({'name': 'x', 'channels': [
+                {'tvg_id': 'virtual.news', 'duration_minutes': 1441}
+            ]})
+
+    def test_name_too_long_raises(self):
+        with pytest.raises(ValueError):
+            save_channel_mix_config({'name': 'x' * 121, 'channels': []})
+
+    def test_invalid_tvg_id_in_config_is_filtered_on_load(self):
+        """Invalid tvg_ids stored in DB are silently filtered on load."""
+        import sqlite3
+        import json
+        import app as app_module
+        with sqlite3.connect(app_module.TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            bad = json.dumps([{'tvg_id': 'invalid.id', 'duration_minutes': 60}])
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('channel_mix.channels', ?)", (bad,))
+            conn.commit()
+        cfg = get_channel_mix_config()
+        assert cfg['channels'] == []
+
+
+class TestChannelMixActiveSlot:
+    def test_empty_channels_returns_none(self):
+        from app import _get_active_channel_mix_slot
+        active, remaining = _get_active_channel_mix_slot([])
+        assert active is None
+        assert remaining == 0
+
+    def test_single_channel_always_active(self):
+        from app import _get_active_channel_mix_slot
+        channels = [{'tvg_id': 'virtual.news', 'duration_minutes': 120}]
+        active, remaining = _get_active_channel_mix_slot(channels)
+        assert active == 'virtual.news'
+        assert 0 < remaining <= 120 * 60
+
+    def test_returns_correct_channel_for_offset(self):
+        """Test the slot algorithm using a known timestamp."""
+        from app import _get_active_channel_mix_slot
+        import unittest.mock as mock
+        channels = [
+            {'tvg_id': 'virtual.news',    'duration_minutes': 2},  # 0–120s
+            {'tvg_id': 'virtual.weather', 'duration_minutes': 2},  # 120–240s
+        ]
+        # Total cycle = 240s
+        # At offset 60s → news is active, 60s remaining
+        with mock.patch('time.time', return_value=60.0):
+            active, remaining = _get_active_channel_mix_slot(channels)
+        assert active == 'virtual.news'
+        assert remaining == 60  # 120 - 60
+
+        # At offset 150s → weather is active, 90s remaining
+        with mock.patch('time.time', return_value=150.0):
+            active, remaining = _get_active_channel_mix_slot(channels)
+        assert active == 'virtual.weather'
+        assert remaining == 90  # 240 - 150
+
+
+class TestApiChannelMix:
+    def test_requires_login(self, client):
+        resp = client.get('/api/channel_mix')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/api/channel_mix')
+        assert resp.status_code == 200
+
+    def test_response_has_required_fields(self, client):
+        login(client)
+        data = client.get('/api/channel_mix').get_json()
+        for field in ('name', 'active_type', 'active_name', 'active_tvg_id',
+                      'seconds_remaining', 'total_cycle_seconds', 'channels'):
+            assert field in data, f"Missing field: {field}"
+
+    def test_empty_mix_returns_null_active(self, client):
+        login(client)
+        data = client.get('/api/channel_mix').get_json()
+        assert data['active_type'] is None
+        assert data['active_tvg_id'] is None
+        assert data['channels'] == []
+
+    def test_configured_mix_returns_active_channel(self, client):
+        save_channel_mix_config({
+            'name': 'Test Mix',
+            'channels': [
+                {'tvg_id': 'virtual.news', 'duration_minutes': 120},
+                {'tvg_id': 'virtual.traffic', 'duration_minutes': 60},
+            ]
+        })
+        login(client)
+        data = client.get('/api/channel_mix').get_json()
+        assert data['active_type'] in ('news', 'traffic')
+        assert data['active_tvg_id'] in ('virtual.news', 'virtual.traffic')
+        assert data['seconds_remaining'] > 0
+        assert data['total_cycle_seconds'] == 180 * 60
+
+    def test_response_name_reflects_config(self, client):
+        save_channel_mix_config({'name': 'Info Mix', 'channels': []})
+        login(client)
+        data = client.get('/api/channel_mix').get_json()
+        assert data['name'] == 'Info Mix'
+
+
+class TestChannelMixRegistration:
+    def test_virtual_channel_mix_in_channel_list(self):
+        ids = {ch['tvg_id'] for ch in get_virtual_channels()}
+        assert 'virtual.channel_mix' in ids
+
+    def test_channel_count_is_eight(self):
+        assert len(get_virtual_channels()) == 9
+
+    def test_channel_mix_has_required_keys(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.channel_mix')
+        required = {'name', 'logo', 'url', 'tvg_id', 'is_virtual',
+                    'playback_mode', 'loop_asset', 'overlay_type', 'overlay_refresh_seconds'}
+        assert required.issubset(ch.keys())
+
+    def test_channel_mix_overlay_type(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.channel_mix')
+        assert ch['overlay_type'] == 'channel_mix'
+
+    def test_channel_mix_epg_entries_present(self):
+        now = datetime(2026, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
+        epg = get_virtual_epg(now, hours_span=2)
+        assert 'virtual.channel_mix' in epg
+        assert len(epg['virtual.channel_mix']) == 2
+
+    def test_channel_mix_enabled_by_default(self):
+        """Channel Mix defaults to enabled (same as all other virtual channels)."""
+        settings = get_virtual_channel_settings()
+        assert settings.get('virtual.channel_mix') is True
+
+    def test_admin_can_save_channel_mix_config_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.channel_mix',
+            'ch_mix_name': 'My Info Mix',
+            'cm_ch_virtual.news': '1',
+            'cm_dur_virtual.news': '60',
+            'cm_ch_virtual.weather': '1',
+            'cm_dur_virtual.weather': '30',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        cfg = get_channel_mix_config()
+        assert cfg['name'] == 'My Info Mix'
+        assert len(cfg['channels']) == 2
+        news = next((c for c in cfg['channels'] if c['tvg_id'] == 'virtual.news'), None)
+        assert news is not None
+        assert news['duration_minutes'] == 60
+
+    def test_virtual_channels_page_shows_channel_mix(self, client):
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'Channel Mix' in html
+        assert 'ch_mix_name' in html
+
+
+# ─── Icon Pack ────────────────────────────────────────────────────────────────
+
+from app import (get_use_icon_pack, set_use_icon_pack,
+                 _ICON_PACK_LOGOS, _DEFAULT_CHANNEL_LOGOS, _resolve_channel_logo,
+                 ICON_PACK_DIR)
+
+
+class TestGetUseIconPack:
+    def test_defaults_to_false(self):
+        assert get_use_icon_pack() is False
+
+    def test_set_and_get_enabled(self):
+        set_use_icon_pack(True)
+        assert get_use_icon_pack() is True
+
+    def test_set_and_get_disabled(self):
+        set_use_icon_pack(True)
+        set_use_icon_pack(False)
+        assert get_use_icon_pack() is False
+
+    def test_set_persists_across_calls(self):
+        set_use_icon_pack(True)
+        # A fresh call to the helper should still read True
+        assert get_use_icon_pack() is True
+
+
+class TestIconPackLogos:
+    def test_all_virtual_channels_have_icon_pack_entry(self):
+        for ch in VIRTUAL_CHANNELS:
+            assert ch['tvg_id'] in _ICON_PACK_LOGOS, (
+                f"No icon pack entry for {ch['tvg_id']}"
+            )
+
+    def test_on_this_day_icon_pack_entry_exists(self):
+        assert 'virtual.on_this_day' in _ICON_PACK_LOGOS
+
+    def test_icon_pack_urls_use_icon_pack_subdirectory(self):
+        for tvg_id, url in _ICON_PACK_LOGOS.items():
+            assert 'icon_pack' in url, (
+                f"Icon pack URL for {tvg_id} does not use icon_pack/: {url}"
+            )
+
+    def test_icon_pack_files_exist_on_disk(self):
+        import os
+        for tvg_id, url in _ICON_PACK_LOGOS.items():
+            rel = url.lstrip('/')
+            abs_path = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel
+            )
+            assert os.path.isfile(abs_path), (
+                f"Icon pack file missing for {tvg_id}: {abs_path}"
+            )
+
+
+class TestResolveChannelLogo:
+    def test_custom_logo_takes_priority_over_icon_pack(self):
+        url = _resolve_channel_logo(
+            'virtual.news',
+            '/static/logos/virtual/news.svg',
+            'virtual_news_logo.png',
+            True,
+        )
+        assert url == '/static/logos/virtual/virtual_news_logo.png'
+
+    def test_custom_logo_takes_priority_when_icon_pack_disabled(self):
+        url = _resolve_channel_logo(
+            'virtual.news',
+            '/static/logos/virtual/news.svg',
+            'virtual_news_logo.png',
+            False,
+        )
+        assert url == '/static/logos/virtual/virtual_news_logo.png'
+
+    def test_icon_pack_used_when_enabled_and_no_custom(self):
+        # The icon pack files exist on disk (they are in the repo)
+        url = _resolve_channel_logo(
+            'virtual.nasa',
+            '/static/logos/virtual/nasa.svg',
+            '',
+            True,
+        )
+        assert 'icon_pack' in url
+
+    def test_default_svg_used_when_icon_pack_disabled_and_no_custom(self):
+        url = _resolve_channel_logo(
+            'virtual.nasa',
+            '/static/logos/virtual/nasa.svg',
+            '',
+            False,
+        )
+        assert url == '/static/logos/virtual/nasa.svg'
+
+    def test_default_svg_used_when_icon_pack_enabled_but_file_missing(self, tmp_path, monkeypatch):
+        import app as app_module
+        # Redirect ICON_PACK_DIR to an empty directory so no icon pack file is found
+        monkeypatch.setattr(app_module, 'ICON_PACK_DIR', str(tmp_path))
+        url = _resolve_channel_logo(
+            'virtual.news',
+            '/static/logos/virtual/news.svg',
+            '',
+            True,
+        )
+        # Should fall back to the default SVG because the icon pack dir is empty
+        assert url == '/static/logos/virtual/news.svg'
+
+
+class TestApiVirtualIconPack:
+    def test_get_returns_default_disabled(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/api/virtual/icon_pack')
+        assert resp.status_code == 200
+        assert resp.get_json()['enabled'] is False
+
+    def test_post_enable(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post(
+            '/api/virtual/icon_pack',
+            json={'enabled': True},
+            content_type='application/json',
+        )
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['ok'] is True
+        assert data['enabled'] is True
+        assert 'logos' in data
+        # logos dict should have an entry for each virtual channel
+        for ch in VIRTUAL_CHANNELS:
+            assert ch['tvg_id'] in data['logos']
+
+    def test_post_disable(self, client):
+        login(client, 'admin', 'adminpass')
+        # Enable first
+        client.post('/api/virtual/icon_pack', json={'enabled': True},
+                    content_type='application/json')
+        # Then disable
+        resp = client.post('/api/virtual/icon_pack', json={'enabled': False},
+                           content_type='application/json')
+        assert resp.status_code == 200
+        assert resp.get_json()['enabled'] is False
+
+    def test_post_persists_state(self, client):
+        login(client, 'admin', 'adminpass')
+        client.post('/api/virtual/icon_pack', json={'enabled': True},
+                    content_type='application/json')
+        resp = client.get('/api/virtual/icon_pack')
+        assert resp.get_json()['enabled'] is True
+
+    def test_post_requires_admin(self, client):
+        login(client)  # regular user
+        resp = client.post('/api/virtual/icon_pack', json={'enabled': True},
+                           content_type='application/json')
+        assert resp.status_code == 403
+
+    def test_post_missing_enabled_field(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/api/virtual/icon_pack', json={},
+                           content_type='application/json')
+        assert resp.status_code == 400
+
+    def test_get_requires_login(self, client):
+        resp = client.get('/api/virtual/icon_pack')
+        assert resp.status_code in (302, 401)
+
+
+class TestIconPackAdminPage:
+    def test_page_shows_icon_pack_section(self, client):
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'icon-pack-toggle' in html
+        assert 'Channel Icon Pack' in html
+
+    def test_page_shows_icon_pack_disabled_by_default(self, client):
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'Icon Pack <strong>Disabled</strong>' in html
+
+    def test_page_shows_icon_pack_enabled_when_set(self, client):
+        login(client, 'admin', 'adminpass')
+        set_use_icon_pack(True)
+        html = client.get('/virtual_channels').data.decode()
+        assert 'Icon Pack <strong>Enabled</strong>' in html
+
+
+class TestGetVirtualChannelsIconPack:
+    def test_default_logos_used_when_icon_pack_disabled(self):
+        set_use_icon_pack(False)
+        channels = get_virtual_channels()
+        for ch in channels:
+            assert 'icon_pack' not in ch['logo'], (
+                f"Expected default logo for {ch['tvg_id']} when icon pack off, got {ch['logo']}"
+            )
+
+    def test_icon_pack_logos_used_when_enabled(self):
+        set_use_icon_pack(True)
+        channels = get_virtual_channels()
+        for ch in channels:
+            # If an icon pack file exists for this channel, it should be used
+            pack_url = _ICON_PACK_LOGOS.get(ch['tvg_id'])
+            if pack_url:
+                rel = pack_url.lstrip('/')
+                import os
+                abs_path = os.path.join(
+                    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel
+                )
+                if os.path.isfile(abs_path):
+                    assert ch['logo'] == pack_url, (
+                        f"Expected icon pack logo for {ch['tvg_id']}, got {ch['logo']}"
+                    )
+
+    def test_custom_logo_overrides_icon_pack(self, tmp_path, monkeypatch):
+        import os
+        import app as app_module
+        # Point LOGO_UPLOAD_DIR to tmp_path and create a fake custom logo
+        monkeypatch.setattr(app_module, 'LOGO_UPLOAD_DIR', str(tmp_path))
+        fake_logo = tmp_path / 'virtual_news_logo.png'
+        fake_logo.write_bytes(b'\x89PNG\r\n\x1a\n')  # minimal PNG header
+        from app import save_channel_custom_logo
+        save_channel_custom_logo('virtual.news', 'virtual_news_logo.png')
+        set_use_icon_pack(True)
+        channels = get_virtual_channels()
+        news = next(c for c in channels if c['tvg_id'] == 'virtual.news')
+        assert 'virtual_news_logo.png' in news['logo']
+        assert 'icon_pack' not in news['logo']
+
+
+# ─── On This Day helpers ──────────────────────────────────────────────────────
+
+class TestOnThisDayHelpers:
+    def test_source_enabled_default_true(self):
+        from app import get_on_this_day_source_enabled
+        assert get_on_this_day_source_enabled('wikipedia_events') is True
+        assert get_on_this_day_source_enabled('wikipedia_births') is True
+        assert get_on_this_day_source_enabled('wikipedia_deaths') is True
+
+    def test_save_and_reload_source_enabled(self):
+        from app import get_on_this_day_source_enabled, save_on_this_day_source_enabled
+        save_on_this_day_source_enabled('wikipedia_events', False)
+        assert get_on_this_day_source_enabled('wikipedia_events') is False
+        save_on_this_day_source_enabled('wikipedia_events', True)
+        assert get_on_this_day_source_enabled('wikipedia_events') is True
+
+    def test_save_source_enabled_invalid_id_raises(self):
+        from app import save_on_this_day_source_enabled
+        with pytest.raises(ValueError):
+            save_on_this_day_source_enabled('nonexistent_source', True)
+
+    def test_custom_events_default_empty(self):
+        from app import get_on_this_day_custom_events
+        assert get_on_this_day_custom_events('wikipedia_events') == []
+
+    def test_save_and_reload_custom_events(self):
+        from app import get_on_this_day_custom_events, save_on_this_day_custom_events
+        events = [{'year': '1969', 'text': 'Moon landing', 'category': 'event'}]
+        save_on_this_day_custom_events('wikipedia_events', events)
+        reloaded = get_on_this_day_custom_events('wikipedia_events')
+        assert reloaded == events
+
+    def test_save_custom_events_invalid_id_raises(self):
+        from app import save_on_this_day_custom_events
+        with pytest.raises(ValueError):
+            save_on_this_day_custom_events('nonexistent_source', [])
+
+    def test_save_custom_events_invalid_type_raises(self):
+        from app import save_on_this_day_custom_events
+        with pytest.raises(ValueError):
+            save_on_this_day_custom_events('wikipedia_events', 'not a list')
+
+    def test_get_on_this_day_config_structure(self):
+        from app import get_on_this_day_config, ON_THIS_DAY_SOURCES
+        cfg = get_on_this_day_config()
+        assert 'sources' in cfg
+        assert 'seconds_per_event' in cfg
+        assert cfg['seconds_per_event'] == 30
+        assert len(cfg['sources']) == len(ON_THIS_DAY_SOURCES)
+
+    def test_get_on_this_day_config_source_fields(self):
+        from app import get_on_this_day_config
+        cfg = get_on_this_day_config()
+        for src in cfg['sources']:
+            assert 'id' in src
+            assert 'label' in src
+            assert 'category' in src
+            assert 'enabled' in src
+            assert 'custom_events' in src
+            assert 'wiki_url' in src
+
+    def test_get_on_this_day_config_default_all_enabled(self):
+        from app import get_on_this_day_config
+        cfg = get_on_this_day_config()
+        for src in cfg['sources']:
+            assert src['enabled'] is True
+
+    def test_wiki_url_contains_api_endpoint(self):
+        from app import get_on_this_day_config
+        cfg = get_on_this_day_config()
+        for src in cfg['sources']:
+            assert src['wiki_url'].startswith('https://en.wikipedia.org/')
+            assert 'feed/onthisday' in src['wiki_url']
+
+
+# ─── /api/on_this_day ─────────────────────────────────────────────────────────
+
+class TestApiOnThisDay:
+    def test_requires_login(self, client):
+        resp = client.get('/api/on_this_day')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/api/on_this_day')
+        assert resp.status_code == 200
+
+    def test_response_has_required_fields(self, client):
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        for field in ('month', 'day', 'date_label', 'events', 'event_count',
+                      'seconds_per_event', 'ms_until_next', 'sources'):
+            assert field in data, f"Missing field: {field}"
+
+    def test_response_month_and_day_are_ints(self, client):
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        assert isinstance(data['month'], int)
+        assert isinstance(data['day'], int)
+        assert 1 <= data['month'] <= 12
+        assert 1 <= data['day'] <= 31
+
+    def test_response_seconds_per_event_is_30(self, client):
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        assert data['seconds_per_event'] == 30
+
+    def test_response_ms_until_next_positive(self, client):
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        assert isinstance(data['ms_until_next'], int)
+        assert data['ms_until_next'] > 0
+
+    def test_response_sources_has_all_source_ids(self, client):
+        from app import ON_THIS_DAY_SOURCES
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        for src in ON_THIS_DAY_SOURCES:
+            assert src['id'] in data['sources'], f"Missing source: {src['id']}"
+
+    def test_custom_events_used_when_source_disabled(self, client):
+        from app import save_on_this_day_source_enabled, save_on_this_day_custom_events
+        save_on_this_day_source_enabled('wikipedia_events', False)
+        save_on_this_day_source_enabled('wikipedia_births', False)
+        save_on_this_day_source_enabled('wikipedia_deaths', False)
+        custom = [{'year': '2000', 'text': 'Custom test event', 'category': 'event'}]
+        save_on_this_day_custom_events('wikipedia_events', custom)
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        texts = [ev['text'] for ev in data['events']]
+        assert 'Custom test event' in texts
+
+    def test_disabled_source_has_no_wikipedia_events(self, client):
+        from app import save_on_this_day_source_enabled
+        # Disable all sources and add no custom events → zero events
+        save_on_this_day_source_enabled('wikipedia_events', False)
+        save_on_this_day_source_enabled('wikipedia_births', False)
+        save_on_this_day_source_enabled('wikipedia_deaths', False)
+        login(client)
+        data = client.get('/api/on_this_day').get_json()
+        # event_count may be 0 when no Wikipedia data and no custom events
+        assert isinstance(data['event_count'], int)
+        assert data['event_count'] >= 0
+
+
+# ─── /on_this_day page ────────────────────────────────────────────────────────
+
+class TestOnThisDayPage:
+    def test_requires_login(self, client):
+        resp = client.get('/on_this_day')
+        assert resp.status_code in (302, 401)
+
+    def test_returns_200_when_authenticated(self, client):
+        login(client)
+        resp = client.get('/on_this_day')
+        assert resp.status_code == 200
+
+    def test_page_contains_on_this_day_branding(self, client):
+        login(client)
+        html = client.get('/on_this_day').data.decode()
+        assert 'On This Day' in html
+
+    def test_page_references_api_on_this_day(self, client):
+        login(client)
+        html = client.get('/on_this_day').data.decode()
+        assert '/api/on_this_day' in html
+
+
+# ─── On This Day channel registration ─────────────────────────────────────────
+
+class TestOnThisDayChannelRegistration:
+    def test_virtual_on_this_day_in_channel_list(self):
+        ids = {ch['tvg_id'] for ch in get_virtual_channels()}
+        assert 'virtual.on_this_day' in ids
+
+    def test_channel_count_is_nine(self):
+        assert len(get_virtual_channels()) == 9
+
+    def test_on_this_day_channel_has_required_keys(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.on_this_day')
+        required = {'name', 'logo', 'url', 'tvg_id', 'is_virtual',
+                    'playback_mode', 'loop_asset', 'overlay_type', 'overlay_refresh_seconds'}
+        assert required.issubset(ch.keys())
+
+    def test_on_this_day_channel_overlay_type(self):
+        ch = next(c for c in get_virtual_channels() if c['tvg_id'] == 'virtual.on_this_day')
+        assert ch['overlay_type'] == 'on_this_day'
+
+    def test_on_this_day_epg_entries_present(self):
+        from app import get_virtual_epg
+        from datetime import datetime, timezone
+        grid_start = datetime(2026, 3, 29, 12, 0, 0, tzinfo=timezone.utc)
+        epg = get_virtual_epg(grid_start, hours_span=6)
+        assert 'virtual.on_this_day' in epg

@@ -18,6 +18,7 @@
     renderers: {},
     lastData: null,
     appearance: { textColor: '', bgColor: '' },
+    stopCallbacks: [],
   };
 
   function rootEl() {
@@ -127,7 +128,16 @@
       state.activeType = null;
       state.lastData = null;
       state.appearance = { textColor: '', bgColor: '' };
+      // Run any registered stop-cleanup callbacks (registered via onStop)
+      state.stopCallbacks.forEach(function (fn) { try { fn(); } catch (e) {} });
       hideRoot();
+    },
+
+    // Register a callback to be invoked whenever stop() is called.
+    // Renderers that maintain their own timers should use this instead of
+    // overriding stop() directly so multiple registrations compose safely.
+    onStop(fn) {
+      state.stopCallbacks.push(fn);
     },
 
     // Utility: simple JSON fetch with timeout
@@ -141,6 +151,11 @@
       } finally {
         window.clearTimeout(t);
       }
+    },
+
+    // Return the registered renderer for a given type, or null
+    getRenderer(type) {
+      return state.renderers[type] || null;
     }
   };
 

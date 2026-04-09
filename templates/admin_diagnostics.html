@@ -320,7 +320,7 @@ body.retro-magazine .sd-tip-warn    { background:rgba(130,50,0,0.10); border-lef
     <div class="diag-box">
       <h3>Activity Log <span id="activitySpinner" class="spinner" style="display:none"></span></h3>
       <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.8rem">
-        User logins, password changes, tuner switches, and other admin actions recorded in <code>activity.log</code>.
+        User logins, password changes, tuner switches, and other admin actions recorded in the activity database.
       </p>
 
       <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;margin-bottom:0.8rem">
@@ -797,6 +797,30 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
           }
           if(ch.traffic_config){
             issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
+          }
+          if(ch.updates_config){
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Beta releases: '+(ch.updates_config.show_beta?'shown':'hidden')+'</div>';
+          }
+          if(ch.sports_config){
+            var sc=ch.sports_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(sc.mode)
+              +(sc.mode==='rss'?' &nbsp;('+sc.rss_feed_count+' feed(s))':'')+'</div>';
+          }
+          if(ch.nasa_config){
+            var nc=ch.nasa_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Interval: '+esc(nc.interval_minutes)+' min &nbsp;Images: '+esc(nc.image_count)
+              +(nc.using_demo_key?' &nbsp;<span style="color:#ff9900">DEMO_KEY</span>':'')+'</div>';
+          }
+          if(ch.channel_mix_config){
+            var mx=ch.channel_mix_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Name: '+esc(mx.name)+' &nbsp;Sub-channels: '+esc(mx.channel_count)+'</div>';
+          }
+          if(ch.on_this_day_config){
+            var ot=ch.on_this_day_config;
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">'
+              +'Sources: '+esc(ot.enabled_source_count)+'/'+esc(ot.total_source_count)+' enabled</div>';
           }
           issues.forEach(function(iss){
             issHtml+='<div style="font-size:0.75rem;margin-top:0.2rem;color:'+(ch.config_ok?'#888':'#ff9900')+'">'+esc(iss)+'</div>';
@@ -1636,7 +1660,7 @@ function fallbackCopy(text){
 
   function loadActivity(){
     spin('activitySpinner', true);
-    fetch('/admin/diagnostics/logs?key=activity&n='+ACTIVITY_MAX_ENTRIES, {credentials:'same-origin'})
+    fetch('/admin/diagnostics/activity-logs?n='+ACTIVITY_MAX_ENTRIES, {credentials:'same-origin'})
     .then(function(r){ return r.json(); })
     .then(function(d){
       spin('activitySpinner', false);

@@ -92,3 +92,42 @@ Username: admin
 Password: strongpassword123
 
 Change the password after the first login.
+
+
+------------------------------------------------------------------------
+
+## 🔐 Admin Password Recovery
+
+If the admin password is lost, it can be reset using the provided script.
+
+### Reset Command
+
+python3 /home/iptv/iptv-server/scripts/reset_admin_password.py --db /home/iptv/iptv-server/config/users.db
+
+### Common Permission Issue
+
+If you see a database write error, it is likely due to ownership mismatch.
+
+Example error:
+- File owned by: iptv
+- Current user: anotheruser
+
+Run the script as the correct user:
+
+sudo -u iptv python3 /home/iptv/iptv-server/scripts/reset_admin_password.py --db /home/iptv/iptv-server/config/users.db
+
+### Immutable File Check (Rare)
+
+If the issue persists, check if the file is immutable:
+
+lsattr /home/iptv/iptv-server/config/users.db
+
+If an `i` flag is present, remove it:
+
+sudo chattr -i /home/iptv/iptv-server/config/users.db
+
+### Result
+
+On success:
+- Password is reset
+- Admin is required to change password on next login

@@ -60,30 +60,64 @@ def check_db(db_path: str) -> Dict[str, Any]:
 
 
 def check_schema(db_path: str) -> Dict[str, Any]:
-    """Verify that expected tables exist in the users database."""
-    required = {"users", "user_preferences"}
+    """Verify that expected tables and columns exist in the users database."""
+    required_tables = {
+        "users",
+        "user_preferences",
+        "activity_logs",
+    }
+    required_columns = {
+        "last_login",
+        "assigned_tuner",
+        "must_change_password",
+    }
     try:
         with sqlite3.connect(db_path, timeout=5) as conn:
             cur = conn.execute(
                 "SELECT name FROM sqlite_master WHERE type='table'"
             )
             found = {row[0] for row in cur.fetchall()}
-        missing = required - found
-        if missing:
+        missing_tables = required_tables - found
+        if missing_tables:
             return {
                 "status": "FAIL",
-                "detail": f"Missing tables: {', '.join(sorted(missing))}. Found: {', '.join(sorted(found)) or 'none'}",
+                "detail": f"Missing tables: {', '.join(sorted(missing_tables))}. Found: {', '.join(sorted(found)) or 'none'}",
                 "tables_found": sorted(found),
-                "tables_missing": sorted(missing),
+                "tables_missing": sorted(missing_tables),
+                "columns_missing": [],
                 "remediation": (
                     "Restart the application to trigger automatic schema initialisation."
                 ),
             }
+
+        # Check that all expected columns are present in the users table.
+        with sqlite3.connect(db_path, timeout=5) as conn:
+            col_cur = conn.execute("PRAGMA table_info(users)")
+            existing_cols = {row[1] for row in col_cur.fetchall()}
+        missing_columns = sorted(required_columns - existing_cols)
+
+        if missing_columns:
+            return {
+                "status": "WARN",
+                "detail": (
+                    f"All required tables present, but users table is missing "
+                    f"column(s): {', '.join(missing_columns)}. "
+                    f"The application will migrate the schema automatically on the next restart."
+                ),
+                "tables_found": sorted(found),
+                "tables_missing": [],
+                "columns_missing": missing_columns,
+                "remediation": (
+                    "Restart the application to apply automatic schema migrations."
+                ),
+            }
+
         return {
             "status": "PASS",
             "detail": f"All required tables present. Tables: {', '.join(sorted(found))}",
             "tables_found": sorted(found),
             "tables_missing": [],
+            "columns_missing": [],
             "remediation": "",
         }
     except Exception as exc:  # noqa: BLE001
@@ -92,7 +126,8 @@ def check_schema(db_path: str) -> Dict[str, Any]:
             "status": "FAIL",
             "detail": "Schema check failed. Check application logs for details.",
             "tables_found": [],
-            "tables_missing": sorted(required),
+            "tables_missing": sorted(required_tables),
+            "columns_missing": [],
             "remediation": "See database check for more information.",
         }
 

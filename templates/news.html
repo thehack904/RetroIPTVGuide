@@ -327,6 +327,7 @@
 
   function build(data) {
     const frame     = document.getElementById('nwFrame');
+    const feedCount = (data.feed_count != null) ? data.feed_count : -1;
     const headlines = Array.isArray(data.headlines) ? data.headlines : [];
 
     const top       = headlines[0] || null;
@@ -355,7 +356,15 @@
     }
 
     let topStoryHtml = '';
-    if (top) {
+    if (feedCount === 0) {
+      topStoryHtml = `<div class="nw-loading" style="flex:1;flex-direction:column;gap:0.5em;">
+        <div style="font-size:3em;">&#127760;</div>
+        <div>No RSS Feeds Configured</div>
+        <div style="font-size:0.65em;font-weight:400;color:#4060a0;max-width:24em;text-align:center;line-height:1.5;">
+          Add news feed URLs in Virtual News Channel Settings.
+        </div>
+      </div>`;
+    } else if (top) {
       const rawSummary = top.summary || '';
       const truncated = rawSummary.length > SUMMARY_MAX
         ? rawSummary.substring(0, SUMMARY_MAX) + '\u2026'

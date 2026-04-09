@@ -297,6 +297,7 @@
     const baseFontPx = Math.max(FONT_MIN_PX, Math.min(fw / FONT_SCALE_DIVISOR, FONT_MAX_PX));
     frame.style.fontSize = baseFontPx + 'px';
 
+    const feedCount = (data && data.feed_count != null) ? data.feed_count : -1;
     const headlines = Array.isArray(data && data.headlines) ? data.headlines : [];
     const top       = headlines[0] || null;
     const sideItems = headlines.slice(1, 6);
@@ -324,9 +325,18 @@
       }
     }
 
-    // Top story
+    // Top story (or not-configured / empty state)
     let mainHtml;
-    if (top) {
+    if (feedCount === 0) {
+      mainHtml =
+        '<div class="vc-news-no-data" style="flex-direction:column;gap:0.4em;">' +
+          '<div style="font-size:2em;">&#127760;</div>' +
+          '<div>No RSS Feeds Configured</div>' +
+          '<div style="font-size:0.75em;font-weight:400;color:#6080c0;max-width:22em;text-align:center;line-height:1.45;">' +
+            'Add news feed URLs in Virtual News Channel Settings.' +
+          '</div>' +
+        '</div>';
+    } else if (top) {
       const raw = top.summary || '';
       const summary = esc(raw.length > SUMMARY_MAX ? raw.substring(0, SUMMARY_MAX) + '\u2026' : raw);
       mainHtml =

@@ -423,6 +423,38 @@
     const ext   = Array.isArray(data?.extended) ? data.extended : [];
     const ticks = Array.isArray(data?.ticker)   ? data.ticker   : [];
 
+    // ── Not configured ────────────────────────────────────────────────────
+    if (now.condition === 'Not Configured') {
+      frame.innerHTML = `
+        <div class="vc-wx-header">
+          <div class="vc-wx-header-title">
+            <span>RetroIPTV</span>
+            ${iconSvg('partly_cloudy', iconHdr)}
+            <span>Weather</span>
+          </div>
+          <div class="vc-wx-header-subtitle">Local Forecast</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;
+                    justify-content:center;gap:0.5em;padding:1em;text-align:center;">
+          <div style="font-size:3em;">${iconSvg('partly_cloudy', iconLg)}</div>
+          <div style="font-size:1em;font-weight:900;letter-spacing:0.1em;text-transform:uppercase;
+                      color:#90c8ff;">No Location Configured</div>
+          <div style="font-size:0.72em;color:#8098c0;max-width:22em;line-height:1.5;">
+            Add a Zip Code or Latitude&nbsp;/&nbsp;Longitude in
+            Virtual Weather Channel Settings.
+          </div>
+        </div>
+        <div class="vc-wx-ticker-bar">
+          <div class="vc-wx-ticker-label">Weather Alert:</div>
+          <div class="vc-wx-ticker-scroll">
+            <span class="vc-wx-ticker-track">No location configured \u2022 </span>
+          </div>
+        </div>`;
+      overlay.appendChild(frame);
+      root.appendChild(overlay);
+      return;
+    }
+
     // Base font-size drives all em values — scales with container width so the
     // overlay is legible at small player sizes without needing to expand it.
     const fw          = root.offsetWidth || 960;
