@@ -435,7 +435,7 @@
     const isBeta        = latest && latest.prerelease;
     const headlineClass = 'vc-up-headline-bar' + (isBeta ? ' beta' : '');
     const headlineText  = isBeta
-      ? '\u26A0\uFE0F Beta Release \u2014 Testing in Progress'
+      ? '\u26A0\uFE0F Pre-release \u2014 Not a Stable Release'
       : '\u2714\uFE0F Latest Release Available';
 
     const metaItems = [];
@@ -456,7 +456,7 @@
       );
     }
 
-    const betaBadge = isBeta ? ' <span class="vc-up-beta-badge">Beta</span>' : '';
+    const betaBadge = isBeta ? ' <span class="vc-up-beta-badge">Pre-release</span>' : '';
 
     frame.innerHTML =
       '<div class="vc-up-header">' +

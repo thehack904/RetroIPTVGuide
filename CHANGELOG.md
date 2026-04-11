@@ -6,6 +6,26 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.4 - 2026-04-09
+
+### Added
+- Added deprecation warning for the Windows installer: the Windows installer (`.bat` / `.ps1`) will be discontinued in **v5.0**. Docker is the recommended deployment going forward.
+  - Warning banner is displayed at startup in `retroiptv_windows.bat`.
+  - Warning banner is displayed at startup in `retroiptv_windows.ps1`.
+  - Deprecation notice added to the Windows Installation section of `INSTALL.md`.
+  - Deprecation note added to `ROADMAP.md` under Installer Enhancements.
+  - Deprecation notice shown on the **About** page when RetroIPTVGuide is running on Windows.
+- Added structured wiki documentation under `docs/wiki/`:
+  - `Home.md` — wiki landing page with navigation table
+  - `Installation.md` — full installation guide covering Docker, Linux, Raspberry Pi, and Windows
+  - `Configuration.md` — tuner setup, settings, environment variables, and data directory
+  - `Virtual-Channels.md` — overview of all 9 built-in virtual channels with configuration details
+  - `FAQ.md` — frequently asked questions
+  - `Troubleshooting.md` — common problems and step-by-step fixes
+- Updated `README.md` to link to the new wiki pages.
+
+---
+
 ## v4.9.3 - 2026-04-08
 
 ### Added

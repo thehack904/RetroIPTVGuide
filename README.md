@@ -110,9 +110,18 @@ If you lose access to the admin account, see: INSTALL.md → Admin Password Reco
 
 ## 📚 Documentation
 
-Detailed guides are available in the repository:
+A structured wiki is available in [`docs/wiki/`](docs/wiki/Home.md):
 
--   INSTALL.md -- Installation and update instructions
+-   [Home](docs/wiki/Home.md) -- Wiki home and navigation
+-   [Installation](docs/wiki/Installation.md) -- Installation and update instructions
+-   [Configuration](docs/wiki/Configuration.md) -- Tuner setup and settings
+-   [Virtual Channels](docs/wiki/Virtual-Channels.md) -- Built-in virtual channels
+-   [FAQ](docs/wiki/FAQ.md) -- Frequently asked questions
+-   [Troubleshooting](docs/wiki/Troubleshooting.md) -- Common problems and fixes
+
+Additional reference documents:
+
+-   INSTALL.md -- Detailed installation reference
 -   ARCHITECTURE.md -- System architecture
 -   DATA_FLOW.md -- How playlists and EPG data are processed
 -   PROJECT_STRUCTURE.md -- Repository layout

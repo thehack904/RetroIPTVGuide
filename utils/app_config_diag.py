@@ -19,7 +19,7 @@ import sys
 import time
 import socket
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -571,6 +571,28 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     }
 
 
+def _sanitize_url_for_log(url: str) -> str:
+    """Return the URL with any embedded credentials removed, safe for logging.
+
+    Only strips userinfo (username/password) from the URL authority component.
+    Secrets in query parameters (e.g. ``?api_key=…``) are not modified.
+    """
+    try:
+        p = urlparse(url)
+        if p.password or p.username:
+            hostname = p.hostname
+            if not hostname:
+                # Cannot safely reconstruct netloc without a hostname; return scheme only
+                return f"{p.scheme}://(host-redacted)"
+            netloc = hostname
+            if p.port:
+                netloc = f"{netloc}:{p.port}"
+            return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
+    except Exception:  # noqa: BLE001
+        return "(url-parse-failed)"
+    return url
+
+
 def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[str, Any]:
     """Probe a single external URL and return a result dict."""
     import requests as _req  # noqa: PLC0415
@@ -615,11 +637,19 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
+<<<<<<< Updated upstream
             logger.debug("Service probe failed for %s: %s", _log_url, exc, exc_info=True)
             result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
         logger.debug("URL probe setup failed for %s: %s", _log_url, exc, exc_info=True)
+=======
+            logger.debug("Service probe failed for '%s': %s", name, exc, exc_info=True)
+            result["error"] = "Service probe failed. Check application logs for details."
+
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("URL probe setup failed for '%s': %s", name, exc, exc_info=True)
+>>>>>>> Stashed changes
         result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result

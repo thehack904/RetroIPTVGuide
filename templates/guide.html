@@ -41,12 +41,11 @@
     (function () {
       try {
         var t = localStorage.getItem('theme');
-        // If no localStorage value, seed from the server-side default (set via user prefs).
+        // Server-side default_theme (set via admin or user prefs) always wins – it overrides
+        // localStorage so that admin-assigned themes actually take effect on next load.
         {% if user_default_theme %}
-        if (!t) {
-          t = {{ user_default_theme | tojson }};
-          try { localStorage.setItem('theme', t); } catch (e) {}
-        }
+        t = {{ user_default_theme | tojson }};
+        try { localStorage.setItem('theme', t); } catch (e) {}
         {% endif %}
         if (t) document.documentElement.setAttribute('data-theme', t);
       } catch (e) { /* ignore */ }
@@ -268,7 +267,7 @@
     </div>
 
     {% for ch in channels %}
-    <div class="guide-row" data-cid="{{ ch.tvg_id }}">
+    <div class="guide-row" data-cid="{{ ch.tvg_id }}" data-group="{{ ch.group or '' }}">
         <div class="chan-col">
             <div class="chan-name"
                  tabindex="0"
@@ -282,7 +281,8 @@
                  data-loop-asset="{{ ch.loop_asset }}"
                  data-overlay-type="{{ ch.overlay_type }}"
                  data-overlay-refresh-seconds="{{ ch.overlay_refresh_seconds }}"
-                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news', 'virtual.traffic') %}
+                 {% if ch.tvg_id not in ('virtual.weather', 'virtual.news', 'virtual.traffic',
+                                         'virtual.sports', 'virtual.nasa', 'virtual.on_this_day') %}
                  {% set ch_app = channel_appearances.get(ch.tvg_id, {'text_color': '', 'bg_color': ''}) %}
                  data-overlay-text-color="{{ ch_app.text_color }}"
                  data-overlay-bg-color="{{ ch_app.bg_color }}"
@@ -318,7 +318,8 @@
                             data-start="{{ prog.start.isoformat() }}"
                             data-stop="{{ prog.stop.isoformat() }}"
                             data-title="{{ prog.title }}"
-                            data-desc="{{ prog.desc }}">
+                            data-desc="{{ prog.desc }}"
+                            data-icon="{{ prog.icon if prog.icon else '' }}">
                             {{ prog.title }}
                         </div>
                     {% endif %}
@@ -511,6 +512,46 @@ document.addEventListener('DOMContentLoaded', function () {
         return ov && !ov.classList.contains('hidden');
     }
 
+    // Polling loop that keeps the channel_mix fullscreen iframe in sync with
+    // whichever sub-channel is currently active.  Runs every 2 s while the
+    // overlay is visible and channel_mix is the selected channel.  Acts as a
+    // safety net alongside the vc-cm-switched event mechanism so the iframe
+    // always advances even if an event is missed (e.g. first render fires
+    // before fullscreen opened, or the browser delays a synthetic event).
+    const CM_FS_POLL_INTERVAL_MS = 2000;
+    let _cmFsPollTimer = null;
+
+    function _startCmFsPoll() {
+        _stopCmFsPoll();
+        function poll() {
+            if (!isOverlayFsActive() || _vcCurrentOverlayType !== 'channel_mix') {
+                _stopCmFsPoll();
+                return;
+            }
+            const overlayRoot = document.getElementById('virtual-overlay-root');
+            const activeType  = overlayRoot && overlayRoot.dataset.cmActiveType;
+            if (activeType) {
+                const targetUrl = VC_PAGE_URL[activeType];
+                if (targetUrl) {
+                    const iframe   = document.getElementById('vcFsIframe');
+                    const fullUrl  = location.origin + targetUrl;
+                    if (iframe && iframe.src !== fullUrl) {
+                        iframe.src = fullUrl;
+                    }
+                }
+            }
+            _cmFsPollTimer = setTimeout(poll, CM_FS_POLL_INTERVAL_MS);
+        }
+        _cmFsPollTimer = setTimeout(poll, CM_FS_POLL_INTERVAL_MS);
+    }
+
+    function _stopCmFsPoll() {
+        if (_cmFsPollTimer !== null) {
+            clearTimeout(_cmFsPollTimer);
+            _cmFsPollTimer = null;
+        }
+    }
+
     function openVcFsOverlay(pageUrl) {
         const overlay = document.getElementById('vcFsOverlay');
         const iframe  = document.getElementById('vcFsIframe');
@@ -521,6 +562,7 @@ document.addEventListener('DOMContentLoaded', function () {
         btn.title = 'Exit fullscreen';
         btn.setAttribute('aria-label', 'Exit fullscreen');
         _showOverlayClose();
+        if (_vcCurrentOverlayType === 'channel_mix') { _startCmFsPoll(); }
         // Request true fullscreen on the overlay div so the browser chrome hides
         const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen || overlay.mozRequestFullscreen;
         if (req) {
@@ -531,6 +573,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function closeVcFsOverlay() {
         _cancelOverlayCloseFade();
+        _stopCmFsPoll();
         const overlay = document.getElementById('vcFsOverlay');
         const iframe  = document.getElementById('vcFsIframe');
         if (overlay) overlay.classList.add('hidden');
@@ -673,15 +716,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 });
 
-/**
- * Returns the CSS zoom factor currently applied to the root <html> element via
- * data-display-size.  CSS zoom does NOT update window.innerWidth / 100vh, so any
- * JS code that sets pixel positions on position:fixed elements or compares
- * getBoundingClientRect() values (which are in visual/viewport pixels) against CSS
- * property values must divide by this factor to stay in the same coordinate space.
- * The actual value is read from the --display-zoom CSS variable set in base.css so
- * the zoom factor lives in one place rather than being duplicated in JS.
- */
 /**
  * Returns the CSS zoom factor currently applied to the root <html> element via
  * data-display-size.  Delegates to the shared global helper exposed by
@@ -996,11 +1030,13 @@ function applyThemeGuide(theme){
   b.classList.add("fade-switch");
   setTimeout(()=>{
     const wasTVG=b.classList.contains("tvguide1990");
+    const wasCC=b.classList.contains("classic-cable");
+    const wasIconGuide=b.classList.contains("ersatztv");
     b.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv",
-                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990", "retroiptv");
+                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990","classic-cable","retroiptv","ersatztv");
     if (theme) b.classList.add(theme);
     try { localStorage.setItem('theme', theme); } catch (e) {}
-    if(wasTVG && theme !== "tvguide1990") {
+    if((wasTVG || wasCC) && theme !== "tvguide1990" && theme !== "classic-cable") {
       document.querySelectorAll(".chan-col .chan-name").forEach(el=>{
         const name = el.dataset.name || "Channel";
         const logo = el.dataset.logo;
@@ -1016,8 +1052,16 @@ function applyThemeGuide(theme){
         el.appendChild(span);
       });
       document.querySelectorAll(".grid-row,.chan-col").forEach(r => r.style.height = "");
+      document.querySelectorAll('.chan-col.tvguide1990-applied,.chan-col.classic-cable-applied').forEach(function(c){
+        c.classList.remove('tvguide1990-applied','classic-cable-applied');
+      });
+    }
+    if(wasIconGuide && theme !== "ersatztv") {
+      restoreIconGuidePrograms();
     }
     if (theme === "tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
+    if (theme === "classic-cable") requestAnimationFrame(applyClassicCableCapsules);
+    if (theme === "ersatztv") requestAnimationFrame(applyIconGuide);
     setTimeout(()=>b.classList.remove("fade-switch"), 100);
   },150);
 }
@@ -1046,14 +1090,120 @@ function applyTvGuide1990Capsules(){
   }
 }
 
-// Apply capsules whenever the tvguide1990 theme is activated, and restore channel
-// names when switching away. theme.js dispatches 'theme:applied' after applying
-// body classes, so the DOM is always ready when this runs.
+function abbreviateChannelName(name) {
+  if (!name) return '';
+  if (name.length <= 6) return name.toUpperCase();
+  var words = name.trim().split(/\s+/);
+  if (words.length >= 2) {
+    var acr = words.map(function(w) { return w.charAt(0).toUpperCase(); }).join('');
+    if (acr.length >= 3 && acr.length <= 6) return acr;
+  }
+  return name.replace(/\s+/g, '').substring(0, 6).toUpperCase();
+}
+
+function applyClassicCableCapsules() {
+  var originalCols = Array.from(document.querySelectorAll('.chan-col')).filter(function(c) {
+    return !c.closest('.__auto_scroll_clone');
+  });
+  var channelNum = 0;
+  originalCols.forEach(function(col) {
+    var box = col.querySelector('.chan-name');
+    if (!box) return;
+    if (col.classList.contains('classic-cable-applied')) return;
+    channelNum++;
+    var numSpan = document.createElement('span');
+    numSpan.className = 'channel-number';
+    numSpan.textContent = String(channelNum);
+    var abbrSpan = document.createElement('span');
+    abbrSpan.className = 'chan-abbr';
+    abbrSpan.textContent = abbreviateChannelName(box.dataset.name || 'CH');
+    box.innerHTML = '';
+    box.appendChild(numSpan);
+    box.appendChild(abbrSpan);
+    col.classList.add('classic-cable-applied');
+  });
+  if (window.__autoScroll && typeof window.__autoScroll.recomputeLoops === 'function') {
+    window.__autoScroll.recomputeLoops();
+  }
+}
+
+function applyIconGuide() {
+  document.querySelectorAll('.program').forEach(function(prog) {
+    if (prog.querySelector('.prog-icon-img')) return;
+    var icon = prog.dataset.icon || '';
+    var title = prog.dataset.title || '';
+    var startStr = prog.dataset.start;
+    var stopStr = prog.dataset.stop;
+    var timeText = '';
+    if (startStr && stopStr) {
+      var s = new Date(startStr);
+      var e = new Date(stopStr);
+      timeText = s.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) +
+                 ' - ' + e.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }
+    prog.textContent = '';
+    if (icon) {
+      var img = document.createElement('img');
+      img.className = 'prog-icon-img';
+      img.src = icon;
+      img.alt = '';
+      img.onerror = function() { this.style.display = 'none'; };
+      prog.appendChild(img);
+    }
+    var textDiv = document.createElement('div');
+    textDiv.className = 'prog-text';
+    var titleSpan = document.createElement('span');
+    titleSpan.className = 'prog-title';
+    titleSpan.textContent = title;
+    textDiv.appendChild(titleSpan);
+    if (timeText) {
+      var timeSpan = document.createElement('span');
+      timeSpan.className = 'prog-time';
+      timeSpan.textContent = timeText;
+      textDiv.appendChild(timeSpan);
+    }
+    prog.appendChild(textDiv);
+    prog.classList.add('ersatztv-applied');
+  });
+
+  if (window.__autoScroll && typeof window.__autoScroll.recomputeLoops === 'function') {
+    window.__autoScroll.recomputeLoops();
+  }
+}
+
+function restoreIconGuidePrograms() {
+  document.querySelectorAll('.program.ersatztv-applied').forEach(function(prog) {
+    var title = prog.dataset.title || '';
+    prog.textContent = title;
+    prog.classList.remove('ersatztv-applied');
+  });
+}
+
+// Apply capsules whenever the tvguide1990 or classic-cable theme is activated, and
+// restore channel names when switching away. theme.js dispatches 'theme:applied' after
+// applying body classes, so the DOM is always ready when this runs.
 window.addEventListener('theme:applied', function(e) {
   var theme = e && e.detail && e.detail.theme;
   if (!theme) return;
   if (theme === 'tvguide1990') {
     requestAnimationFrame(applyTvGuide1990Capsules);
+  } else if (theme === 'classic-cable') {
+    // Restore any tvguide1990 capsules first, then apply classic-cable capsules.
+    document.querySelectorAll('.chan-col.tvguide1990-applied').forEach(function(c) {
+      var box = c.querySelector('.chan-name');
+      if (box) {
+        var name = box.dataset.name || 'Channel';
+        var logo = box.dataset.logo;
+        box.textContent = '';
+        if (logo) { var img = document.createElement('img'); img.src = logo; img.alt = name; box.appendChild(img); }
+        var span = document.createElement('span'); span.textContent = name; box.appendChild(span);
+      }
+      c.style.height = '';
+      c.classList.remove('tvguide1990-applied');
+    });
+    requestAnimationFrame(applyClassicCableCapsules);
+  } else if (theme === 'ersatztv') {
+    requestAnimationFrame(applyIconGuide);
   } else {
     // Restore original channel name / logo HTML in columns that had capsules applied.
     document.querySelectorAll('.chan-col .chan-name').forEach(function(el) {
@@ -1071,18 +1221,24 @@ window.addEventListener('theme:applied', function(e) {
       span.textContent = name;
       el.appendChild(span);
     });
-    document.querySelectorAll('.chan-col.tvguide1990-applied').forEach(function(c) {
+    document.querySelectorAll('.chan-col.tvguide1990-applied,.chan-col.classic-cable-applied').forEach(function(c) {
       c.style.height = '';
-      c.classList.remove('tvguide1990-applied');
+      c.classList.remove('tvguide1990-applied', 'classic-cable-applied');
     });
+    restoreIconGuidePrograms();
   }
 });
 
-// Also apply on page load in case tvguide1990 was the saved theme and theme:applied
-// already fired before this listener was registered.
+// Also apply on page load in case tvguide1990, classic-cable or ersatztv was the saved
+// theme and theme:applied already fired before this listener was registered.
 document.addEventListener('DOMContentLoaded', function() {
   if (document.body.classList.contains('tvguide1990')) {
     requestAnimationFrame(applyTvGuide1990Capsules);
+  } else if (document.body.classList.contains('classic-cable')) {
+    requestAnimationFrame(applyClassicCableCapsules);
+  }
+  if (document.body.classList.contains('ersatztv')) {
+    requestAnimationFrame(applyIconGuide);
   }
 });
 
@@ -1395,6 +1551,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a>
         <a href="#" data-theme-selector data-theme="directv">DirecTV</a>
         <a href="#" data-theme-selector data-theme="comcast">Comcast</a>
+        <a href="#" data-theme-selector data-theme="classic-cable">Classic Cable</a>
       </div>`;
     linksContainer.insertBefore(themesMenu, logoutLink);
   }

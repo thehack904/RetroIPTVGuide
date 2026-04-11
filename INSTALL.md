@@ -46,6 +46,9 @@ Supported hardware:
 ------------------------------------------------------------------------
 
 # Windows Installation
+
+> ⚠️ **Deprecation Notice:** The Windows installer will be discontinued in **v5.0**. Docker is the recommended deployment method. See [Docker Installation](#docker-installation-recommended) above.
+
 ```
 Set-ExecutionPolicy Bypass -Scope Process -Force Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
 .\retroiptv_windows.bat install

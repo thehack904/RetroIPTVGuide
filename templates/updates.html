@@ -467,7 +467,7 @@
     const isBeta       = latest && latest.prerelease;
     const headlineClass = 'up-headline-bar' + (isBeta ? ' beta' : '');
     const headlineText  = isBeta
-      ? '\u26A0\uFE0F Beta Release \u2014 Testing in Progress'
+      ? '\u26A0\uFE0F Pre-release \u2014 Not a Stable Release'
       : '\u2714\uFE0F Latest Release Available';
     const summary = latest ? trimBody(latest.body) : '';
     const releaseDate = latest ? formatDate(latest.published) : '';
@@ -509,7 +509,7 @@
           </div>
           <div class="up-main-content">
             <div class="up-version-label">
-              Latest Version${isBeta ? ' &nbsp;<span class="up-beta-badge">Beta</span>' : ''}
+              Latest Version${isBeta ? ' &nbsp;<span class="up-beta-badge">Pre-release</span>' : ''}
             </div>
             <div class="up-version-number">${esc(releaseTag || releaseName)}</div>
             ${metaItems.length ? `<div class="up-meta-row">${metaItems.join('')}</div>` : ''}

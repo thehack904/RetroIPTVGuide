@@ -308,6 +308,145 @@ class TestApiWeather:
         data = client.get("/api/weather").get_json()
         assert "updated" in data
 
+    def test_response_has_segment_field(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "segment" in data
+        assert data["segment"] in (0, 1, 2, 3)
+
+    def test_response_has_segment_label(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "segment_label" in data
+        assert data["segment_label"] in ("current", "forecast", "radar", "alerts")
+
+    def test_response_has_seconds_per_segment(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "seconds_per_segment" in data
+        assert isinstance(data["seconds_per_segment"], int)
+        assert data["seconds_per_segment"] >= 30
+
+    def test_response_has_ms_until_next(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "ms_until_next" in data
+        sps = data["seconds_per_segment"]
+        assert 0 < data["ms_until_next"] <= sps * 1000
+
+    def test_response_has_five_day(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "five_day" in data
+        assert isinstance(data["five_day"], list)
+
+    def test_response_has_radar_url(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert "radar_url" in data
+        assert isinstance(data["radar_url"], str)
+        assert data["radar_url"].startswith("https://")
+
+    def test_segment_label_matches_segment_index(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        labels = ("current", "forecast", "radar", "alerts")
+        assert data["segment_label"] == labels[data["segment"]]
+
+    def test_default_seconds_per_segment_is_300(self, client):
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert data["seconds_per_segment"] == 300
+
+
+# ─── WeatherConfig helpers ────────────────────────────────────────────────────
+
+class TestWeatherConfig:
+    def test_default_seconds_per_segment(self):
+        from app import get_weather_config
+        cfg = get_weather_config()
+        # Default value when nothing is stored
+        assert cfg["seconds_per_segment"] in ("300", 300, "")
+
+    def test_save_and_reload_seconds_per_segment(self):
+        from app import save_weather_config, get_weather_config
+        save_weather_config({"lat": "", "lon": "", "location_name": "",
+                             "units": "F", "seconds_per_segment": "120"})
+        cfg = get_weather_config()
+        assert cfg["seconds_per_segment"] == "120"
+
+    def test_invalid_seconds_per_segment_too_low_raises(self):
+        from app import save_weather_config
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            save_weather_config({"lat": "", "lon": "", "location_name": "",
+                                 "units": "F", "seconds_per_segment": "10"})
+
+    def test_invalid_seconds_per_segment_too_high_raises(self):
+        from app import save_weather_config
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            save_weather_config({"lat": "", "lon": "", "location_name": "",
+                                 "units": "F", "seconds_per_segment": "9999"})
+
+    def test_invalid_seconds_per_segment_non_numeric_raises(self):
+        from app import save_weather_config
+        import pytest as _pytest
+        with _pytest.raises(ValueError):
+            save_weather_config({"lat": "", "lon": "", "location_name": "",
+                                 "units": "F", "seconds_per_segment": "fast"})
+
+    def test_seconds_per_segment_saved_via_http(self, client):
+        login(client, "admin", "adminpass")
+        client.post("/virtual_channels", data={
+            "action": "update_channel_overlay_appearance",
+            "tvg_id": "virtual.weather",
+            "ch_weather_location": "Miami, FL",
+            "ch_weather_lat": "25.77",
+            "ch_weather_lon": "-80.19",
+            "ch_weather_units": "F",
+            "ch_weather_seconds_per_segment": "180",
+        }, follow_redirects=True)
+        from app import get_weather_config
+        cfg = get_weather_config()
+        assert cfg["seconds_per_segment"] == "180"
+
+    def test_api_respects_saved_seconds_per_segment(self, client):
+        from app import save_weather_config
+        save_weather_config({"lat": "", "lon": "", "location_name": "",
+                             "units": "F", "seconds_per_segment": "60"})
+        login(client)
+        data = client.get("/api/weather").get_json()
+        assert data["seconds_per_segment"] == 60
+        assert 0 < data["ms_until_next"] <= 60 * 1000
+
+
+# ─── _build_radar_url ─────────────────────────────────────────────────────────
+
+class TestBuildRadarUrl:
+    def test_returns_string(self):
+        from app import _build_radar_url
+        url = _build_radar_url("25.77", "-80.19")
+        assert isinstance(url, str)
+        assert url.startswith("https://")
+
+    def test_no_coords_returns_conus(self):
+        from app import _build_radar_url, _RADAR_URL_CONUS
+        assert _build_radar_url("", "") == _RADAR_URL_CONUS
+        assert _build_radar_url(None, None) == _RADAR_URL_CONUS
+
+    def test_with_coords_contains_bbox(self):
+        from app import _build_radar_url
+        url = _build_radar_url("40.0", "-75.0")
+        assert "bbox=" in url
+        # Bounding box should be centred on the coordinates
+        assert "-83" in url or "-83.0" in url  # lon - 8
+        assert "35" in url                      # lat - 5
+
+    def test_invalid_coords_falls_back_to_conus(self):
+        from app import _build_radar_url, _RADAR_URL_CONUS
+        assert _build_radar_url("notanumber", "alsonotanumber") == _RADAR_URL_CONUS
+
 
 # ─── /api/virtual/status ─────────────────────────────────────────────────────
 
@@ -555,6 +694,86 @@ class TestChangeTunerOverlayAppearance:
             'ch_news_rss_url': '',
         }, follow_redirects=True)
         s = get_channel_overlay_appearance('virtual.news')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_traffic_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the traffic channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.traffic',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'Traffic Alert!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.traffic',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'Traffic Alert!',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.traffic')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_sports_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the sports channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.sports',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'Game Time!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.sports',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'Game Time!',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.sports')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_nasa_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the nasa channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.nasa',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'NASA APOD!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.nasa',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'NASA APOD!',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.nasa')
+        assert s['text_color'] == ''
+        assert s['bg_color'] == ''
+        assert s['test_text'] == ''
+
+    def test_on_this_day_overlay_appearance_fields_always_cleared_via_http(self, client):
+        """Text Color, Background Color, and Test Banner Text are not applicable to
+        the on_this_day channel; they must always be stored as empty strings regardless
+        of what values are submitted in the form."""
+        save_channel_overlay_appearance('virtual.on_this_day',
+                                        {'text_color': '#abcdef', 'bg_color': '#123456',
+                                         'test_text': 'On This Day!'})
+        login(client, 'admin', 'adminpass')
+        client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.on_this_day',
+            'ch_text_color': '#abcdef',
+            'ch_bg_color': '#123456',
+            'ch_test_text': 'On This Day!',
+        }, follow_redirects=True)
+        s = get_channel_overlay_appearance('virtual.on_this_day')
         assert s['text_color'] == ''
         assert s['bg_color'] == ''
         assert s['test_text'] == ''

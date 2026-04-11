@@ -80,6 +80,7 @@
       gap: 0.3em;
       padding: 0.3em 0.45em 0.2em;
       min-height: 0;
+      overflow: hidden;
     }
     .vc-wx-box {
       background: rgba(10,40,170,0.75);
@@ -246,6 +247,163 @@
     .vc-wx-svg { display: inline-block; vertical-align: middle; }
     .vc-wx-ext-lo { opacity: 0.7; }
     .vc-wx-no-data { color: #90a8f0; padding: 0.4em; }
+
+    /* ── Segment: 5-Day Forecast ─────────────────────────────────── */
+    .vc-wx-seg-forecast {
+      flex: 1;
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 0.3em;
+      padding: 0.3em 0.45em 0.2em;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .vc-wx-fc-day {
+      background: rgba(10,40,170,0.75);
+      border: 1px solid #3058d8;
+      border-radius: 3px;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 2px 6px rgba(0,0,0,0.4);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0.3em 0.2em;
+      overflow: hidden;
+    }
+    .vc-wx-fc-today {
+      border-color: #40c0ff;
+      background: rgba(10,60,190,0.85);
+    }
+    .vc-wx-fc-dow {
+      font-size: 0.82em;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #c8d8ff;
+      margin-bottom: 0.1em;
+    }
+    .vc-wx-fc-today .vc-wx-fc-dow { color: #40c0ff; }
+    .vc-wx-fc-icon { line-height: 1; margin: 0.15em 0; }
+    .vc-wx-fc-hi {
+      font-size: 1.9em;
+      font-weight: 900;
+      line-height: 1;
+      margin-top: 0.05em;
+    }
+    .vc-wx-fc-lo {
+      font-size: 1.1em;
+      font-weight: 700;
+      opacity: 0.6;
+      line-height: 1;
+      margin-bottom: 0.1em;
+    }
+    .vc-wx-fc-cond {
+      font-size: 0.64em;
+      font-weight: 700;
+      text-align: center;
+      color: #d0e0ff;
+      margin-top: auto;
+      padding: 0 0.1em;
+    }
+
+    /* ── Segment: Regional Radar ─────────────────────────────────── */
+    .vc-wx-seg-radar {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 0.3em 0.45em 0.15em;
+      min-height: 0;
+      overflow: hidden;
+      gap: 0.2em;
+    }
+    .vc-wx-radar-img-wrap {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: #000818;
+      border: 1px solid #3058d8;
+      border-radius: 3px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.5);
+      min-height: 0;
+      position: relative;
+    }
+    .vc-wx-radar-img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .vc-wx-radar-err {
+      color: #7090c0;
+      font-size: 0.8em;
+      font-weight: 700;
+      text-align: center;
+      padding: 1em;
+      display: none;
+    }
+    .vc-wx-radar-caption {
+      font-size: 0.68em;
+      font-weight: 700;
+      color: #8098c0;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      align-self: flex-end;
+    }
+
+    /* ── Segment: Severe Weather Alerts ──────────────────────────── */
+    .vc-wx-seg-alerts {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 0.35em 0.45em 0.2em;
+      gap: 0.3em;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .vc-wx-alert-item {
+      background: rgba(140,20,20,0.7);
+      border: 1px solid #cc4444;
+      border-radius: 3px;
+      padding: 0.5em 0.7em;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .vc-wx-alert-icon {
+      font-size: 1.6em;
+      flex-shrink: 0;
+    }
+    .vc-wx-alert-text {
+      font-size: 0.88em;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      color: #ffdddd;
+    }
+    .vc-wx-no-alerts {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4em;
+    }
+    .vc-wx-no-alerts-icon { font-size: 3.5em; line-height: 1; }
+    .vc-wx-no-alerts-title {
+      font-size: 1em;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #60d060;
+    }
+    .vc-wx-no-alerts-sub {
+      font-size: 0.72em;
+      color: #70a870;
+    }
   `;
 
   // ── SVG icon defs (same symbols as weather.html) ─────────────────────────
@@ -406,6 +564,181 @@
     } catch (e) { return isoStr; }
   }
 
+  // ── Shared header / ticker helpers ─────────────────────────────────────────
+
+  function headerHtml(subtitle, iconHdr) {
+    return `
+      <div class="vc-wx-header">
+        <div class="vc-wx-header-title">
+          <span>RetroIPTV</span>
+          ${iconSvg('partly_cloudy', iconHdr)}
+          <span>Weather</span>
+        </div>
+        <div class="vc-wx-header-subtitle">${subtitle}</div>
+      </div>`;
+  }
+
+  function updatedBarHtml(location, updatedIso) {
+    return `<div class="vc-wx-updated">
+      <span>${location || ''}</span>
+      <span>UPDATED: ${updatedIso ? formatLocalTime(updatedIso) : ''}</span>
+    </div>`;
+  }
+
+  function tickerHtml(ticks) {
+    const tickText = (ticks && ticks.length)
+      ? ticks.join(' \u2022 ') + ' \u2022 '
+      : 'No active weather alerts \u2022 ';
+    return `
+      <div class="vc-wx-ticker-bar">
+        <div class="vc-wx-ticker-label">Weather Alert:</div>
+        <div class="vc-wx-ticker-scroll">
+          <span class="vc-wx-ticker-track">${tickText.repeat(3)}</span>
+        </div>
+      </div>`;
+  }
+
+  // ── Segment 0: Current Conditions ─────────────────────────────────────────
+
+  function renderCurrent(data, frame, bp) {
+    const now   = data?.now   || {};
+    const today = Array.isArray(data?.today)    ? data.today    : [];
+    const ext   = Array.isArray(data?.extended) ? data.extended : [];
+    const ticks = Array.isArray(data?.ticker)   ? data.ticker   : [];
+
+    const iconLg  = Math.round(bp * ICON_RATIO_LG);
+    const iconMd  = Math.round(bp * ICON_RATIO_MD);
+    const iconSm  = Math.round(bp * ICON_RATIO_SM);
+    const iconHdr = Math.round(bp * ICON_RATIO_HDR);
+
+    const periodCols = today.map(p => `
+      <div class="vc-wx-period">
+        <div class="vc-wx-period-label">${p.label || ''}</div>
+        <div class="vc-wx-period-icon">${iconSvg(p.icon, iconMd)}</div>
+        <div class="vc-wx-period-temp">${tempStr(p.temp)}</div>
+        <div class="vc-wx-period-cond">${p.condition || ''}</div>
+      </div>`).join('');
+
+    const extCols = ext.map(d => `
+      <div class="vc-wx-ext-day">
+        <div class="vc-wx-ext-dow">${d.dow || ''}</div>
+        <div class="vc-wx-ext-icon">${iconSvg(d.icon, iconSm)}</div>
+        <div class="vc-wx-ext-temps">${tempStr(d.hi)} <span class="vc-wx-ext-lo">${tempStr(d.lo)}</span></div>
+        <div class="vc-wx-ext-cond">${d.condition || ''}</div>
+      </div>`).join('');
+
+    const details = [];
+    if (now.humidity != null)  details.push(`Humid: ${now.humidity}%`);
+    if (now.wind)               details.push(`Wind: ${now.wind}`);
+    if (now.feels_like != null) details.push(`Feels Like: ${now.feels_like}°`);
+
+    frame.innerHTML =
+      headerHtml('Current Conditions', iconHdr) +
+      updatedBarHtml(data?.location, data?.updated) +
+      `<div class="vc-wx-body">
+        <div class="vc-wx-box vc-wx-current">
+          <div class="vc-wx-box-title">Current Conditions</div>
+          <div class="vc-wx-current-icon">${iconSvg(now.icon || 'cloudy', iconLg)}</div>
+          <div class="vc-wx-current-temp">${tempStr(now.temp)}</div>
+          <div class="vc-wx-current-cond">${now.condition || ''}</div>
+          <div class="vc-wx-current-details">${details.join('<br>')}</div>
+        </div>
+        <div class="vc-wx-box vc-wx-today">
+          <div class="vc-wx-box-title">Today's Forecast</div>
+          <div class="vc-wx-today-cols">${periodCols}</div>
+        </div>
+        <div class="vc-wx-box vc-wx-extended">
+          <div class="vc-wx-box-title">Extended Outlook</div>
+          <div class="vc-wx-ext-cols">${extCols || '<div class="vc-wx-no-data">No extended forecast available.</div>'}</div>
+        </div>
+      </div>` +
+      tickerHtml(ticks);
+  }
+
+  // ── Segment 1: 5-Day Forecast ──────────────────────────────────────────────
+
+  function renderForecast(data, frame, bp) {
+    const five = Array.isArray(data?.five_day) ? data.five_day : [];
+    const ticks = Array.isArray(data?.ticker) ? data.ticker : [];
+    const iconHdr = Math.round(bp * ICON_RATIO_HDR);
+    const iconLg  = Math.round(bp * ICON_RATIO_LG);
+
+    const dayCols = five.map((d, i) => `
+      <div class="vc-wx-fc-day${i === 0 ? ' vc-wx-fc-today' : ''}">
+        <div class="vc-wx-fc-dow">${d.dow || ''}</div>
+        <div class="vc-wx-fc-icon">${iconSvg(d.icon, iconLg)}</div>
+        <div class="vc-wx-fc-hi">${tempStr(d.hi)}</div>
+        <div class="vc-wx-fc-lo">${tempStr(d.lo)}</div>
+        <div class="vc-wx-fc-cond">${d.condition || ''}</div>
+      </div>`).join('');
+
+    frame.innerHTML =
+      headerHtml('5-Day Forecast', iconHdr) +
+      updatedBarHtml(data?.location, data?.updated) +
+      `<div class="vc-wx-seg-forecast">
+        ${dayCols || '<div class="vc-wx-no-data" style="grid-column:1/-1">No forecast data available.</div>'}
+      </div>` +
+      tickerHtml(ticks);
+  }
+
+  // ── Segment 2: Regional Radar ──────────────────────────────────────────────
+
+  function renderRadar(data, frame, bp) {
+    const ticks   = Array.isArray(data?.ticker) ? data.ticker : [];
+    const iconHdr = Math.round(bp * ICON_RATIO_HDR);
+    const radarUrl = data?.radar_url || '';
+
+    frame.innerHTML =
+      headerHtml('Regional Radar', iconHdr) +
+      updatedBarHtml(data?.location, data?.updated) +
+      `<div class="vc-wx-seg-radar">
+        <div class="vc-wx-radar-img-wrap" id="vc-wx-radar-wrap">
+          ${radarUrl
+            ? `<img class="vc-wx-radar-img" id="vc-wx-radar-img"
+                    src="${radarUrl}" alt="Regional Radar"
+                    onerror="document.getElementById('vc-wx-radar-img').style.display='none';
+                             document.getElementById('vc-wx-radar-err').style.display='block';">
+               <div class="vc-wx-radar-err" id="vc-wx-radar-err">Radar Unavailable</div>`
+            : `<div class="vc-wx-radar-err" style="display:block">Radar Unavailable &mdash; No location configured</div>`}
+        </div>
+        <div class="vc-wx-radar-caption">Source: NOAA/NWS</div>
+      </div>` +
+      tickerHtml(ticks);
+  }
+
+  // ── Segment 3: Severe Weather Alerts ──────────────────────────────────────
+
+  function renderAlerts(data, frame, bp) {
+    const ticks   = Array.isArray(data?.ticker) ? data.ticker : [];
+    const iconHdr = Math.round(bp * ICON_RATIO_HDR);
+    const iconLg  = Math.round(bp * ICON_RATIO_LG);
+
+    let bodyHtml;
+    if (ticks.length) {
+      const items = ticks.map(t => `
+        <div class="vc-wx-alert-item">
+          <div class="vc-wx-alert-icon">&#9888;</div>
+          <div class="vc-wx-alert-text">${t}</div>
+        </div>`).join('');
+      bodyHtml = `<div class="vc-wx-seg-alerts">${items}</div>`;
+    } else {
+      bodyHtml = `
+        <div class="vc-wx-seg-alerts">
+          <div class="vc-wx-no-alerts">
+            <div class="vc-wx-no-alerts-icon">${iconSvg('sunny', iconLg)}</div>
+            <div class="vc-wx-no-alerts-title">No Active Severe Weather Alerts</div>
+            <div class="vc-wx-no-alerts-sub">${data?.location || 'Local Area'}</div>
+          </div>
+        </div>`;
+    }
+
+    frame.innerHTML =
+      headerHtml('Severe Weather Alerts', iconHdr) +
+      updatedBarHtml(data?.location, data?.updated) +
+      bodyHtml +
+      tickerHtml(ticks);
+  }
+
   function render(data, root) {
     ensureAssets();
     root.querySelectorAll('.vc-overlay').forEach(e => e.remove());
@@ -418,13 +751,14 @@
     frame.className = 'vc-wx-frame';
     frame.id = 'vc-wx-frame';
 
-    const now   = data?.now   || {};
-    const today = Array.isArray(data?.today)    ? data.today    : [];
-    const ext   = Array.isArray(data?.extended) ? data.extended : [];
-    const ticks = Array.isArray(data?.ticker)   ? data.ticker   : [];
+    const now = data?.now || {};
 
-    // ── Not configured ────────────────────────────────────────────────────
+    // ── Not configured ──────────────────────────────────────────────────────
     if (now.condition === 'Not Configured') {
+      const bp      = Math.max(FONT_MIN_PX, Math.min((root.offsetWidth || 960) / FONT_SCALE_DIVISOR, FONT_MAX_PX));
+      const iconLg  = Math.round(bp * ICON_RATIO_LG);
+      const iconHdr = Math.round(bp * ICON_RATIO_HDR);
+      frame.style.fontSize = bp + 'px';
       frame.innerHTML = `
         <div class="vc-wx-header">
           <div class="vc-wx-header-title">
@@ -436,7 +770,7 @@
         </div>
         <div style="flex:1;display:flex;flex-direction:column;align-items:center;
                     justify-content:center;gap:0.5em;padding:1em;text-align:center;">
-          <div style="font-size:3em;">${iconSvg('partly_cloudy', iconLg)}</div>
+          <div>${iconSvg('partly_cloudy', iconLg)}</div>
           <div style="font-size:1em;font-weight:900;letter-spacing:0.1em;text-transform:uppercase;
                       color:#90c8ff;">No Location Configured</div>
           <div style="font-size:0.72em;color:#8098c0;max-width:22em;line-height:1.5;">
@@ -455,80 +789,17 @@
       return;
     }
 
-    // Base font-size drives all em values — scales with container width so the
-    // overlay is legible at small player sizes without needing to expand it.
-    const fw          = root.offsetWidth || 960;
-    const baseFontPx  = Math.max(FONT_MIN_PX, Math.min(fw / FONT_SCALE_DIVISOR, FONT_MAX_PX));
-    frame.style.fontSize = baseFontPx + 'px';
+    // Base font-size drives all em values
+    const fw  = root.offsetWidth || 960;
+    const bp  = Math.max(FONT_MIN_PX, Math.min(fw / FONT_SCALE_DIVISOR, FONT_MAX_PX));
+    frame.style.fontSize = bp + 'px';
 
-    // Icon sizes in px, proportional to base font
-    const iconLg  = Math.round(baseFontPx * ICON_RATIO_LG);   // current conditions
-    const iconMd  = Math.round(baseFontPx * ICON_RATIO_MD);   // today periods
-    const iconSm  = Math.round(baseFontPx * ICON_RATIO_SM);   // extended days
-    const iconHdr = Math.round(baseFontPx * ICON_RATIO_HDR);  // header icon
-
-    // Today periods
-    const periodCols = today.map(p => `
-      <div class="vc-wx-period">
-        <div class="vc-wx-period-label">${p.label || ''}</div>
-        <div class="vc-wx-period-icon">${iconSvg(p.icon, iconMd)}</div>
-        <div class="vc-wx-period-temp">${tempStr(p.temp)}</div>
-        <div class="vc-wx-period-cond">${p.condition || ''}</div>
-      </div>`).join('');
-
-    // Extended days
-    const extCols = ext.map(d => `
-      <div class="vc-wx-ext-day">
-        <div class="vc-wx-ext-dow">${d.dow || ''}</div>
-        <div class="vc-wx-ext-icon">${iconSvg(d.icon, iconSm)}</div>
-        <div class="vc-wx-ext-temps">${tempStr(d.hi)} <span class="vc-wx-ext-lo">${tempStr(d.lo)}</span></div>
-        <div class="vc-wx-ext-cond">${d.condition || ''}</div>
-      </div>`).join('');
-
-    // Ticker
-    const tickText = ticks.length
-      ? ticks.join(' \u2022 ') + ' \u2022 '
-      : 'No active weather alerts \u2022 ';
-
-    // Current details
-    const details = [];
-    if (now.humidity != null) details.push(`Humid: ${now.humidity}%`);
-    if (now.wind)              details.push(`Wind: ${now.wind}`);
-    if (now.feels_like != null) details.push(`Feels Like: ${now.feels_like}°`);
-
-    frame.innerHTML = `
-      <div class="vc-wx-header">
-        <div class="vc-wx-header-title">
-          <span>RetroIPTV</span>
-          ${iconSvg('partly_cloudy', iconHdr)}
-          <span>Weather</span>
-        </div>
-        <div class="vc-wx-header-subtitle">Local Forecast</div>
-      </div>
-      <div class="vc-wx-updated"><span>${data?.location || ''}</span><span>UPDATED: ${data?.updated ? formatLocalTime(data.updated) : ''}</span></div>
-      <div class="vc-wx-body">
-        <div class="vc-wx-box vc-wx-current">
-          <div class="vc-wx-box-title">Current Conditions</div>
-          <div class="vc-wx-current-icon">${iconSvg(now.icon || 'cloudy', iconLg)}</div>
-          <div class="vc-wx-current-temp">${tempStr(now.temp)}</div>
-          <div class="vc-wx-current-cond">${now.condition || ''}</div>
-          <div class="vc-wx-current-details">${details.join('<br>')}</div>
-        </div>
-        <div class="vc-wx-box vc-wx-today">
-          <div class="vc-wx-box-title">Today's Forecast</div>
-          <div class="vc-wx-today-cols">${periodCols}</div>
-        </div>
-        <div class="vc-wx-box vc-wx-extended">
-          <div class="vc-wx-box-title">Extended Outlook</div>
-          <div class="vc-wx-ext-cols">${extCols || '<div class="vc-wx-no-data">No extended forecast available.</div>'}</div>
-        </div>
-      </div>
-      <div class="vc-wx-ticker-bar">
-        <div class="vc-wx-ticker-label">Weather Alert:</div>
-        <div class="vc-wx-ticker-scroll">
-          <span class="vc-wx-ticker-track">${tickText.repeat(3)}</span>
-        </div>
-      </div>`;
+    // Dispatch to the correct segment renderer
+    const segment = (data?.segment != null) ? data.segment : 0;
+    if      (segment === 1) { renderForecast(data, frame, bp); }
+    else if (segment === 2) { renderRadar(data, frame, bp); }
+    else if (segment === 3) { renderAlerts(data, frame, bp); }
+    else                    { renderCurrent(data, frame, bp); }
 
     overlay.appendChild(frame);
     root.appendChild(overlay);
@@ -538,6 +809,38 @@
     return await window.OverlayEngine.fetchJson('/api/weather');
   }
 
-  window.OverlayEngine.register(TYPE, { fetch: fetchData, render });
+  // ── Self-driven cycle timer ────────────────────────────────────────────────
+  // Mirrors the on_this_day pattern: after each fetch the client schedules its
+  // next OverlayEngine.tick() to fire precisely at the segment boundary using
+  // ms_until_next from the API response.  This makes the overlay cycle at the
+  // admin-configured rate rather than at the engine's static refreshSeconds.
+
+  const CYCLE_FALLBACK_MS = 60 * 1000;  // fallback if ms_until_next is unavailable
+  let _cycleTimer = null;
+
+  function advanceAndTick() {
+    _cycleTimer = null;
+    if (!window.OverlayEngine.isActive(TYPE)) { return; }
+    window.OverlayEngine.tick();
+  }
+
+  async function fetchDataWithCycling() {
+    const data = await fetchData();
+    if (_cycleTimer === null) {
+      const ms = (data && data.ms_until_next > 0) ? data.ms_until_next : CYCLE_FALLBACK_MS;
+      _cycleTimer = setTimeout(advanceAndTick, ms);
+    }
+    return data;
+  }
+
+  function _clearCycleTimer() {
+    if (_cycleTimer !== null) {
+      clearTimeout(_cycleTimer);
+      _cycleTimer = null;
+    }
+  }
+
+  window.OverlayEngine.register(TYPE, { fetch: fetchDataWithCycling, render });
+  window.OverlayEngine.onStop(_clearCycleTimer);
 })();
 

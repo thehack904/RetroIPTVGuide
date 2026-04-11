@@ -53,7 +53,7 @@
               <span class="vc-item-name">{{ ch.name }}</span>
               <span class="vc-item-sub muted small">
                 {% if ch.tvg_id == 'virtual.weather' %}
-                  Location: {{ weather_config.location_name or 'Not set' }}&nbsp;&nbsp;Units: &deg;{{ weather_config.units or 'F' }}
+                  Location: {{ weather_config.location_name or 'Not set' }}&nbsp;&nbsp;Units: &deg;{{ weather_config.units or 'F' }}&nbsp;&nbsp;Rotation: {{ weather_config.seconds_per_segment or '300' }}s/segment
                 {% elif ch.tvg_id == 'virtual.news' %}
                   Source: {{ 'News Feed (Auto)' if not news_feed_urls else news_feed_urls|length ~ ' RSS Feed' ~ ('' if news_feed_urls|length == 1 else 's') }}
                 {% elif ch.tvg_id == 'virtual.status' %}
@@ -61,7 +61,7 @@
                 {% elif ch.tvg_id == 'virtual.traffic' %}
                   Mode: {{ 'Admin Rotation' if traffic_demo_config.mode != 'random_pack' else 'Random Pack' }}&nbsp;&nbsp;Interval: {{ traffic_demo_config.rotation_seconds or '120' }}s
                 {% elif ch.tvg_id == 'virtual.updates' %}
-                  GitHub Release Notes{% if updates_config.show_beta %} &amp; Beta Alerts{% endif %}
+                  GitHub Release Notes{% if updates_config.show_beta %} &amp; Pre-release Alerts{% endif %}
                 {% elif ch.tvg_id == 'virtual.sports' %}
                   {% if sports_config.mode == 'rss' %}
                     {% set feed_count = sports_feed_urls | select | list | length %}
@@ -152,6 +152,23 @@
                   <option value="F" {% if weather_config.units != 'C' %}selected{% endif %}>&#176;F &mdash; Fahrenheit</option>
                   <option value="C" {% if weather_config.units == 'C' %}selected{% endif %}>&#176;C &mdash; Celsius</option>
                 </select>
+              </div>
+              <div class="vc-prefs-field">
+                <label>Segment Duration
+                  <span class="muted small">(time on each of the 4 screens)</span>
+                </label>
+                <select name="ch_weather_seconds_per_segment">
+                  {% set cur_sps = (weather_config.seconds_per_segment or '300') | int %}
+                  <option value="60"  {% if cur_sps == 60  %}selected{% endif %}>1 minute &mdash; 4-min cycle</option>
+                  <option value="120" {% if cur_sps == 120 %}selected{% endif %}>2 minutes &mdash; 8-min cycle</option>
+                  <option value="180" {% if cur_sps == 180 %}selected{% endif %}>3 minutes &mdash; 12-min cycle</option>
+                  <option value="300" {% if cur_sps == 300 %}selected{% endif %}>5 minutes &mdash; 20-min cycle (default)</option>
+                  <option value="600" {% if cur_sps == 600 %}selected{% endif %}>10 minutes &mdash; 40-min cycle</option>
+                </select>
+                <p class="muted small" style="margin-top:4px;">
+                  Cycles: Current Conditions &#8594; 5-Day Forecast &#8594; Regional Radar &#8594; Severe Weather Alerts, then repeats.
+                  All viewers stay in sync (wall-clock aligned).
+                </p>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                 <a href="/weather" target="_blank" class="btn-link small">&#127780; Preview Weather Page &#8599;</a>
@@ -266,7 +283,7 @@
                 </div>
               </div>
               <div class="vc-prefs-field" style="align-items:center; gap:10px; display:flex; flex-wrap:wrap;">
-                <label class="toggle-switch" title="Show pre-release / beta versions on this channel">
+                <label class="toggle-switch" title="Show pre-release versions on this channel">
                   <input type="checkbox"
                          name="ch_updates_show_beta"
                          value="1"
@@ -276,12 +293,12 @@
                   <span class="toggle-slider"></span>
                 </label>
                 <span>
-                  Show Beta / Pre-release versions
+                  Show pre-release versions
                   <span class="muted small" style="margin-left:4px;">
                     &mdash; when enabled, pre-releases are shown with a
                     <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
                                  font-size:0.75em; letter-spacing:0.07em; text-transform:uppercase;
-                                 padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                                 padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Pre-release</span>
                     badge; when disabled, only stable releases appear.
                   </span>
                 </span>
@@ -291,7 +308,7 @@
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
 
-              <!-- Beta info modal — admin page only, triggered when beta toggle is turned ON -->
+              <!-- Pre-release info modal — admin page only, triggered when pre-release toggle is turned ON -->
               <div id="betaInfoModal" role="dialog" aria-modal="true" aria-labelledby="betaModalTitle"
                    style="display:none; position:fixed; inset:0; z-index:9000;
                           background:rgba(0,0,0,0.65); backdrop-filter:blur(3px);
@@ -304,23 +321,23 @@
                     <div>
                       <h3 id="betaModalTitle" style="margin:0 0 6px; font-size:1.05em; font-weight:900;
                                                      letter-spacing:0.04em; text-transform:uppercase;
-                                                     color:#ffd700;">Beta Versions Enabled</h3>
+                                                     color:#ffd700;">Pre-release Versions Enabled</h3>
                       <p style="margin:0; font-size:0.88em; color:#c8d8ff; line-height:1.55;">
-                        You have enabled <strong style="color:#ffd700;">pre-release / beta</strong>
+                        You have enabled <strong style="color:#ffd700;">pre-release</strong>
                         versions on the Updates &amp; Announcements channel.
                       </p>
                     </div>
                   </div>
                   <ul style="margin:0 0 18px 1.1em; padding:0; font-size:0.85em; color:#a8c8ff;
                               line-height:1.7; list-style:disc;">
-                    <li>Beta releases may contain <strong style="color:#fff;">incomplete features</strong>
+                    <li>Pre-release versions may contain <strong style="color:#fff;">incomplete features</strong>
                         or <strong style="color:#fff;">known bugs</strong>.</li>
                     <li>They are intended for testing and feedback &mdash; <strong style="color:#fff;">not
                         for production use</strong>.</li>
-                    <li>Beta info will appear on this channel with a
+                    <li>Pre-release info will appear on this channel with a
                         <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
                                      font-size:0.78em; letter-spacing:0.07em; text-transform:uppercase;
-                                     padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                                     padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Pre-release</span>
                         badge.</li>
                     <li>Disable this toggle at any time to return to <strong style="color:#fff;">stable
                         releases only</strong>.</li>
@@ -952,30 +969,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Drag-and-drop channel order
   const orderList = document.getElementById('channel-order-list');
   if (orderList) {
-    let dragging = null;
-    orderList.addEventListener('dragstart', e => {
-      dragging = e.target.closest('.channel-order-item');
-      if (dragging) dragging.classList.add('dragging');
-    });
-    orderList.addEventListener('dragend', () => {
-      if (dragging) dragging.classList.remove('dragging');
-      dragging = null;
-      orderList.querySelectorAll('.channel-order-item').forEach((item, i) => {
-        const num = item.querySelector('.order-num');
-        if (num) num.textContent = i + 1;
-      });
-    });
-    orderList.addEventListener('dragover', e => {
-      e.preventDefault();
-      const over = e.target.closest('.channel-order-item');
-      if (over && dragging && over !== dragging) {
-        const rect = over.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        if (e.clientY < mid) orderList.insertBefore(dragging, over);
-        else orderList.insertBefore(dragging, over.nextSibling);
-      }
-    });
-
     const saveBtn = document.getElementById('channel-order-save-btn');
     const saveStatus = document.getElementById('channel-order-save-status');
 
@@ -995,7 +988,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Enforce on load in case server order differs
     enforceMixLast();
 
-    if (orderList) {
     let dragging = null;
     orderList.addEventListener('dragstart', e => {
       dragging = e.target.closest('.channel-order-item');
@@ -1025,7 +1017,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // If that accidentally pushed past Channel Mix, enforceMixLast will fix it on dragend
       }
     });
-    }
 
     if (saveBtn) {
       saveBtn.addEventListener('click', () => {

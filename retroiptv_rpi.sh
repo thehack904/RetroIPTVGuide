@@ -209,7 +209,7 @@ EOF
   echo "End time: $(date)"
   echo "Access in browser: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "NOTE: BETA build — internal network use only."
+  echo "Security Notice: Do not expose this service directly to the public internet."
   echo "GPU accel: $PI_TYPE"
   echo "Service: retroiptvguide"
   echo "User: $APP_USER"

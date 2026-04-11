@@ -1,39 +1,26 @@
-# Python
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
+.Python
 *.egg-info/
 dist/
 build/
-
-# Virtual environment
-venv/
+.eggs/
+*.egg
 .env
-.venv/
+.venv
+env/
+venv/
 ENV/
-
-# Databases
-*.db
-*.db-shm
-*.db-wal
-*.sqlite3
-db/*.db
-
-# Road geometry disk cache (populated at runtime by the Overpass fetch)
-data/roads_cache/
-
-# Traffic demo basemap PNGs (generated at runtime by stitching OSM tiles)
-static/maps/traffic_demo/*.png
-
-# Logs
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 *.log
-
-# IDE / Editor
-.vscode/
-.idea/
-
-# OS files
-.DS_Store
-Thumbs.db
-cookies.txt
+instance/
+config/logs/
+tests/__pycache__/
+config/tuners.db
+config/users.db
+config/users.db-shm
+config/users.db-wal

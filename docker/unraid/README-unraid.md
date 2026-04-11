@@ -1,4 +1,4 @@
-# RetroIPTVGuide – Unraid Template *BETA*
+# RetroIPTVGuide – Unraid Template
 
 This repository contains the Unraid Docker template for **RetroIPTVGuide**.
 
@@ -9,11 +9,11 @@ An Unraid-compatible XML template that pre-populates:
 - Persistent volume mappings (`/app/config`, `/app/logs`, `/app/data`)
 - Common environment variables (TZ, etc.)
 
-#### BETA Limitations
+#### Notes
 - Not indexed by **Community Applications**
 - Template fields and defaults may change
 - Limited Unraid-specific testing to date
-- No migration guarantees between template revisions during beta
+- No migration guarantees between template revisions
 
 ## Install methods
 
@@ -33,7 +33,7 @@ Use this method if you do **not** use Community Applications, or you want to tes
 
 
 Notes:
-- Feedback from Unraid users is welcome and will help promote this install method out of BETA.
+- Feedback from Unraid users is welcome and will help improve this install method.
 - Updates to the XML are not automatically “pushed” into existing installs; users typically re-apply changes manually.
 
 ### Method 2: Community Applications - Currently under development 

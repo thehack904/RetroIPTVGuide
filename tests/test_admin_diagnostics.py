@@ -412,6 +412,43 @@ class TestLogReadingUtils:
 
 
 # ---------------------------------------------------------------------------
+# Tests: URL credential sanitization for logging
+# ---------------------------------------------------------------------------
+
+class TestSanitizeUrlForLog:
+    def test_url_without_credentials_unchanged(self):
+        from utils.app_config_diag import _sanitize_url_for_log
+        url = "https://example.com/path?query=1"
+        assert _sanitize_url_for_log(url) == url
+
+    def test_password_stripped_from_url(self):
+        from urllib.parse import urlparse
+        from utils.app_config_diag import _sanitize_url_for_log
+        url = "https://user:secret@example.com/path"
+        result = _sanitize_url_for_log(url)
+        assert "secret" not in result
+        assert urlparse(result).hostname == "example.com"
+
+    def test_username_stripped_from_url(self):
+        from urllib.parse import urlparse
+        from utils.app_config_diag import _sanitize_url_for_log
+        url = "http://admin:password@host.example.org:8080/resource"
+        result = _sanitize_url_for_log(url)
+        assert "password" not in result
+        assert "admin" not in result
+        parsed = urlparse(result)
+        assert parsed.hostname == "host.example.org"
+        assert parsed.port == 8080
+
+    def test_url_with_api_key_query_param_unchanged(self):
+        from utils.app_config_diag import _sanitize_url_for_log
+        # This helper only strips userinfo credentials from the URL authority component.
+        # Secrets in query parameters require separate handling if needed.
+        url = "https://api.example.com/v1/data?api_key=abc123"
+        assert _sanitize_url_for_log(url) == url
+
+
+# ---------------------------------------------------------------------------
 # Tests: SQLite activity log
 # ---------------------------------------------------------------------------
 

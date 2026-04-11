@@ -799,7 +799,7 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
             issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Mode: '+esc(ch.traffic_config.mode)+'</div>';
           }
           if(ch.updates_config){
-            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Beta releases: '+(ch.updates_config.show_beta?'shown':'hidden')+'</div>';
+            issHtml+='<div style="font-size:0.76rem;color:var(--dc-muted);margin-top:0.3rem">Pre-release versions: '+(ch.updates_config.show_beta?'shown':'hidden')+'</div>';
           }
           if(ch.sports_config){
             var sc=ch.sports_config;

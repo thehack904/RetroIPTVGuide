@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.9.3 (2026-04-08)**
+# Current Version: **v4.9.4 (2026-04-09)**
 
 ---
 
@@ -121,6 +121,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ## 🍓 Installer Enhancements
 - [x] Unified installer architecture  
 - [x] Windows parity  
+- [ ] **Deprecate Windows installer in v5.0** — Docker is the recommended deployment method going forward  
 
 ---
 
@@ -129,4 +130,4 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Resize video *(v4.6.0)*
 - [ ] Auto load Channel from Guide  
 - [x] Adjustable scrolling speed *(v4.6.0)*
-- [x] Unraid Template *(BETA)*
+- [x] Unraid Template

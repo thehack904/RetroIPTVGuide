@@ -1,7 +1,7 @@
 <# 
 RetroIPTVGuide Windows Installer/Uninstaller
 Filename: retroiptv_windows.ps1
-Version: 4.9.3
+Version: 4.9.4
 
 License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -55,7 +55,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "4.9.3"
+$VERSION = "4.9.4"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -146,6 +146,13 @@ Write-Info ""
 Write-Info "=== RetroIPTVGuide Unified Script (v$VERSION) ==="
 Write-Info ("Start time: {0}" -f (Get-Date))
 Write-Info ("Log file: {0}" -f $logFile)
+Write-Info ""
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host " DEPRECATION NOTICE                                         " -ForegroundColor Yellow
+Write-Host " The Windows installer will be discontinued in v5.0.       " -ForegroundColor Yellow
+Write-Host " Docker is the recommended deployment method going forward. " -ForegroundColor Yellow
+Write-Host " See INSTALL.md for Docker installation instructions.      " -ForegroundColor Yellow
+Write-Host "============================================================" -ForegroundColor Yellow
 Write-Info ""
 
 # -------------------------------
