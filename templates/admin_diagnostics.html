@@ -749,7 +749,10 @@ document.getElementById('btnLoadConfig').addEventListener('click',function(){
   spin('cfgSpinner',true);
   var cont=document.getElementById('cfgContent');
   cont.innerHTML='<div style="color:var(--dc-muted);font-size:0.85rem">Loading&#x2026; (external service probes may take up to 15s)</div>';
-  fetch('/admin/diagnostics/config',{credentials:'same-origin'}).then(function(r){return r.json();})
+  fetch('/admin/diagnostics/config',{credentials:'same-origin'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  })
   .then(function(d){
     spin('cfgSpinner',false);
     var html='';

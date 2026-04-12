@@ -315,8 +315,6 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
 
     Returns per-service results with HTTP status, response time, error messages.
     """
-    import requests as _req  # noqa: PLC0415
-
     # Read settings
     settings: Dict[str, str] = {}
     try:
@@ -595,7 +593,19 @@ def _sanitize_url_for_log(url: str) -> str:
 
 def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[str, Any]:
     """Probe a single external URL and return a result dict."""
-    import requests as _req  # noqa: PLC0415
+    try:
+        import requests as _req  # noqa: PLC0415
+    except ImportError:
+        return {
+            "id": svc_id,
+            "name": name,
+            "url": url,
+            "reachable": False,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": "requests library not available — run: pip install requests",
+            "resolved_ip": None,
+        }
 
     result: Dict[str, Any] = {
         "id": svc_id,
@@ -637,19 +647,11 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
-<<<<<<< Updated upstream
-            logger.debug("Service probe failed for %s: %s", _log_url, exc, exc_info=True)
-            result["error"] = "Service probe failed. Check application logs for details."
-
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("URL probe setup failed for %s: %s", _log_url, exc, exc_info=True)
-=======
             logger.debug("Service probe failed for '%s': %s", name, exc, exc_info=True)
             result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
         logger.debug("URL probe setup failed for '%s': %s", name, exc, exc_info=True)
->>>>>>> Stashed changes
         result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result

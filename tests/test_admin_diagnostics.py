@@ -1447,6 +1447,30 @@ class TestRunConfigChecks:
         assert "regpass" not in result_str
 
 
+class TestProbeServiceRobustness:
+    """Verify _probe_service handles missing requests library gracefully."""
+
+    def test_requests_import_error_returns_error_dict(self, monkeypatch):
+        """When requests cannot be imported, _probe_service must return a
+        plain dict with reachable=False — never raise ImportError.
+
+        Simulates a missing requests package by temporarily masking the
+        already-imported module via sys.modules, forcing a fresh ImportError
+        on the lazy ``import requests`` inside _probe_service.
+        """
+        import sys
+        from utils.app_config_diag import _probe_service
+
+        # Setting sys.modules[name] = None causes 'import name' to raise
+        # ImportError without needing to uninstall or reload the module.
+        monkeypatch.setitem(sys.modules, "requests", None)
+
+        result = _probe_service("test_svc", "Test Service", "http://example.com")
+        assert result["reachable"] is False
+        assert result["error"] is not None
+        assert "requests" in result["error"].lower()
+
+
 # ---------------------------------------------------------------------------
 # Tests: /admin/diagnostics/config endpoint
 # ---------------------------------------------------------------------------
@@ -1492,6 +1516,34 @@ class TestDiagnosticsConfigEndpoint:
         vc = data["virtual_channels"]
         assert "channels" in vc
         assert len(vc["channels"]) >= 1
+
+    def test_config_endpoint_returns_json_on_run_config_checks_exception(
+        self, client, isolated_db, monkeypatch
+    ):
+        """Endpoint must return valid JSON even when run_config_checks raises.
+
+        Guards against a regression where an unhandled exception inside
+        run_config_checks caused Flask to return an HTML 500 page, which
+        the JavaScript fetch handler then failed to parse as JSON.
+        """
+        import utils.app_config_diag as _acd
+
+        def _boom(db_path, tuner_db_path):
+            raise RuntimeError("simulated internal failure")
+
+        monkeypatch.setattr(_acd, "run_config_checks", _boom)
+
+        login(client)
+        resp = client.get("/admin/diagnostics/config")
+        # Must be 200 with valid JSON, never an HTML 500 page
+        assert resp.status_code == 200
+        assert resp.content_type.startswith("application/json")
+        data = json.loads(resp.data)
+        # The fallback payload must contain at least the four expected top-level keys
+        for key in ("user_accounts", "virtual_channels", "external_services", "system_resources"):
+            assert key in data
+        # Internal exception details must not be leaked to the browser
+        assert "simulated internal failure" not in resp.data.decode()
 
 
 # ---------------------------------------------------------------------------

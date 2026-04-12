@@ -230,12 +230,29 @@ def diagnostics_config():
 
     Covers: user accounts, virtual channel config, external service
     reachability (weather API + news RSS), and system resource usage.
+
+    A top-level try/except ensures that any unexpected exception in
+    run_config_checks() always produces a valid JSON response instead of
+    an HTML 500 page (which would cause a JSON.parse error in the
+    JavaScript fetch handler).
     """
     _require_admin()
     from utils.app_config_diag import run_config_checks
 
     _, db_path, tuner_db_path, _, _ = _get_config()
-    result = run_config_checks(db_path, tuner_db_path)
+    try:
+        result = run_config_checks(db_path, tuner_db_path)
+    except Exception as exc:  # noqa: BLE001
+        # Log the full exception server-side; do NOT expose exc details to the
+        # browser response to prevent internal state leakage.
+        logger.exception("Unexpected error in run_config_checks: %s", exc)
+        result = {
+            "user_accounts": {"status": "ERROR", "detail": "Diagnostics unavailable.", "users": [], "never_logged_in": [], "remediation": "Check server logs for details."},
+            "virtual_channels": {"status": "ERROR", "detail": "Diagnostics unavailable.", "channels": [], "remediation": "Check server logs for details."},
+            "external_services": {"status": "ERROR", "detail": "Diagnostics unavailable.", "services": [], "remediation": "Check server logs for details."},
+            "system_resources": {"status": "ERROR", "detail": "Diagnostics unavailable.", "remediation": "Check server logs for details."},
+            "error": "Internal diagnostics error — check server logs for details.",
+        }
     return jsonify(result)
 
 
