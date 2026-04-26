@@ -1,0 +1,47 @@
+name: Sync Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/sync-wiki.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config --global user.name "RetroIPTVGuide Wiki Sync"
+          git config --global user.email "actions@users.noreply.github.com"
+
+      - name: Clone wiki
+        env:
+          GH_TOKEN: ${{ secrets.WIKI_SYNC_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: Sync docs/wiki to GitHub Wiki
+        run: |
+          rsync -av --delete docs/wiki/ wiki/
+          cd wiki
+          git status
+
+          if git diff --quiet && git diff --cached --quiet; then
+            echo "No wiki changes to commit."
+            exit 0
+          fi
+
+          git add .
+          git commit -m "Sync wiki from docs/wiki"
+          git push
