@@ -1,0 +1,54 @@
+name: 📚 Sync RetroIPTVGuide Wiki
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "docs/wiki/**"
+      - ".github/workflows/sync-wiki.yml"
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  sync-wiki:
+    name: 📚 Sync docs/wiki to GitHub Wiki
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: 🧾 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🔧 Configure git
+        run: |
+          git config --global user.name "RetroIPTVGuide Wiki Sync"
+          git config --global user.email "actions@users.noreply.github.com"
+
+      - name: 📥 Clone GitHub Wiki
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_PAT }}
+        run: |
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
+
+      - name: 🔁 Sync docs/wiki to Wiki repo
+        run: |
+          rsync -av --delete docs/wiki/ wiki/
+
+          cd wiki
+
+          if git diff --quiet && git status --short | grep -q "^??" ; then
+            echo "New untracked files detected."
+          fi
+
+          if git diff --quiet && [ -z "$(git status --short)" ]; then
+            echo "No wiki changes to commit."
+            exit 0
+          fi
+
+          git add .
+          git commit -m "Sync wiki from docs/wiki"
+          git push origin master
