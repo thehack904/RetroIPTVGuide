@@ -1055,10 +1055,12 @@ class TestCheckVirtualChannels:
         assert sports["sports_config"]["mode"] == "scores"
 
     def test_sports_rss_mode_no_feeds_warns(self, isolated_db):
-        """Sports in RSS mode with no feeds should set config_ok=False."""
+        """Sports in RSS mode with no feeds and external data enabled should set config_ok=False."""
         import sqlite3
         with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.external_data_enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.virtual.sports.enabled', '1')")
         from utils.app_config_diag import check_virtual_channels
         result = check_virtual_channels(app_module.TUNER_DB)
         sports = next(c for c in result["channels"] if c["tvg_id"] == "virtual.sports")
@@ -1163,8 +1165,15 @@ class TestCheckExternalServices:
 
     def test_overpass_504_reported_as_fail(self, isolated_db, monkeypatch):
         """A 504 from Overpass should surface as a FAIL in the services list."""
+        import sqlite3
         import requests as _req
         from utils import app_config_diag
+
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "1"),
+            )
 
         class _FakeResp:
             status_code = 504
@@ -1198,7 +1207,14 @@ class TestCheckExternalServices:
 
     def test_overpass_fail_appears_in_failing_list(self, isolated_db, monkeypatch):
         """An unreachable Overpass service should appear in the detail string."""
+        import sqlite3
         from utils import app_config_diag
+
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "1"),
+            )
 
         monkeypatch.setattr(app_config_diag, "_probe_service",
                             lambda svc_id, name, url, timeout=8: {
@@ -1217,7 +1233,14 @@ class TestCheckExternalServices:
     def test_runtime_429_overrides_probe_success(self, isolated_db, monkeypatch):
         """Even when /api/status probes OK, a 429 in _OVERPASS_LAST_ERROR should
         surface as reachable=False with status_code=429."""
+        import sqlite3
         from utils import app_config_diag
+
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "1"),
+            )
 
         # _probe_service returns success (200 OK) — as if /api/status is fine
         monkeypatch.setattr(app_config_diag, "_probe_service",
@@ -1251,7 +1274,14 @@ class TestCheckExternalServices:
 
     def test_runtime_429_note_mentions_rate_limit(self, isolated_db, monkeypatch):
         """A runtime 429 should include a helpful rate-limiting note."""
+        import sqlite3
         from utils import app_config_diag
+
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "1"),
+            )
 
         monkeypatch.setattr(app_config_diag, "_probe_service",
                             lambda svc_id, name, url, timeout=8: {
@@ -1274,7 +1304,14 @@ class TestCheckExternalServices:
 
     def test_no_last_error_uses_probe_result(self, isolated_db, monkeypatch):
         """When _OVERPASS_LAST_ERROR is empty, the probe result is used as-is."""
+        import sqlite3
         from utils import app_config_diag
+
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                ("virtual_channel.virtual.traffic.enabled", "1"),
+            )
 
         monkeypatch.setattr(app_config_diag, "_probe_service",
                             lambda svc_id, name, url, timeout=8: {
@@ -1291,16 +1328,17 @@ class TestCheckExternalServices:
         assert overpass["reachable"] is True
         assert overpass["status_code"] == 200
 
-    def test_espn_api_included_when_sports_enabled(self, isolated_db):
-        """ESPN API entry should be present when sports channel is enabled (default scores mode)."""
+    def test_sports_external_disabled_by_default(self, isolated_db):
+        """Sports external data entry should reflect disabled state by default."""
         from utils.app_config_diag import check_external_services
         result = check_external_services(app_module.TUNER_DB)
-        espn = next((s for s in result["services"] if s["id"] == "espn_api"), None)
-        assert espn is not None, "ESPN API entry should be present"
-        assert "espn" in espn["url"].lower()
+        sports = next((s for s in result["services"] if s["id"] == "sports_external"), None)
+        assert sports is not None, "Sports external data entry should be present"
+        assert sports["reachable"] is None
+        assert "disabled" in sports["note"].lower()
 
-    def test_espn_api_not_probed_when_sports_disabled(self, isolated_db):
-        """When sports channel is disabled, ESPN API should be listed but not probed."""
+    def test_sports_external_not_probed_when_sports_channel_disabled(self, isolated_db):
+        """When sports channel is disabled, external data entry should show not-applicable."""
         import sqlite3
         with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
             conn.execute(
@@ -1309,26 +1347,55 @@ class TestCheckExternalServices:
             )
         from utils.app_config_diag import check_external_services
         result = check_external_services(app_module.TUNER_DB)
-        espn = next((s for s in result["services"] if s["id"] == "espn_api"), None)
-        assert espn is not None
-        assert espn["reachable"] is None
+        sports = next((s for s in result["services"] if s["id"] == "sports_external"), None)
+        assert sports is not None
+        assert sports["reachable"] is None
+
+    def test_sports_scores_api_listed_when_enabled_scores_mode(self, isolated_db):
+        """In scores mode with external data enabled and base URL set, scores API should be probed."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.virtual.sports.enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.external_data_enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.scores_base_url', 'https://scores.example.com/api')")
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        scores_api = next((s for s in result["services"] if s["id"] == "sports_scores_api"), None)
+        assert scores_api is not None
+        assert scores_api["url"].startswith("https://scores.example.com/")
+
+    def test_sports_scores_api_unconfigured_when_no_base_url(self, isolated_db):
+        """In scores mode with no base URL, a not-configured placeholder should appear."""
+        import sqlite3
+        with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.virtual.sports.enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.external_data_enabled', '1')")
+        from utils.app_config_diag import check_external_services
+        result = check_external_services(app_module.TUNER_DB)
+        scores_api = next((s for s in result["services"] if s["id"] == "sports_scores_api"), None)
+        assert scores_api is not None
+        assert scores_api["reachable"] is None
 
     def test_sports_rss_feed_included_in_rss_mode(self, isolated_db):
         """In RSS mode with feeds configured, sports feeds should appear as services."""
         import sqlite3
         with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.virtual.sports.enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.external_data_enabled', '1')")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
-            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.rss_url_1', 'https://www.espn.com/espn/rss/news')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.rss_url_1', 'https://feeds.example.com/sports.xml')")
         from utils.app_config_diag import check_external_services
         result = check_external_services(app_module.TUNER_DB)
         sports_feed = next((s for s in result["services"] if s["id"] == "sports_feed_1"), None)
         assert sports_feed is not None
-        assert "espn" in sports_feed["url"].lower()
+        assert sports_feed["url"].startswith("https://feeds.example.com/")
 
     def test_sports_rss_unconfigured_listed_in_rss_mode(self, isolated_db):
         """In RSS mode with no feeds, a placeholder entry should appear."""
         import sqlite3
         with sqlite3.connect(app_module.TUNER_DB, timeout=5) as conn:
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('virtual_channel.virtual.sports.enabled', '1')")
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.external_data_enabled', '1')")
             conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('sports.mode', 'rss')")
         from utils.app_config_diag import check_external_services
         result = check_external_services(app_module.TUNER_DB)

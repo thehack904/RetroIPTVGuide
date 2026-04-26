@@ -134,10 +134,10 @@ class TestGetVirtualEpg:
 # ─── get/save_virtual_channel_settings ───────────────────────────────────────
 
 class TestVirtualChannelSettings:
-    def test_defaults_all_enabled(self):
+    def test_defaults_all_disabled(self):
         settings = get_virtual_channel_settings()
         for ch in VIRTUAL_CHANNELS:
-            assert settings.get(ch["tvg_id"]) is True
+            assert settings.get(ch["tvg_id"]) is False
 
     def test_save_and_reload(self):
         save_virtual_channel_settings({
@@ -154,9 +154,9 @@ class TestVirtualChannelSettings:
         save_virtual_channel_settings({"virtual.news": False})
         settings = get_virtual_channel_settings()
         assert settings["virtual.news"] is False
-        # others not saved, so still default True
-        assert settings["virtual.weather"] is True
-        assert settings["virtual.status"] is True
+        # others not saved, so still default False
+        assert settings["virtual.weather"] is False
+        assert settings["virtual.status"] is False
 
     def test_re_enable_after_disable(self):
         save_virtual_channel_settings({"virtual.news": False})
@@ -572,6 +572,7 @@ class TestOverlayAppearance:
 
 class TestChangeTunerOverlayAppearance:
     def test_section_present_in_page(self, client):
+        save_virtual_channel_settings({"virtual.status": True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         # Each channel has a per-channel settings button; overlay action present in page
@@ -926,6 +927,7 @@ class TestNewsFeedUrl:
     def test_change_tuner_page_includes_news_feed_url(self, client):
         from app import save_news_feed_url
         save_news_feed_url('https://feeds.bbc.co.uk/news/rss.xml')
+        save_virtual_channel_settings({"virtual.news": True})
         login(client, "admin", "adminpass")
         resp = client.get('/virtual_channels')
         assert b'https://feeds.bbc.co.uk/news/rss.xml' in resp.data
@@ -1076,9 +1078,9 @@ class TestVirtualUpdatesChannel:
         assert "virtual.updates" in epg
         assert len(epg["virtual.updates"]) == 3
 
-    def test_updates_channel_enabled_by_default(self):
+    def test_updates_channel_disabled_by_default(self):
         settings = get_virtual_channel_settings()
-        assert settings.get("virtual.updates") is True
+        assert settings.get("virtual.updates") is False
 
     def test_updates_channel_can_be_disabled(self):
         save_virtual_channel_settings({"virtual.updates": False})
@@ -1300,6 +1302,7 @@ class TestUpdatesConfig:
         assert get_updates_config()["show_beta"] is False
 
     def test_virtual_channels_page_shows_show_beta_toggle(self, client):
+        save_virtual_channel_settings({"virtual.updates": True})
         login(client, "admin", "adminpass")
         html = client.get("/virtual_channels").data.decode()
         assert "ch_updates_show_beta" in html
@@ -1336,13 +1339,18 @@ class TestSportsHelpers:
         from app import get_sports_config
         assert get_sports_config()['mode'] == 'scores'
 
-    def test_sports_config_default_leagues_include_nfl_nba_mlb_nhl(self):
+    def test_sports_config_external_data_disabled_by_default(self):
+        from app import get_sports_config
+        assert get_sports_config()['external_data_enabled'] is False
+
+    def test_sports_config_scores_base_url_empty_by_default(self):
+        from app import get_sports_config
+        assert get_sports_config()['scores_base_url'] == ''
+
+    def test_sports_config_default_leagues_all_disabled(self):
         from app import get_sports_config
         leagues = get_sports_config()['leagues']
-        assert leagues['nfl'] is True
-        assert leagues['nba'] is True
-        assert leagues['mlb'] is True
-        assert leagues['nhl'] is True
+        assert all(v is False for v in leagues.values()), "All leagues should be disabled by default"
 
     def test_save_and_reload_sports_config(self):
         from app import get_sports_config, save_sports_config
@@ -1353,15 +1361,37 @@ class TestSportsHelpers:
         assert leagues['mlb'] is True
         assert leagues['mls'] is True
 
+    def test_save_and_reload_external_data_enabled(self):
+        from app import get_sports_external_data_enabled, save_sports_external_data_enabled
+        save_sports_external_data_enabled(True)
+        assert get_sports_external_data_enabled() is True
+        save_sports_external_data_enabled(False)
+        assert get_sports_external_data_enabled() is False
+
+    def test_save_and_reload_scores_base_url(self):
+        from app import get_sports_scores_base_url, save_sports_scores_base_url
+        save_sports_scores_base_url('https://scores.example.com/api')
+        assert get_sports_scores_base_url() == 'https://scores.example.com/api'
+
+    def test_save_scores_base_url_rejects_invalid_scheme(self):
+        from app import save_sports_scores_base_url
+        with pytest.raises(ValueError):
+            save_sports_scores_base_url('ftp://invalid.com/api')
+
+    def test_save_scores_base_url_allows_empty(self):
+        from app import get_sports_scores_base_url, save_sports_scores_base_url
+        save_sports_scores_base_url('')
+        assert get_sports_scores_base_url() == ''
+
     def test_get_sports_feed_urls_empty_by_default(self):
         from app import get_sports_feed_urls
         assert get_sports_feed_urls() == []
 
     def test_save_and_reload_sports_feed_urls(self):
         from app import get_sports_feed_urls, save_sports_feed_urls
-        save_sports_feed_urls(['https://www.espn.com/espn/rss/news', 'https://feeds.bbci.co.uk/sport/rss.xml'])
+        save_sports_feed_urls(['https://feeds.example.com/sports1.xml', 'https://feeds.bbci.co.uk/sport/rss.xml'])
         urls = get_sports_feed_urls()
-        assert 'https://www.espn.com/espn/rss/news' in urls
+        assert 'https://feeds.example.com/sports1.xml' in urls
         assert 'https://feeds.bbci.co.uk/sport/rss.xml' in urls
 
     def test_save_sports_feed_urls_rejects_invalid_scheme(self):
@@ -1371,7 +1401,7 @@ class TestSportsHelpers:
 
     def test_save_sports_feed_urls_pads_to_six(self):
         from app import get_sports_feed_urls, save_sports_feed_urls
-        save_sports_feed_urls(['https://www.espn.com/espn/rss/news'])
+        save_sports_feed_urls(['https://feeds.example.com/sports.xml'])
         # get_sports_feed_urls only returns non-empty entries
         assert len(get_sports_feed_urls()) == 1
 
@@ -1401,27 +1431,45 @@ class TestApiSports:
         assert isinstance(data['ms_until_next'], int)
         assert data['ms_until_next'] > 0
 
-    def test_scores_mode_response_shape(self, client):
-        from app import save_sports_mode
+    def test_external_data_disabled_by_default_returns_not_configured(self, client):
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert data.get('not_configured') is True
+
+    def test_external_data_disabled_response_has_empty_games(self, client):
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert data['games'] == []
+
+    def test_external_data_disabled_response_has_empty_headlines(self, client):
+        login(client)
+        data = client.get('/api/sports').get_json()
+        assert data['headlines'] == []
+
+    def test_scores_mode_response_shape_when_external_enabled(self, client):
+        from app import save_sports_mode, save_sports_external_data_enabled
         save_sports_mode('scores')
+        save_sports_external_data_enabled(True)
         login(client)
         data = client.get('/api/sports').get_json()
         assert data['mode'] == 'scores'
         assert 'games' in data
         assert isinstance(data['games'], list)
 
-    def test_rss_mode_response_shape(self, client):
-        from app import save_sports_mode
+    def test_rss_mode_response_shape_when_external_enabled(self, client):
+        from app import save_sports_mode, save_sports_external_data_enabled
         save_sports_mode('rss')
+        save_sports_external_data_enabled(True)
         login(client)
         data = client.get('/api/sports').get_json()
         assert data['mode'] == 'rss'
         assert 'headlines' in data
         assert isinstance(data['headlines'], list)
 
-    def test_rss_mode_has_feed_count(self, client):
-        from app import save_sports_mode
+    def test_rss_mode_has_feed_count_when_external_enabled(self, client):
+        from app import save_sports_mode, save_sports_external_data_enabled
         save_sports_mode('rss')
+        save_sports_external_data_enabled(True)
         login(client)
         data = client.get('/api/sports').get_json()
         assert 'feed_count' in data
@@ -1501,11 +1549,34 @@ class TestSportsChannelRegistration:
         assert leagues['nfl'] is False   # not submitted → disabled
 
     def test_virtual_channels_page_shows_sports_settings(self, client):
+        save_virtual_channel_settings({"virtual.sports": True})
         login(client, 'admin', 'adminpass')
         html = client.get('/virtual_channels').data.decode()
         assert 'ch_sports_mode' in html
+        assert 'ch_sports_external_data_enabled' in html
         assert 'ch_sports_league_nfl' in html
         assert 'ch_sports_rss_url_1' in html
+        assert 'ch_sports_scores_base_url' in html
+
+    def test_virtual_channels_page_shows_disclaimer(self, client):
+        save_virtual_channel_settings({"virtual.sports": True})
+        login(client, 'admin', 'adminpass')
+        html = client.get('/virtual_channels').data.decode()
+        assert 'RetroIPTVGuide does not provide sports data' in html
+
+    def test_admin_can_enable_external_data_via_form(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/virtual_channels', data={
+            'action': 'update_channel_overlay_appearance',
+            'tvg_id': 'virtual.sports',
+            'ch_sports_mode': 'scores',
+            'ch_sports_external_data_enabled': '1',
+            'ch_sports_scores_base_url': 'https://scores.example.com/api',
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        from app import get_sports_external_data_enabled, get_sports_scores_base_url
+        assert get_sports_external_data_enabled() is True
+        assert get_sports_scores_base_url() == 'https://scores.example.com/api'
 
 # ─── NASA helpers ─────────────────────────────────────────────────────────────
 
@@ -1667,11 +1738,11 @@ class TestNasaPage:
         resp = client.get('/nasa')
         assert resp.status_code == 200
 
-    def test_page_contains_nasa_branding(self, client):
+    def test_page_contains_space_channel_branding(self, client):
         login(client)
         html = client.get('/nasa').data.decode()
         assert 'RetroIPTV' in html
-        assert 'NASA' in html
+        assert 'Space Channel' in html
 
     def test_page_references_api_nasa(self, client):
         login(client)
@@ -1730,6 +1801,7 @@ class TestNasaChannelRegistration:
         assert get_nasa_image_count() == 8
 
     def test_virtual_channels_page_shows_nasa_settings(self, client):
+        save_virtual_channel_settings({"virtual.nasa": True})
         login(client, 'admin', 'adminpass')
         html = client.get('/virtual_channels').data.decode()
         assert 'ch_nasa_interval' in html
@@ -1909,10 +1981,10 @@ class TestChannelMixRegistration:
         assert 'virtual.channel_mix' in epg
         assert len(epg['virtual.channel_mix']) == 2
 
-    def test_channel_mix_enabled_by_default(self):
-        """Channel Mix defaults to enabled (same as all other virtual channels)."""
+    def test_channel_mix_disabled_by_default(self):
+        """Channel Mix defaults to disabled (same as all other virtual channels)."""
         settings = get_virtual_channel_settings()
-        assert settings.get('virtual.channel_mix') is True
+        assert settings.get('virtual.channel_mix') is False
 
     def test_admin_can_save_channel_mix_config_via_form(self, client):
         login(client, 'admin', 'adminpass')
@@ -1934,6 +2006,7 @@ class TestChannelMixRegistration:
         assert news['duration_minutes'] == 60
 
     def test_virtual_channels_page_shows_channel_mix(self, client):
+        save_virtual_channel_settings({"virtual.channel_mix": True})
         login(client, 'admin', 'adminpass')
         html = client.get('/virtual_channels').data.decode()
         assert 'Channel Mix' in html

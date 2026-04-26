@@ -17,7 +17,7 @@ same fullscreen playback experience.
 | [Traffic](#traffic) | `virtual.traffic` | Overpass API |
 | [System Status](#system-status) | `virtual.status` | Internal system data |
 | [Updates / Announcements](#updates--announcements) | `virtual.updates` | GitHub Releases RSS |
-| [Sports](#sports) | `virtual.sports` | ESPN API / Sports RSS |
+| [Sports](#sports) | `virtual.sports` | User-configured external data source |
 | [NASA](#nasa) | `virtual.nasa` | NASA APOD API |
 | [On This Day](#on-this-day) | `virtual.on_this_day` | Wikipedia REST API |
 | [Channel Mix](#channel-mix) | `virtual.channel_mix` | Composite of selected channels |
@@ -97,16 +97,32 @@ Updates admin settings.
 
 ## Sports
 
-Displays live sports scores and recent results.
+Displays sports scores and recent results from a user-configured external data source.
 
-**Data sources:**
+External sports data is **disabled by default**. Users must enable it and supply
+their own data source. RetroIPTVGuide does not provide or bundle any sports data.
 
-- ESPN API (live scores)
-- Sports RSS feeds
+> **Notice:** RetroIPTVGuide does not provide sports data. You are responsible for
+> any external data source you configure and for complying with that provider's
+> terms of use.
+
+**Display modes:**
+
+- **Live Scores** — fetches game data from a user-supplied JSON scores endpoint,
+  cycling through selected leagues every 60 seconds.
+- **RSS News Feeds** — displays headlines from up to 6 user-supplied RSS/Atom feed URLs.
 
 **Configuration:**
 
-- Select leagues and teams in the Sports admin settings.
+1. Open Admin → Virtual Channels → Sports Scores.
+2. Check **Enable external sports data** and acknowledge the disclaimer.
+3. Select a display mode:
+   - For **Live Scores**: enter your scores API base URL and select leagues to display.
+   - For **RSS**: enter up to 6 RSS/Atom feed URLs.
+4. Save settings.
+
+If external data is not enabled, the Sports channel overlay shows a neutral
+"not configured" placeholder.
 
 **API endpoint:** `GET /api/sports`
 

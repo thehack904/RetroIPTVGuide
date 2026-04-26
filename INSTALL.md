@@ -23,10 +23,32 @@ http://`<server-ip>`{=html}:5000
 
 # Linux Installation
 
-Run the official installer:
+## Option A — From a downloaded release archive (no internet required for repo files)
+
+Download the release `.zip` or `.tar.gz` from the
+[Releases page](https://github.com/thehack904/RetroIPTVGuide/releases), extract it,
+then run the installer from inside the extracted directory:
+
+```bash
+# Example using v4.9.4
+wget https://github.com/thehack904/RetroIPTVGuide/archive/refs/tags/v4.9.4.tar.gz
+tar -xzf v4.9.4.tar.gz
+cd RetroIPTVGuide-4.9.4
+sudo bash retroiptv_linux.sh install --agree
+```
+
+The installer detects that `app.py` and `requirements.txt` are present alongside the
+script and uses those files directly — no `git clone` is performed.
+
+## Option B — Direct curl one-liner (clones from GitHub)
+
 ```
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_linux.sh | sudo bash -s install --agree --yes
 ```
+
+If the full repository is **not** detected in the current directory the installer will
+ask for confirmation before cloning from GitHub. Pass `--yes` to skip the prompt.
+
 Default install location:
 
 /home/iptv/iptv-server
@@ -34,9 +56,27 @@ Default install location:
 ------------------------------------------------------------------------
 
 # Raspberry Pi Installation
+
+## Option A — From a downloaded release archive (no internet required for repo files)
+
+```bash
+wget https://github.com/thehack904/RetroIPTVGuide/archive/refs/tags/v4.9.4.tar.gz
+tar -xzf v4.9.4.tar.gz
+cd RetroIPTVGuide-4.9.4
+sudo bash retroiptv_rpi.sh install --agree
+```
+
+The installer detects the local release files and skips the GitHub clone step.
+
+## Option B — Direct curl one-liner (clones from GitHub)
+
 ```
 curl -sSL https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_rpi.sh | sudo bash -s install --agree --yes
 ```
+
+If the full repository is **not** detected in the current directory the installer will
+ask for confirmation before cloning. Pass `--yes` to skip the prompt.
+
 Supported hardware:
 
 -   Raspberry Pi 3
@@ -49,10 +89,30 @@ Supported hardware:
 
 > ⚠️ **Deprecation Notice:** The Windows installer will be discontinued in **v5.0**. Docker is the recommended deployment method. See [Docker Installation](#docker-installation-recommended) above.
 
+## Option A — From a downloaded release archive (no internet required for repo files)
+
+Download the `.zip` from the [Releases page](https://github.com/thehack904/RetroIPTVGuide/releases),
+extract it, then open PowerShell **as Administrator** in the extracted folder and run:
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+.\retroiptv_windows.ps1 install --agree
 ```
-Set-ExecutionPolicy Bypass -Scope Process -Force Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat -OutFile retroiptv_windows.bat
+
+The installer detects that `app.py` and `requirements.txt` are present and uses those
+files directly — no `git clone` is performed.
+
+## Option B — Download script and run (clones from GitHub if needed)
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force
+Invoke-WebRequest https://raw.githubusercontent.com/thehack904/RetroIPTVGuide/main/retroiptv_windows.bat `
+  -OutFile retroiptv_windows.bat
 .\retroiptv_windows.bat install
 ```
+
+If the full repository is **not** detected in the current directory the installer will
+ask for confirmation before cloning from GitHub. Pass `--yes` to skip the prompt.
 ------------------------------------------------------------------------
 
 # Updating

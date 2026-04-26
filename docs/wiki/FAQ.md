@@ -53,6 +53,32 @@ See [SECURITY_MODEL.md](../../SECURITY_MODEL.md) for the full security design.
 **Docker** is the recommended and best-supported method. A pre-built image is
 available at `ghcr.io/thehack904/retroiptvguide:latest`.
 
+### Can I install from a downloaded release archive without cloning?
+
+Yes. As of v4.9.4 all three native installers (`retroiptv_linux.sh`,
+`retroiptv_rpi.sh`, and `retroiptv_windows.ps1`) detect whether they are being run
+from a directory that already contains the full release (identified by the presence of
+`app.py` and `requirements.txt`). If those files are present the installer uses them
+directly and does **not** clone from GitHub.
+
+To use this method:
+
+1. Download the `.zip` or `.tar.gz` from the
+   [Releases page](https://github.com/thehack904/RetroIPTVGuide/releases).
+2. Extract the archive.
+3. Run the installer from inside the extracted directory.
+
+```bash
+# Linux / Raspberry Pi example
+tar -xzf v4.9.4.tar.gz
+cd RetroIPTVGuide-4.9.4
+sudo bash retroiptv_linux.sh install --agree
+```
+
+If the installer is run as a standalone download (e.g. via `curl | bash`) and the
+full release is **not** present alongside the script, it will ask for confirmation
+before cloning from GitHub. Pass `--yes` (`-y`) to skip the prompt.
+
 ### What happened to the Windows installer?
 
 The Windows installer (`.bat` / `.ps1`) is deprecated and will be discontinued in

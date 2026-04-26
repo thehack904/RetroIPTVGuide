@@ -37,7 +37,7 @@
 
     <!-- Enabled Channels -->
     {% set enabled_count = namespace(n=0) %}
-    {% for ch in VIRTUAL_CHANNELS %}{% if vc_settings.get(ch.tvg_id, true) %}{% set enabled_count.n = enabled_count.n + 1 %}{% endif %}{% endfor %}
+    {% for ch in VIRTUAL_CHANNELS %}{% if vc_settings.get(ch.tvg_id, false) %}{% set enabled_count.n = enabled_count.n + 1 %}{% endif %}{% endfor %}
 
     <section class="card vc-card" aria-labelledby="lbl-enabled-channels">
       <div class="card-head">
@@ -45,7 +45,7 @@
       </div>
       <div class="card-body vc-card-body">
         {% for ch in VIRTUAL_CHANNELS %}
-        {% if vc_settings.get(ch.tvg_id, true) %}
+        {% if vc_settings.get(ch.tvg_id, false) %}
         <div class="vc-enabled-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
             {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
@@ -387,6 +387,23 @@
               </script>
               {% endif %}
               {% if ch.tvg_id == 'virtual.sports' %}
+              <!-- External data enable toggle + disclaimer -->
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" name="ch_sports_external_data_enabled" value="1"
+                         id="sp-ext-toggle"
+                         {% if sports_config.external_data_enabled %}checked{% endif %}>
+                  <span>Enable external sports data</span>
+                </label>
+                <div id="sp-ext-notice"
+                     style="margin-top:8px; padding:10px 14px; background:#1a1a2e; border-left:3px solid #f0ad4e; border-radius:3px; font-size:0.85em; color:#d4b96a; line-height:1.5;{% if not sports_config.external_data_enabled %} display:none;{% endif %}"
+                     role="note" aria-label="External data notice">
+                  <span aria-hidden="true">&#9888;</span> <strong>Notice:</strong> RetroIPTVGuide does not provide sports data.
+                  You are responsible for any external data source you configure and for complying
+                  with that provider&#39;s terms of use.
+                </div>
+              </div>
+              <!-- Mode selector -->
               <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
                 <label>Display Mode</label>
                 <div class="form-row form-row-inline" style="gap:16px; align-items:center;">
@@ -394,7 +411,7 @@
                     <input type="radio" name="ch_sports_mode" value="scores"
                            class="sp-mode-radio"
                            {% if sports_config.mode != 'rss' %}checked{% endif %}>
-                    <span>&#127942; Live Scores <span class="muted small">(ESPN scoreboard by league)</span></span>
+                    <span>&#127942; Live Scores <span class="muted small">(external JSON scores feed by league)</span></span>
                   </label>
                   <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                     <input type="radio" name="ch_sports_mode" value="rss"
@@ -407,7 +424,12 @@
               <!-- Scores section -->
               <div class="vc-prefs-field vc-prefs-field-wide sp-scores-section"
                    style="width:100%;flex-basis:100%;{% if sports_config.mode == 'rss' %}display:none;{% endif %}">
-                <label>&#127942; Leagues to Display <span class="muted small">(cycles through enabled leagues every 60 s)</span></label>
+                <label>Scores API Base URL <span class="muted small">(your external scores endpoint &mdash; no default is provided)</span></label>
+                <input type="url" name="ch_sports_scores_base_url"
+                       value="{{ sports_config.scores_base_url or '' }}"
+                       placeholder="https://your-scores-api.example.com/api/sports"
+                       maxlength="500" style="width:100%; box-sizing:border-box;">
+                <label style="margin-top:10px; display:block;">&#127942; Leagues to Display <span class="muted small">(cycles through enabled leagues every 60 s)</span></label>
                 <div style="display:flex; flex-wrap:wrap; gap:10px 20px; margin-top:6px;">
                   {% for lg in SPORTS_LEAGUES %}
                   <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -448,6 +470,13 @@
                   document.querySelectorAll('.sp-rss-section').forEach(function(el)   { el.style.display = isRss ? '' : 'none'; });
                 }
                 radios.forEach(function(r) { r.addEventListener('change', toggleSections); });
+                var extToggle = document.getElementById('sp-ext-toggle');
+                var extNotice = document.getElementById('sp-ext-notice');
+                if (extToggle && extNotice) {
+                  extToggle.addEventListener('change', function() {
+                    extNotice.style.display = extToggle.checked ? '' : 'none';
+                  });
+                }
               })();
               </script>
               {% endif %}
@@ -489,7 +518,7 @@
                 </p>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
-                <a href="/nasa" target="_blank" class="btn-link small">&#127760; Preview NASA Page &#8599;</a>
+                <a href="/nasa" target="_blank" class="btn-link small">&#127760; Preview Space Channel Page &#8599;</a>
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
               <script>
@@ -726,7 +755,7 @@
 
     <!-- Available (disabled) Channels -->
     {% set has_disabled = namespace(v=false) %}
-    {% for ch in VIRTUAL_CHANNELS %}{% if not vc_settings.get(ch.tvg_id, true) %}{% set has_disabled.v = true %}{% endif %}{% endfor %}
+    {% for ch in VIRTUAL_CHANNELS %}{% if not vc_settings.get(ch.tvg_id, false) %}{% set has_disabled.v = true %}{% endif %}{% endfor %}
 
     <section class="card vc-card" aria-labelledby="lbl-available-channels">
       <div class="card-head card-head-collapsible">
@@ -740,7 +769,7 @@
       <div class="card-body" id="available-channels-body" {% if not has_disabled.v %}hidden{% endif %}>
         {% set any_shown = namespace(v=false) %}
         {% for ch in VIRTUAL_CHANNELS %}
-        {% if not vc_settings.get(ch.tvg_id, true) %}
+        {% if not vc_settings.get(ch.tvg_id, false) %}
         {% set any_shown.v = true %}
         <div class="vc-available-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
@@ -781,13 +810,13 @@
     <section class="card vc-card" aria-labelledby="lbl-icon-pack">
       <div class="card-head card-head-collapsible">
         <button type="button" class="collapsible-toggle" id="btn-icon-pack-toggle"
-                aria-expanded="true"
+                aria-expanded="false"
                 aria-controls="icon-pack-body">
-          <span class="collapsible-arrow">&#9660;</span>
+          <span class="collapsible-arrow">&#9654;</span>
           <h2 id="lbl-icon-pack" class="collapsible-heading">&#127912; Channel Icon Pack</h2>
         </button>
       </div>
-      <div class="card-body" id="icon-pack-body">
+      <div class="card-body" id="icon-pack-body" hidden>
         <p class="muted small" style="margin:0 0 10px;">
           Enable the styled icon pack to use custom channel logos instead of the standard icons.
           You can still upload your own logo per channel, which always takes priority.

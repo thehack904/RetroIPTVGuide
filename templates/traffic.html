@@ -259,6 +259,21 @@
       z-index: 1;
     }
     .leaflet-control-attribution { font-size: 9px !important; opacity: 0.8; }
+    /* OSM attribution — always visible over the static-PNG layer */
+    .tf-map-credit {
+      position: absolute;
+      bottom: 3px;
+      right: 4px;
+      z-index: 10;
+      font-size: clamp(7px, 0.8vw, 10px);
+      color: rgba(255,255,255,0.75);
+      background: rgba(0,0,0,0.45);
+      padding: 1px 4px;
+      border-radius: 2px;
+      pointer-events: none;
+      line-height: 1.4;
+      white-space: nowrap;
+    }
 
     /* ── Ticker ── */
     .tf-ticker-bar {
@@ -767,6 +782,7 @@
               '<img id="tf-static-map" src="" alt="basemap">'+
               '<canvas id="tf-overlay"></canvas>'+
               '<div id="tf-map"></div>'+
+              '<div class="tf-map-credit">Map data \u00a9 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" aria-label="OpenStreetMap copyright information" style="color:inherit;text-decoration:none;pointer-events:auto;">OpenStreetMap</a> contributors</div>'+
             '</div>'+
           '</div>'+
         '</div>'+

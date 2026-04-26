@@ -4,7 +4,28 @@ This page covers common problems and how to fix them.
 
 ---
 
-## Cannot Access the Web Interface
+## Installer Asks to Clone from GitHub Unexpectedly
+
+**Symptom:** Running the installer prompts:
+> "The full RetroIPTVGuide repository was not detected in the current directory.
+> The installer needs to clone it from GitHub…"
+
+**Cause:** The installer checks for `app.py` and `requirements.txt` in the same
+directory as the script. If those files are absent it assumes the full release was not
+downloaded and offers to clone from GitHub.
+
+**Common causes and fixes:**
+
+| Situation | Fix |
+|-----------|-----|
+| Ran `curl … \| sudo bash` — full repo was never downloaded | Answer `yes` to let the installer clone, or use `--yes` to skip the prompt |
+| Extracted the release ZIP but ran the script from a different directory | `cd` into the extracted directory first, then re-run the script |
+| Only the installer script was downloaded, not the full archive | Download the full `.zip` or `.tar.gz` from the [Releases page](https://github.com/thehack904/RetroIPTVGuide/releases) and extract it, then run the script from inside that folder |
+| Windows: running from a path other than the extracted folder | Open PowerShell **inside** the extracted folder and run `.\retroiptv_windows.ps1 install` |
+
+---
+
+
 
 **Symptom:** `http://<server-ip>:5000` does not load.
 
@@ -129,7 +150,7 @@ sudo chattr -i /home/iptv/iptv-server/config/users.db
    | Weather | `api.open-meteo.com` |
    | News | Configured RSS feed URLs |
    | Traffic | `overpass-api.de` |
-   | Sports | ESPN API / sports RSS feeds |
+   | Sports | User-configured external data source (RSS feeds or JSON scores endpoint) |
    | NASA | `api.nasa.gov` |
    | On This Day | `en.wikipedia.org` |
 

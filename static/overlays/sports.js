@@ -1,8 +1,9 @@
 /* Sports overlay renderer (v1)
  * Renders the retro TV sports broadcast layout into the virtual channel
- * overlay.  Handles both 'scores' mode (ESPN scoreboard) and 'rss' mode
- * (user-supplied RSS/Atom feeds), matching the /sports standalone page design
- * but using a blue colour palette consistent with the other virtual channels.
+ * overlay.  Handles both 'scores' mode (user-configured external JSON feed)
+ * and 'rss' mode (user-supplied RSS/Atom feeds), matching the /sports
+ * standalone page design but using a blue colour palette consistent with the
+ * other virtual channels.
  * Compact: base font-size is set proportional to the container width in JS so
  * every em-based value scales together.
  * Endpoint: GET /api/sports

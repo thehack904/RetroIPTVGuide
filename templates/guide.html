@@ -789,7 +789,12 @@ function playChannel(url, cid, name) {
 
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (Hls.isSupported()) {
-        hlsInstance = new Hls();
+        hlsInstance = new Hls({
+            liveSyncDurationCount: 6,
+            liveMaxLatencyDurationCount: 12,
+            initialLiveManifestSize: 6,
+            maxLiveSyncPlaybackRate: 1.1
+        });
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
         hlsInstance.on(Hls.Events.MANIFEST_PARSED, tryPlay);

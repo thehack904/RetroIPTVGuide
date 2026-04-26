@@ -6,7 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.9.4 - 2026-04-09
+## v4.9.4 - 2026-04-25
 
 ### Added
 - Added deprecation warning for the Windows installer: the Windows installer (`.bat` / `.ps1`) will be discontinued in **v5.0**. Docker is the recommended deployment going forward.

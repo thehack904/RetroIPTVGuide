@@ -260,14 +260,15 @@ body { font-family: Arial, sans-serif; margin:0; }
 .time-cell { flex: 0 0 var(--timecell-width); width: var(--timecell-width); text-align:center; border-right:1px solid; font-weight:600; }
 
 .chan-name {
-  padding: 10px;
+  padding: 5px 8px;
   height: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   text-align: center;
-  gap: 6px;
+  gap: 2px;
+  font-size: 11px;
   border-bottom: 1px solid;
   cursor: pointer;
   position: relative;
@@ -275,8 +276,9 @@ body { font-family: Arial, sans-serif; margin:0; }
   pointer-events: auto;
   user-select: none;
 }
-.chan-name img { width:36px; height:36px; object-fit:contain; margin-bottom: 4px; }
-.grid-row  { position:relative; height:60px; border-bottom:1px solid; }
+.chan-name img { width:28px; height:28px; object-fit:contain; margin-bottom: 2px; }
+.chan-name span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.grid-row  { position:relative; height:52px; border-bottom:1px solid; }
 .grid-content { position:relative; width: var(--total-width); min-height:100%; }
 .program {
   position:absolute;
@@ -621,7 +623,7 @@ body.retroiptv .summary h3{margin:0 0 8px 0;font-family:"Fredoka One","Poppins",
 body.retroiptv #video{background:#000;border:4px solid rgba(59,15,26,.85);border-radius:6px;box-shadow:0 8px 20px rgba(59,15,26,.12);object-fit:cover;max-width:100%}
 body.retroiptv .chan-col{background:linear-gradient(180deg,var(--chan-col-bg),#f3dbc0);border-right:2px solid rgba(59,15,26,.85)}
 body.retroiptv .grid-col{background:linear-gradient(180deg,#fffefc,#fff)}
-body.retroiptv .chan-name{color:var(--timebar-border);padding:10px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700}
+body.retroiptv .chan-name{color:var(--timebar-border);padding:5px 8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-weight:700}
 body.retroiptv .time-header-wrap,body.retroiptv .time-header-fixed{background:var(--timebar-bg);color:var(--timebar-color);border-bottom:2px solid rgba(59,15,26,.9);box-shadow:0 3px 8px rgba(59,15,26,.06)}
 body.retroiptv .time-cell{color:var(--timebar-color);font-weight:700;padding:6px 10px;border-right:1px solid rgba(255,255,255,.06)}
 body.retroiptv .program{background:linear-gradient(180deg,#fff,#f3e8d6);border:2px solid rgba(59,15,26,.6);color:var(--timebar-border);border-radius:8px;padding:6px 8px;font-size:12px;box-shadow:0 4px 10px rgba(59,15,26,.06);top:3px;height:calc(100% - 6px)}

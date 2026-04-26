@@ -71,13 +71,19 @@ class TestAddTunerValidation:
         with pytest.raises(ValueError, match="XML URL must start with http:// or https://"):
             app_module.add_tuner("TestTuner", "ftp://example.com/epg.xml", "http://example.com/playlist.m3u")
     
-    def test_xml_url_cannot_be_empty(self):
-        """Test that XML URL cannot be empty or whitespace."""
-        with pytest.raises(ValueError, match="cannot be empty"):
-            app_module.add_tuner("TestTuner1", "", "http://example.com/playlist.m3u")
-        
-        with pytest.raises(ValueError, match="cannot be empty"):
-            app_module.add_tuner("TestTuner2", "   ", "http://example.com/playlist2.m3u")
+    def test_xml_url_optional(self):
+        """Test that XML URL is optional – empty or whitespace is allowed for single .m3u8 streams."""
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
+            app_module.add_tuner("NoXmlTuner1", "", "http://example.com/playlist.m3u")
+        tuners = app_module.get_tuners()
+        assert "NoXmlTuner1" in tuners
+        assert tuners["NoXmlTuner1"]["xml"] == ""
+
+        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
+            app_module.add_tuner("NoXmlTuner2", "   ", "http://example.com/playlist2.m3u")
+        tuners = app_module.get_tuners()
+        assert "NoXmlTuner2" in tuners
+        assert tuners["NoXmlTuner2"]["xml"] == "   "
     
     def test_url_reachability_check(self):
         """Test that valid external URLs are accepted without making HTTP requests."""
@@ -101,19 +107,22 @@ class TestAddTunerValidation:
         with pytest.raises(ValueError, match="M3U URL cannot point to link-local"):
             app_module.add_tuner("LinkLocalTuner", "http://example.com/epg.xml", "http://169.254.169.254/latest/meta-data/")
     
-    def test_private_ip_ranges_blocked(self):
-        """Test that private IP ranges are blocked to prevent SSRF."""
+    def test_private_ip_ranges_allowed(self):
+        """Test that private IP ranges are allowed – tuners are commonly on local networks."""
         # 10.0.0.0/8
-        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
-            app_module.add_tuner("PrivateTuner1", "http://example.com/epg.xml", "http://10.0.0.1/playlist.m3u")
-        
+        app_module.add_tuner("PrivateTuner1", "http://example.com/epg.xml", "http://10.0.0.1/playlist.m3u")
+        tuners = app_module.get_tuners()
+        assert "PrivateTuner1" in tuners
+
         # 172.16.0.0/12
-        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
-            app_module.add_tuner("PrivateTuner2", "http://example.com/epg.xml", "http://172.16.0.1/playlist.m3u")
-        
+        app_module.add_tuner("PrivateTuner2", "http://example.com/epg.xml", "http://172.16.0.1/playlist.m3u")
+        tuners = app_module.get_tuners()
+        assert "PrivateTuner2" in tuners
+
         # 192.168.0.0/16
-        with pytest.raises(ValueError, match="M3U URL cannot point to a private IP address range"):
-            app_module.add_tuner("PrivateTuner3", "http://example.com/epg.xml", "http://192.168.1.100/playlist.m3u")
+        app_module.add_tuner("PrivateTuner3", "http://example.com/epg.xml", "http://192.168.1.100/playlist.m3u")
+        tuners = app_module.get_tuners()
+        assert "PrivateTuner3" in tuners
     
     def test_successful_tuner_addition(self):
         """Test successful tuner addition with valid inputs."""

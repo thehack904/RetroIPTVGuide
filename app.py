@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.4-dev"
-APP_RELEASE_DATE = "2026-04-08"
+APP_VERSION = "v4.9.4"
+APP_RELEASE_DATE = "2026-04-25"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -485,11 +485,10 @@ def add_tuner(name, xml_url, m3u_url):
     if name in tuners:
         raise ValueError(f"Tuner '{name}' already exists")
     
-    # Validate XML URL
-    if not xml_url or not xml_url.strip():
-        raise ValueError("XML URL cannot be empty")
-    if not xml_url.startswith(('http://', 'https://')):
-        raise ValueError("XML URL must start with http:// or https://")
+    # Validate XML URL (optional – single .m3u8 stream tuners may omit it)
+    if xml_url and xml_url.strip():
+        if not xml_url.startswith(('http://', 'https://')):
+            raise ValueError("XML URL must start with http:// or https://")
 
     # Validate M3U URL
     if not m3u_url or not m3u_url.strip():
@@ -516,9 +515,6 @@ def add_tuner(name, xml_url, m3u_url):
             # Block link-local addresses (169.254.0.0/16) which could be cloud metadata
             if ip_obj.is_link_local:
                 raise ValueError("M3U URL cannot point to link-local addresses (169.254.0.0/16)")
-            # Block private IP ranges (10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16)
-            if ip_obj.is_private:
-                raise ValueError("M3U URL cannot point to a private IP address range")
             # Block reserved, unspecified, or multicast addresses
             if ip_obj.is_reserved or ip_obj.is_unspecified or ip_obj.is_multicast:
                 raise ValueError("M3U URL cannot point to a reserved or multicast address")
@@ -881,7 +877,7 @@ VIRTUAL_CHANNELS = [
         'overlay_refresh_seconds': 60,
     },
     {
-        'name': 'NASA Imagery',
+        'name': 'Space Channel',
         'logo': '/static/logos/virtual/nasa.svg',
         'url': '',
         'tvg_id': 'virtual.nasa',
@@ -917,8 +913,8 @@ VIRTUAL_CHANNELS = [
 
 def get_virtual_channel_settings():
     """Return a dict mapping each virtual channel tvg_id to its enabled state (bool).
-    Defaults to True (enabled) when no setting has been persisted yet."""
-    defaults = {ch['tvg_id']: True for ch in VIRTUAL_CHANNELS}
+    Defaults to False (disabled) when no setting has been persisted yet."""
+    defaults = {ch['tvg_id']: False for ch in VIRTUAL_CHANNELS}
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -1196,16 +1192,91 @@ def save_sports_feed_urls(urls):
         raise
 
 
+def get_sports_external_data_enabled():
+    """Return whether external sports data fetching is enabled.
+
+    Defaults to ``False`` (disabled) so no external requests are made until the
+    user explicitly opts in and configures a source.
+    """
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='sports.external_data_enabled'")
+            row = c.fetchone()
+            if row is not None:
+                return row[0] == '1'
+    except Exception:
+        logging.exception("get_sports_external_data_enabled failed")
+    return False
+
+
+def save_sports_external_data_enabled(enabled):
+    """Persist whether external sports data fetching is enabled."""
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
+                      "('sports.external_data_enabled', ?)", ('1' if enabled else '0',))
+            conn.commit()
+    except Exception:
+        logging.exception("save_sports_external_data_enabled failed")
+        raise
+
+
+def get_sports_scores_base_url():
+    """Return the user-configured base URL for the scores JSON endpoint.
+
+    Returns an empty string when not configured.  No default value is shipped;
+    users must supply their own compatible endpoint.
+    """
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT value FROM settings WHERE key='sports.scores_base_url'")
+            row = c.fetchone()
+            if row and row[0]:
+                return row[0].rstrip('/')
+    except Exception:
+        logging.exception("get_sports_scores_base_url failed")
+    return ''
+
+
+def save_sports_scores_base_url(url):
+    """Persist the user-configured scores API base URL.
+
+    ``url`` must be an empty string or a valid http/https URL.
+    Raises ``ValueError`` for invalid schemes.
+    """
+    url = str(url).strip().rstrip('/')
+    if url:
+        parsed = urlparse(url)
+        if parsed.scheme not in ('http', 'https') or not parsed.netloc:
+            raise ValueError(f"Invalid scores base URL: {url!r}. Must be an http or https URL.")
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("INSERT OR REPLACE INTO settings (key, value) VALUES "
+                      "('sports.scores_base_url', ?)", (url,))
+            conn.commit()
+    except Exception:
+        logging.exception("save_sports_scores_base_url failed")
+        raise
+
+
 def get_sports_config():
     """Return sports channel configuration dict:
         {
-            'mode':    'scores' | 'rss',
-            'leagues': {league_id: bool, ...},
+            'mode':                 'scores' | 'rss',
+            'leagues':              {league_id: bool, ...},
+            'external_data_enabled': bool,
+            'scores_base_url':      str,
         }
-    Defaults: mode='scores', NFL/NBA/MLB/NHL enabled.
+    Defaults: mode='scores', no leagues pre-enabled, external data disabled.
     """
     mode = get_sports_mode()
-    league_defaults = {lg['id']: lg['id'] in ('nfl', 'nba', 'mlb', 'nhl') for lg in SPORTS_LEAGUES}
+    external_data_enabled = get_sports_external_data_enabled()
+    scores_base_url = get_sports_scores_base_url()
+    league_defaults = {lg['id']: False for lg in SPORTS_LEAGUES}
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -1216,7 +1287,12 @@ def get_sports_config():
                     league_defaults[lg_id] = row[0] == '1'
     except Exception:
         logging.exception("get_sports_config failed")
-    return {'mode': mode, 'leagues': league_defaults}
+    return {
+        'mode': mode,
+        'leagues': league_defaults,
+        'external_data_enabled': external_data_enabled,
+        'scores_base_url': scores_base_url,
+    }
 
 
 def save_sports_config(cfg):
@@ -1236,8 +1312,12 @@ def save_sports_config(cfg):
         raise
 
 
-def fetch_espn_scoreboard(sport, league_slug):
-    """Fetch today's scoreboard from ESPN's public API.
+def fetch_scores(sport, league_slug, base_url):
+    """Fetch today's scoreboard from a user-configured JSON scores endpoint.
+
+    ``base_url`` is the root of the scores API.  The full request URL is built as::
+
+        {base_url}/{sport}/{league_slug}/scoreboard
 
     Returns a list of game dicts:
         {home_team, home_abbr, home_score,
@@ -1245,15 +1325,17 @@ def fetch_espn_scoreboard(sport, league_slug):
          status_text, status_state, clock}
 
     ``status_state`` is one of: 'pre' (scheduled), 'in' (live), 'post' (final).
-    Returns an empty list on any error.
+    Returns an empty list on any error or when ``base_url`` is empty.
     """
-    url = f'https://site.api.espn.com/apis/site/v2/sports/{sport}/{league_slug}/scoreboard'
+    if not base_url:
+        return []
+    url = f'{base_url.rstrip("/")}/{sport}/{league_slug}/scoreboard'
     try:
         resp = requests.get(url, timeout=10)
         resp.raise_for_status()
         data = resp.json()
     except Exception:
-        logging.exception("fetch_espn_scoreboard failed for %s/%s", sport, league_slug)
+        logging.exception("fetch_scores failed for %s/%s", sport, league_slug)
         return []
 
     games = []
@@ -3372,7 +3454,7 @@ def get_virtual_epg(grid_start, hours_span=6):
         'virtual.traffic':     'Traffic Now',
         'virtual.updates':     'Updates & Announcements',
         'virtual.sports':      'Sports Scores',
-        'virtual.nasa':        'NASA Imagery',
+        'virtual.nasa':        'Space Channel',
         'virtual.channel_mix': 'Channel Mix',
         'virtual.on_this_day': 'On This Day',
     }
@@ -3820,6 +3902,10 @@ def virtual_channels():
                         if sports_mode not in ('rss', 'scores'):
                             sports_mode = 'scores'
                         save_sports_mode(sports_mode)
+                        sports_external = request.form.get('ch_sports_external_data_enabled') == '1'
+                        save_sports_external_data_enabled(sports_external)
+                        scores_base_url = request.form.get('ch_sports_scores_base_url', '').strip()
+                        save_sports_scores_base_url(scores_base_url)
                         rss_urls = [request.form.get(f'ch_sports_rss_url_{i}', '').strip()
                                     for i in range(1, 7)]
                         save_sports_feed_urls(rss_urls)
@@ -3997,8 +4083,12 @@ def change_tuner():
                     flash(str(e), "warning")
                     log_event(current_user.username, f"Failed to add combined tuner {name}: {str(e)}")
             else:
-                xml_url = request.form.get("xml_url", "").strip()
-                m3u_url = request.form.get("m3u_url", "").strip()
+                if tuner_mode == "single_stream":
+                    xml_url = ""
+                    m3u_url = request.form.get("m3u8_stream_url", "").strip()
+                else:
+                    xml_url = request.form.get("xml_url", "").strip()
+                    m3u_url = request.form.get("m3u_url", "").strip()
                 try:
                     add_tuner(name, xml_url, m3u_url)
                     log_event(current_user.username, f"Added tuner {name}")
@@ -4337,11 +4427,14 @@ def sports_page():
 def api_sports():
     """Sports overlay data endpoint.
 
-    Branches on the configured mode:
+    Returns a not-configured response when external sports data is disabled.
+
+    When external data is enabled, branches on the configured mode:
     * ``'rss'``    — returns RSS/Atom headlines from up to 6 user-supplied feeds,
                      cycling wall-clock aligned the same way as /api/news.
-    * ``'scores'`` — returns today's game scores from ESPN's public scoreboard API,
-                     cycling through enabled leagues every 60 s (wall-clock aligned).
+    * ``'scores'`` — returns today's game scores from the user-configured scores
+                     endpoint, cycling through enabled leagues every 60 s
+                     (wall-clock aligned).
 
     Both modes include ``mode``, ``ms_until_next``, and ``updated`` in the response.
     """
@@ -4350,6 +4443,18 @@ def api_sports():
     music_filename = get_channel_music_file('virtual.sports')
     music_file = f'/static/audio/{music_filename}' if music_filename else ''
     _now_ts = datetime.now(timezone.utc).timestamp()
+
+    if not sports_cfg.get('external_data_enabled', False):
+        return jsonify({
+            'mode':          mode,
+            'updated':       datetime.now(timezone.utc).isoformat(),
+            'not_configured': True,
+            'league':        None,
+            'games':         [],
+            'headlines':     [],
+            'ms_until_next': 60 * 1000,
+            'music_file':    music_file,
+        })
 
     if mode == 'rss':
         feeds = get_sports_feed_urls()
@@ -4394,7 +4499,8 @@ def api_sports():
     slot_start = datetime.fromtimestamp(slot_start_ts, tz=timezone.utc)
 
     current_league = enabled_leagues[league_index % league_count]
-    games = fetch_espn_scoreboard(current_league['sport'], current_league['league_slug'])
+    scores_base_url = sports_cfg.get('scores_base_url', '')
+    games = fetch_scores(current_league['sport'], current_league['league_slug'], scores_base_url)
     return jsonify({
         'mode':          'scores',
         'updated':       slot_start.isoformat(),

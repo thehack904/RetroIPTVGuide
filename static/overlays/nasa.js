@@ -346,7 +346,7 @@
       ? esc(img.title || '') + ' — ' + formatDate(img.date || '') +
         ' \u2022 Image ' + (imageIndex + 1) + ' of ' + totalImages +
         ' \u2022 ' + interval + '-Minute Cycle \u2022 '
-      : 'NASA Astronomy Picture of the Day \u2022 ';
+      : 'Astronomy Picture of the Day \u2022 ';
     const tickText = tickBase.repeat(3);
 
     // Header / cycle label
@@ -357,17 +357,17 @@
         '<div class="vc-nasa-header">' +
           '<div class="vc-nasa-header-left">' +
             '<span style="font-size:1.5em">&#127760;</span>' +
-            '<span class="vc-nasa-brand">RetroIPTV <strong>NASA</strong></span>' +
+            '<span class="vc-nasa-brand">RetroIPTV <strong>Space Channel</strong></span>' +
           '</div>' +
           '<div class="vc-nasa-header-right">' + esc(cycleLabel) + '</div>' +
         '</div>' +
         '<div class="vc-nasa-no-data">' +
           '<div class="vc-nasa-no-data-icon">&#128301;</div>' +
           '<div class="vc-nasa-no-data-text">No Images Available</div>' +
-          '<div class="vc-nasa-no-data-hint">NASA Astronomy Pictures of the Day are temporarily unavailable. Check Virtual Channels settings or try again shortly.</div>' +
+          '<div class="vc-nasa-no-data-hint">Space Channel images are temporarily unavailable. Check Virtual Channels settings or try again shortly.</div>' +
         '</div>' +
         '<div class="vc-nasa-ticker-bar">' +
-          '<div class="vc-nasa-ticker-label">NASA APOD:</div>' +
+          '<div class="vc-nasa-ticker-label">APOD:</div>' +
           '<div class="vc-nasa-ticker-scroll">' +
             '<span class="vc-nasa-ticker-track">No images loaded \u2022 </span>' +
           '</div>' +
@@ -385,7 +385,7 @@
         '<div class="vc-nasa-header">' +
           '<div class="vc-nasa-header-left">' +
             '<span style="font-size:1.5em">&#127760;</span>' +
-            '<span class="vc-nasa-brand">RetroIPTV <strong>NASA</strong></span>' +
+            '<span class="vc-nasa-brand">RetroIPTV <strong>Space Channel</strong></span>' +
           '</div>' +
           '<div class="vc-nasa-header-right">' + esc(cycleLabel) + '</div>' +
         '</div>' +
@@ -403,7 +403,7 @@
           '<div class="vc-nasa-progress-bar" id="vc-nasa-progress" style="width:' + pct.toFixed(1) + '%"></div>' +
         '</div>' +
         '<div class="vc-nasa-ticker-bar">' +
-          '<div class="vc-nasa-ticker-label">NASA APOD:</div>' +
+          '<div class="vc-nasa-ticker-label">APOD:</div>' +
           '<div class="vc-nasa-ticker-scroll">' +
             '<span class="vc-nasa-ticker-track">' + tickText + '</span>' +
           '</div>' +
