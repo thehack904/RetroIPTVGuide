@@ -542,6 +542,14 @@ class TestTrafficPage:
         assert b'RetroIPTV Traffic' in resp.data
         assert b'(Simulated)' in resp.data
 
+    def test_page_has_osm_attribution(self, client):
+        """traffic.html must include 'OpenStreetMap contributors' map attribution for OSM compliance."""
+        login(client)
+        resp = client.get('/traffic')
+        assert b'OpenStreetMap' in resp.data
+        assert b'contributors' in resp.data
+        assert b'tf-map-credit' in resp.data
+
 
 # ─── _overpass_to_geojson helper ─────────────────────────────────────────────
 

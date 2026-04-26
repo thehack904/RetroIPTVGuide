@@ -1,7 +1,7 @@
 <# 
 RetroIPTVGuide Windows Installer/Uninstaller
 Filename: retroiptv_windows.ps1
-Version: 4.9.3
+Version: 4.9.4
 
 License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International
 https://creativecommons.org/licenses/by-nc-sa/4.0/
@@ -55,7 +55,7 @@ if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdent
 $ErrorActionPreference = 'Stop'
 $PSDefaultParameterValues['Out-File:Encoding'] = 'utf8'
 
-$VERSION = "4.9.3"
+$VERSION = "4.9.4"
 $ScriptDir = Split-Path -Parent -Path $MyInvocation.MyCommand.Path
 Set-Location $ScriptDir
 
@@ -146,6 +146,13 @@ Write-Info ""
 Write-Info "=== RetroIPTVGuide Unified Script (v$VERSION) ==="
 Write-Info ("Start time: {0}" -f (Get-Date))
 Write-Info ("Log file: {0}" -f $logFile)
+Write-Info ""
+Write-Host "============================================================" -ForegroundColor Yellow
+Write-Host " DEPRECATION NOTICE                                         " -ForegroundColor Yellow
+Write-Host " The Windows installer will be discontinued in v5.0.       " -ForegroundColor Yellow
+Write-Host " Docker is the recommended deployment method going forward. " -ForegroundColor Yellow
+Write-Host " See INSTALL.md for Docker installation instructions.      " -ForegroundColor Yellow
+Write-Host "============================================================" -ForegroundColor Yellow
 Write-Info ""
 
 # -------------------------------
@@ -333,23 +340,34 @@ function Ensure-AppFiles {
   
   $appPy = Join-Path $ScriptDir "app.py"
   
-  # Check if we're in a git repository
-  if (Test-Path (Join-Path $ScriptDir ".git")) {
-    Write-Ok "Running from git repository."
-    if (-not (Test-Path $appPy)) {
-      Write-ErrorMsg "app.py not found in repository. Repository may be corrupted."
-      throw "AppPyNotFound"
-    }
+  # If the full release is present in the script's own directory (ZIP download or
+  # git clone), use those files directly without touching the network.
+  $reqTxt = Join-Path $ScriptDir "requirements.txt"
+  if ((Test-Path $appPy) -and (Test-Path $reqTxt)) {
+    Write-Ok "Full release detected in '$ScriptDir'. Using local files."
     return
   }
-  
-  # Not in a git repo - need to clone it
-  Write-Warn "This installer is not running from a git repository."
-  Write-Info "The RetroIPTVGuide repository will be cloned to continue installation."
-  
+
+  # Check if we're in a git repository (app.py absent but .git exists — corrupted?)
+  if (Test-Path (Join-Path $ScriptDir ".git")) {
+    Write-Warn "Running from git repository but app.py is missing. Repository may be corrupted."
+    throw "AppPyNotFound"
+  }
+
+  # Full repo not found locally — ask the user before cloning.
+  Write-Warn ""
+  Write-Warn "The full RetroIPTVGuide repository was not detected in the current directory."
+  Write-Info "The installer needs to clone it from GitHub to continue."
+  Write-Info ""
+
+  if (-not (Confirm-YesNo "Proceed with cloning from GitHub?")) {
+    Write-Warn "Installation aborted by user."
+    exit 1
+  }
+
   $installPath = "C:\RetroIPTVGuide"
   $repoUrl = "https://github.com/thehack904/RetroIPTVGuide.git"
-  
+
   if (Test-Path $installPath) {
     Write-Warn "Directory $installPath already exists."
     if (-not (Confirm-YesNo "Remove existing directory and clone fresh?")) {
@@ -364,7 +382,7 @@ function Ensure-AppFiles {
       throw
     }
   }
-  
+
   Write-Info "Cloning repository to $installPath..."
   try {
     git clone $repoUrl $installPath
@@ -376,14 +394,14 @@ function Ensure-AppFiles {
     Write-ErrorMsg "Failed to clone repository: $_"
     throw
   }
-  
+
   # Update script directory to the cloned repo
   Write-Info "Switching to repository directory..."
   Set-Location $installPath
   $script:ScriptDir = $installPath
   $script:VenvDir = Join-Path $ScriptDir "venv"
   $script:VenvPy = Join-Path $VenvDir "Scripts\python.exe"
-  
+
   Write-Ok "Now working from $installPath"
 }
 

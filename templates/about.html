@@ -8,6 +8,18 @@
 {% block content %}
 <div class="container-about">
 
+  {% if sys_platform == 'win32' %}
+  <div class="box" style="border: 2px solid #f0ad4e; background: rgba(240,173,78,0.08); margin-bottom: 18px;">
+    <h3 style="color: #f0ad4e; margin: 0 0 8px;">⚠️ Windows Installer Deprecation Notice</h3>
+    <p style="margin: 0; font-size: 0.95rem; line-height: 1.6;">
+      The Windows installer (<code>.bat</code> / <code>.ps1</code>) will be <strong>discontinued in v5.0</strong>.
+      Docker is the recommended deployment method going forward.
+      See <a href="https://github.com/thehack904/RetroIPTVGuide/blob/main/INSTALL.md" target="_blank" rel="noopener noreferrer" style="color:#f0ad4e;">INSTALL.md</a>
+      for Docker installation instructions.
+    </p>
+  </div>
+  {% endif %}
+
   <div class="box about-box">
     <h2>📺 RetroIPTVGuide</h2>
     <p style="text-align:center;margin:0 0 16px;font-size:0.97rem;opacity:0.85;">

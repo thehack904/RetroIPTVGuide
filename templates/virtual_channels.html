@@ -37,7 +37,7 @@
 
     <!-- Enabled Channels -->
     {% set enabled_count = namespace(n=0) %}
-    {% for ch in VIRTUAL_CHANNELS %}{% if vc_settings.get(ch.tvg_id, true) %}{% set enabled_count.n = enabled_count.n + 1 %}{% endif %}{% endfor %}
+    {% for ch in VIRTUAL_CHANNELS %}{% if vc_settings.get(ch.tvg_id, false) %}{% set enabled_count.n = enabled_count.n + 1 %}{% endif %}{% endfor %}
 
     <section class="card vc-card" aria-labelledby="lbl-enabled-channels">
       <div class="card-head">
@@ -45,7 +45,7 @@
       </div>
       <div class="card-body vc-card-body">
         {% for ch in VIRTUAL_CHANNELS %}
-        {% if vc_settings.get(ch.tvg_id, true) %}
+        {% if vc_settings.get(ch.tvg_id, false) %}
         <div class="vc-enabled-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
             {% if ch.logo %}<img src="{{ ch.logo }}" alt="" class="vc-logo-lg">{% endif %}
@@ -53,7 +53,7 @@
               <span class="vc-item-name">{{ ch.name }}</span>
               <span class="vc-item-sub muted small">
                 {% if ch.tvg_id == 'virtual.weather' %}
-                  Location: {{ weather_config.location_name or 'Not set' }}&nbsp;&nbsp;Units: &deg;{{ weather_config.units or 'F' }}
+                  Location: {{ weather_config.location_name or 'Not set' }}&nbsp;&nbsp;Units: &deg;{{ weather_config.units or 'F' }}&nbsp;&nbsp;Rotation: {{ weather_config.seconds_per_segment or '300' }}s/segment
                 {% elif ch.tvg_id == 'virtual.news' %}
                   Source: {{ 'News Feed (Auto)' if not news_feed_urls else news_feed_urls|length ~ ' RSS Feed' ~ ('' if news_feed_urls|length == 1 else 's') }}
                 {% elif ch.tvg_id == 'virtual.status' %}
@@ -61,7 +61,7 @@
                 {% elif ch.tvg_id == 'virtual.traffic' %}
                   Mode: {{ 'Admin Rotation' if traffic_demo_config.mode != 'random_pack' else 'Random Pack' }}&nbsp;&nbsp;Interval: {{ traffic_demo_config.rotation_seconds or '120' }}s
                 {% elif ch.tvg_id == 'virtual.updates' %}
-                  GitHub Release Notes{% if updates_config.show_beta %} &amp; Beta Alerts{% endif %}
+                  GitHub Release Notes{% if updates_config.show_beta %} &amp; Pre-release Alerts{% endif %}
                 {% elif ch.tvg_id == 'virtual.sports' %}
                   {% if sports_config.mode == 'rss' %}
                     {% set feed_count = sports_feed_urls | select | list | length %}
@@ -152,6 +152,23 @@
                   <option value="F" {% if weather_config.units != 'C' %}selected{% endif %}>&#176;F &mdash; Fahrenheit</option>
                   <option value="C" {% if weather_config.units == 'C' %}selected{% endif %}>&#176;C &mdash; Celsius</option>
                 </select>
+              </div>
+              <div class="vc-prefs-field">
+                <label>Segment Duration
+                  <span class="muted small">(time on each of the 4 screens)</span>
+                </label>
+                <select name="ch_weather_seconds_per_segment">
+                  {% set cur_sps = (weather_config.seconds_per_segment or '300') | int %}
+                  <option value="60"  {% if cur_sps == 60  %}selected{% endif %}>1 minute &mdash; 4-min cycle</option>
+                  <option value="120" {% if cur_sps == 120 %}selected{% endif %}>2 minutes &mdash; 8-min cycle</option>
+                  <option value="180" {% if cur_sps == 180 %}selected{% endif %}>3 minutes &mdash; 12-min cycle</option>
+                  <option value="300" {% if cur_sps == 300 %}selected{% endif %}>5 minutes &mdash; 20-min cycle (default)</option>
+                  <option value="600" {% if cur_sps == 600 %}selected{% endif %}>10 minutes &mdash; 40-min cycle</option>
+                </select>
+                <p class="muted small" style="margin-top:4px;">
+                  Cycles: Current Conditions &#8594; 5-Day Forecast &#8594; Regional Radar &#8594; Severe Weather Alerts, then repeats.
+                  All viewers stay in sync (wall-clock aligned).
+                </p>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
                 <a href="/weather" target="_blank" class="btn-link small">&#127780; Preview Weather Page &#8599;</a>
@@ -266,7 +283,7 @@
                 </div>
               </div>
               <div class="vc-prefs-field" style="align-items:center; gap:10px; display:flex; flex-wrap:wrap;">
-                <label class="toggle-switch" title="Show pre-release / beta versions on this channel">
+                <label class="toggle-switch" title="Show pre-release versions on this channel">
                   <input type="checkbox"
                          name="ch_updates_show_beta"
                          value="1"
@@ -276,12 +293,12 @@
                   <span class="toggle-slider"></span>
                 </label>
                 <span>
-                  Show Beta / Pre-release versions
+                  Show pre-release versions
                   <span class="muted small" style="margin-left:4px;">
                     &mdash; when enabled, pre-releases are shown with a
                     <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
                                  font-size:0.75em; letter-spacing:0.07em; text-transform:uppercase;
-                                 padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                                 padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Pre-release</span>
                     badge; when disabled, only stable releases appear.
                   </span>
                 </span>
@@ -291,7 +308,7 @@
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
 
-              <!-- Beta info modal — admin page only, triggered when beta toggle is turned ON -->
+              <!-- Pre-release info modal — admin page only, triggered when pre-release toggle is turned ON -->
               <div id="betaInfoModal" role="dialog" aria-modal="true" aria-labelledby="betaModalTitle"
                    style="display:none; position:fixed; inset:0; z-index:9000;
                           background:rgba(0,0,0,0.65); backdrop-filter:blur(3px);
@@ -304,23 +321,23 @@
                     <div>
                       <h3 id="betaModalTitle" style="margin:0 0 6px; font-size:1.05em; font-weight:900;
                                                      letter-spacing:0.04em; text-transform:uppercase;
-                                                     color:#ffd700;">Beta Versions Enabled</h3>
+                                                     color:#ffd700;">Pre-release Versions Enabled</h3>
                       <p style="margin:0; font-size:0.88em; color:#c8d8ff; line-height:1.55;">
-                        You have enabled <strong style="color:#ffd700;">pre-release / beta</strong>
+                        You have enabled <strong style="color:#ffd700;">pre-release</strong>
                         versions on the Updates &amp; Announcements channel.
                       </p>
                     </div>
                   </div>
                   <ul style="margin:0 0 18px 1.1em; padding:0; font-size:0.85em; color:#a8c8ff;
                               line-height:1.7; list-style:disc;">
-                    <li>Beta releases may contain <strong style="color:#fff;">incomplete features</strong>
+                    <li>Pre-release versions may contain <strong style="color:#fff;">incomplete features</strong>
                         or <strong style="color:#fff;">known bugs</strong>.</li>
                     <li>They are intended for testing and feedback &mdash; <strong style="color:#fff;">not
                         for production use</strong>.</li>
-                    <li>Beta info will appear on this channel with a
+                    <li>Pre-release info will appear on this channel with a
                         <span style="display:inline-block; background:#ffd700; color:#0a0e2a; font-weight:700;
                                      font-size:0.78em; letter-spacing:0.07em; text-transform:uppercase;
-                                     padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Beta</span>
+                                     padding:0.1em 0.4em; border-radius:2px; vertical-align:middle;">Pre-release</span>
                         badge.</li>
                     <li>Disable this toggle at any time to return to <strong style="color:#fff;">stable
                         releases only</strong>.</li>
@@ -370,6 +387,23 @@
               </script>
               {% endif %}
               {% if ch.tvg_id == 'virtual.sports' %}
+              <!-- External data enable toggle + disclaimer -->
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
+                <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                  <input type="checkbox" name="ch_sports_external_data_enabled" value="1"
+                         id="sp-ext-toggle"
+                         {% if sports_config.external_data_enabled %}checked{% endif %}>
+                  <span>Enable external sports data</span>
+                </label>
+                <div id="sp-ext-notice"
+                     style="margin-top:8px; padding:10px 14px; background:#1a1a2e; border-left:3px solid #f0ad4e; border-radius:3px; font-size:0.85em; color:#d4b96a; line-height:1.5;{% if not sports_config.external_data_enabled %} display:none;{% endif %}"
+                     role="note" aria-label="External data notice">
+                  <span aria-hidden="true">&#9888;</span> <strong>Notice:</strong> RetroIPTVGuide does not provide sports data.
+                  You are responsible for any external data source you configure and for complying
+                  with that provider&#39;s terms of use.
+                </div>
+              </div>
+              <!-- Mode selector -->
               <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
                 <label>Display Mode</label>
                 <div class="form-row form-row-inline" style="gap:16px; align-items:center;">
@@ -377,7 +411,7 @@
                     <input type="radio" name="ch_sports_mode" value="scores"
                            class="sp-mode-radio"
                            {% if sports_config.mode != 'rss' %}checked{% endif %}>
-                    <span>&#127942; Live Scores <span class="muted small">(ESPN scoreboard by league)</span></span>
+                    <span>&#127942; Live Scores <span class="muted small">(external JSON scores feed by league)</span></span>
                   </label>
                   <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
                     <input type="radio" name="ch_sports_mode" value="rss"
@@ -390,7 +424,12 @@
               <!-- Scores section -->
               <div class="vc-prefs-field vc-prefs-field-wide sp-scores-section"
                    style="width:100%;flex-basis:100%;{% if sports_config.mode == 'rss' %}display:none;{% endif %}">
-                <label>&#127942; Leagues to Display <span class="muted small">(cycles through enabled leagues every 60 s)</span></label>
+                <label>Scores API Base URL <span class="muted small">(your external scores endpoint &mdash; no default is provided)</span></label>
+                <input type="url" name="ch_sports_scores_base_url"
+                       value="{{ sports_config.scores_base_url or '' }}"
+                       placeholder="https://your-scores-api.example.com/api/sports"
+                       maxlength="500" style="width:100%; box-sizing:border-box;">
+                <label style="margin-top:10px; display:block;">&#127942; Leagues to Display <span class="muted small">(cycles through enabled leagues every 60 s)</span></label>
                 <div style="display:flex; flex-wrap:wrap; gap:10px 20px; margin-top:6px;">
                   {% for lg in SPORTS_LEAGUES %}
                   <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
@@ -431,6 +470,13 @@
                   document.querySelectorAll('.sp-rss-section').forEach(function(el)   { el.style.display = isRss ? '' : 'none'; });
                 }
                 radios.forEach(function(r) { r.addEventListener('change', toggleSections); });
+                var extToggle = document.getElementById('sp-ext-toggle');
+                var extNotice = document.getElementById('sp-ext-notice');
+                if (extToggle && extNotice) {
+                  extToggle.addEventListener('change', function() {
+                    extNotice.style.display = extToggle.checked ? '' : 'none';
+                  });
+                }
               })();
               </script>
               {% endif %}
@@ -472,7 +518,7 @@
                 </p>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px;">
-                <a href="/nasa" target="_blank" class="btn-link small">&#127760; Preview NASA Page &#8599;</a>
+                <a href="/nasa" target="_blank" class="btn-link small">&#127760; Preview Space Channel Page &#8599;</a>
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
               <script>
@@ -709,7 +755,7 @@
 
     <!-- Available (disabled) Channels -->
     {% set has_disabled = namespace(v=false) %}
-    {% for ch in VIRTUAL_CHANNELS %}{% if not vc_settings.get(ch.tvg_id, true) %}{% set has_disabled.v = true %}{% endif %}{% endfor %}
+    {% for ch in VIRTUAL_CHANNELS %}{% if not vc_settings.get(ch.tvg_id, false) %}{% set has_disabled.v = true %}{% endif %}{% endfor %}
 
     <section class="card vc-card" aria-labelledby="lbl-available-channels">
       <div class="card-head card-head-collapsible">
@@ -723,7 +769,7 @@
       <div class="card-body" id="available-channels-body" {% if not has_disabled.v %}hidden{% endif %}>
         {% set any_shown = namespace(v=false) %}
         {% for ch in VIRTUAL_CHANNELS %}
-        {% if not vc_settings.get(ch.tvg_id, true) %}
+        {% if not vc_settings.get(ch.tvg_id, false) %}
         {% set any_shown.v = true %}
         <div class="vc-available-item" data-tvg-id="{{ ch.tvg_id }}">
           <div class="vc-item-left">
@@ -764,13 +810,13 @@
     <section class="card vc-card" aria-labelledby="lbl-icon-pack">
       <div class="card-head card-head-collapsible">
         <button type="button" class="collapsible-toggle" id="btn-icon-pack-toggle"
-                aria-expanded="true"
+                aria-expanded="false"
                 aria-controls="icon-pack-body">
-          <span class="collapsible-arrow">&#9660;</span>
+          <span class="collapsible-arrow">&#9654;</span>
           <h2 id="lbl-icon-pack" class="collapsible-heading">&#127912; Channel Icon Pack</h2>
         </button>
       </div>
-      <div class="card-body" id="icon-pack-body">
+      <div class="card-body" id="icon-pack-body" hidden>
         <p class="muted small" style="margin:0 0 10px;">
           Enable the styled icon pack to use custom channel logos instead of the standard icons.
           You can still upload your own logo per channel, which always takes priority.
@@ -952,30 +998,6 @@ document.addEventListener('DOMContentLoaded', () => {
   // Drag-and-drop channel order
   const orderList = document.getElementById('channel-order-list');
   if (orderList) {
-    let dragging = null;
-    orderList.addEventListener('dragstart', e => {
-      dragging = e.target.closest('.channel-order-item');
-      if (dragging) dragging.classList.add('dragging');
-    });
-    orderList.addEventListener('dragend', () => {
-      if (dragging) dragging.classList.remove('dragging');
-      dragging = null;
-      orderList.querySelectorAll('.channel-order-item').forEach((item, i) => {
-        const num = item.querySelector('.order-num');
-        if (num) num.textContent = i + 1;
-      });
-    });
-    orderList.addEventListener('dragover', e => {
-      e.preventDefault();
-      const over = e.target.closest('.channel-order-item');
-      if (over && dragging && over !== dragging) {
-        const rect = over.getBoundingClientRect();
-        const mid = rect.top + rect.height / 2;
-        if (e.clientY < mid) orderList.insertBefore(dragging, over);
-        else orderList.insertBefore(dragging, over.nextSibling);
-      }
-    });
-
     const saveBtn = document.getElementById('channel-order-save-btn');
     const saveStatus = document.getElementById('channel-order-save-status');
 
@@ -995,7 +1017,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Enforce on load in case server order differs
     enforceMixLast();
 
-    if (orderList) {
     let dragging = null;
     orderList.addEventListener('dragstart', e => {
       dragging = e.target.closest('.channel-order-item');
@@ -1025,7 +1046,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // If that accidentally pushed past Channel Mix, enforceMixLast will fix it on dragend
       }
     });
-    }
 
     if (saveBtn) {
       saveBtn.addEventListener('click', () => {

@@ -56,6 +56,8 @@
                       <li><a href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
                       <li><a href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
                       <li><a href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                      <li><a href="#" data-theme-selector data-theme="classic-cable">Classic Cable</a></li>
+                      <li><a href="#" data-theme-selector data-theme="ersatztv" title="Inspired by ErsatzTV">Icon Guide</a></li>
                     </ul>
                   </li>
                   <li class="submenu">
@@ -101,7 +103,6 @@
               <li><a href="{{ url_for('virtual_channels') }}">Virtual Channels</a></li>
               <li><a href="{{ url_for('manage_users') }}" id="manageUsersMenu">Manage Users</a></li>
               <li><a href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
-              <li><a href="{{ url_for('about') }}">System Info</a></li>
               {% endif %}
           </div>
       </div>
@@ -224,6 +225,8 @@
                   <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="tvguide1990">TV Guide (Classic)</a></li>
                   <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="directv">DirecTV</a></li>
                   <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="comcast">Comcast</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="classic-cable">Classic Cable</a></li>
+                  <li role="none"><a role="menuitem" href="#" data-theme-selector data-theme="ersatztv" title="Inspired by ErsatzTV">Icon Guide</a></li>
                 </ul>
               </li>
               <li class="mobile-submenu" role="none">
@@ -300,7 +303,6 @@
           <li role="none"><a role="menuitem" href="{{ url_for('virtual_channels') }}">Virtual Channels</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('manage_users') }}">Manage Users</a></li>
           <li role="none"><a role="menuitem" href="{{ url_for('admin_diagnostics.diagnostics_index') }}">Diagnostics</a></li>
-          <li role="none"><a role="menuitem" href="{{ url_for('about') }}">System Info</a></li>
           {% endif %}
 
         </ul>

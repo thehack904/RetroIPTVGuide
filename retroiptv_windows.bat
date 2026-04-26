@@ -3,7 +3,7 @@ mode con: cols=160 lines=50
 
 REM ============================================================
 REM RetroIPTVGuide Windows Unified Installer / Uninstaller
-REM Version: v4.9.3
+REM Version: v4.9.4
 REM License: Creative Commons BY-NC-SA 4.0
 REM ============================================================
 
@@ -31,7 +31,7 @@ if /i "%choice%"=="Y" (
 
 :continue
 setlocal
-set "VERSION=4.9.3"
+set "VERSION=4.9.4"
 set "REPO_URL=https://github.com/thehack904/RetroIPTVGuide.git"
 set "ZIP_URL=https://github.com/thehack904/RetroIPTVGuide/archive/refs/heads/main.zip"
 set "INSTALL_DIR=%~dp0RetroIPTVGuide"
@@ -48,6 +48,13 @@ echo ============================================================
 echo   RetroIPTVGuide  ^|  Windows Edition (Headless Installer)
 echo   Version %VERSION%
 echo ============================================================
+echo.
+echo  ************************************************************
+echo  *  DEPRECATION NOTICE                                      *
+echo  *  The Windows installer will be discontinued in v5.0.    *
+echo  *  Docker is the recommended deployment method.           *
+echo  *  See INSTALL.md for Docker installation instructions.   *
+echo  ************************************************************
 echo.
 echo  This launcher prepares your Windows environment to safely run
 echo  the RetroIPTVGuide PowerShell installer.

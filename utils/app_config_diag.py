@@ -19,7 +19,7 @@ import sys
 import time
 import socket
 from typing import Any, Dict, List
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +123,7 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
         ("virtual.traffic",     "Traffic Now"),
         ("virtual.updates",     "Updates & Announcements"),
         ("virtual.sports",      "Sports Now"),
-        ("virtual.nasa",        "NASA Imagery"),
+        ("virtual.nasa",        "Space Channel"),
         ("virtual.channel_mix", "Channel Mix"),
         ("virtual.on_this_day", "On This Day"),
     ]
@@ -132,7 +132,7 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
     warnings = []
 
     for tvg_id, name in VIRTUAL_IDS:
-        enabled_val = settings.get(f"virtual_channel.{tvg_id}.enabled", "1")
+        enabled_val = settings.get(f"virtual_channel.{tvg_id}.enabled", "0")
         enabled = (enabled_val == "1")
 
         entry: Dict[str, Any] = {
@@ -193,21 +193,34 @@ def check_virtual_channels(tuner_db_path: str) -> Dict[str, Any]:
 
         elif tvg_id == "virtual.sports":
             mode = settings.get("sports.mode", "scores").strip() or "scores"
+            external_data_enabled = settings.get("sports.external_data_enabled", "0") == "1"
+            scores_base_url = settings.get("sports.scores_base_url", "").strip()
             feed_urls = []
             for i in range(1, 7):
                 val = settings.get(f"sports.rss_url_{i}", "").strip()
                 if val:
                     feed_urls.append(val)
-            entry["sports_config"] = {"mode": mode, "rss_feed_count": len(feed_urls)}
-            if mode == "rss" and not feed_urls:
+            entry["sports_config"] = {
+                "mode": mode,
+                "external_data_enabled": external_data_enabled,
+                "rss_feed_count": len(feed_urls),
+            }
+            if not external_data_enabled:
+                entry["config_issues"].append("External sports data is disabled. Enable it in Sports Settings to fetch live data.")
+            elif mode == "rss" and not feed_urls:
                 entry["config_ok"] = False
                 entry["config_issues"].append("Sports channel is in RSS mode but no RSS feed URLs are configured.")
                 if enabled:
                     warnings.append(f"{name}: RSS mode selected but no feed URLs configured")
             elif mode == "rss":
                 entry["config_issues"].append(f"RSS mode: {len(feed_urls)} feed(s) configured.")
+            elif mode == "scores" and not scores_base_url:
+                entry["config_ok"] = False
+                entry["config_issues"].append("Scores mode: no scores API base URL configured.")
+                if enabled:
+                    warnings.append(f"{name}: Scores mode selected but no scores base URL configured")
             else:
-                entry["config_issues"].append("Scores mode: uses ESPN live scoreboard API.")
+                entry["config_issues"].append(f"Scores mode: using configured base URL.")
 
         elif tvg_id == "virtual.nasa":
             interval = settings.get("nasa.interval", "15").strip() or "15"
@@ -298,8 +311,8 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     - Open-Meteo weather API (if lat/lon configured)
     - Each configured news RSS feed
     - Overpass API status (if the traffic virtual channel is enabled)
-    - ESPN Scoreboard API (if sports channel is enabled in scores mode)
-    - Sports RSS feeds (if sports channel is enabled in RSS mode)
+    - Configured scores endpoint (if sports channel is enabled, in scores mode, and external data enabled)
+    - Sports RSS feeds (if sports channel is enabled in RSS mode and external data enabled)
     - NASA APOD API (if NASA channel is enabled)
     - Wikipedia On This Day API (if On This Day channel is enabled)
 
@@ -315,8 +328,6 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
 
     Returns per-service results with HTTP status, response time, error messages.
     """
-    import requests as _req  # noqa: PLC0415
-
     # Read settings
     settings: Dict[str, str] = {}
     try:
@@ -388,7 +399,7 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     # Only probe when the traffic channel is enabled; the check uses the
     # /api/status endpoint (plain-text, no query payload) so it is cheap and
     # does not consume Overpass fair-use quota.
-    traffic_enabled = settings.get("virtual_channel.virtual.traffic.enabled", "1") == "1"
+    traffic_enabled = settings.get("virtual_channel.virtual.traffic.enabled", "0") == "1"
     if traffic_enabled:
         svc = _probe_service(
             "overpass_api",
@@ -451,58 +462,82 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
         })
 
     # --- Sports channel external services ---
-    sports_enabled = settings.get("virtual_channel.virtual.sports.enabled", "1") == "1"
+    sports_enabled = settings.get("virtual_channel.virtual.sports.enabled", "0") == "1"
+    sports_external_data_enabled = settings.get("sports.external_data_enabled", "0") == "1"
     sports_mode = settings.get("sports.mode", "scores").strip() or "scores"
-    if sports_enabled:
-        if sports_mode == "scores":
-            # Probe the ESPN Scoreboard API (a stable, public endpoint)
-            svc = _probe_service(
-                "espn_api",
-                "ESPN Scoreboard API (sports scores)",
-                "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
-                timeout=10,
-            )
-            svc["note"] = (
-                "Used by the Sports channel in Scores mode to fetch live game data. "
-                "A failure here explains missing scores or empty sports overlays."
-            )
-            services.append(svc)
-        else:
-            # RSS mode — probe configured sports feed URLs
-            sports_feed_urls: List[str] = []
-            for i in range(1, 7):
-                val = settings.get(f"sports.rss_url_{i}", "").strip()
-                if val:
-                    sports_feed_urls.append(val)
-            if sports_feed_urls:
-                for idx, url in enumerate(sports_feed_urls, start=1):
-                    svc = _probe_service(f"sports_feed_{idx}", f"Sports RSS Feed {idx}", url)
-                    services.append(svc)
-            else:
-                services.append({
-                    "id": "sports_feed",
-                    "name": "Sports RSS Feed",
-                    "url": "(not configured)",
-                    "reachable": None,
-                    "status_code": None,
-                    "response_time_ms": None,
-                    "error": None,
-                    "note": "Sports channel is in RSS mode but no feed URLs are configured.",
-                })
-    else:
+    sports_scores_base_url = settings.get("sports.scores_base_url", "").strip()
+    if not sports_enabled:
         services.append({
-            "id": "espn_api",
-            "name": "ESPN Scoreboard API (sports scores)",
-            "url": "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+            "id": "sports_external",
+            "name": "Sports external data",
+            "url": "(not applicable)",
             "reachable": None,
             "status_code": None,
             "response_time_ms": None,
             "error": None,
-            "note": "Sports virtual channel is disabled — ESPN API not probed.",
+            "note": "Sports virtual channel is disabled — external data not probed.",
         })
+    elif not sports_external_data_enabled:
+        services.append({
+            "id": "sports_external",
+            "name": "Sports external data",
+            "url": "(not configured)",
+            "reachable": None,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": None,
+            "note": "External sports data is disabled. Enable it in Sports Settings to fetch live data.",
+        })
+    elif sports_mode == "scores":
+        if sports_scores_base_url:
+            probe_url = f"{sports_scores_base_url.rstrip('/')}/football/nfl/scoreboard"
+            svc = _probe_service(
+                "sports_scores_api",
+                "Sports Scores API (scores mode)",
+                probe_url,
+                timeout=10,
+            )
+            svc["note"] = (
+                "Used by the Sports channel in Scores mode to fetch game data. "
+                "A failure here explains missing scores or empty sports overlays."
+            )
+            services.append(svc)
+        else:
+            services.append({
+                "id": "sports_scores_api",
+                "name": "Sports Scores API (scores mode)",
+                "url": "(not configured)",
+                "reachable": None,
+                "status_code": None,
+                "response_time_ms": None,
+                "error": None,
+                "note": "Scores mode is active but no scores API base URL is configured.",
+            })
+    else:
+        # RSS mode — probe configured sports feed URLs
+        sports_feed_urls: List[str] = []
+        for i in range(1, 7):
+            val = settings.get(f"sports.rss_url_{i}", "").strip()
+            if val:
+                sports_feed_urls.append(val)
+        if sports_feed_urls:
+            for idx, url in enumerate(sports_feed_urls, start=1):
+                svc = _probe_service(f"sports_feed_{idx}", f"Sports RSS Feed {idx}", url)
+                services.append(svc)
+        else:
+            services.append({
+                "id": "sports_feed",
+                "name": "Sports RSS Feed",
+                "url": "(not configured)",
+                "reachable": None,
+                "status_code": None,
+                "response_time_ms": None,
+                "error": None,
+                "note": "Sports channel is in RSS mode but no feed URLs are configured.",
+            })
 
     # --- NASA APOD API ---
-    nasa_enabled = settings.get("virtual_channel.virtual.nasa.enabled", "1") == "1"
+    nasa_enabled = settings.get("virtual_channel.virtual.nasa.enabled", "0") == "1"
     if nasa_enabled:
         nasa_api_key = settings.get("nasa.api_key", "").strip() or "DEMO_KEY"
         nasa_probe_url = f"https://api.nasa.gov/planetary/apod?api_key={nasa_api_key}&count=1"
@@ -510,8 +545,8 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
         # Sanitize displayed URL to avoid leaking the API key in diagnostic output
         svc["url"] = "https://api.nasa.gov/planetary/apod"
         svc["note"] = (
-            "Used by the NASA Imagery channel to fetch Astronomy Picture of the Day images. "
-            "A failure here explains empty or placeholder NASA imagery."
+            "Used by the Space Channel to fetch Astronomy Picture of the Day images. "
+            "A failure here explains empty or placeholder space imagery."
         )
         services.append(svc)
     else:
@@ -523,11 +558,11 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
             "status_code": None,
             "response_time_ms": None,
             "error": None,
-            "note": "NASA Imagery virtual channel is disabled — NASA APOD API not probed.",
+            "note": "Space Channel virtual channel is disabled — NASA APOD API not probed.",
         })
 
     # --- Wikipedia On This Day API ---
-    on_this_day_enabled = settings.get("virtual_channel.virtual.on_this_day.enabled", "1") == "1"
+    on_this_day_enabled = settings.get("virtual_channel.virtual.on_this_day.enabled", "0") == "1"
     if on_this_day_enabled:
         import datetime as _dt  # noqa: PLC0415
         _now = _dt.datetime.now(_dt.timezone.utc)
@@ -571,9 +606,43 @@ def check_external_services(tuner_db_path: str) -> Dict[str, Any]:
     }
 
 
+def _sanitize_url_for_log(url: str) -> str:
+    """Return the URL with any embedded credentials removed, safe for logging.
+
+    Only strips userinfo (username/password) from the URL authority component.
+    Secrets in query parameters (e.g. ``?api_key=…``) are not modified.
+    """
+    try:
+        p = urlparse(url)
+        if p.password or p.username:
+            hostname = p.hostname
+            if not hostname:
+                # Cannot safely reconstruct netloc without a hostname; return scheme only
+                return f"{p.scheme}://(host-redacted)"
+            netloc = hostname
+            if p.port:
+                netloc = f"{netloc}:{p.port}"
+            return urlunparse((p.scheme, netloc, p.path, p.params, p.query, p.fragment))
+    except Exception:  # noqa: BLE001
+        return "(url-parse-failed)"
+    return url
+
+
 def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[str, Any]:
     """Probe a single external URL and return a result dict."""
-    import requests as _req  # noqa: PLC0415
+    try:
+        import requests as _req  # noqa: PLC0415
+    except ImportError:
+        return {
+            "id": svc_id,
+            "name": name,
+            "url": url,
+            "reachable": False,
+            "status_code": None,
+            "response_time_ms": None,
+            "error": "requests library not available — run: pip install requests",
+            "resolved_ip": None,
+        }
 
     result: Dict[str, Any] = {
         "id": svc_id,
@@ -615,11 +684,11 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
                 result["error"] = f"HTTP {resp.status_code}"
         except Exception as exc:  # noqa: BLE001
             result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
-            logger.debug("Service probe failed for %s: %s", _log_url, exc, exc_info=True)
+            logger.debug("Service probe failed for '%s': %s", name, exc, exc_info=True)
             result["error"] = "Service probe failed. Check application logs for details."
 
     except Exception as exc:  # noqa: BLE001
-        logger.debug("URL probe setup failed for %s: %s", _log_url, exc, exc_info=True)
+        logger.debug("URL probe setup failed for '%s': %s", name, exc, exc_info=True)
         result["error"] = "URL probe setup failed. Check application logs for details."
 
     return result

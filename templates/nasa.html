@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RetroIPTV NASA Imagery</title>
+  <title>RetroIPTV Space Channel</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -330,7 +330,7 @@
   <div class="nasa-header">
     <div class="nasa-header-left">
       <span class="nasa-icon">&#127760;</span>
-      <span class="nasa-brand">RetroIPTV <strong>NASA</strong></span>
+      <span class="nasa-brand">RetroIPTV <strong>Space Channel</strong></span>
     </div>
     <div class="nasa-header-right">
       <div class="nasa-cycle-label" id="nasaCycleLabel">Loading&hellip;</div>
@@ -340,14 +340,14 @@
   <div id="nasaBodyWrap" style="flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0;">
   <div class="nasa-loading" id="nasaBody">
     <div class="nasa-loading-icon">&#128301;</div>
-    <div class="nasa-loading-text">Loading NASA Images&hellip;</div>
+    <div class="nasa-loading-text">Loading Space Images&hellip;</div>
   </div>
   </div>
   <div class="nasa-progress-wrap">
     <div class="nasa-progress-bar" id="nasaProgress" style="width:0%"></div>
   </div>
   <div class="nasa-ticker-bar">
-    <div class="nasa-ticker-label">NASA APOD:</div>
+    <div class="nasa-ticker-label">APOD:</div>
     <div class="nasa-ticker-scroll">
       <span class="nasa-ticker-track" id="nasaTicker">Astronomy Picture of the Day &bull; </span>
     </div>
@@ -419,7 +419,7 @@
       ? esc(img.title || '') + ' \u2014 ' + formatDate(img.date || '') +
         ' \u2022 Image ' + (imageIndex + 1) + ' of ' + total +
         ' \u2022 ' + interval + '-Min Cycle \u2022 '
-      : 'NASA Astronomy Picture of the Day \u2022 ';
+      : 'Astronomy Picture of the Day \u2022 ';
     document.getElementById('nasaTicker').innerHTML = tickBase.repeat(3);
 
     // No image case
@@ -428,7 +428,7 @@
         '<div class="nasa-loading">' +
         '<div class="nasa-loading-icon">&#128301;</div>' +
         '<div class="nasa-loading-text">No Images Available</div>' +
-        '<div class="nasa-loading-hint">NASA Astronomy Pictures of the Day are temporarily unavailable. Check Virtual Channels settings or try again shortly.</div>' +
+        '<div class="nasa-loading-hint">Space Channel images are temporarily unavailable. Check Virtual Channels settings or try again shortly.</div>' +
         '</div>';
       return;
     }

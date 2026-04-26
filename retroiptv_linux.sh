@@ -3,7 +3,7 @@
 # License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 set -euo pipefail
-VERSION="4.9.3"
+VERSION="4.9.4"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
@@ -122,7 +122,40 @@ ensure_user(){
 }
 
 clone_or_stage_project(){
+  # Resolve the directory that contains this script
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
   mkdir -p "$APP_DIR"; chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+
+  # If the full release is already present locally (ZIP download or git clone),
+  # use those files directly instead of cloning from GitHub.
+  if [[ -f "$SCRIPT_DIR/app.py" && -f "$SCRIPT_DIR/requirements.txt" ]]; then
+    echo "✅ Full release detected in '$SCRIPT_DIR'. Using local files."
+    # Only rsync if source and destination differ; syncing a directory to itself
+    # with --delete would erroneously remove files.
+    if [[ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$APP_DIR")" ]]; then
+      rsync -a --delete --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/"
+    fi
+    chown -R "$APP_USER":"$APP_USER" "$APP_DIR"
+    chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
+    return
+  fi
+
+  # Full repo not found locally — ask the user before cloning.
+  echo ""
+  echo "ℹ️  The full RetroIPTVGuide repository was not detected in the current directory."
+  echo "   The installer needs to clone it from GitHub into /tmp/retroiptvguide."
+  echo ""
+  if [[ "$AUTO_YES" == true ]]; then
+    echo "Auto-yes flag set. Proceeding with clone."
+  else
+    read -rp "Proceed with cloning from GitHub? (yes/no): " clone_confirm
+    if [[ "$clone_confirm" != "yes" ]]; then
+      echo "Installation aborted by user."
+      exit 1
+    fi
+  fi
+
   TMP="/tmp/retroiptvguide"; rm -rf "$TMP"
   git clone --depth 1 -b main https://github.com/thehack904/RetroIPTVGuide.git "$TMP"
   rsync -a --delete --exclude 'venv' "$TMP/" "$APP_DIR/"
@@ -192,7 +225,7 @@ install_linux(){
   echo "End time: $(date)"
   echo "Access at: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "This application is intended for use on trusted local networks. Do not expose it directly to the public internet."
+  echo "Security Notice: Do not expose this service directly to the public internet."
   echo "Installation complete!"
 }
 

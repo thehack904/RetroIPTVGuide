@@ -299,7 +299,12 @@
             if (window.Hls && Hls.isSupported && Hls.isSupported()) {
               try {
                 if (window.__tuner._hlsInstance) { window.__tuner._hlsInstance.destroy(); delete window.__tuner._hlsInstance; }
-                const hls = new Hls();
+                const hls = new Hls({
+                    liveSyncDurationCount: 6,
+                    liveMaxLatencyDurationCount: 12,
+                    initialLiveManifestSize: 6,
+                    maxLiveSyncPlaybackRate: 1.1
+                });
                 hls.loadSource(url);
                 hls.attachMedia(vid);
                 window.__tuner._hlsInstance = hls;

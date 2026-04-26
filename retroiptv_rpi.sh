@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="4.9.3"
+VERSION="4.9.4"
 # RetroIPTVGuide Raspberry Pi Installer (Headless, Pi3/4/5)
 # Installs to /home/iptv/iptv-server for consistency with Debian/Windows
 # Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log
@@ -153,13 +153,35 @@ install_app() {
   sudo apt-get dist-upgrade -y
   sudo apt-get install -y git python3 python3-venv python3-pip ffmpeg mesa-utils v4l-utils raspi-config || true
 
-  # Clone or update repo
-  if [ ! -d "$APP_DIR/.git" ]; then
-    sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
+  # Detect the directory containing this script
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+  # If the full release is already present locally (ZIP download or git clone),
+  # use those files directly instead of cloning from GitHub.
+  if [ -f "$SCRIPT_DIR/app.py" ] && [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+    echo "✅ Full release detected in '$SCRIPT_DIR'. Using local files."
+    # Only rsync if source and destination differ to avoid self-deletion.
+    if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$APP_DIR")" ]; then
+      sudo rsync -a --delete --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/"
+    fi
+    ensure_owned_by_iptv
+    sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
   else
-    ( cd "$APP_DIR" && sudo -u "$APP_USER" git pull )
+    # Full repo not found locally — ask the user before cloning.
+    echo ""
+    echo "ℹ️  The full RetroIPTVGuide repository was not detected in the current directory."
+    echo "   The installer needs to clone it from GitHub to continue."
+    echo ""
+    if [ "$AUTO_YES" = true ]; then
+      echo "Auto-yes flag set. Proceeding with clone."
+    else
+      read -p "Proceed with cloning from GitHub? (yes/no): " clone_confirm
+      [[ "$clone_confirm" != "yes" ]] && echo "Installation aborted by user." && exit 1
+    fi
+    sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git "$APP_DIR"
+    ensure_owned_by_iptv
+    sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
   fi
-  sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
 
   # Python venv setup
   if [ ! -d "$APP_DIR/venv" ]; then
@@ -209,7 +231,7 @@ EOF
   echo "End time: $(date)"
   echo "Access in browser: http://$(hostname -I | awk '{print $1}'):5000"
   echo "Default login: admin / strongpassword123"
-  echo "NOTE: BETA build — internal network use only."
+  echo "Security Notice: Do not expose this service directly to the public internet."
   echo "GPU accel: $PI_TYPE"
   echo "Service: retroiptvguide"
   echo "User: $APP_USER"
