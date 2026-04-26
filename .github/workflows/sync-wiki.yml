@@ -23,6 +23,14 @@ jobs:
       - name: 🧾 Checkout repository
         uses: actions/checkout@v4
 
+      - name: 🔍 Verify wiki source files
+        run: |
+          echo "Repository root:"
+          pwd
+          echo ""
+          echo "docs/wiki contents:"
+          ls -lah docs/wiki
+
       - name: 🔧 Configure git
         run: |
           git config --global user.name "RetroIPTVGuide Wiki Sync"
@@ -34,21 +42,34 @@ jobs:
         run: |
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
 
+      - name: 🔍 Verify cloned wiki repo
+        run: |
+          echo "Wiki repo contents:"
+          ls -lah wiki
+          cd wiki
+          echo ""
+          echo "Current branch:"
+          git branch --show-current
+
       - name: 🔁 Sync docs/wiki to Wiki repo
         run: |
           rsync -av --delete docs/wiki/ wiki/
 
+          echo ""
+          echo "Wiki repo after sync:"
+          ls -lah wiki
+
           cd wiki
 
-          if git diff --quiet && git status --short | grep -q "^??" ; then
-            echo "New untracked files detected."
-          fi
+          echo ""
+          echo "Git status:"
+          git status --short
 
-          if git diff --quiet && [ -z "$(git status --short)" ]; then
+          if [ -z "$(git status --short)" ]; then
             echo "No wiki changes to commit."
             exit 0
           fi
 
           git add .
           git commit -m "Sync wiki from docs/wiki"
-          git push origin master
+          git push origin HEAD:main
