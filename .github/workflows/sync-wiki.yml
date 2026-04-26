@@ -22,6 +22,8 @@ jobs:
     steps:
       - name: 🧾 Checkout repository
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: 🔍 Verify wiki source files
         run: |
@@ -30,6 +32,11 @@ jobs:
           echo ""
           echo "docs/wiki contents:"
           ls -lah docs/wiki
+
+          if [ ! -f docs/wiki/Home.md ]; then
+            echo "ERROR: docs/wiki/Home.md is required for the GitHub Wiki landing page."
+            exit 1
+          fi
 
       - name: 🔧 Configure git
         run: |
@@ -42,24 +49,17 @@ jobs:
         run: |
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git" wiki
 
-      - name: 🔍 Verify cloned wiki repo
+      - name: 🔁 Sync docs/wiki to GitHub Wiki
+        env:
+          GH_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
-          echo "Wiki repo contents:"
-          ls -lah wiki
+          rsync -av --delete --exclude='.git/' docs/wiki/ wiki/
+
           cd wiki
+
           echo ""
-          echo "Current branch:"
+          echo "Current wiki branch:"
           git branch --show-current
-
-      - name: 🔁 Sync docs/wiki to Wiki repo
-        run: |
-          rsync -av --delete docs/wiki/ wiki/
-
-          echo ""
-          echo "Wiki repo after sync:"
-          ls -lah wiki
-
-          cd wiki
 
           echo ""
           echo "Git status:"
@@ -72,4 +72,6 @@ jobs:
 
           git add .
           git commit -m "Sync wiki from docs/wiki"
+
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git"
           git push origin HEAD:main
