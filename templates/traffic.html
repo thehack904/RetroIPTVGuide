@@ -14,7 +14,7 @@
       font-family: Arial, Helvetica, sans-serif;
       background: #0a1a6e;
       color: #fff;
-      min-height: 100vh;
+      height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -22,7 +22,7 @@
     }
 
     .tf-frame {
-      width: min(1280px, 100vw);
+      width: min(1280px, 100vw, calc(100vh * 16 / 9));
       aspect-ratio: 16 / 9;
       background: linear-gradient(160deg, #0f2ab0 0%, #0a1a80 40%, #081060 100%);
       display: flex;

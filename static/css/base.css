@@ -322,8 +322,8 @@ body { font-family: Arial, sans-serif; margin:0; }
   display: flex;
   align-items: stretch;
   overflow: hidden;
-  background: transparent;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.12);
+  background: var(--timebar-bg, rgba(255,255,255,0.95));
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18);
   border-bottom: 1px solid var(--timebar-border, rgba(0,0,0,0.12));
   height: 34px;
   top: 0;
@@ -339,6 +339,23 @@ body { font-family: Arial, sans-serif; margin:0; }
 .time-header-fixed .now-line { position:absolute; top:0; bottom:0; width:2px; z-index:1300; pointer-events:none; }
 .time-header-fixed .left-spacer { flex: 0 0 auto; height:100%; background: var(--chan-col-bg, #1a1a1a); border-right: 1px solid var(--timebar-border, rgba(0,0,0,0.12)); pointer-events: none; }
 .hide-in-grid .time-header-wrap { visibility: hidden; height: 0; margin:0; padding:0; }
+/* Collapse the entire gridTimeRow so the empty chan-header strip is not visible
+   between the fixed timebar and the first real channel row. Elements stay in the
+   DOM so JS can still clone time cells and compute the spacer width.
+   visibility:hidden is required in addition to height:0/overflow:hidden because
+   .chan-header uses position:sticky and sticky elements anchor to the nearest
+   scroll container (.guide-outer), allowing them to escape an intermediate
+   overflow:hidden parent — visibility:hidden makes all descendants invisible
+   regardless of their positioning model. JS cloneNode() is unaffected since
+   visibility is a CSS cascade property on the ancestor, not carried on clones. */
+.guide-row.hide-in-grid {
+  height: 0 !important;
+  overflow: hidden !important;
+  visibility: hidden !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
 
 /* Theme variables & theme-specific rules preserved below (copied/preserved from original base.css) */
 

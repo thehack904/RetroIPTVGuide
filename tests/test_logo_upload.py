@@ -12,7 +12,7 @@ from app import (
     app, init_db, init_tuners_db, add_user,
     get_channel_custom_logo, save_channel_custom_logo,
     LOGO_UPLOAD_DIR, _ALLOWED_LOGO_EXTENSIONS, _DEFAULT_CHANNEL_LOGOS,
-    VIRTUAL_CHANNELS,
+    VIRTUAL_CHANNELS, save_virtual_channel_settings,
 )
 
 
@@ -271,6 +271,7 @@ class TestApiLogoReset:
 
 class TestVirtualChannelPageLogoUI:
     def test_logo_upload_section_present(self, client):
+        save_virtual_channel_settings({ch['tvg_id']: True for ch in VIRTUAL_CHANNELS})
         login(client)
         resp = client.get('/virtual_channels')
         assert resp.status_code == 200

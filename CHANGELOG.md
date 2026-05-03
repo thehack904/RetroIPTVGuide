@@ -6,6 +6,23 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.5 - 2026-04-29
+
+### Fixed
+- Fixed virtual channel standalone pages not fitting the viewport on mobile devices.
+  - Updated `weather.html`, `news.html`, `status.html`, `traffic.html`, `nasa.html`, and `on_this_day.html` to use `height: 100vh` (instead of `min-height: 100vh`) so the page fills the screen without overflow.
+  - Added `calc(100vh * 16 / 9)` as an additional constraint to each channel frame's `width: min(...)` so the 16:9 frame stays fully visible and correctly proportioned on landscape mobile screens. This brings these pages in line with `sports.html` and `updates.html`.
+- Improved mobile layout of the Virtual Channels admin page (`/virtual_channels`):
+  - Channel list items now wrap gracefully on narrow screens instead of overflowing.
+  - Channel names allow wrapping on very small viewports.
+  - Per-channel preferences fields stack vertically at ≤ 700 px.
+  - Traffic demo city table gains horizontal scrolling so all columns remain accessible on narrow screens.
+  - Audio file list items stack vertically on mobile so filenames and audio controls are readable.
+  - Drag handles in the Channel Order list are larger for easier touch interaction.
+  - Page title font size is reduced slightly on narrow screens to prevent overflow.
+
+---
+
 ## v4.9.4 - 2026-04-25
 
 ### Added
@@ -15,7 +32,6 @@ This project follows [Semantic Versioning](https://semver.org/).
   - Deprecation notice added to the Windows Installation section of `INSTALL.md`.
   - Deprecation note added to `ROADMAP.md` under Installer Enhancements.
   - Deprecation notice shown on the **About** page when RetroIPTVGuide is running on Windows.
-  - The About page now shows a Windows deprecation notice when running on Windows.
 - Added structured wiki documentation under `docs/wiki/`:
   - `Home.md` — wiki landing page with navigation table
   - `Installation.md` — full installation guide covering Docker, Linux, Raspberry Pi, and Windows
@@ -24,78 +40,6 @@ This project follows [Semantic Versioning](https://semver.org/).
   - `FAQ.md` — frequently asked questions
   - `Troubleshooting.md` — common problems and step-by-step fixes
 - Updated `README.md` to link to the new wiki pages.
-- Added Space Channel naming to replace NASA-facing labels.
-- Added optional external sports data configuration:
-  - External sports data is disabled by default.
-  - Users must explicitly enable external sports data.
-  - Users must provide their own compatible scores API base URL.
-  - Added notice that RetroIPTVGuide does not provide sports data.
-- Added weather channel segment rotation controls.
-  - Current Conditions
-  - 5-Day Forecast
-  - Regional Radar
-  - Severe Weather Alerts
-- Added configurable weather segment duration.
-- Added NOAA-style regional radar URL generation based on configured latitude/longitude.
-- Added XMLTV program icon support for guide display.
-- Added M3U `group-title` parsing for channel grouping.
-- Added new guide theme styling:
-  - Classic Cable-style theme rules
-  - Icon/ErsatzTV-style guide theme rules
-
-### Changed
-- Bumped application version from `v4.9.3` to `v4.9.4`.
-- Updated release date from `2026-04-08` to `2026-04-25`.
-- Renamed the virtual NASA channel display name to **Space Channel**.
-- Updated NASA-facing preview text to Space Channel-facing text.
-- Removed hardcoded ESPN scoreboard API behavior.
-- Replaced ESPN-specific sports score fetching with a user-configured external JSON scores endpoint.
-- Changed sports league defaults so leagues are no longer enabled by default.
-- Changed external sports data behavior so no outside sports requests are made unless explicitly enabled.
-- Changed virtual channel defaults from enabled by default to disabled by default.
-- Changed default overlay refresh from 300 seconds to 30 seconds.
-- Updated Updates / Announcements wording from “Beta” to “Pre-release”.
-- Updated README documentation links to point to the new wiki documentation.
-- Updated install documentation to better position Docker as the recommended long-term deployment method.
-- Updated guide theme handling so server-side/admin-assigned default themes override local browser storage.
-- Updated guide rendering to carry channel group metadata into the DOM.
-- Updated program blocks to support optional XMLTV icon artwork.
-- Updated Channel Mix fullscreen behavior to better sync the active sub-channel iframe while fullscreen is open.
-- Updated Virtual Channels admin UI:
-  - Shows disabled virtual channels differently due to default-disabled behavior.
-  - Adds weather rotation details.
-  - Adds sports external data opt-in controls.
-  - Adds sports scores base URL input.
-  - Starts icon pack details collapsed by default.
-- Updated diagnostics/config reporting to include newer virtual-channel and sports/weather configuration fields.
-- Updated Linux and Raspberry Pi installer scripts.
-- Updated Windows installer scripts with deprecation notices.
-- Updated CodeQL workflow configuration.
-- Updated Unraid Docker documentation wording.
-
-### Fixed
-- Fixed virtual channel enablement logic so missing settings no longer implicitly enable all virtual channels.
-- Fixed sports channel behavior to avoid relying on a specific third-party API by default.
-- Fixed weather virtual channel layout to support multi-screen rotation without overflowing.
-- Fixed guide theme persistence so admin/user-selected defaults apply reliably.
-- Fixed tuner validation behavior to allow single `.m3u8` stream tuners without requiring an XML URL.
-- Fixed tuner validation behavior around private/local M3U URLs.
-- Fixed drag/reorder handling cleanup in the Virtual Channels admin page.
-- Fixed additional test coverage around:
-  - virtual channels
-  - tuner validation
-  - traffic demo behavior
-  - admin diagnostics
-  - app configuration diagnostics
-
-### Removed
-- Removed default Plex and Tubi sample tuner entries.
-- Removed ESPN-specific naming and API dependency from sports score handling.
-- Removed public-facing NASA channel naming in favor of Space Channel naming.
-
-### Deprecated
-- Deprecated the Windows installer path for future removal in v5.0.
-- Docker is now the recommended deployment method going forward.
 
 ---
 

@@ -71,19 +71,13 @@ class TestAddTunerValidation:
         with pytest.raises(ValueError, match="XML URL must start with http:// or https://"):
             app_module.add_tuner("TestTuner", "ftp://example.com/epg.xml", "http://example.com/playlist.m3u")
     
-    def test_xml_url_optional(self):
-        """Test that XML URL is optional – empty or whitespace is allowed for single .m3u8 streams."""
-        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
+    def test_xml_url_required(self):
+        """Test that XML URL is required – empty or whitespace is rejected."""
+        with pytest.raises(ValueError, match="cannot be empty"):
             app_module.add_tuner("NoXmlTuner1", "", "http://example.com/playlist.m3u")
-        tuners = app_module.get_tuners()
-        assert "NoXmlTuner1" in tuners
-        assert tuners["NoXmlTuner1"]["xml"] == ""
 
-        with patch('app.socket.gethostbyname', return_value='93.184.216.34'):
+        with pytest.raises(ValueError, match="cannot be empty"):
             app_module.add_tuner("NoXmlTuner2", "   ", "http://example.com/playlist2.m3u")
-        tuners = app_module.get_tuners()
-        assert "NoXmlTuner2" in tuners
-        assert tuners["NoXmlTuner2"]["xml"] == "   "
     
     def test_url_reachability_check(self):
         """Test that valid external URLs are accepted without making HTTP requests."""

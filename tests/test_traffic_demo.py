@@ -28,6 +28,7 @@ from app import (
     _BASEMAP_W, _BASEMAP_H,
     _prewarm_roads_cache,
     _roads_cache_path,
+    save_virtual_channel_settings,
 )
 
 
@@ -437,6 +438,7 @@ class TestApiTrafficDemoPickRandom:
 
 class TestChangeTunerTrafficDemoUI:
     def test_traffic_demo_fields_in_change_tuner_page(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert resp.status_code == 200
@@ -452,6 +454,7 @@ class TestChangeTunerTrafficDemoUI:
         assert b'TomTom' not in resp.data
 
     def test_city_table_present(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert b'traffic-demo-city-table' in resp.data

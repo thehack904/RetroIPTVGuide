@@ -1,14 +1,21 @@
-// auto-scroll v36.3 — deterministic wrap + RAF primary with interval fallback watchdog.
+// auto-scroll v36.4 — deterministic wrap + RAF primary with interval fallback watchdog.
 // - Clone full row elements so program cells are carried with clones.
 // - Deterministic immediate wrap to prep offset to avoid stop/restart races.
 // - Primary animation via requestAnimationFrame; fallback watcher uses setInterval to nudge scrollTop
 //   when RAF hasn't advanced (handles throttling/race across browsers).
+// - guide-outer (overflow:auto, flex:1) is the scroll container on both desktop and mobile.
 // - Exposes status and cloneNow APIs.
 
 (function () {
   const PREF_KEY = 'autoScrollEnabled';
   function prefEnabled() { return localStorage.getItem(PREF_KEY) !== 'false'; }
   function setPref(v) { localStorage.setItem(PREF_KEY, v ? 'true' : 'false'); }
+
+  // Previously returned true on ≤900px viewports when guide-outer had overflow:visible
+  // and the page itself scrolled via window.scrollY.  Mobile now uses the same
+  // fixed-viewport model as desktop (guide-outer has overflow:auto and scrolls
+  // internally), so window-scroll handling is no longer needed anywhere.
+  function isMobilePage() { return false; }
 
   const SELECTOR_PRIORITY = ['#guideOuter', '.guide-outer', '.grid-col'];
   let scrollSpeed = 1.2; // px per frame (visual)
@@ -280,7 +287,7 @@
       try {
         if (!isScrolling || !scroller) return;
         const now = performance.now();
-        // If RAF hasn't run in last 250ms, nudge scrollTop a tiny amount
+        // If RAF hasn't run in last 250ms, nudge scroll a tiny amount
         if (now - lastFrameTime > 250) {
           try { scroller.scrollTop = (scroller.scrollTop || 0) + scrollSpeed; } catch (e) {}
           // update lastFrameTime so we don't double-nudge
@@ -297,6 +304,7 @@
     if (document.hidden) { rafId = requestAnimationFrame(frameLoop); return; }
     try {
       lastFrameTime = performance.now();
+
       if (scroller && scroller.scrollHeight > scroller.clientHeight) {
         scroller.scrollTop += scrollSpeed;
         const maxScroll = scroller.scrollHeight - scroller.clientHeight;
@@ -361,6 +369,7 @@
       ensureStyles(scroller);
     }
 
+    // Clone rows for seamless loop, then begin animation
     if (loopMode && scroller && scroller.dataset.__autoScrollCloned !== '1') {
       waitForContent(scroller, waitForContentMs, contentSampleCount).then(() => cloneOnce(scroller)).catch(() => cloneOnce(scroller)).then(() => {
         // start animation after a tiny tick to let layout settle
@@ -369,7 +378,7 @@
       return;
     }
 
-    // clones already present or no cloning needed
+    // clones already present, no cloning needed, or mobile mode
     startAnimation();
   }
 
@@ -445,13 +454,20 @@
       }
     };
     window.__autoScroll.getSpeed = function(){ return scrollSpeed; };
-    window.__autoScroll.status = function(){ return { isScrolling, pref: prefEnabled(), loopMode, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId: !!rafId, watchdog: !!watchdogInterval }; };
-    window.__autoScroll.debug = function(){ return { lastActivity, idleDelay, scrollSpeed, isScrolling, pref: prefEnabled(), loopMode, endReached, endReachedAt, autoRestart, autoRestartDelayMs, scrollerInfo: scroller ? { id: scroller.id, scrollTop: scroller.scrollTop, scrollHeight: scroller.scrollHeight, clientHeight: scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId, lastFrameTime, watchdogInterval }; };
+    window.__autoScroll.status = function(){
+      var mob = isMobilePage();
+      return { isScrolling, pref: prefEnabled(), loopMode, mobile: mob, scrollerInfo: scroller ? { id: scroller.id, scrollTop: mob ? window.scrollY : scroller.scrollTop, scrollHeight: mob ? document.body.scrollHeight : scroller.scrollHeight, clientHeight: mob ? window.innerHeight : scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId: !!rafId, watchdog: !!watchdogInterval };
+    };
+    window.__autoScroll.debug = function(){
+      var mob = isMobilePage();
+      return { lastActivity, idleDelay, scrollSpeed, isScrolling, pref: prefEnabled(), loopMode, endReached, endReachedAt, autoRestart, autoRestartDelayMs, mobile: mob, scrollerInfo: scroller ? { id: scroller.id, scrollTop: mob ? window.scrollY : scroller.scrollTop, scrollHeight: mob ? document.body.scrollHeight : scroller.scrollHeight, clientHeight: mob ? window.innerHeight : scroller.clientHeight, cloned: !!scroller.dataset.__autoScrollCloned, prependedHeight: scroller.dataset.__autoScrollPrependedHeight } : null, rafId, lastFrameTime, watchdogInterval };
+    };
 
-    log('auto-scroll (conservative v36.3) initialized');
+    log('auto-scroll (conservative v36.4) initialized');
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
 
 })();
+

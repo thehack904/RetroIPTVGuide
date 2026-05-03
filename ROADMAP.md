@@ -11,10 +11,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ## 🔮 Feature Upgrades
 
 ### 1. Tuner Management
-- [x] Add ability to **add/remove tuners** from the UI *(v2.3.0)*  
-- [x] Add ability to rename tuners via the UI *(v2.3.0)*  
-- [x] Support for **.m3u8 single-channel playlists** as tuner sources *(v4.6.0)*  
-- [x] Validate tuner URLs *(v2.0.0 → improved v4.9.1–v4.9.4)*  
+- [x] Add ability to **add/remove tuners** from the UI (v2.3.0).  
+- [x] Add ability to rename tuners via the UI (v2.3.0).  
+- [x] Support for **.m3u8 single-channel playlists** as tuner sources. *(v4.6.0)*
+- [x] Validate tuner URLs *(v2.0.0 → improved v4.9.1–v4.9.2)*
 - [x] Duplicate tuner name prevention *(v4.6.0)*  
 - [x] Optional auto-refresh of tuner lineup *(v4.3.0)*  
 - [x] Per-user tuner assignment and default preferences *(v4.7.0)*  
@@ -32,7 +32,6 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Post-install verification *(v3.1.0)*  
 - [x] Unified guide refresh scheduler *(v4.2.0)*  
 - [x] Sanitized diagnostics and error responses *(v4.9.1–v4.9.2)*  
-- [x] Expanded diagnostics/config reporting *(v4.9.4)*  
 
 ---
 
@@ -40,10 +39,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Auto-Scroll *(v4.1.0 → v4.6.0 enhancements)*  
 - [x] Responsive layout *(v4.2.0)*  
 - [x] Fullscreen improvements for virtual channels *(v4.9.3)*  
-- [x] Channel Mix dynamic fullscreen switching *(v4.9.3 → improved v4.9.4)*  
-- [x] XMLTV program icon support *(v4.9.4)*  
-- [x] M3U `group-title` parsing *(v4.9.4)*  
-- [x] Theme priority handling (server/admin defaults override stale browser storage) *(v4.9.4)*  
+- [x] Channel Mix dynamic fullscreen switching *(v4.9.3)*  
 - [ ] Search/filter box  
 - [ ] Favorites (lightweight)  
 - [ ] Channel Info Banner  
@@ -78,10 +74,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Mobile responsiveness *(v4.2.0)*  
 - [x] Theme auto-detect *(v4.5.0)*  
 - [x] Display size settings *(v4.6.0)*  
-- [x] Virtual channel fullscreen enhancements *(v4.8.0–v4.9.4)*  
-- [x] New guide themes:
-  - Classic Cable Style *(v4.9.4)*
-  - Icon / ErsatzTV Style *(v4.9.4)*
+- [x] Virtual channel fullscreen enhancements *(v4.8.0–v4.9.3)*  
 
 ---
 
@@ -89,7 +82,6 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Linux / Windows / Raspberry Pi installers *(v4.0.0)*  
 - [x] Windows parity *(v4.1.0)*  
 - [ ] TrueNAS SCALE App Catalog certification  
-- [ ] Windows installer retirement in v5.0 (Docker-first direction)
 
 ---
 
@@ -101,26 +93,16 @@ These are **not yet implemented**, partially implemented, or completed in previo
 
 ### 8. Virtual Channels
 - [x] Virtual Channels framework *(v4.8.0)*  
-- [x] Weather *(v4.8.0 → expanded v4.9.4)*  
+- [x] Weather *(v4.8.0)*  
 - [x] News *(v4.8.0)*  
 - [x] Traffic *(v4.8.0)*  
 - [x] System Status *(v4.8.0)*  
 - [x] Updates *(v4.9.3)*  
-- [x] Sports *(v4.9.3 → reworked v4.9.4)*  
-- [x] Space Channel *(renamed from NASA in v4.9.4)*  
+- [x] Sports *(v4.9.3)*  
+- [x] NASA *(v4.9.3)*  
 - [x] On This Day *(v4.9.3)*  
 - [x] Channel Mix *(v4.9.3)*  
-- [x] Expanded Virtual Channels admin UI *(v4.9.3 → improved v4.9.4)*  
-- [x] Virtual channels default disabled for safer deployments *(v4.9.4)*  
-- [x] Weather segment rotation:
-  - Current Conditions
-  - 5-Day Forecast
-  - Regional Radar
-  - Severe Weather Alerts *(v4.9.4)*
-- [x] Configurable weather segment duration *(v4.9.4)*
-- [x] Regional radar generation using configured coordinates *(v4.9.4)*
-- [x] External sports data opt-in only *(v4.9.4)*
-- [x] User-configurable sports scores API base URL *(v4.9.4)*
+- [x] Expanded Virtual Channels admin UI *(v4.9.3)*  
 - [ ] Advanced Virtual Channel Composition Engine  
       - Scheduled rotation blocks  
       - Weighted/random playback  
@@ -133,34 +115,19 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] DB schema migration guards *(v4.7.1)*  
 - [x] Security hardening *(v4.9.1–v4.9.2)*  
 - [x] Database-backed activity logging *(v4.9.3)*  
-- [x] CodeQL workflow improvements *(v4.9.4)*  
 
 ---
 
 ## 🍓 Installer Enhancements
 - [x] Unified installer architecture  
 - [x] Windows parity  
-- [x] Windows deprecation notices added *(v4.9.4)*  
-- [ ] **Deprecate Windows installer in v5.0** — Docker is the recommended deployment method going forward
-
----
-
-## 📚 Documentation
-- [x] Added GitHub Wiki-ready documentation structure *(v4.9.4)*
-  - Home
-  - Installation
-  - Configuration
-  - Virtual Channels
-  - FAQ
-  - Troubleshooting
-- [x] Updated README links to point users toward the new wiki documentation *(v4.9.4)*
-- [x] Updated install documentation around Docker-first deployment direction *(v4.9.4)*
+- [ ] **Deprecate Windows installer in v5.0** — Docker is the recommended deployment method going forward  
 
 ---
 
 ## User Submitted Enhancements
 - [x] Resize Pop Out Video *(v4.6.0)*
 - [x] Resize video *(v4.6.0)*
-- [x] Auto load Channel from Guide  
+- [ ] Auto load Channel from Guide  
 - [x] Adjustable scrolling speed *(v4.6.0)*
 - [x] Unraid Template

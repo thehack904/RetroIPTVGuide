@@ -13,6 +13,7 @@ from app import (
     get_weather_config, save_weather_config,
     _wmo_label, _wmo_icon, _to_night_icon, _wind_dir,
     _build_weather_payload,
+    save_virtual_channel_settings,
 )
 
 
@@ -305,6 +306,7 @@ class TestChangeTunerWeatherSettings:
     """Weather config fields are surfaced in the Virtual Channel overlay panel."""
 
     def test_weather_fields_in_change_tuner_page(self, client):
+        save_virtual_channel_settings({'virtual.weather': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert resp.status_code == 200
@@ -330,6 +332,7 @@ class TestChangeTunerWeatherSettings:
     def test_saved_location_prefills_in_page(self, client):
         save_weather_config({'lat': '25.77', 'lon': '-80.19',
                              'location_name': 'Miami, FL', 'units': 'F'})
+        save_virtual_channel_settings({'virtual.weather': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert b'Miami, FL' in resp.data

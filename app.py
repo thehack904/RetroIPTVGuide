@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.4"
-APP_RELEASE_DATE = "2026-04-25"
+APP_VERSION = "v4.9.5-beta"
+APP_RELEASE_DATE = "2026-05-02"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -485,10 +485,11 @@ def add_tuner(name, xml_url, m3u_url):
     if name in tuners:
         raise ValueError(f"Tuner '{name}' already exists")
     
-    # Validate XML URL (optional – single .m3u8 stream tuners may omit it)
-    if xml_url and xml_url.strip():
-        if not xml_url.startswith(('http://', 'https://')):
-            raise ValueError("XML URL must start with http:// or https://")
+    # Validate XML URL
+    if not xml_url or not xml_url.strip():
+        raise ValueError("XML URL cannot be empty")
+    if not xml_url.startswith(('http://', 'https://')):
+        raise ValueError("XML URL must start with http:// or https://")
 
     # Validate M3U URL
     if not m3u_url or not m3u_url.strip():
@@ -4084,8 +4085,8 @@ def change_tuner():
                     log_event(current_user.username, f"Failed to add combined tuner {name}: {str(e)}")
             else:
                 if tuner_mode == "single_stream":
-                    xml_url = ""
                     m3u_url = request.form.get("m3u8_stream_url", "").strip()
+                    xml_url = m3u_url
                 else:
                     xml_url = request.form.get("xml_url", "").strip()
                     m3u_url = request.form.get("m3u_url", "").strip()

@@ -12,6 +12,7 @@ from app import (
     app, init_db, init_tuners_db, add_user,
     get_channel_music_file, save_channel_music_file, list_audio_files,
     AUDIO_UPLOAD_DIR, _ALLOWED_AUDIO_EXTENSIONS,
+    VIRTUAL_CHANNELS, save_virtual_channel_settings,
 )
 
 
@@ -311,6 +312,7 @@ class TestChangeTunerAudioUI:
 class TestGuideMusicFile:
     def test_guide_has_data_music_file_attribute(self, client):
         """Guide page HTML includes the data-music-file attribute on virtual channels."""
+        save_virtual_channel_settings({ch['tvg_id']: True for ch in VIRTUAL_CHANNELS})
         login(client)
         resp = client.get('/guide')
         assert resp.status_code == 200
@@ -318,6 +320,7 @@ class TestGuideMusicFile:
 
     def test_guide_includes_music_src_when_set(self, client, tmp_path, monkeypatch):
         """When a music file is saved for a channel, the guide page embeds its path."""
+        save_virtual_channel_settings({ch['tvg_id']: True for ch in VIRTUAL_CHANNELS})
         d = tmp_path / "audio"
         d.mkdir()
         monkeypatch.setattr(app_module, "AUDIO_UPLOAD_DIR", str(d))
@@ -329,6 +332,7 @@ class TestGuideMusicFile:
 
     def test_guide_music_file_empty_when_not_set(self, client):
         """With no music file configured, the data-music-file attribute is empty."""
+        save_virtual_channel_settings({ch['tvg_id']: True for ch in VIRTUAL_CHANNELS})
         login(client)
         resp = client.get('/guide')
         assert b'data-music-file=""' in resp.data

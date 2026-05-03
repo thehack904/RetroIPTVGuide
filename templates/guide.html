@@ -87,6 +87,13 @@
         /* optional: expose channel column width if you compute it server-side or want to override */
         --chan-col-width: 200px;
     }
+    /* On mobile, narrow the channel column so the guide grid gets more room */
+    @media (max-width: 900px) {
+        :root { --chan-col-width: 80px; }
+        .chan-name { padding: 4px 3px !important; gap: 1px !important; }
+        .chan-name img { width: 22px !important; height: 22px !important; }
+        .chan-name span { font-size: 9px !important; }
+    }
     .video-player-wrap {
         position: relative;
         display: inline-block;
@@ -916,36 +923,74 @@ function createOrUpdateFixedTimeBar(){
     fixedBar.style.left = '0px';
     fixedBar.style.width = Math.ceil(window.innerWidth / getDisplayZoom()) + 'px';
 
-    // On mobile, #appZoomRoot is position:relative + transform:scale(s), so
-    // position:fixed children behave like position:absolute within appZoomRoot.
-    // The CSS top must compensate for window.scrollY so the bar stays in view:
-    //   top_css = (scrollY + desired_visual_y) / scale
-    // On desktop, appZoomRoot is position:fixed so position:fixed children are
-    // truly viewport-anchored and no scroll compensation is needed.
-    const isMobileZoom = window.innerWidth <= 900 && getDisplayZoom() < 1;
-    const scrollOff = isMobileZoom ? (window.scrollY || 0) : 0;
+    // #appZoomRoot is position:fixed on both mobile and desktop.
+    // When scale=1 (Large): no transform, position:fixed children are viewport-anchored.
+    //   top = playerRow.getBoundingClientRect().bottom (a viewport Y coordinate).
+    // When scale<1 (Medium/Small): transform:scale is applied to appZoomRoot, so
+    //   browsers treat position:fixed children as positioned within that element.
+    //   top_css = desired_visual_y / scale  (scrollY is always 0 since no page scroll).
+    // We clamp visualY to headerH on mobile so the bar can't slide behind the nav header.
+    const isMobile = window.innerWidth <= 900;
+    const headerEl = document.querySelector('.header');
+    const headerH = headerEl ? Math.round(headerEl.getBoundingClientRect().height) : 40;
 
     if (playerRow) {
         const rect = playerRow.getBoundingClientRect();
-        // Clamp to 0: when player scrolls off the top, anchor timebar to viewport top.
-        const visualY = isMobileZoom ? Math.max(0, rect.bottom) : rect.bottom;
-        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
+        const visualY = isMobile ? Math.max(headerH, rect.bottom) : rect.bottom;
+        // Math.floor ensures the timebar is placed at-or-above playerRow.bottom.
+        // Math.ceil could position it 1-2px below (when visualY/zoom is non-integer
+        // due to float imprecision at medium/small display sizes), leaving a gap
+        // that shows raw body background above the timebar on dark/light themes.
+        fixedBar.style.top = Math.floor(visualY / getDisplayZoom()) + 'px';
     } else {
-        const header = document.querySelector('.header');
-        const headerRect = header ? header.getBoundingClientRect() : { bottom: 40 };
-        const visualY = isMobileZoom ? Math.max(0, headerRect.bottom) : headerRect.bottom;
-        fixedBar.style.top = Math.ceil((scrollOff + visualY) / getDisplayZoom()) + 'px';
+        const headerRect = headerEl ? headerEl.getBoundingClientRect() : { bottom: 40 };
+        const visualY = isMobile ? Math.max(headerH, headerRect.bottom) : headerRect.bottom;
+        fixedBar.style.top = Math.floor(visualY / getDisplayZoom()) + 'px';
     }
 
-    requestAnimationFrame(() => {
-        const zoom = getDisplayZoom();
-        // getBCR returns visual/viewport px; convert to CSS px by dividing by zoom
-        const fbHeightCss = Math.ceil((fixedBar.getBoundingClientRect().height || 34) / zoom);
-        const currentPaddingTop = parseFloat(window.getComputedStyle(guideOuter).paddingTop) || 0;
-        if (currentPaddingTop < fbHeightCss) {
-            guideOuter.style.paddingTop = fbHeightCss + 'px';
-        }
-    });
+    // Compute and apply guide-outer padding so the first guide row starts at or
+    // below the timebar's visual bottom edge.
+    //
+    // We intentionally avoid reading fixedBar.getBoundingClientRect() here.
+    // On Amazon Fire TV Silk browser (and some older WebKit builds), BCR on
+    // position:fixed elements inside a CSS-transformed container can return
+    // stale viewport coordinates even after a forced layout flush, causing the
+    // padding to be computed as 0 and leaving guide rows visible above the bar.
+    // (RetroIPTV appeared to work only because its box-shadow: 0 3px 8px creates
+    // a visual buffer that hides the mis-measurement.)
+    //
+    // Analytical approach:
+    //   fixedBarTopCss  – the CSS-px top value we just wrote to fixedBar.style.top
+    //   fixedBar.offsetHeight – timebar height in CSS px (content + border), never
+    //                           affected by transforms or BCR quirks
+    //   guideRect.top / zoom  – guide-outer's CSS-px top edge (BCR of a normal
+    //                           flex element, consistently accurate on all browsers)
+    //
+    // neededPaddingCss = fixedBarTopCss + timebar_height - guide_outer_css_top
+    //                  ≈ timebar_height  (since fixedBarTopCss ≈ guide_outer_css_top)
+    //
+    // guideOuter.getBoundingClientRect() also serves as the layout flush that
+    // ensures fixedBar is correctly positioned in the compositor before paint.
+    {
+        const zoom            = getDisplayZoom();
+        const guideRect       = guideOuter.getBoundingClientRect();
+        // CSS-px top value we just set; parseFloat never mismatches because we
+        // own every write to fixedBar.style.top in this function.
+        const fixedBarTopCss  = parseFloat(fixedBar.style.top) || 0;
+        // offsetHeight: content-box height + border.  Reliable on all browsers;
+        // unaffected by CSS transforms or the BCR quirks mentioned above.
+        const fixedBarHCss    = fixedBar.offsetHeight;
+        // Distance (CSS px) from guide-outer's outer top to the timebar's bottom.
+        const neededPaddingCss = Math.ceil(
+            Math.max(0, fixedBarTopCss + fixedBarHCss - guideRect.top / zoom)
+        );
+        guideOuter.style.paddingTop       = neededPaddingCss + 'px';
+        // Reserve the same space for programmatic scrollIntoView / DPAD navigation.
+        guideOuter.style.scrollPaddingTop = neededPaddingCss + 'px';
+        // Fill the remaining viewport height below guide-outer's top.
+        const availableHeightCss = Math.floor((window.innerHeight - guideRect.top) / zoom);
+        if (availableHeightCss > 0) guideOuter.style.height = availableHeightCss + 'px';
+    }
 
     const origNow = document.getElementById('nowLineOriginal');
     if (origNow) origNow.style.display = 'none';
@@ -1016,7 +1061,32 @@ document.addEventListener("DOMContentLoaded", () => {
 
     setInterval(updateClock, 1000);
     setInterval(updateNowLine, 60000);
+
+    // On mobile, abbreviate channel names so they fit the narrower column
+    if (window.innerWidth <= 900) {
+        applyMobileChanAbbreviations();
+    }
 });
+
+/**
+ * Abbreviate channel name spans on mobile so they fit in the 80px column.
+ * Re-uses abbreviateChannelName() which is also used by the classic-cable theme.
+ * Called on DOMContentLoaded and after a theme:applied event restores full names.
+ */
+function applyMobileChanAbbreviations() {
+    if (window.innerWidth > 900) return;
+    document.querySelectorAll('.chan-name').forEach(function(el) {
+        // Skip names inside auto-scroll clones (they'll be updated when clones are rebuilt)
+        if (el.closest('.__auto_scroll_clone')) return;
+        // Skip cols already decorated by a theme (tvguide1990 / classic-cable use different markup)
+        if (el.querySelector('.channel-number')) return;
+        var span = el.querySelector('span');
+        if (!span) return;
+        var fullName = el.dataset.name || span.textContent || '';
+        var abbr = abbreviateChannelName(fullName);
+        if (abbr && abbr !== span.textContent) span.textContent = abbr;
+    });
+}
 
 /* Ensure layout recomputes on viewport resize */
 window.addEventListener('resize', () => {
@@ -1067,6 +1137,19 @@ function applyThemeGuide(theme){
     if (theme === "tvguide1990") requestAnimationFrame(applyTvGuide1990Capsules);
     if (theme === "classic-cable") requestAnimationFrame(applyClassicCableCapsules);
     if (theme === "ersatztv") requestAnimationFrame(applyIconGuide);
+    // After theme CSS has settled (new body class + any capsule RAF), recompute
+    // the fixed timebar position and guide-outer padding so every theme aligns
+    // correctly on all browsers including TV/Fire TV.
+    // Two nested RAFs are needed: the first lets any capsule-applying RAF (e.g.
+    // applyTvGuide1990Capsules) commit its DOM changes and trigger layout, and
+    // the second ensures the browser has fully resolved the new theme CSS before
+    // we measure timebar and guide-outer positions.
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+        if (typeof updateNowLine === 'function') updateNowLine();
+      });
+    });
     setTimeout(()=>b.classList.remove("fade-switch"), 100);
   },150);
 }
@@ -1231,7 +1314,18 @@ window.addEventListener('theme:applied', function(e) {
       c.classList.remove('tvguide1990-applied', 'classic-cable-applied');
     });
     restoreIconGuidePrograms();
+    // Re-apply mobile abbreviations after full names are restored
+    if (window.innerWidth <= 900) requestAnimationFrame(applyMobileChanAbbreviations);
   }
+  // Recompute fixed timebar position and guide-outer padding for every theme change.
+  // Two nested RAFs let any DOM-mutating RAF above (e.g. capsule application) settle
+  // first, and guarantee the browser has resolved the new theme CSS before measuring.
+  requestAnimationFrame(function() {
+    requestAnimationFrame(function() {
+      if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+      if (typeof updateNowLine === 'function') updateNowLine();
+    });
+  });
 });
 
 // Also apply on page load in case tvguide1990, classic-cable or ersatztv was the saved
@@ -1548,6 +1642,7 @@ document.addEventListener('DOMContentLoaded', () => {
     themesMenu.innerHTML = `
       <button class="dropbtn">THEMES ▾</button>
       <div class="dropdown-content">
+        <a href="#" data-theme-selector data-theme="auto">Auto (System)</a>
         <a href="#" data-theme-selector data-theme="retroiptv">RetroIPTV</a>
         <a href="#" data-theme-selector data-theme="light">Light</a>
         <a href="#" data-theme-selector data-theme="dark">Dark</a>
@@ -1557,6 +1652,7 @@ document.addEventListener('DOMContentLoaded', () => {
         <a href="#" data-theme-selector data-theme="directv">DirecTV</a>
         <a href="#" data-theme-selector data-theme="comcast">Comcast</a>
         <a href="#" data-theme-selector data-theme="classic-cable">Classic Cable</a>
+        <a href="#" data-theme-selector data-theme="ersatztv">Icon Guide</a>
       </div>`;
     linksContainer.insertBefore(themesMenu, logoutLink);
   }
