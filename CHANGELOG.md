@@ -8,6 +8,20 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ## v4.9.5 - 2026-04-29
 
+### Added
+- Added ability to hide channels per user (#190).
+  - Users can right-click any channel name in the guide grid to access a context menu with **Hide Channel** / **Unhide Channel** options; hidden channels are persisted server-side per user account.
+  - Added **Show/Hide Hidden Channels** toggle to the **Guide Preferences** submenu in the Settings menu (desktop and mobile) so users can reveal or re-hide all their hidden channels with one click.
+  - Admins can now view a summary of hidden channels per user and **set hidden channels directly** from the **Manage Users** preferences panel using a multi-select channel picker — selecting channels marks them as hidden, deselecting all clears the list.
+- Added **IPTV Backends** wiki page (`docs/wiki/IPTV-Backends.md`) listing compatible IPTV server software that provides HLS segmenter streams (#189).
+  - Documents Tunarr, dizqueTV, Channels DVR, TVHeadend, Jellyfin, Plex, and Emby as ErsatzTV alternatives.
+  - Includes an FFmpeg direct-segmenter example for advanced users.
+  - Includes guidance on using the built-in stream detector to verify backend compatibility.
+  - Updated `README.md` and `docs/wiki/FAQ.md` to reference the new page and broaden ErsatzTV-specific language.
+
+### Removed
+- Removed **Sizzle Reels** feature (hover-to-preview channel stream). The `sizzle_reels_enabled` preference key has been retired; any stored values are silently ignored going forward.
+
 ### Fixed
 - Fixed virtual channel standalone pages not fitting the viewport on mobile devices.
   - Updated `weather.html`, `news.html`, `status.html`, `traffic.html`, `nasa.html`, and `on_this_day.html` to use `height: 100vh` (instead of `min-height: 100vh`) so the page fills the screen without overflow.

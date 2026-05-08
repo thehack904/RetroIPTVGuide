@@ -826,6 +826,15 @@ function updateSummary(cid, fallbackName) {
     const row = document.querySelector(`.guide-row[data-cid="${cid}"]`);
     if (!row) return;
 
+    // Retrieve channel logo from the chan-name element's data attribute
+    const escapedCid = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(cid) : cid.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
+    const chanNameEl = document.querySelector(`.chan-name[data-cid="${escapedCid}"]`);
+    const channelLogo = (chanNameEl && chanNameEl.dataset.logo) ? chanNameEl.dataset.logo : '';
+
+    const logoHTML = channelLogo
+        ? `<img class="summary-channel-logo" src="${escapeHTML(channelLogo)}" alt="${escapeHTML(fallbackName)}">`
+        : '';
+
     let currentProg = null;
     row.querySelectorAll('.program').forEach(prog => {
         const start = new Date(prog.dataset.start);
@@ -838,11 +847,11 @@ function updateSummary(cid, fallbackName) {
         const desc = currentProg.dataset.desc || '';
         const start = new Date(currentProg.dataset.start);
         const stop = new Date(currentProg.dataset.stop);
-        summary.innerHTML = `<h3>${escapeHTML(title)}</h3>
+        summary.innerHTML = `<div class="summary-header">${logoHTML}<h3>${escapeHTML(title)}</h3></div>
                              <p>${escapeHTML(desc)}</p>
                              <p>${escapeHTML(start.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))} - ${escapeHTML(stop.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}))}</p>`;
     } else {
-        summary.innerHTML = `<h3>${escapeHTML(fallbackName)}</h3><p>No Program Info</p>`;
+        summary.innerHTML = `<div class="summary-header">${logoHTML}<h3>${escapeHTML(fallbackName)}</h3></div><p>No Program Info</p>`;
     }
 
     // After summary content changes, re-run layout-sensitive code

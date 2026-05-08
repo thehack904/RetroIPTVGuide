@@ -147,7 +147,9 @@ sudo chattr -i /home/iptv/iptv-server/config/users.db
 
    | Channel | External API |
    |---------|-------------|
-   | Weather | `api.open-meteo.com` |
+   | Weather (conditions/forecast) | `api.open-meteo.com` |
+   | Weather (alerts, US only) | `api.weather.gov` |
+   | Weather (radar) | `opengeo.ncep.noaa.gov` |
    | News | Configured RSS feed URLs |
    | Traffic | `overpass-api.de` |
    | Sports | User-configured external data source (RSS feeds or JSON scores endpoint) |

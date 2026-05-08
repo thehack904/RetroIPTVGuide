@@ -368,21 +368,90 @@
       background: rgba(140,20,20,0.7);
       border: 1px solid #cc4444;
       border-radius: 3px;
-      padding: 0.5em 0.7em;
+      padding: 0.4em 0.7em;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15em;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      overflow: hidden;
+    }
+    .vc-wx-alert-item.moderate {
+      background: rgba(140,80,10,0.75);
+      border-color: #cc8833;
+    }
+    .vc-wx-alert-item.minor {
+      background: rgba(100,100,10,0.75);
+      border-color: #bbaa22;
+    }
+    .vc-wx-alert-header {
       display: flex;
       align-items: center;
-      gap: 0.5em;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+      gap: 0.4em;
     }
-    .vc-wx-alert-icon {
-      font-size: 1.6em;
+    .vc-wx-alert-badge {
+      font-size: 0.68em;
+      font-weight: 900;
+      letter-spacing: 0.07em;
+      text-transform: uppercase;
+      padding: 0.12em 0.45em;
+      border-radius: 2px;
       flex-shrink: 0;
     }
-    .vc-wx-alert-text {
-      font-size: 0.88em;
+    .vc-wx-alert-badge.extreme, .vc-wx-alert-badge.severe {
+      background: #cc2222;
+      color: #fff;
+    }
+    .vc-wx-alert-badge.moderate {
+      background: #cc7711;
+      color: #fff;
+    }
+    .vc-wx-alert-badge.minor {
+      background: #aaaa00;
+      color: #111;
+    }
+    .vc-wx-alert-badge.unknown {
+      background: #445577;
+      color: #ddd;
+    }
+    .vc-wx-alert-event {
+      font-size: 0.84em;
       font-weight: 900;
       letter-spacing: 0.03em;
       color: #ffdddd;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .vc-wx-alert-item.moderate .vc-wx-alert-event { color: #ffe8c0; }
+    .vc-wx-alert-item.minor .vc-wx-alert-event    { color: #fffac0; }
+    .vc-wx-alert-headline {
+      font-size: 0.7em;
+      font-weight: 700;
+      color: #ffcccc;
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .vc-wx-alert-item.moderate .vc-wx-alert-headline { color: #ffddb0; }
+    .vc-wx-alert-item.minor .vc-wx-alert-headline    { color: #fefaaa; }
+    .vc-wx-alert-expires {
+      font-size: 0.63em;
+      color: #cc9999;
+      margin-top: 0.05em;
+    }
+    .vc-wx-alert-item.moderate .vc-wx-alert-expires { color: #cc9966; }
+    .vc-wx-alert-item.minor .vc-wx-alert-expires    { color: #aaaa55; }
+    .vc-wx-alerts-source {
+      font-size: 0.62em;
+      font-weight: 700;
+      color: #607090;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      text-align: right;
+      padding: 0.1em 0.1em 0;
+      flex-shrink: 0;
     }
     .vc-wx-no-alerts {
       flex: 1;
@@ -403,6 +472,188 @@
     .vc-wx-no-alerts-sub {
       font-size: 0.72em;
       color: #70a870;
+    }
+
+    /* ── Animated Background Layer ──────────────────────────────────── */
+    .vc-wx-bg-anim {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+    }
+    /* Keep all weather content above the animated background layer */
+    .vc-wx-frame > :not(.vc-wx-bg-anim) {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Sunny ──────────────────────────────────────────────────────────── */
+    .vc-wx-bg-anim.wx-bg-sunny {
+      background:
+        radial-gradient(ellipse 110% 55% at 50% -8%,
+          rgba(255, 210, 0, 0.25) 0%, transparent 55%),
+        linear-gradient(180deg, #1838cc 0%, #0a1a80 50%, #081060 100%);
+    }
+    .vc-wx-bg-anim.wx-bg-sunny::before {
+      content: '';
+      position: absolute;
+      top: -18%; left: 32%;
+      width: 36%; height: 55%;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255, 210, 0, 0.28) 0%, transparent 65%);
+      animation: vc-wx-sun-pulse 5s ease-in-out infinite;
+    }
+    @keyframes vc-wx-sun-pulse {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50%       { opacity: 1;   transform: scale(1.12); }
+    }
+
+    /* Partly Cloudy ──────────────────────────────────────────────────── */
+    .vc-wx-bg-anim.wx-bg-partly-cloudy {
+      background:
+        radial-gradient(ellipse 85% 45% at 62% -10%,
+          rgba(255, 200, 0, 0.18) 0%, transparent 55%),
+        linear-gradient(180deg, #1535cc 0%, #0a1a80 55%, #081060 100%);
+    }
+    .vc-wx-bg-anim.wx-bg-partly-cloudy::before {
+      content: '';
+      position: absolute;
+      top: 3%; left: -2%;
+      width: 65%; height: 28%;
+      background:
+        radial-gradient(ellipse 50% 60% at 38% 50%,
+          rgba(155, 175, 225, 0.14) 0%, transparent 70%);
+      animation: vc-wx-cloud-slow1 13s ease-in-out infinite alternate;
+    }
+
+    /* Cloudy ─────────────────────────────────────────────────────────── */
+    .vc-wx-bg-anim.wx-bg-cloudy {
+      background: linear-gradient(180deg, #1a2258 0%, #0d1440 55%, #090e30 100%);
+    }
+    .vc-wx-bg-anim.wx-bg-cloudy::before {
+      content: '';
+      position: absolute;
+      top: 0%; left: -5%;
+      width: 80%; height: 42%;
+      background:
+        radial-gradient(ellipse 55% 55% at 35% 40%,
+          rgba(140, 155, 210, 0.18) 0%, transparent 65%),
+        radial-gradient(ellipse 40% 40% at 78% 28%,
+          rgba(120, 140, 200, 0.12) 0%, transparent 55%);
+      animation: vc-wx-cloud-slow1 14s ease-in-out infinite alternate;
+    }
+    .vc-wx-bg-anim.wx-bg-cloudy::after {
+      content: '';
+      position: absolute;
+      top: 6%; right: -12%;
+      width: 62%; height: 36%;
+      background:
+        radial-gradient(ellipse 50% 50% at 60% 55%,
+          rgba(130, 150, 210, 0.11) 0%, transparent 60%);
+      animation: vc-wx-cloud-slow2 19s ease-in-out infinite alternate;
+    }
+    @keyframes vc-wx-cloud-slow1 {
+      from { transform: translateX(0); }
+      to   { transform: translateX(5%); }
+    }
+    @keyframes vc-wx-cloud-slow2 {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-6%); }
+    }
+
+    /* Thunderstorm ───────────────────────────────────────────────────── */
+    .vc-wx-bg-anim.wx-bg-thunderstorm {
+      background: linear-gradient(180deg, #0e1530 0%, #070d20 65%, #050910 100%);
+    }
+    .vc-wx-bg-anim.wx-bg-thunderstorm::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 80% 50% at 50% 18%,
+          rgba(80, 90, 130, 0.22) 0%, transparent 65%);
+    }
+    .vc-wx-lightning-flash {
+      position: absolute;
+      inset: 0;
+      background: rgba(200, 210, 255, 0.06);
+      animation: vc-wx-lightning-flash 7s steps(1) infinite;
+      pointer-events: none;
+    }
+    @keyframes vc-wx-lightning-flash {
+      0%, 88%, 90.6%, 92.6%, 94%, 100% { opacity: 0; }
+      89%, 90%   { opacity: 1;   }
+      91%, 92%   { opacity: 0.7; }
+      93%, 93.6% { opacity: 0.4; }
+    }
+
+    /* Foggy ──────────────────────────────────────────────────────────── */
+    .vc-wx-bg-anim.wx-bg-foggy {
+      background: linear-gradient(180deg, #18202e 0%, #0e1620 65%, #080e18 100%);
+    }
+    .vc-wx-bg-anim.wx-bg-foggy::before {
+      content: '';
+      position: absolute;
+      top: 8%; left: -12%;
+      width: 125%; height: 32%;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(155, 170, 200, 0.12) 25%,
+        rgba(160, 175, 205, 0.16) 55%,
+        rgba(155, 170, 200, 0.12) 78%,
+        transparent 100%);
+      border-radius: 50%;
+      animation: vc-wx-fog-drift1 22s linear infinite alternate;
+    }
+    .vc-wx-bg-anim.wx-bg-foggy::after {
+      content: '';
+      position: absolute;
+      top: 42%; left: -18%;
+      width: 135%; height: 28%;
+      background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(140, 155, 185, 0.09) 22%,
+        rgba(148, 163, 192, 0.13) 55%,
+        rgba(140, 155, 185, 0.09) 82%,
+        transparent 100%);
+      border-radius: 50%;
+      animation: vc-wx-fog-drift2 30s linear infinite alternate;
+    }
+    @keyframes vc-wx-fog-drift1 {
+      from { transform: translateX(0); }
+      to   { transform: translateX(12%); }
+    }
+    @keyframes vc-wx-fog-drift2 {
+      from { transform: translateX(0); }
+      to   { transform: translateX(-10%); }
+    }
+
+    /* Canvas-based backgrounds (rain, snow, windy) */
+    .vc-wx-bg-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+    .vc-wx-bg-anim.wx-bg-rain,
+    .vc-wx-bg-anim.wx-bg-snow,
+    .vc-wx-bg-anim.wx-bg-windy {
+      background: linear-gradient(180deg, #0e1a48 0%, #081030 55%, #050820 100%);
+    }
+
+    /* Reduced motion: disable all background animations */
+    @media (prefers-reduced-motion: reduce) {
+      .vc-wx-bg-anim,
+      .vc-wx-bg-anim::before,
+      .vc-wx-bg-anim::after,
+      .vc-wx-lightning-flash {
+        animation: none !important;
+        transition: none !important;
+      }
+      .vc-wx-bg-canvas { display: none; }
     }
   `;
 
@@ -522,6 +773,161 @@
     snow:                'vc-icon-snow',
     foggy:               'vc-icon-foggy',
   };
+
+  // ── Animated Background ───────────────────────────────────────────────────
+
+  // Map bg_condition value → CSS class on .vc-wx-bg-anim
+  const BG_CSS_CLASS = {
+    sunny:               'wx-bg-sunny',
+    partly_cloudy:       'wx-bg-partly-cloudy',
+    partly_cloudy_night: 'wx-bg-partly-cloudy',
+    cloudy:              'wx-bg-cloudy',
+    cloudy_night:        'wx-bg-cloudy',
+    thunderstorm:        'wx-bg-thunderstorm',
+    foggy:               'wx-bg-foggy',
+    rain:                'wx-bg-rain',
+    drizzle:             'wx-bg-rain',
+    showers:             'wx-bg-rain',
+    snow:                'wx-bg-snow',
+    windy:               'wx-bg-windy',
+  };
+
+  // Canvas-based conditions (particle systems drawn each frame)
+  const BG_CANVAS_CONDITIONS = new Set(['rain', 'drizzle', 'showers', 'snow', 'windy']);
+
+  // Particle counts per condition — higher = denser effect
+  const BG_PARTICLE_COUNT_SNOW    = 55;
+  const BG_PARTICLE_COUNT_WINDY   = 35;
+  const BG_PARTICLE_COUNT_DRIZZLE = 45;
+  const BG_PARTICLE_COUNT_RAIN    = 65;
+
+  let _bgRafId = null;
+
+  function _prefersReducedMotion() {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }
+  }
+
+  function _cancelBgAnim() {
+    if (_bgRafId !== null) { cancelAnimationFrame(_bgRafId); _bgRafId = null; }
+  }
+
+  function _runCanvasBg(canvas, condition) {
+    if (_prefersReducedMotion()) return;
+    const isSnow  = condition === 'snow';
+    const isWindy = condition === 'windy';
+    const isDrizzle = condition === 'drizzle';
+    const COUNT   = isSnow ? BG_PARTICLE_COUNT_SNOW
+                           : isWindy   ? BG_PARTICLE_COUNT_WINDY
+                           : isDrizzle ? BG_PARTICLE_COUNT_DRIZZLE
+                           : BG_PARTICLE_COUNT_RAIN;
+
+    const particles = [];
+    function _initP(p) {
+      if (!p) p = {};
+      p.x = Math.random();
+      p.y = isSnow ? Math.random() : (Math.random() - 0.05);
+      if (isSnow) {
+        p.r  = Math.random() * 2.2 + 0.9;
+        p.vy = Math.random() * 0.00075 + 0.0003;
+        p.vx = (Math.random() - 0.5) * 0.00025;
+        p.a  = Math.random() * 0.45 + 0.2;
+        p.wb = Math.random() * Math.PI * 2;
+        p.ws = Math.random() * 0.018 + 0.007;
+      } else if (isWindy) {
+        p.r  = Math.random() * 1.4 + 0.7;
+        p.vx = Math.random() * 0.0022 + 0.0009;
+        p.vy = (Math.random() - 0.5) * 0.0004;
+        p.a  = Math.random() * 0.35 + 0.15;
+        p.len = Math.random() * 0.04 + 0.018;
+      } else {
+        p.r  = isDrizzle ? Math.random() * 0.5 + 0.4 : Math.random() * 0.75 + 0.5;
+        p.len = isDrizzle ? Math.random() * 0.04 + 0.03 : Math.random() * 0.065 + 0.05;
+        p.vy = Math.random() * 0.003 + (isDrizzle ? 0.0012 : 0.0026);
+        p.vx = isDrizzle ? -0.00025 : -0.00075;
+        p.a  = Math.random() * 0.32 + (isDrizzle ? 0.12 : 0.2);
+      }
+      return p;
+    }
+    for (let i = 0; i < COUNT; i++) particles.push(_initP(null));
+
+    function draw() {
+      const el = canvas.parentElement;
+      if (!el) return; // detached
+      const w = el.offsetWidth, h = el.offsetHeight;
+      if (!w || !h) { _bgRafId = requestAnimationFrame(draw); return; }
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+      }
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        const px = p.x * w, py = p.y * h;
+        ctx.globalAlpha = p.a;
+        if (isSnow) {
+          p.wb += p.ws;
+          ctx.fillStyle = '#d0e4ff';
+          ctx.beginPath();
+          ctx.arc(px + Math.sin(p.wb) * 3, py, p.r, 0, Math.PI * 2);
+          ctx.fill();
+          p.x += p.vx; p.y += p.vy;
+          if (p.y > 1.04) { p.x = Math.random(); p.y = -0.02; }
+          if (p.x < -0.02 || p.x > 1.02) p.x = Math.random();
+        } else if (isWindy) {
+          ctx.strokeStyle = 'rgba(190, 215, 255, 0.75)';
+          ctx.lineWidth = p.r * 0.5;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px - p.len * w, py + p.vy * h * 18);
+          ctx.stroke();
+          p.x += p.vx; p.y += p.vy;
+          if (p.x > 1.06) { p.x = -0.04; p.y = Math.random(); }
+          if (p.y < 0 || p.y > 1) p.y = Math.random();
+        } else {
+          ctx.strokeStyle = 'rgba(155, 188, 240, 0.8)';
+          ctx.lineWidth = p.r;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + p.vx * w * 12, py + p.len * h);
+          ctx.stroke();
+          p.x += p.vx; p.y += p.vy;
+          if (p.y > 1.08) { p.x = Math.random(); p.y = -0.05; }
+          if (p.x < -0.06) { p.x = 1.02; p.y = Math.random(); }
+        }
+      }
+      ctx.globalAlpha = 1;
+      _bgRafId = requestAnimationFrame(draw);
+    }
+    _cancelBgAnim();
+    _bgRafId = requestAnimationFrame(draw);
+  }
+
+  function _applyWeatherBackground(frame, condition) {
+    _cancelBgAnim();
+    const bgDiv = document.createElement('div');
+    bgDiv.className = 'vc-wx-bg-anim';
+    const cls = BG_CSS_CLASS[condition];
+    if (cls) bgDiv.classList.add(cls);
+
+    if (condition === 'thunderstorm') {
+      const flash = document.createElement('div');
+      flash.className = 'vc-wx-lightning-flash';
+      bgDiv.appendChild(flash);
+    }
+
+    if (BG_CANVAS_CONDITIONS.has(condition)) {
+      const canvas = document.createElement('canvas');
+      canvas.className = 'vc-wx-bg-canvas';
+      canvas.style.opacity = condition === 'windy' ? '0.5' : '0.45';
+      bgDiv.appendChild(canvas);
+      // defer canvas start until it is in the DOM
+      requestAnimationFrame(function () { _runCanvasBg(canvas, condition); });
+    }
+
+    frame.insertBefore(bgDiv, frame.firstChild);
+  }
 
   function ensureAssets() {
     if (!document.getElementById(STYLE_ID)) {
@@ -708,17 +1114,77 @@
 
   // ── Segment 3: Severe Weather Alerts ──────────────────────────────────────
 
+  function _alertClass(severity) {
+    const s = (severity || '').toLowerCase();
+    if (s === 'extreme' || s === 'severe') return 'severe';
+    if (s === 'moderate') return 'moderate';
+    if (s === 'minor') return 'minor';
+    return 'unknown';
+  }
+
+  function _alertBadgeLabel(severity) {
+    const s = (severity || '').toLowerCase();
+    if (s === 'extreme')  return 'EXTREME';
+    if (s === 'severe')   return 'SEVERE';
+    if (s === 'moderate') return 'MODERATE';
+    if (s === 'minor')    return 'MINOR';
+    return 'ALERT';
+  }
+
+  function _fmtExpires(isoStr) {
+    if (!isoStr) return '';
+    try {
+      return 'Expires: ' + new Date(isoStr).toLocaleString([], {
+        month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit'
+      });
+    } catch (e) { return ''; }
+  }
+
+  function _escHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
   function renderAlerts(data, frame, bp) {
+    const alerts  = Array.isArray(data?.alerts) ? data.alerts : [];
     const ticks   = Array.isArray(data?.ticker) ? data.ticker : [];
     const iconHdr = Math.round(bp * ICON_RATIO_HDR);
     const iconLg  = Math.round(bp * ICON_RATIO_LG);
 
     let bodyHtml;
-    if (ticks.length) {
+    if (alerts.length) {
+      const items = alerts.map(a => {
+        const cls      = _alertClass(a.severity);
+        const badge    = _alertBadgeLabel(a.severity);
+        const event    = a.event    ? _escHtml(a.event)    : '';
+        const headline = a.headline ? _escHtml(a.headline) : event;
+        const expires  = _fmtExpires(a.expires);
+        return `
+          <div class="vc-wx-alert-item ${cls}">
+            <div class="vc-wx-alert-header">
+              <span class="vc-wx-alert-badge ${cls}">${badge}</span>
+              <span class="vc-wx-alert-event">${event}</span>
+            </div>
+            ${headline ? `<div class="vc-wx-alert-headline">${headline}</div>` : ''}
+            ${expires  ? `<div class="vc-wx-alert-expires">${expires}</div>`  : ''}
+          </div>`;
+      }).join('');
+      bodyHtml = `
+        <div class="vc-wx-seg-alerts">
+          ${items}
+          <div class="vc-wx-alerts-source">Source: NOAA/NWS</div>
+        </div>`;
+    } else if (ticks.length) {
       const items = ticks.map(t => `
         <div class="vc-wx-alert-item">
-          <div class="vc-wx-alert-icon">&#9888;</div>
-          <div class="vc-wx-alert-text">${t}</div>
+          <div class="vc-wx-alert-header">
+            <span class="vc-wx-alert-badge unknown">&#9888;</span>
+            <span class="vc-wx-alert-event">${_escHtml(t)}</span>
+          </div>
         </div>`).join('');
       bodyHtml = `<div class="vc-wx-seg-alerts">${items}</div>`;
     } else {
@@ -729,6 +1195,7 @@
             <div class="vc-wx-no-alerts-title">No Active Severe Weather Alerts</div>
             <div class="vc-wx-no-alerts-sub">${data?.location || 'Local Area'}</div>
           </div>
+          <div class="vc-wx-alerts-source">Source: NOAA/NWS</div>
         </div>`;
     }
 
@@ -752,6 +1219,10 @@
     frame.id = 'vc-wx-frame';
 
     const now = data?.now || {};
+    // Prefer the API-derived bg_condition (which may reflect an admin override),
+    // then fall back to the current icon, and ultimately to 'cloudy' as a safe
+    // neutral default that works for the unconfigured / stub state.
+    const bgCondition = data?.bg_condition || now.icon || 'cloudy';
 
     // ── Not configured ──────────────────────────────────────────────────────
     if (now.condition === 'Not Configured') {
@@ -784,6 +1255,7 @@
             <span class="vc-wx-ticker-track">No location configured \u2022 </span>
           </div>
         </div>`;
+      _applyWeatherBackground(frame, bgCondition);
       overlay.appendChild(frame);
       root.appendChild(overlay);
       return;
@@ -794,12 +1266,16 @@
     const bp  = Math.max(FONT_MIN_PX, Math.min(fw / FONT_SCALE_DIVISOR, FONT_MAX_PX));
     frame.style.fontSize = bp + 'px';
 
-    // Dispatch to the correct segment renderer
+    // Dispatch to the correct segment renderer (sets frame.innerHTML)
     const segment = (data?.segment != null) ? data.segment : 0;
     if      (segment === 1) { renderForecast(data, frame, bp); }
     else if (segment === 2) { renderRadar(data, frame, bp); }
     else if (segment === 3) { renderAlerts(data, frame, bp); }
     else                    { renderCurrent(data, frame, bp); }
+
+    // Apply animated background after content so insertBefore(firstChild) places
+    // it behind all rendered content in DOM order.
+    _applyWeatherBackground(frame, bgCondition);
 
     overlay.appendChild(frame);
     root.appendChild(overlay);
@@ -838,9 +1314,9 @@
       clearTimeout(_cycleTimer);
       _cycleTimer = null;
     }
+    _cancelBgAnim();
   }
 
   window.OverlayEngine.register(TYPE, { fetch: fetchDataWithCycling, render });
   window.OverlayEngine.onStop(_clearCycleTimer);
 })();
-

@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
 APP_VERSION = "v4.9.5-beta"
-APP_RELEASE_DATE = "2026-05-02"
+APP_RELEASE_DATE = "2026-05-07"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -633,7 +633,6 @@ def inject_tuner_context():
 _DEFAULT_PREFS = {
     "auto_load_channel": None,
     "hidden_channels": [],
-    "sizzle_reels_enabled": False,
     "default_theme": None,
 }
 
@@ -1778,15 +1777,22 @@ def get_current_feed_state(feed_count):
 
 
 
-_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units', 'seconds_per_segment')
+_WEATHER_CONFIG_KEYS = ('lat', 'lon', 'location_name', 'units', 'seconds_per_segment',
+                        'bg_condition_override')
 _WEATHER_SECONDS_PER_SEGMENT_DEFAULT = 300  # 5 minutes
 _WEATHER_SEGMENT_LABELS = ('current', 'forecast', 'radar', 'alerts')
+# Valid condition values the admin may force for animated-background testing
+_WEATHER_BG_VALID_CONDITIONS = (
+    '', 'sunny', 'partly_cloudy', 'cloudy', 'rain', 'drizzle',
+    'showers', 'snow', 'thunderstorm', 'foggy', 'windy',
+)
 
 def get_weather_config():
     """Return weather configuration: lat, lon (strings), location_name, units ('F'/'C'),
-    seconds_per_segment (int, default 300)."""
+    seconds_per_segment (int, default 300), bg_condition_override (string, default '')."""
     result = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
-              'seconds_per_segment': str(_WEATHER_SECONDS_PER_SEGMENT_DEFAULT)}
+              'seconds_per_segment': str(_WEATHER_SECONDS_PER_SEGMENT_DEFAULT),
+              'bg_condition_override': ''}
     try:
         with sqlite3.connect(TUNER_DB, timeout=10) as conn:
             c = conn.cursor()
@@ -1812,6 +1818,8 @@ def save_weather_config(config_dict):
                 raise ValueError(f"Invalid value for {key}: {val!r}. Must be a number.")
         if key == 'units' and val not in ('F', 'C', ''):
             raise ValueError(f"Invalid units: {val!r}. Must be 'F' or 'C'.")
+        if key == 'bg_condition_override' and val not in _WEATHER_BG_VALID_CONDITIONS:
+            raise ValueError(f"Invalid bg_condition_override: {val!r}.")
         if key == 'seconds_per_segment' and val:
             try:
                 sps = int(val)
@@ -2064,6 +2072,265 @@ def pick_random_traffic_demo_pack(pack_size=10):
     except Exception:
         logging.exception("pick_random_traffic_demo_pack failed")
     return chosen
+
+
+def lookup_zip_city(postal_code: str, country_code: str = 'us') -> dict:
+    """Look up city name, state abbreviation, latitude, and longitude for a postal code.
+
+    Uses the free Nominatim OpenStreetMap geocoding API (no API key required).
+    Returns a dict with keys: name, state, lat, lon.
+    Raises ValueError if the postal code is not found or the response is invalid.
+    """
+    postal_code = (postal_code or '').strip()
+    if not postal_code:
+        raise ValueError("Postal code must not be empty.")
+    if len(postal_code) > 20:
+        raise ValueError("Postal code is too long.")
+
+    country_code = (country_code or 'us').strip().lower()[:2]
+
+    # US state name → 2-letter abbreviation mapping used when the API returns a full name
+    _US_STATE_ABBR = {
+        'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+        'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+        'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+        'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+        'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+        'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+        'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+        'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+        'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+        'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+        'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+        'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+        'Wisconsin': 'WI', 'Wyoming': 'WY', 'District of Columbia': 'DC',
+    }
+
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        'postalcode': postal_code,
+        'countrycodes': country_code,
+        'format': 'json',
+        'addressdetails': '1',
+        'limit': '1',
+    }
+    headers = {
+        'User-Agent': 'RetroIPTVGuide/1.0 (traffic demo city lookup; '
+                      'https://github.com/thehack904/RetroIPTVGuide)',
+        'Accept-Language': 'en',
+    }
+    try:
+        resp = requests.get(url, params=params, headers=headers, timeout=10)
+        resp.raise_for_status()
+        results = resp.json()
+    except Exception as exc:
+        logging.warning("lookup_zip_city: Nominatim request failed: %s", exc)
+        raise ValueError("Postal code lookup service unavailable. Enter city details manually.") from exc
+
+    if not results:
+        raise ValueError(f"No results found for postal code \"{postal_code}\".")
+
+    item    = results[0]
+    lat     = float(item.get('lat', 0))
+    lon     = float(item.get('lon', 0))
+    address = item.get('address', {})
+
+    # City name: try several address keys in priority order
+    name = (address.get('city')
+            or address.get('town')
+            or address.get('village')
+            or address.get('hamlet')
+            or address.get('county')
+            or address.get('state')
+            or postal_code)
+
+    # State: for US prefer the abbreviation; for other countries use full name
+    state_full = address.get('state', '')
+    state = _US_STATE_ABBR.get(state_full, state_full) if country_code == 'us' else state_full
+    if not state:
+        state = address.get('country_code', country_code).upper()
+
+    return {'name': name, 'state': state, 'lat': lat, 'lon': lon}
+
+
+def add_traffic_demo_city(name, state, lat, lon, population):
+    """Insert a new city into traffic_demo_cities.
+
+    Validates all inputs, inserts the row, and starts a background thread that
+    downloads road data (Overpass GeoJSON) and the basemap PNG for the new city
+    so that it works fully offline after the next page load.
+
+    Returns the new city's integer id.
+    Raises ValueError on invalid input.
+    """
+    name = (name or '').strip()
+    state = (state or '').strip()
+    if not name:
+        raise ValueError("City name must not be empty.")
+    if len(name) > 100:
+        raise ValueError("City name must be 100 characters or fewer.")
+    if not state:
+        raise ValueError("State/region must not be empty.")
+    if len(state) > 50:
+        raise ValueError("State/region must be 50 characters or fewer.")
+    try:
+        lat = float(lat)
+        if not (-90.0 <= lat <= 90.0):
+            raise ValueError("Latitude must be between -90 and 90.")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid latitude: {exc}") from exc
+    try:
+        lon = float(lon)
+        if not (-180.0 <= lon <= 180.0):
+            raise ValueError("Longitude must be between -180 and 180.")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid longitude: {exc}") from exc
+    try:
+        # Strip all common thousands-separator styles before parsing:
+        #   37,390  (US/UK comma)
+        #   37.390  (European period)
+        #   37 390  (French/SI non-breaking or plain space)
+        #   37'390  (Swiss apostrophe)
+        #   37_390  (Python / some locales)
+        pop_raw = re.sub(r"[,.\s'_\u00a0\u202f]", '', str(population).strip())
+        population = int(pop_raw) if pop_raw else 0
+        if population < 0:
+            raise ValueError("Population must be a non-negative integer.")
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid population: {exc}") from exc
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute(
+                "INSERT INTO traffic_demo_cities "
+                "(name, state, lat, lon, population, enabled, weight, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?)",
+                (name, state, lat, lon, population, now_iso, now_iso),
+            )
+            conn.commit()
+            new_id = c.lastrowid
+    except Exception:
+        logging.exception("add_traffic_demo_city failed for name=%r", name)
+        raise
+
+    # Kick off a background thread to download road data and basemap so the city
+    # works offline immediately without blocking the HTTP response.
+    threading.Thread(
+        target=_download_city_offline_data,
+        args=(new_id, name, lat, lon),
+        daemon=True,
+        name=f"city-data-dl-{new_id}",
+    ).start()
+
+    return new_id
+
+
+def delete_traffic_demo_city(city_id):
+    """Remove a city from traffic_demo_cities and clean up its cached data.
+
+    Deletes the DB row and removes:
+    - the disk road-data cache  (ROADS_CACHE_DIR/<city_id>.json)
+    - the basemap PNG           (static/maps/traffic_demo/<slug>.png)
+
+    Raises if the city_id does not exist.
+    """
+    # Look up the city name before deleting so we can remove the slug-based files.
+    cities = get_traffic_demo_cities()
+    city = next((c for c in cities if c['id'] == int(city_id)), None)
+    if city is None:
+        raise ValueError(f"City id={city_id} not found.")
+
+    # Remove DB row
+    try:
+        with sqlite3.connect(TUNER_DB, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("DELETE FROM traffic_demo_cities WHERE id=?", (int(city_id),))
+            conn.commit()
+    except Exception:
+        logging.exception("delete_traffic_demo_city: DB delete failed for id=%s", city_id)
+        raise
+
+    # Evict in-memory road cache
+    _ROADS_CACHE.pop(int(city_id), None)
+    _ROADS_CACHE_TIME.pop(int(city_id), None)
+
+    # Remove disk road-data cache file
+    cache_path = _roads_cache_path(int(city_id))
+    try:
+        if os.path.isfile(cache_path):
+            os.remove(cache_path)
+            logging.info("delete_traffic_demo_city: removed road cache %s", cache_path)
+    except Exception:
+        logging.warning("delete_traffic_demo_city: could not remove road cache %s", cache_path,
+                        exc_info=True)
+
+    # Remove basemap PNG
+    slug = _city_slug(city['name'])
+    basemap_path = os.path.join(_BASEMAP_DIR, f"{slug}.png")
+    try:
+        if os.path.isfile(basemap_path):
+            os.remove(basemap_path)
+            logging.info("delete_traffic_demo_city: removed basemap %s", basemap_path)
+    except Exception:
+        logging.warning("delete_traffic_demo_city: could not remove basemap %s", basemap_path,
+                        exc_info=True)
+
+
+def _download_city_offline_data(city_id: int, city_name: str, lat: float, lon: float) -> None:
+    """Background thread: download road GeoJSON and basemap PNG for a newly added city.
+
+    This is called from add_traffic_demo_city() so the city has usable offline
+    data as soon as possible after it is created.  Both downloads are best-effort
+    — failures are logged but do not raise so the thread always terminates cleanly.
+    """
+    logging.info("_download_city_offline_data: starting for %r (id=%s)", city_name, city_id)
+
+    # 1. Road data (Overpass GeoJSON) ─────────────────────────────────────────
+    try:
+        raw     = _fetch_overpass_roads(lat, lon)
+        geojson = _overpass_to_geojson(raw)
+        if geojson["features"]:
+            _save_roads_to_disk(city_id, geojson)
+            # Warm the in-memory cache too
+            _ROADS_CACHE[city_id]      = geojson
+            _ROADS_CACHE_TIME[city_id] = time.time()
+            logging.info("_download_city_offline_data: road data saved for %r (%d features)",
+                         city_name, len(geojson["features"]))
+        else:
+            logging.warning("_download_city_offline_data: no road features returned for %r",
+                            city_name)
+    except Exception:
+        logging.exception("_download_city_offline_data: road download failed for %r", city_name)
+
+    # 2. Basemap PNG (OSM tile stitch) ─────────────────────────────────────────
+    if not _PILLOW_AVAILABLE:
+        logging.info("_download_city_offline_data: Pillow unavailable, skipping basemap for %r",
+                     city_name)
+        return
+
+    slug      = _city_slug(city_name)
+    out_path  = os.path.join(_BASEMAP_DIR, f"{slug}.png")
+    if os.path.isfile(out_path):
+        logging.debug("_download_city_offline_data: basemap already exists for %r, skipping", city_name)
+        return
+
+    try:
+        ok = _generate_basemap_png(lat, lon, out_path)
+        if ok:
+            logging.info("_download_city_offline_data: basemap saved for %r", city_name)
+        else:
+            # Tile download failed — use placeholder so the overlay always has a background
+            logging.info("_download_city_offline_data: tile download failed for %r, generating placeholder",
+                         city_name)
+            _generate_placeholder_basemap_png(city_name, out_path)
+    except Exception:
+        logging.exception("_download_city_offline_data: basemap generation failed for %r", city_name)
+        try:
+            _generate_placeholder_basemap_png(city_name, out_path)
+        except Exception:
+            logging.exception("_download_city_offline_data: placeholder also failed for %r", city_name)
 
 
 def _get_congestion_distribution(hour, is_weekend=False):
@@ -3003,6 +3270,43 @@ def _build_radar_url(lat, lon):
         return _RADAR_URL_CONUS
 
 
+_NWS_ALERT_SEVERITIES = ('Extreme', 'Severe', 'Moderate', 'Minor')
+
+def _fetch_nws_alerts(lat, lon):
+    """Fetch active NWS weather alerts for a lat/lon point (US only).
+
+    Calls https://api.weather.gov/alerts/active?point={lat},{lon}.
+    Returns a list of alert dicts (may be empty) or [] on failure / non-US location.
+    Each dict has keys: event, headline, description, severity, urgency,
+    certainty, onset, expires.
+    """
+    try:
+        url = f"https://api.weather.gov/alerts/active?point={lat},{lon}"
+        resp = requests.get(url, timeout=10, headers={
+            'User-Agent': 'RetroIPTVGuide/1.0',
+            'Accept': 'application/geo+json',
+        })
+        resp.raise_for_status()
+        features = resp.json().get('features', [])
+        alerts = []
+        for feat in features:
+            props = feat.get('properties', {})
+            alerts.append({
+                'event':       props.get('event', ''),
+                'headline':    props.get('headline', ''),
+                'description': props.get('description', ''),
+                'severity':    props.get('severity', 'Unknown'),
+                'urgency':     props.get('urgency', 'Unknown'),
+                'certainty':   props.get('certainty', 'Unknown'),
+                'onset':       props.get('onset', ''),
+                'expires':     props.get('expires', ''),
+            })
+        return alerts
+    except Exception:
+        logging.exception("_fetch_nws_alerts failed for lat=%s lon=%s", lat, lon)
+        return []
+
+
 def _fetch_open_meteo(lat, lon, units):
     """Fetch current + hourly + daily weather from open-meteo. Returns dict or None on failure."""
     temp_unit = 'fahrenheit' if units != 'C' else 'celsius'
@@ -3025,6 +3329,12 @@ def _fetch_open_meteo(lat, lon, units):
         logging.exception("_fetch_open_meteo failed for lat=%s lon=%s", lat, lon)
         return None
 
+# Wind speed threshold (in mph or kmh depending on the configured units) above
+# which a "clear/partly-cloudy/cloudy" sky is reported as a "windy" animated
+# background.  25 mph is roughly "breezy / fresh breeze" on the Beaufort scale.
+_WINDY_BG_THRESHOLD_MPH = 25
+_WINDY_BG_THRESHOLD_KMH = 40
+
 def _build_weather_payload(cfg):
     """Build the full weather API payload from open-meteo data or a stub when unconfigured."""
     now_utc = datetime.now(timezone.utc)
@@ -3034,10 +3344,13 @@ def _build_weather_payload(cfg):
     location_name = cfg.get('location_name') or 'Local Weather'
     units = cfg.get('units') or 'F'
     deg = '°F' if units != 'C' else '°C'
+    bg_override = cfg.get('bg_condition_override', '').strip()
 
     raw = None
+    nws_alerts = []
     if lat and lon:
         raw = _fetch_open_meteo(lat, lon, units)
+        nws_alerts = _fetch_nws_alerts(lat, lon)
 
     if raw:
         cur = raw.get('current', {})
@@ -3126,14 +3439,29 @@ def _build_weather_payload(cfg):
                              'condition': _wmo_label(wc), 'icon': _wmo_icon(wc)})
 
         ticker = []
-        if wcode in (95, 96, 99):
-            ticker.append('Severe Thunderstorms Possible')
-        if wcode in (71, 73, 75, 77, 85, 86):
-            ticker.append('Winter Weather Advisory in Effect')
+        # Prefer real NWS alert headlines; fall back to WMO-code hints when no alerts
+        if nws_alerts:
+            ticker = [a['headline'] or a['event'] for a in nws_alerts if a['headline'] or a['event']]
+        else:
+            if wcode in (95, 96, 99):
+                ticker.append('Severe Thunderstorms Possible')
+            if wcode in (71, 73, 75, 77, 85, 86):
+                ticker.append('Winter Weather Advisory in Effect')
 
         # backward-compat forecast list
         compat_forecast = [{'label': d['dow'], 'hi': d['hi'], 'lo': d['lo'],
                             'condition': d['condition']} for d in extended]
+
+        # Derive the animated-background condition from the actual icon, then let
+        # the admin override override it when set.
+        auto_bg = now_info['icon']
+        # Treat high wind speeds as a "windy" hint when no stronger condition.
+        # open-meteo returns mph when units='F' and km/h when units='C'.
+        windy_threshold = (_WINDY_BG_THRESHOLD_KMH if units == 'C'
+                           else _WINDY_BG_THRESHOLD_MPH)
+        if wind_spd is not None and wind_spd >= windy_threshold and auto_bg in ('sunny', 'partly_cloudy', 'cloudy'):
+            auto_bg = 'windy'
+        bg_condition = bg_override if bg_override in _WEATHER_BG_VALID_CONDITIONS and bg_override else auto_bg
 
         return {
             'updated': updated_str,
@@ -3143,11 +3471,15 @@ def _build_weather_payload(cfg):
             'extended': extended,
             'five_day': five_day,
             'ticker': ticker,
+            'alerts': nws_alerts,
             'forecast': compat_forecast,
             'radar_url': _build_radar_url(lat, lon),
+            'bg_condition': bg_condition,
+            'bg_condition_override': bg_override,
         }
 
     # Stub / demo data when no coordinates configured
+    bg_condition = bg_override if bg_override in _WEATHER_BG_VALID_CONDITIONS and bg_override else 'cloudy'
     return {
         'updated': updated_str,
         'location': location_name,
@@ -3161,8 +3493,11 @@ def _build_weather_payload(cfg):
         'extended': [],
         'five_day': [],
         'ticker': [],
+        'alerts': [],
         'forecast': [],
         'radar_url': _build_radar_url('', ''),
+        'bg_condition': bg_condition,
+        'bg_condition_override': bg_override,
     }
 
 _RSS_NS = {'atom': 'http://www.w3.org/2005/Atom', 'media': 'http://search.yahoo.com/mrss/'}
@@ -3692,10 +4027,14 @@ def manage_users():
             ch_name = request.form.get('auto_load_channel_name', '').strip() or ch_id
             auto_load = {"id": ch_id, "name": ch_name} if ch_id else None
             raw_theme = request.form.get('default_theme', '').strip() or None
-            save_user_prefs(username, {
+            patch = {
                 "auto_load_channel": auto_load,
                 "default_theme": raw_theme,
-            })
+            }
+            if request.form.get('update_hidden_channels'):
+                patch["hidden_channels"] = request.form.getlist('hidden_channel_ids')
+                log_event(current_user.username, f"Set hidden channels for {username}: {patch['hidden_channels']}")
+            save_user_prefs(username, patch)
             log_event(current_user.username, f"Updated prefs for {username}")
             flash(f"✅ Preferences saved for '{username}'.")
 
@@ -4746,6 +5085,43 @@ def api_weather():
     payload['ms_until_next'] = ms_until_next
     return jsonify(payload)
 
+
+@app.route('/api/weather/bg_override', methods=['GET', 'POST', 'DELETE'])
+@login_required
+def api_weather_bg_override():
+    """Admin endpoint: get/set/clear the animated-background condition override.
+
+    GET  → returns {"condition": "<current override or ''>"}.
+    POST → body JSON {"condition": "<value>"}  sets override; "" or "auto" clears it.
+    DELETE → clears the override (sets to "").
+    """
+    if request.method == 'GET':
+        cfg = get_weather_config()
+        return jsonify({'condition': cfg.get('bg_condition_override', '')})
+
+    if request.method == 'DELETE':
+        try:
+            save_weather_config({**get_weather_config(), 'bg_condition_override': ''})
+            return jsonify({'ok': True, 'condition': ''})
+        except Exception as exc:
+            logging.exception("api_weather_bg_override DELETE failed: %s", exc)
+            return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+    # POST
+    data = request.get_json(silent=True) or {}
+    condition = str(data.get('condition', '')).strip()
+    if condition == 'auto':
+        condition = ''
+    if condition not in _WEATHER_BG_VALID_CONDITIONS:
+        return jsonify({'ok': False, 'error': f'Invalid condition: {condition!r}'}), 400
+    try:
+        save_weather_config({**get_weather_config(), 'bg_condition_override': condition})
+        return jsonify({'ok': True, 'condition': condition})
+    except Exception as exc:
+        logging.exception("api_weather_bg_override POST failed: %s", exc)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+
 @app.route('/api/traffic', methods=['GET'])
 @login_required
 def api_traffic():
@@ -4827,6 +5203,93 @@ def api_traffic_demo_roads(city_id):
     No API key required — Overpass is a free public service."""
     geojson = get_traffic_demo_roads(city_id)
     return jsonify(geojson)
+
+
+@app.route('/api/traffic/demo/cities/add', methods=['POST'])
+@login_required
+def api_traffic_demo_city_add():
+    """Add a new city to the traffic demo rotation.
+
+    Expected JSON body:
+      { "name": "Portland", "state": "OR", "lat": 45.5051, "lon": -122.6750, "population": 652503 }
+
+    On success returns { "ok": true, "city": { <city dict> } }.
+    The server immediately starts a background thread to download road data
+    (Overpass GeoJSON) and the basemap PNG so the new city is offline-ready.
+    """
+    if current_user.username != 'admin':
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
+    data = request.get_json(silent=True) or {}
+    try:
+        new_id = add_traffic_demo_city(
+            name=data.get('name', ''),
+            state=data.get('state', ''),
+            lat=data.get('lat', 0),
+            lon=data.get('lon', 0),
+            population=data.get('population', 0),
+        )
+    except ValueError as exc:
+        logging.debug("api_traffic_demo_city_add: validation failed: %s", exc)
+        return jsonify({'ok': False, 'error': 'Invalid city data. Check name, state, lat/lon and population.'}), 400
+    except Exception as exc:
+        logging.exception("api_traffic_demo_city_add failed: %s", exc)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+    cities = get_traffic_demo_cities()
+    new_city = next((c for c in cities if c['id'] == new_id), None)
+    return jsonify({'ok': True, 'city': new_city})
+
+
+@app.route('/api/traffic/demo/cities/<int:city_id>', methods=['DELETE'])
+@login_required
+def api_traffic_demo_city_delete(city_id):
+    """Delete a city from the traffic demo rotation.
+
+    Removes the DB row and cleans up the cached road GeoJSON and basemap PNG.
+    Returns { "ok": true } on success.
+    """
+    if current_user.username != 'admin':
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
+    try:
+        delete_traffic_demo_city(city_id)
+        return jsonify({'ok': True})
+    except ValueError as exc:
+        logging.debug("api_traffic_demo_city_delete: city not found: %s", exc)
+        return jsonify({'ok': False, 'error': 'City not found.'}), 404
+    except Exception as exc:
+        logging.exception("api_traffic_demo_city_delete failed for city_id=%s: %s", city_id, exc)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+
+@app.route('/api/traffic/demo/zip_lookup', methods=['GET'])
+@login_required
+def api_traffic_demo_zip_lookup():
+    """Look up city info for a postal code using the free Nominatim OSM geocoding API.
+
+    Query parameters:
+      zip     — postal code (required)
+      country — 2-letter ISO country code, defaults to 'us'
+
+    Returns { "ok": true, "name": "...", "state": "...", "lat": ..., "lon": ... }
+    on success, or { "ok": false, "error": "..." } on failure.
+    No API key is required.
+    """
+    if current_user.username != 'admin':
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
+    postal_code  = request.args.get('zip', '').strip()
+    country_code = request.args.get('country', 'us').strip()
+    if not postal_code:
+        return jsonify({'ok': False, 'error': 'zip parameter is required'}), 400
+    try:
+        info = lookup_zip_city(postal_code, country_code)
+        return jsonify({'ok': True, **info})
+    except ValueError as exc:
+        logging.debug("api_traffic_demo_zip_lookup: lookup failed: %s", exc)
+        return jsonify({'ok': False, 'error': 'Postal code not found or lookup service unavailable.'}), 404
+    except Exception as exc:
+        logging.exception("api_traffic_demo_zip_lookup failed: %s", exc)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
 
 @app.route('/api/virtual/status', methods=['GET'])
 @login_required
@@ -5272,7 +5735,7 @@ def api_current_program():
     Query params:
       - tvg_id (preferred) OR id (fallback) — the channel identifier used in cached_channels
     Response:
-      { ok: True, channel: "<name>", tvg_id: "<id>", program: { title, desc, start_iso, stop_iso } }
+      { ok: True, channel: "<name>", tvg_id: "<id>", logo: "<url>", program: { title, desc, start_iso, stop_iso } }
       or { ok: False, error: "..." }
     """
     tvg_id = request.args.get('tvg_id') or request.args.get('id') or ''
@@ -5281,11 +5744,13 @@ def api_current_program():
 
     try:
         now = datetime.now(timezone.utc)
-        # find channel name
+        # find channel name and logo
         channel_name = None
+        channel_logo = ''
         for ch in cached_channels:
             if ch.get('tvg_id') == tvg_id or str(ch.get('number')) == str(tvg_id):
                 channel_name = ch.get('name')
+                channel_logo = ch.get('logo') or ''
                 break
 
         # get epg entries for tvg_id
@@ -5316,6 +5781,7 @@ def api_current_program():
                 "ok": True,
                 "channel": channel_name,
                 "tvg_id": tvg_id,
+                "logo": channel_logo,
                 "program": {
                     "title": current_prog.get('title') or '',
                     "desc": current_prog.get('desc') or '',
@@ -5328,6 +5794,7 @@ def api_current_program():
                 "ok": True,
                 "channel": channel_name,
                 "tvg_id": tvg_id,
+                "logo": channel_logo,
                 "program": {
                     "title": "No Guide Data Available",
                     "desc": "",

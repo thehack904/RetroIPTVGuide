@@ -49,7 +49,6 @@ class TestUserPrefsHelpers:
         prefs = get_user_prefs("newuser")
         assert prefs["auto_load_channel"] is None
         assert prefs["hidden_channels"] == []
-        assert prefs["sizzle_reels_enabled"] is False
 
     def test_all_default_keys_present(self):
         prefs = get_user_prefs("nobody")
@@ -60,23 +59,19 @@ class TestUserPrefsHelpers:
         save_user_prefs("testuser", {
             "auto_load_channel": {"id": "ch1", "name": "Channel 1"},
             "hidden_channels": ["ch2", "ch3"],
-            "sizzle_reels_enabled": True,
         })
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"] == {"id": "ch1", "name": "Channel 1"}
         assert prefs["hidden_channels"] == ["ch2", "ch3"]
-        assert prefs["sizzle_reels_enabled"] is True
 
     def test_upsert_overwrites_existing(self):
         save_user_prefs("testuser", {"auto_load_channel": {"id": "old", "name": "Old"},
-                                     "hidden_channels": [], "sizzle_reels_enabled": False})
+                                     "hidden_channels": []})
         save_user_prefs("testuser", {"auto_load_channel": None,
-                                     "hidden_channels": ["x"],
-                                     "sizzle_reels_enabled": True})
+                                     "hidden_channels": ["x"]})
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"] is None
         assert prefs["hidden_channels"] == ["x"]
-        assert prefs["sizzle_reels_enabled"] is True
 
     def test_missing_keys_filled_with_defaults(self):
         """Partial JSON stored in DB should still return all expected keys."""
@@ -85,12 +80,11 @@ class TestUserPrefsHelpers:
         with sqlite3.connect(db) as conn:
             conn.execute(
                 "INSERT INTO user_preferences (username, prefs) VALUES (?, ?)",
-                ("partial", json.dumps({"sizzle_reels_enabled": True}))
+                ("partial", json.dumps({"hidden_channels": ["x"]}))
             )
         prefs = get_user_prefs("partial")
         assert prefs["auto_load_channel"] is None   # filled from defaults
-        assert prefs["hidden_channels"] == []       # filled from defaults
-        assert prefs["sizzle_reels_enabled"] is True
+        assert prefs["hidden_channels"] == ["x"]
 
     def test_graceful_on_missing_table(self, monkeypatch, tmp_path):
         """get_user_prefs should return defaults if the table doesn't exist yet."""
@@ -112,8 +106,7 @@ class TestUserPrefsHelpers:
         monkeypatch.setattr(app_module, "DATABASE", empty_db)
         # Should not raise — auto-heals by calling init_db() then retrying
         save_user_prefs("alice", {"auto_load_channel": None,
-                                  "hidden_channels": [],
-                                  "sizzle_reels_enabled": False})
+                                  "hidden_channels": []})
         prefs = get_user_prefs("alice")
         assert prefs["hidden_channels"] == []
 
@@ -132,17 +125,15 @@ class TestApiUserPrefsGet:
         data = resp.get_json()
         assert data["auto_load_channel"] is None
         assert data["hidden_channels"] == []
-        assert data["sizzle_reels_enabled"] is False
 
     def test_returns_saved_prefs(self, client):
         login(client)
         save_user_prefs("testuser", {"auto_load_channel": {"id": "abc", "name": "ABC"},
-                                     "hidden_channels": ["x"], "sizzle_reels_enabled": True})
+                                     "hidden_channels": ["x"]})
         resp = client.get("/api/user_prefs")
         data = resp.get_json()
         assert data["auto_load_channel"]["id"] == "abc"
         assert "x" in data["hidden_channels"]
-        assert data["sizzle_reels_enabled"] is True
 
 
 # ─── API endpoint: POST /api/user_prefs ──────────────────────────────────────
@@ -168,7 +159,7 @@ class TestApiUserPrefsPost:
     def test_clear_auto_load_channel(self, client):
         login(client)
         save_user_prefs("testuser", {"auto_load_channel": {"id": "ch1", "name": "News"},
-                                     "hidden_channels": [], "sizzle_reels_enabled": False})
+                                     "hidden_channels": []})
         resp = client.post("/api/user_prefs",
                            data=json.dumps({"auto_load_channel": None}),
                            content_type="application/json")
@@ -186,25 +177,25 @@ class TestApiUserPrefsPost:
         assert "news" in prefs["hidden_channels"]
 
     def test_toggle_sizzle_reels(self, client):
+        """sizzle_reels_enabled is no longer a valid pref — unknown keys are ignored."""
         login(client)
         resp = client.post("/api/user_prefs",
                            data=json.dumps({"sizzle_reels_enabled": True}),
                            content_type="application/json")
         assert resp.status_code == 200
-        assert get_user_prefs("testuser")["sizzle_reels_enabled"] is True
+        assert "sizzle_reels_enabled" not in get_user_prefs("testuser")
 
     def test_partial_update_preserves_other_keys(self, client):
         login(client)
         save_user_prefs("testuser", {"auto_load_channel": {"id": "ch1", "name": "News"},
-                                     "hidden_channels": ["x"], "sizzle_reels_enabled": True})
-        # Only update sizzle_reels_enabled
+                                     "hidden_channels": ["x"]})
+        # Only update hidden_channels
         client.post("/api/user_prefs",
-                    data=json.dumps({"sizzle_reels_enabled": False}),
+                    data=json.dumps({"hidden_channels": ["y"]}),
                     content_type="application/json")
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"]["id"] == "ch1"   # unchanged
-        assert prefs["hidden_channels"] == ["x"]           # unchanged
-        assert prefs["sizzle_reels_enabled"] is False      # updated
+        assert prefs["hidden_channels"] == ["y"]           # updated
 
     def test_invalid_json_returns_400(self, client):
         login(client)
@@ -216,7 +207,7 @@ class TestApiUserPrefsPost:
         """auto_load_channel with no 'id' key should be treated as clearing it."""
         login(client)
         save_user_prefs("testuser", {"auto_load_channel": {"id": "ch1", "name": "x"},
-                                     "hidden_channels": [], "sizzle_reels_enabled": False})
+                                     "hidden_channels": []})
         client.post("/api/user_prefs",
                     data=json.dumps({"auto_load_channel": {}}),
                     content_type="application/json")
@@ -276,7 +267,6 @@ class TestManageUsersSetPrefs:
         save_user_prefs("testuser", {
             "auto_load_channel": {"id": "ch99", "name": "Test Ch"},
             "hidden_channels": [],
-            "sizzle_reels_enabled": False,
         })
         login(client, "admin", "adminpass")
         resp = client.get("/manage_users")
@@ -307,7 +297,6 @@ class TestManageUsersSetPrefs:
         save_user_prefs("testuser", {
             "auto_load_channel": {"id": "old-ch", "name": "Old Tuner Channel"},
             "hidden_channels": [],
-            "sizzle_reels_enabled": False,
         })
         # Give testuser an initial assigned_tuner
         login(client, "admin", "adminpass")
@@ -324,7 +313,6 @@ class TestManageUsersSetPrefs:
         save_user_prefs("testuser", {
             "auto_load_channel": {"id": "keep-ch", "name": "Keep This Channel"},
             "hidden_channels": [],
-            "sizzle_reels_enabled": False,
         })
         login(client, "admin", "adminpass")
         # First, assign Tuner 1 to testuser (tuner was None → Tuner 1, so auto_load clears here)
@@ -337,7 +325,6 @@ class TestManageUsersSetPrefs:
         save_user_prefs("testuser", {
             "auto_load_channel": {"id": "keep-ch", "name": "Keep This Channel"},
             "hidden_channels": [],
-            "sizzle_reels_enabled": False,
         })
         # Re-assign the SAME tuner — channel must be preserved
         client.post("/manage_users", data={
@@ -420,3 +407,117 @@ class TestManageUsersSetPrefs:
         resp = client.get("/manage_users")
         assert resp.status_code == 200
         assert b"Active Combined Channel" in resp.data
+
+
+# ─── Admin: manage_users hidden channels ─────────────────────────────────────
+
+class TestManageUsersHiddenChannels:
+    def test_hidden_channels_shown_in_admin_panel(self, client):
+        """Admin manage_users page shows count summary of a user's hidden channels."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["sports", "news", "weather"],
+        })
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b"3 channels hidden" in resp.data
+
+    def test_no_hidden_channels_shows_empty_message(self, client):
+        """Admin manage_users page shows 'No channels hidden' when the list is empty."""
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b"No channels hidden" in resp.data
+
+    def test_admin_can_clear_hidden_channels_via_multiselect(self, client):
+        """Admin can clear hidden channels by submitting update_hidden_channels with no IDs."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["ch1", "ch2"],
+        })
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "update_hidden_channels": "1",
+            # no hidden_channel_ids → selects nothing → empty list
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["hidden_channels"] == []
+
+    def test_admin_can_set_hidden_channels_via_multiselect(self, client):
+        """Admin can set specific hidden channels by submitting update_hidden_channels with IDs."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": [],
+        })
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "update_hidden_channels": "1",
+            "hidden_channel_ids": ["sports", "news"],
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert "sports" in prefs["hidden_channels"]
+        assert "news" in prefs["hidden_channels"]
+        assert len(prefs["hidden_channels"]) == 2
+
+    def test_admin_can_replace_hidden_channels(self, client):
+        """Admin can replace existing hidden channels with a new selection."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["old1", "old2"],
+        })
+        login(client, "admin", "adminpass")
+        client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "update_hidden_channels": "1",
+            "hidden_channel_ids": ["new1"],
+        }, follow_redirects=True)
+        prefs = get_user_prefs("testuser")
+        assert prefs["hidden_channels"] == ["new1"]
+
+    def test_save_prefs_without_update_sentinel_preserves_hidden_channels(self, client):
+        """Saving prefs without the update_hidden_channels sentinel must NOT wipe the hidden list."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["keep-me"],
+        })
+        login(client, "admin", "adminpass")
+        client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            # no update_hidden_channels field
+        }, follow_redirects=True)
+        assert get_user_prefs("testuser")["hidden_channels"] == ["keep-me"]
+
+    def test_no_channel_list_does_not_clear_hidden_channels(self, client):
+        """When the user has no channel list (no tuner loaded), saving prefs must
+        not send the update_hidden_channels sentinel and must preserve hidden channels."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["preserved"],
+        })
+        login(client, "admin", "adminpass")
+        # Submit the form as the template would when channel_list is empty —
+        # no update_hidden_channels sentinel, no hidden_channel_ids.
+        client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+        }, follow_redirects=True)
+        assert get_user_prefs("testuser")["hidden_channels"] == ["preserved"]
+
+    def test_clear_hidden_channels_singular_label(self, client):
+        """When exactly 1 channel is hidden the label should be '1 channel hidden'."""
+        save_user_prefs("testuser", {
+            "auto_load_channel": None,
+            "hidden_channels": ["solo"],
+        })
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b"1 channel hidden" in resp.data

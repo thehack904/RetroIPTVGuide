@@ -162,6 +162,18 @@ body { font-family: Arial, sans-serif; margin:0; }
 .summary { flex:1; }
 #video  { width:620px; height:350px; }
 
+/* Channel logo + program title header inside the summary panel */
+.summary-header { display:flex; align-items:center; gap:10px; margin-bottom:6px; }
+.summary-header h3 { margin:0; flex:1; }
+.summary-channel-logo {
+    width:48px;
+    height:48px;
+    object-fit:contain;
+    flex-shrink:0;
+    border-radius:4px;
+    background:rgba(0,0,0,0.15);
+}
+
 /* === Resize handles === */
 /* Wrapper around #video to host the corner resize handle.
    inline-block (not inline-flex) keeps the video as a normal replaced element

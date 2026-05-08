@@ -12,7 +12,7 @@ from app import (
     app, init_db, init_tuners_db,
     get_weather_config, save_weather_config,
     _wmo_label, _wmo_icon, _to_night_icon, _wind_dir,
-    _build_weather_payload,
+    _build_weather_payload, _fetch_nws_alerts,
     save_virtual_channel_settings,
 )
 
@@ -409,3 +409,351 @@ class TestChangeTunerWeatherSettings:
         }, follow_redirects=True)
         data = client.get('/api/weather').get_json()
         assert data['location'] == 'Austin, TX'
+
+
+# ─── _fetch_nws_alerts ────────────────────────────────────────────────────────
+
+class TestFetchNwsAlerts:
+    def test_returns_list_on_network_error(self, monkeypatch):
+        """_fetch_nws_alerts returns [] (not raises) when the NWS API is unavailable."""
+        import requests as req_mod
+
+        def _fail(*a, **kw):
+            raise req_mod.exceptions.ConnectionError("mocked failure")
+
+        monkeypatch.setattr(req_mod, "get", _fail)
+        result = _fetch_nws_alerts('25.77', '-80.19')
+        assert result == []
+
+    def test_returns_list_on_bad_json(self, monkeypatch):
+        """_fetch_nws_alerts returns [] when the response body is not valid JSON."""
+        import requests as req_mod
+
+        class _BadResp:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): raise ValueError("bad json")
+
+        monkeypatch.setattr(req_mod, "get", lambda *a, **kw: _BadResp())
+        result = _fetch_nws_alerts('25.77', '-80.19')
+        assert result == []
+
+    def test_parses_alert_fields(self, monkeypatch):
+        """_fetch_nws_alerts correctly maps NWS GeoJSON feature properties."""
+        import requests as req_mod
+
+        sample = {
+            "features": [
+                {
+                    "properties": {
+                        "event":       "Winter Storm Warning",
+                        "headline":    "Winter Storm Warning until Monday",
+                        "description": "Heavy snow expected.",
+                        "severity":    "Severe",
+                        "urgency":     "Expected",
+                        "certainty":   "Likely",
+                        "onset":       "2026-01-10T06:00:00-05:00",
+                        "expires":     "2026-01-11T06:00:00-05:00",
+                    }
+                }
+            ]
+        }
+
+        class _OkResp:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): return sample
+
+        monkeypatch.setattr(req_mod, "get", lambda *a, **kw: _OkResp())
+        result = _fetch_nws_alerts('40.71', '-74.00')
+        assert len(result) == 1
+        a = result[0]
+        assert a['event']       == 'Winter Storm Warning'
+        assert a['headline']    == 'Winter Storm Warning until Monday'
+        assert a['severity']    == 'Severe'
+        assert a['urgency']     == 'Expected'
+        assert a['certainty']   == 'Likely'
+        assert a['expires']     == '2026-01-11T06:00:00-05:00'
+
+    def test_empty_features_returns_empty_list(self, monkeypatch):
+        import requests as req_mod
+
+        class _OkResp:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): return {"features": []}
+
+        monkeypatch.setattr(req_mod, "get", lambda *a, **kw: _OkResp())
+        assert _fetch_nws_alerts('51.5', '-0.12') == []
+
+    def test_missing_features_key_returns_empty_list(self, monkeypatch):
+        import requests as req_mod
+
+        class _OkResp:
+            status_code = 200
+            def raise_for_status(self): pass
+            def json(self): return {"type": "FeatureCollection"}
+
+        monkeypatch.setattr(req_mod, "get", lambda *a, **kw: _OkResp())
+        assert _fetch_nws_alerts('25.77', '-80.19') == []
+
+
+# ─── _build_weather_payload – alerts key ─────────────────────────────────────
+
+class TestBuildWeatherPayloadAlerts:
+    def test_stub_payload_has_alerts_key(self):
+        """Stub (no lat/lon) payload must include an 'alerts' key."""
+        cfg = {'lat': '', 'lon': '', 'location_name': 'Anywhere', 'units': 'F'}
+        p = _build_weather_payload(cfg)
+        assert 'alerts' in p
+        assert isinstance(p['alerts'], list)
+
+    def test_stub_alerts_is_empty(self):
+        cfg = {'lat': '', 'lon': '', 'location_name': 'Anywhere', 'units': 'F'}
+        p = _build_weather_payload(cfg)
+        assert p['alerts'] == []
+
+    def test_alerts_from_nws_populate_ticker(self, monkeypatch):
+        """When NWS returns alerts, their headlines become the ticker entries."""
+        import requests as req_mod
+
+        nws_sample = {
+            "features": [
+                {"properties": {
+                    "event": "Flood Warning",
+                    "headline": "Flood Warning in effect until Tuesday",
+                    "description": "Significant flooding expected.",
+                    "severity": "Severe", "urgency": "Immediate",
+                    "certainty": "Observed", "onset": "", "expires": "",
+                }}
+            ]
+        }
+        open_meteo_sample = {
+            "current": {
+                "temperature_2m": 72, "apparent_temperature": 70,
+                "relative_humidity_2m": 60, "weather_code": 0,
+                "wind_speed_10m": 5, "wind_direction_10m": 90,
+            },
+            "current_units": {"wind_speed_10m": "mph"},
+            "hourly": {"time": [], "temperature_2m": [], "weather_code": []},
+            "daily": {
+                "time": [], "temperature_2m_max": [], "temperature_2m_min": [],
+                "weather_code": [], "sunrise": [], "sunset": [],
+            },
+        }
+
+        call_log = []
+
+        def _mock_get(url, *a, **kw):
+            call_log.append(url)
+
+            class _Resp:
+                status_code = 200
+                def raise_for_status(self): pass
+                def json(self_):
+                    if 'open-meteo' in url:
+                        return open_meteo_sample
+                    return nws_sample
+
+            return _Resp()
+
+        monkeypatch.setattr(req_mod, "get", _mock_get)
+        cfg = {'lat': '25.77', 'lon': '-80.19', 'location_name': 'Miami', 'units': 'F'}
+        p = _build_weather_payload(cfg)
+
+        assert 'alerts' in p
+        assert len(p['alerts']) == 1
+        assert p['alerts'][0]['event'] == 'Flood Warning'
+        # Ticker should use the NWS headline
+        assert any('Flood Warning' in t for t in p['ticker'])
+
+    def test_wmo_ticker_used_when_no_nws_alerts(self, monkeypatch):
+        """When NWS returns no alerts and WMO code is thunderstorm, ticker still fires."""
+        import requests as req_mod
+
+        open_meteo_sample = {
+            "current": {
+                "temperature_2m": 78, "apparent_temperature": 76,
+                "relative_humidity_2m": 80, "weather_code": 95,
+                "wind_speed_10m": 15, "wind_direction_10m": 180,
+            },
+            "current_units": {"wind_speed_10m": "mph"},
+            "hourly": {"time": [], "temperature_2m": [], "weather_code": []},
+            "daily": {
+                "time": [], "temperature_2m_max": [], "temperature_2m_min": [],
+                "weather_code": [], "sunrise": [], "sunset": [],
+            },
+        }
+
+        def _mock_get(url, *a, **kw):
+            class _Resp:
+                status_code = 200
+                def raise_for_status(self): pass
+                def json(self_):
+                    if 'open-meteo' in url:
+                        return open_meteo_sample
+                    return {"features": []}
+            return _Resp()
+
+        monkeypatch.setattr(req_mod, "get", _mock_get)
+        cfg = {'lat': '25.77', 'lon': '-80.19', 'location_name': 'Miami', 'units': 'F'}
+        p = _build_weather_payload(cfg)
+        assert p['alerts'] == []
+        assert any('Thunderstorm' in t or 'thunderstorm' in t.lower() for t in p['ticker'])
+
+
+# ─── /api/weather – alerts key present ───────────────────────────────────────
+
+class TestApiWeatherAlertsKey:
+    def test_api_weather_has_alerts_key(self, client):
+        login(client)
+        data = client.get('/api/weather').get_json()
+        assert 'alerts' in data
+        assert isinstance(data['alerts'], list)
+
+
+# ─── Animated Background Override ────────────────────────────────────────────
+
+class TestWeatherBgConditionOverride:
+    """Tests for bg_condition_override config key and /api/weather/bg_override endpoint."""
+
+    def test_default_bg_condition_override_is_empty(self):
+        cfg = get_weather_config()
+        assert cfg.get('bg_condition_override', '') == ''
+
+    def test_save_valid_condition(self):
+        save_weather_config({'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+                             'bg_condition_override': 'rain'})
+        assert get_weather_config()['bg_condition_override'] == 'rain'
+
+    def test_save_empty_condition_clears_override(self):
+        save_weather_config({'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+                             'bg_condition_override': 'snow'})
+        save_weather_config({'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+                             'bg_condition_override': ''})
+        assert get_weather_config()['bg_condition_override'] == ''
+
+    def test_invalid_bg_condition_raises(self):
+        with pytest.raises(ValueError):
+            save_weather_config({'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+                                 'bg_condition_override': 'rainbow'})
+
+    def test_all_valid_conditions_accepted(self):
+        valid = ['', 'sunny', 'partly_cloudy', 'cloudy', 'rain', 'drizzle',
+                 'showers', 'snow', 'thunderstorm', 'foggy', 'windy']
+        for cond in valid:
+            save_weather_config({'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+                                 'bg_condition_override': cond})
+            assert get_weather_config()['bg_condition_override'] == cond
+
+    def test_payload_includes_bg_condition(self):
+        cfg = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+               'bg_condition_override': ''}
+        p = _build_weather_payload(cfg)
+        assert 'bg_condition' in p
+        assert 'bg_condition_override' in p
+
+    def test_override_sets_bg_condition_in_payload(self):
+        cfg = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+               'bg_condition_override': 'snow'}
+        p = _build_weather_payload(cfg)
+        assert p['bg_condition'] == 'snow'
+        assert p['bg_condition_override'] == 'snow'
+
+    def test_no_override_uses_default_condition(self):
+        cfg = {'lat': '', 'lon': '', 'location_name': '', 'units': 'F',
+               'bg_condition_override': ''}
+        p = _build_weather_payload(cfg)
+        # Stub payload defaults to 'cloudy' icon, so bg_condition should be 'cloudy'
+        assert p['bg_condition'] == 'cloudy'
+        assert p['bg_condition_override'] == ''
+
+
+class TestBgOverrideEndpoint:
+    """Tests for the /api/weather/bg_override AJAX endpoint."""
+
+    def test_get_returns_empty_by_default(self, client):
+        login(client)
+        r = client.get('/api/weather/bg_override')
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data['condition'] == ''
+
+    def test_post_sets_condition(self, client):
+        login(client)
+        r = client.post('/api/weather/bg_override',
+                        json={'condition': 'thunderstorm'},
+                        content_type='application/json')
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data['ok'] is True
+        assert data['condition'] == 'thunderstorm'
+
+    def test_post_persists_condition(self, client):
+        login(client)
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'rain'},
+                    content_type='application/json')
+        r = client.get('/api/weather/bg_override')
+        assert r.get_json()['condition'] == 'rain'
+
+    def test_post_auto_clears_override(self, client):
+        login(client)
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'snow'},
+                    content_type='application/json')
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'auto'},
+                    content_type='application/json')
+        r = client.get('/api/weather/bg_override')
+        assert r.get_json()['condition'] == ''
+
+    def test_post_empty_string_clears_override(self, client):
+        login(client)
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'sunny'},
+                    content_type='application/json')
+        client.post('/api/weather/bg_override',
+                    json={'condition': ''},
+                    content_type='application/json')
+        r = client.get('/api/weather/bg_override')
+        assert r.get_json()['condition'] == ''
+
+    def test_post_invalid_condition_returns_400(self, client):
+        login(client)
+        r = client.post('/api/weather/bg_override',
+                        json={'condition': 'tornado'},
+                        content_type='application/json')
+        assert r.status_code == 400
+        assert r.get_json()['ok'] is False
+
+    def test_delete_clears_override(self, client):
+        login(client)
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'foggy'},
+                    content_type='application/json')
+        r = client.delete('/api/weather/bg_override')
+        assert r.status_code == 200
+        assert r.get_json()['condition'] == ''
+        r2 = client.get('/api/weather/bg_override')
+        assert r2.get_json()['condition'] == ''
+
+    def test_requires_login_get(self, client):
+        r = client.get('/api/weather/bg_override')
+        assert r.status_code in (302, 401)
+
+    def test_requires_login_post(self, client):
+        r = client.post('/api/weather/bg_override',
+                        json={'condition': 'snow'},
+                        content_type='application/json')
+        assert r.status_code in (302, 401)
+
+    def test_api_weather_reflects_override(self, client):
+        """After setting override, /api/weather returns that bg_condition."""
+        login(client)
+        client.post('/api/weather/bg_override',
+                    json={'condition': 'windy'},
+                    content_type='application/json')
+        data = client.get('/api/weather').get_json()
+        assert data['bg_condition'] == 'windy'
+        assert data['bg_condition_override'] == 'windy'

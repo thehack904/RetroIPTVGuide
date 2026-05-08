@@ -166,7 +166,7 @@
                   <option value="600" {% if cur_sps == 600 %}selected{% endif %}>10 minutes &mdash; 40-min cycle</option>
                 </select>
                 <p class="muted small" style="margin-top:4px;">
-                  Cycles: Current Conditions &#8594; 5-Day Forecast &#8594; Regional Radar &#8594; Severe Weather Alerts, then repeats.
+                  Cycles: Current Conditions &#8594; 5-Day Forecast &#8594; Regional Radar &#8594; Severe Weather Alerts (NOAA/NWS), then repeats.
                   All viewers stay in sync (wall-clock aligned).
                 </p>
               </div>
@@ -174,6 +174,110 @@
                 <a href="/weather" target="_blank" class="btn-link small">&#127780; Preview Weather Page &#8599;</a>
                 <span class="muted small" style="margin-left:8px;">Save settings first.</span>
               </div>
+              <!-- Animated Background Test Panel -->
+              <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;margin-top:10px;">
+                <div style="padding:10px 12px; background:rgba(0,10,50,0.55);
+                            border:1px solid #3058d8; border-radius:4px;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                    <span style="display:inline-block; background:#1640d4; color:#fff; font-weight:700;
+                                 font-size:0.78em; letter-spacing:0.07em; text-transform:uppercase;
+                                 padding:0.18em 0.5em; border-radius:3px;">&#127919; Test</span>
+                    <strong style="color:#c8d8ff; font-size:0.88em;">Animated Background Preview</strong>
+                    <span id="wx-bg-override-status" class="muted small" aria-live="polite" style="margin-left:auto;"></span>
+                  </div>
+                  <p class="muted small" style="margin:0 0 8px; font-size:0.78em; line-height:1.4;">
+                    Force a specific animated background on the weather channel for testing, regardless of actual weather.
+                    Click a condition to activate it; click <strong>Auto</strong> to restore real-weather backgrounds.
+                  </p>
+                  <div id="wx-bg-btn-group" style="display:flex; flex-wrap:wrap; gap:6px;">
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition=""
+                            title="Use actual weather condition (default)">&#9654; Auto</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="sunny"
+                            title="Sunny / Clear sky">&#9728; Sunny</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="partly_cloudy"
+                            title="Partly cloudy">&#9925; Partly Cloudy</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="cloudy"
+                            title="Overcast / Cloudy">&#9729; Cloudy</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="rain"
+                            title="Rain">&#127783; Rain</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="drizzle"
+                            title="Drizzle">&#127746; Drizzle</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="snow"
+                            title="Snow">&#10052; Snow</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="thunderstorm"
+                            title="Thunderstorm">&#9928; T-Storm</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="foggy"
+                            title="Foggy / Misty">&#127787; Foggy</button>
+                    <button type="button" class="wx-bg-test-btn secondary small"
+                            data-condition="windy"
+                            title="Windy">&#127786; Windy</button>
+                  </div>
+                </div>
+              </div>
+              <script>
+              (function() {
+                var statusEl = document.getElementById('wx-bg-override-status');
+                var buttons  = document.querySelectorAll('.wx-bg-test-btn');
+
+                // Fetch current override and highlight the active button
+                fetch('/api/weather/bg_override', {credentials: 'same-origin'})
+                  .then(function(r) { return r.json(); })
+                  .then(function(d) { _highlightActive(d.condition || ''); })
+                  .catch(function() {});
+
+                function _highlightActive(condition) {
+                  buttons.forEach(function(btn) {
+                    var isActive = btn.getAttribute('data-condition') === condition;
+                    btn.style.background = isActive ? '#1640d4' : '';
+                    btn.style.color = isActive ? '#fff' : '';
+                    btn.style.borderColor = isActive ? '#4a70ff' : '';
+                    btn.style.fontWeight = isActive ? '700' : '';
+                  });
+                  if (condition) {
+                    statusEl.textContent = 'Override: ' + condition.replaceAll('_', ' ');
+                    statusEl.style.color = '#ffd700';
+                  } else {
+                    statusEl.textContent = 'Auto (actual weather)';
+                    statusEl.style.color = '';
+                  }
+                }
+
+                buttons.forEach(function(btn) {
+                  btn.addEventListener('click', function() {
+                    var condition = btn.getAttribute('data-condition');
+                    statusEl.textContent = 'Saving\u2026';
+                    fetch('/api/weather/bg_override', {
+                      method: 'POST',
+                      credentials: 'same-origin',
+                      headers: {'Content-Type': 'application/json'},
+                      body: JSON.stringify({condition: condition})
+                    })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d) {
+                      if (d.ok) {
+                        _highlightActive(d.condition || '');
+                      } else {
+                        statusEl.textContent = 'Error: ' + (d.error || 'unknown');
+                        statusEl.style.color = '#ff6060';
+                      }
+                    })
+                    .catch(function() {
+                      statusEl.textContent = 'Request failed';
+                      statusEl.style.color = '#ff6060';
+                    });
+                  });
+                });
+              })();
+              </script>
               {% endif %}
               {% if ch.tvg_id == 'virtual.traffic' %}
               <div class="vc-prefs-field vc-prefs-field-wide" style="width:100%;flex-basis:100%;">
@@ -224,7 +328,7 @@
                 </div>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:6px;flex-basis:100%;width:100%;">
-                <label>&#127961; Cities (US cities with population &gt; 1M)</label>
+                <label>&#127961; Cities</label>
                 <table class="traffic-demo-city-table" id="traffic-demo-city-table"
                        style="width:100%;border-collapse:collapse;font-size:clamp(11px,1.3vw,14px);margin-top:4px;">
                   <thead>
@@ -234,6 +338,7 @@
                       <th style="padding:3px 6px;">State</th>
                       <th style="padding:3px 6px;">Population</th>
                       <th style="padding:3px 6px;" title="Higher frequency = city appears more often in rotation">Frequency</th>
+                      <th style="padding:3px 6px;"></th>
                     </tr>
                   </thead>
                   <tbody>
@@ -254,6 +359,13 @@
                                data-city-id="{{ city.id }}"
                                style="width:4em;">
                       </td>
+                      <td style="padding:3px 6px; text-align:center;">
+                        <button type="button" class="traffic-city-delete-btn secondary small"
+                                data-city-id="{{ city.id }}"
+                                data-city-name="{{ city.name }}"
+                                title="Remove {{ city.name }} from rotation"
+                                aria-label="Remove {{ city.name }}">&#10005;</button>
+                      </td>
                     </tr>
                     {% endfor %}
                   </tbody>
@@ -261,6 +373,54 @@
                 <div class="muted small" style="margin-top:4px;">
                   Check or uncheck cities to include or exclude them from rotation. Changes save immediately.
                   Use Save above to persist the Rotation Mode and Interval settings.
+                </div>
+              </div>
+              <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:8px;flex-basis:100%;width:100%;">
+                <label>&#10133; Add City</label>
+                <div id="traffic-add-city-form"
+                     style="display:flex;flex-wrap:wrap;gap:6px;align-items:flex-end;margin-top:4px;">
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">ZIP / Postal Code</span>
+                    <div style="display:flex;gap:4px;">
+                      <input type="text" id="traffic-add-city-zip" placeholder="e.g. 97201"
+                             maxlength="20" style="width:8em;">
+                      <button type="button" class="secondary small" id="traffic-zip-lookup-btn"
+                              aria-label="Look up postal code">&#128269; Lookup</button>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">City Name</span>
+                    <input type="text" id="traffic-add-city-name" placeholder="e.g. Portland"
+                           maxlength="100" style="width:12em;">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">State / Region</span>
+                    <input type="text" id="traffic-add-city-state" placeholder="e.g. OR"
+                           maxlength="50" style="width:6em;">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">Latitude</span>
+                    <input type="number" id="traffic-add-city-lat" placeholder="45.5051"
+                           step="0.0001" min="-90" max="90" style="width:8em;">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">Longitude</span>
+                    <input type="number" id="traffic-add-city-lon" placeholder="-122.675"
+                           step="0.0001" min="-180" max="180" style="width:9em;">
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:2px;">
+                    <span class="muted small">Population</span>
+                    <input type="text" id="traffic-add-city-pop" placeholder="0"
+                           maxlength="20" style="width:9em;"
+                           title="Commas are allowed, e.g. 37,390">
+                  </div>
+                  <button type="button" class="secondary small" id="traffic-add-city-btn"
+                          aria-label="Add City">&#10133; Add</button>
+                  <span id="traffic-add-city-status" class="muted small" aria-live="polite"></span>
+                </div>
+                <div class="muted small" style="margin-top:4px;">
+                  Enter a ZIP / postal code and click <strong>Lookup</strong> to auto-fill city details, or fill in manually.
+                  Road data and basemap are downloaded automatically in the background after adding.
                 </div>
               </div>
               <div class="vc-prefs-field vc-prefs-field-wide" style="margin-top:4px; flex-basis:100%; width:100%;">
@@ -1200,6 +1360,184 @@ document.addEventListener('DOMContentLoaded', () => {
         })
         .catch(function() { setActionStatus('\u2717 Network error', true); })
         .finally(function() { pickRandomBtn.disabled = false; });
+    });
+  }
+
+  // ── Delete City ────────────────────────────────────────────────────────────
+  function attachDeleteHandlers(scope) {
+    (scope || document).querySelectorAll('.traffic-city-delete-btn').forEach(function(btn) {
+      if (btn.dataset.deleteListenerAttached) return;
+      btn.dataset.deleteListenerAttached = '1';
+      btn.addEventListener('click', function() {
+        var cityId   = this.dataset.cityId;
+        var cityName = this.dataset.cityName || ('City #' + cityId);
+        if (!confirm('Remove \u201c' + cityName + '\u201d from the rotation?\nThis cannot be undone.')) return;
+        btn.disabled = true;
+        fetch('/api/traffic/demo/cities/' + cityId, {method: 'DELETE', credentials: 'same-origin'})
+          .then(function(r) { return r.json(); })
+          .then(function(d) {
+            if (d.ok) {
+              var row = document.querySelector('tr[data-city-id="' + cityId + '"]');
+              if (row) row.remove();
+              setActionStatus('\u2713 ' + cityName + ' removed', false);
+            } else {
+              setActionStatus('\u2717 ' + (d.error || 'Error'), true);
+              btn.disabled = false;
+            }
+            setTimeout(function() { setActionStatus(''); }, 3000);
+          })
+          .catch(function() {
+            setActionStatus('\u2717 Network error', true);
+            btn.disabled = false;
+          });
+      });
+    });
+  }
+  attachDeleteHandlers();
+
+  // ── Add City ───────────────────────────────────────────────────────────────
+  var addCityBtn    = document.getElementById('traffic-add-city-btn');
+  var addCityStatus = document.getElementById('traffic-add-city-status');
+
+  function setAddStatus(msg, isError) {
+    if (!addCityStatus) return;
+    addCityStatus.textContent  = msg;
+    addCityStatus.style.color  = isError ? '#ff6666' : '#6eff6e';
+  }
+
+  // ── ZIP / Postal Code Lookup ───────────────────────────────────────────────
+  var zipLookupBtn = document.getElementById('traffic-zip-lookup-btn');
+  if (zipLookupBtn) {
+    zipLookupBtn.addEventListener('click', function() {
+      var zip = ((document.getElementById('traffic-add-city-zip') || {}).value || '').trim();
+      if (!zip) { setAddStatus('\u2717 Enter a ZIP / postal code first', true); return; }
+      zipLookupBtn.disabled = true;
+      setAddStatus('\u23f3 Looking up\u2026', false);
+      fetch('/api/traffic/demo/zip_lookup?zip=' + encodeURIComponent(zip), {credentials: 'same-origin'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok) {
+            var setVal = function(id, val) {
+              var el = document.getElementById(id);
+              if (el) el.value = val;
+            };
+            setVal('traffic-add-city-name',  d.name  || '');
+            setVal('traffic-add-city-state', d.state || '');
+            setVal('traffic-add-city-lat',   d.lat   != null ? d.lat.toFixed(4)  : '');
+            setVal('traffic-add-city-lon',   d.lon   != null ? d.lon.toFixed(4)  : '');
+            setAddStatus('\u2713 Found: ' + (d.name || zip) + ', ' + (d.state || ''), false);
+          } else {
+            setAddStatus('\u2717 ' + (d.error || 'Not found'), true);
+          }
+          setTimeout(function() { setAddStatus(''); }, 4000);
+        })
+        .catch(function() { setAddStatus('\u2717 Network error', true); })
+        .finally(function() { zipLookupBtn.disabled = false; });
+    });
+    // Allow pressing Enter in the ZIP field to trigger the lookup
+    var zipInput = document.getElementById('traffic-add-city-zip');
+    if (zipInput) {
+      zipInput.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { e.preventDefault(); zipLookupBtn.click(); }
+      });
+    }
+  }
+
+  if (addCityBtn) {
+    addCityBtn.addEventListener('click', function() {
+      var name = (document.getElementById('traffic-add-city-name') || {}).value || '';
+      var state = (document.getElementById('traffic-add-city-state') || {}).value || '';
+      var lat  = parseFloat((document.getElementById('traffic-add-city-lat')  || {}).value);
+      var lon  = parseFloat((document.getElementById('traffic-add-city-lon')  || {}).value);
+      // Strip all common thousands-separator styles so regional formats work:
+      //   37,390  US/UK comma   37.390  European period
+      //   37 390  French/SI     37'390  Swiss apostrophe   37_390  Python-style
+      var popRaw = ((document.getElementById('traffic-add-city-pop') || {}).value || '')
+                    .replace(/[,.\s'\u00a0\u202f_]/g, '');
+      var pop  = parseInt(popRaw, 10);
+      if (isNaN(pop) || pop < 0) pop = 0;
+
+      if (!name.trim()) { setAddStatus('\u2717 City name required', true); return; }
+      if (!state.trim()) { setAddStatus('\u2717 State / region required', true); return; }
+      if (isNaN(lat) || isNaN(lon)) { setAddStatus('\u2717 Valid lat/lon required', true); return; }
+
+      addCityBtn.disabled = true;
+      setAddStatus('\u23f3 Adding\u2026', false);
+
+      fetch('/api/traffic/demo/cities/add', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name: name.trim(), state: state.trim(), lat: lat, lon: lon, population: pop}),
+        credentials: 'same-origin',
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d.ok && d.city) {
+            var city = d.city;
+            var tbody = document.querySelector('#traffic-demo-city-table tbody');
+            if (tbody) {
+              var tr = document.createElement('tr');
+              tr.setAttribute('data-city-id', city.id);
+              tr.style.borderBottom = '1px solid rgba(48,88,216,0.3)';
+              tr.innerHTML = [
+                '<td style="padding:3px 6px;text-align:center;">',
+                '  <input type="checkbox" class="traffic-city-enabled" checked data-city-id="' + city.id + '">',
+                '</td>',
+                '<td style="padding:3px 6px;">' + city.name + '</td>',
+                '<td style="padding:3px 6px;">' + city.state + '</td>',
+                '<td style="padding:3px 6px;">' + city.population.toLocaleString() + '</td>',
+                '<td style="padding:3px 6px;">',
+                '  <input type="number" class="traffic-city-weight" value="1" min="1" max="10" step="1"',
+                '         data-city-id="' + city.id + '" style="width:4em;">',
+                '</td>',
+                '<td style="padding:3px 6px;text-align:center;">',
+                '  <button type="button" class="traffic-city-delete-btn secondary small"',
+                '          data-city-id="' + city.id + '" data-city-name="' + city.name.replace(/"/g, '&quot;') + '"',
+                '          title="Remove ' + city.name.replace(/"/g, '&quot;') + ' from rotation"',
+                '          aria-label="Remove ' + city.name.replace(/"/g, '&quot;') + '">\u2715</button>',
+                '</td>',
+              ].join('');
+              tbody.appendChild(tr);
+              // Wire up event listeners on the newly added row
+              attachDeleteHandlers(tr);
+              tr.querySelectorAll('.traffic-city-enabled, .traffic-city-weight').forEach(function(el) {
+                el.addEventListener('change', function() {
+                  var cid = this.dataset.cityId;
+                  var row2 = document.querySelector('tr[data-city-id="' + cid + '"]');
+                  if (!row2) return;
+                  var enEl  = row2.querySelector('.traffic-city-enabled');
+                  var wtEl  = row2.querySelector('.traffic-city-weight');
+                  var en    = enEl ? enEl.checked : true;
+                  var wt    = wtEl ? parseInt(wtEl.value, 10) || 1 : 1;
+                  fetch('/api/traffic/demo/cities/' + cid, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({enabled: en, weight: wt}),
+                    credentials: 'same-origin',
+                  })
+                    .then(function(r) { return r.json(); })
+                    .then(function(d2) {
+                      setActionStatus(d2.ok ? '\u2713 Saved' : ('\u2717 ' + (d2.error || 'Error')), !d2.ok);
+                      setTimeout(function() { setActionStatus(''); }, 2500);
+                    })
+                    .catch(function() { setActionStatus('\u2717 Network error', true); });
+                });
+              });
+            }
+            // Clear form
+            ['traffic-add-city-zip','traffic-add-city-name','traffic-add-city-state',
+             'traffic-add-city-lat','traffic-add-city-lon','traffic-add-city-pop'].forEach(function(id) {
+              var el = document.getElementById(id);
+              if (el) el.value = '';
+            });
+            setAddStatus('\u2713 ' + city.name + ' added — road data downloading in background', false);
+          } else {
+            setAddStatus('\u2717 ' + (d.error || 'Error'), true);
+          }
+          setTimeout(function() { setAddStatus(''); }, 5000);
+        })
+        .catch(function() { setAddStatus('\u2717 Network error', true); })
+        .finally(function() { addCityBtn.disabled = false; });
     });
   }
 })();

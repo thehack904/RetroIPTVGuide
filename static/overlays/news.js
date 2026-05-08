@@ -38,6 +38,53 @@
       pointer-events: none;
       z-index: 10;
     }
+
+    /* ── News animated background ──────────────────────────────────── */
+    .vc-news-bg-anim {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      pointer-events: none;
+      overflow: hidden;
+      background: linear-gradient(130deg,
+        #0c1a90 0%, #1535cc 25%, #0a1060 50%, #1a28a8 75%, #0c1a90 100%);
+      background-size: 300% 300%;
+      animation: vc-news-bg-drift 20s ease infinite;
+    }
+    @keyframes vc-news-bg-drift {
+      0%   { background-position: 0% 50%; }
+      50%  { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    .vc-news-bg-anim::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(ellipse 60% 40% at 80% 20%, rgba(60, 80, 200, 0.12) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 35% at 15% 75%, rgba(40, 60, 180, 0.10) 0%, transparent 60%);
+      animation: vc-news-glow-shift 15s ease-in-out infinite alternate;
+    }
+    @keyframes vc-news-glow-shift {
+      from { opacity: 0.5; transform: scale(1); }
+      to   { opacity: 1;   transform: scale(1.06); }
+    }
+    .vc-news-particle-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .vc-news-bg-anim,
+      .vc-news-bg-anim::before {
+        animation: none !important;
+        background-position: 50% 50% !important;
+      }
+      .vc-news-particle-canvas { display: none; }
+    }
     .vc-news-header {
       background: linear-gradient(90deg, #0d2aaa 0%, #1840d8 50%, #0d2aaa 100%);
       border-bottom: 0.18em solid #4a70ff;
@@ -281,9 +328,77 @@
     }, 0);
   }
 
+  // ── News animated background ──────────────────────────────────────────────
+  let _newsParticleRafId = null;
+
+  function _newsPrefersReducedMotion() {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; }
+    catch (e) { return false; }
+  }
+
+  function _cancelNewsParticles() {
+    if (_newsParticleRafId !== null) {
+      cancelAnimationFrame(_newsParticleRafId);
+      _newsParticleRafId = null;
+    }
+  }
+
+  function _runNewsParticles(canvas) {
+    if (_newsPrefersReducedMotion()) return;
+    var COUNT = 28;
+    var pts = [];
+    for (var i = 0; i < COUNT; i++) {
+      pts.push({
+        x:  Math.random(),
+        y:  Math.random(),
+        vx: (Math.random() - 0.5) * 0.00012,
+        vy: -(Math.random() * 0.00045 + 0.00015),
+        r:  Math.random() * 1.2 + 0.4,
+        a:  Math.random() * 0.25 + 0.08
+      });
+    }
+    function draw() {
+      var el = canvas.parentElement;
+      if (!el) return;
+      var w = el.offsetWidth, h = el.offsetHeight;
+      if (!w || !h) { _newsParticleRafId = requestAnimationFrame(draw); return; }
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w; canvas.height = h;
+      }
+      var ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, w, h);
+      for (var i = 0; i < pts.length; i++) {
+        var p = pts[i];
+        ctx.globalAlpha = p.a;
+        ctx.fillStyle = '#c8d4ff';
+        ctx.beginPath();
+        ctx.arc(p.x * w, p.y * h, p.r, 0, Math.PI * 2);
+        ctx.fill();
+        p.x += p.vx; p.y += p.vy;
+        if (p.y < -0.02) { p.y = 1.02; p.x = Math.random(); }
+        if (p.x < 0) p.x = 1; if (p.x > 1) p.x = 0;
+      }
+      ctx.globalAlpha = 1;
+      _newsParticleRafId = requestAnimationFrame(draw);
+    }
+    _cancelNewsParticles();
+    _newsParticleRafId = requestAnimationFrame(draw);
+  }
+
+  function applyNewsBackground(frame) {
+    var bgDiv = document.createElement('div');
+    bgDiv.className = 'vc-news-bg-anim';
+    var canvas = document.createElement('canvas');
+    canvas.className = 'vc-news-particle-canvas';
+    bgDiv.appendChild(canvas);
+    frame.insertBefore(bgDiv, frame.firstChild);
+    requestAnimationFrame(function () { _runNewsParticles(canvas); });
+  }
+
   function render(data, root) {
     ensureStyles();
     root.querySelectorAll('.vc-overlay').forEach(function (e) { e.remove(); });
+    _cancelNewsParticles();
     root.classList.remove('hidden');
 
     const overlay = document.createElement('div');
@@ -370,6 +485,9 @@
         '</div>' +
       '</div>';
 
+    // Add animated background layer behind content
+    applyNewsBackground(frame);
+
     overlay.appendChild(frame);
     root.appendChild(overlay);
 
@@ -422,4 +540,5 @@
   }
 
   window.OverlayEngine.register(TYPE, { fetch: fetchDataWithCycling, render: render });
+  window.OverlayEngine.onStop(_cancelNewsParticles);
 })();
