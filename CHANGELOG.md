@@ -6,7 +6,7 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.9.5 - 2026-04-29
+## v4.9.5 - 2026-05-25
 
 ### Added
 - Added channel logo to be displayed in "Current Program" information area.
