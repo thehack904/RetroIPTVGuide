@@ -25,8 +25,11 @@ It aggregates **IPTV playlists and XMLTV program data** and presents
 them in a **retro‑style channel guide** designed for home lab and 
 local network deployments, including use on smart TV browsers.
 
-The project works particularly well alongside playout systems such as
-**ErsatzTV**, but supports any IPTV backend that provides:
+The project works well alongside any IPTV playout system that provides HLS segmented
+streams, such as **Tunarr**, **dizqueTV**, **Channels DVR**, **ErsatzTV**, and others.
+See [IPTV Backends](docs/wiki/IPTV-Backends.md) for a full compatibility list.
+
+Any backend that provides:
 
 -   `.m3u` / `.m3u8` playlists
 -   XMLTV `.xml` EPG data
@@ -115,6 +118,7 @@ A structured wiki is available in [`docs/wiki/`](docs/wiki/Home.md):
 -   [Home](docs/wiki/Home.md) -- Wiki home and navigation
 -   [Installation](docs/wiki/Installation.md) -- Installation and update instructions
 -   [Configuration](docs/wiki/Configuration.md) -- Tuner setup and settings
+-   [IPTV Backends](docs/wiki/IPTV-Backends.md) -- Compatible IPTV servers with HLS output
 -   [Virtual Channels](docs/wiki/Virtual-Channels.md) -- Built-in virtual channels
 -   [FAQ](docs/wiki/FAQ.md) -- Frequently asked questions
 -   [Troubleshooting](docs/wiki/Troubleshooting.md) -- Common problems and fixes
@@ -139,7 +143,8 @@ Many IPTV servers output **MPEG‑TS streams**, which are not directly
 playable in browsers.
 
 For best compatibility, use an IPTV backend that provides **HLS
-output**, such as **ErsatzTV**.
+output**, such as **Tunarr** or **Channels DVR**. See
+[IPTV Backends](docs/wiki/IPTV-Backends.md) for a full list of compatible servers.
 
 ------------------------------------------------------------------------
 

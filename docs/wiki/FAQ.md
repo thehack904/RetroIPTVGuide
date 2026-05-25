@@ -28,7 +28,11 @@ Any backend that provides:
 - XMLTV `.xml` or `.xml.gz` EPG URLs
 - **HLS segmented streams** for in-browser playback
 
-ErsatzTV is particularly well-suited because it natively outputs HLS streams.
+Several open-source and commercial IPTV server applications provide HLS segmenter
+output. See [IPTV Backends](IPTV-Backends.md) for a full list with setup notes.
+ErsatzTV was a popular choice; following the archiving of that project, **Tunarr**
+is the most actively maintained open-source alternative with equivalent
+HLS segmenter functionality.
 
 ### Does RetroIPTVGuide work with MPEG-TS streams?
 

@@ -137,6 +137,21 @@ html, body {
     padding: 10px !important;
   }
 
+  /* Video player wrap must be block (not inline-block) so it stretches to the
+     full column width; otherwise it shrinks to the natural video size.
+     .video-wrapper is the div dynamically injected by video-resize.js around
+     #video — it also needs block + 100% so the video inside resolves width
+     against the full player column rather than the inline-block natural size. */
+  .video-player-wrap,
+  #videoPlayerWrap,
+  .video-wrapper {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    flex-shrink: 0 !important;
+  }
+
   /* Video fills the width and is constrained in height so it does not become huge */
   #video {
     order: 2;

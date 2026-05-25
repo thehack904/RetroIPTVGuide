@@ -2,7 +2,6 @@
 // Features:
 //   • Auto-load channel: automatically plays a saved channel when the guide opens
 //   • Hidden channels:   hides selected channels from the guide grid (right-click to hide)
-//   • Sizzle reels:      muted hover preview of a channel stream after a short delay
 //
 // Prefs are loaded from window.__initialUserPrefs (injected by guide.html) and
 // saved back to the server via POST /api/user_prefs.
@@ -12,7 +11,6 @@
 //   .save(patch)              — PATCH prefs on server and apply locally
 //   .setAutoLoad()            — set currently-playing channel as auto-load
 //   .clearAutoLoad()          — clear auto-load channel
-//   .toggleSizzleReels()      — toggle sizzle-reel mode and save
 //   .toggleShowHidden()       — toggle visibility of hidden rows in the guide
 //   .hideChannel(id)          — add channel to hidden list
 //   .unhideChannel(id)        — remove channel from hidden list
@@ -22,13 +20,10 @@
 
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
-    { auto_load_channel: null, hidden_channels: [], sizzle_reels_enabled: false },
+    { auto_load_channel: null, hidden_channels: [] },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
-  let sizzleTimer   = null;
-  let sizzleHls     = null;
-  let sizzleVideo   = null;
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   function log() {
@@ -189,86 +184,6 @@
     }
   }
 
-  // ─── Sizzle reels ─────────────────────────────────────────────────────────
-  function syncSizzleButton() {
-    const label = prefs.sizzle_reels_enabled ? '🎬 Sizzle Reels: On' : '🎬 Sizzle Reels: Off';
-    ['toggleSizzleReels', 'mobileToggleSizzleReels'].forEach(function (id) {
-      const el = document.getElementById(id);
-      if (el) el.textContent = label;
-    });
-  }
-
-  async function toggleSizzleReels() {
-    await savePatch({ sizzle_reels_enabled: !prefs.sizzle_reels_enabled });
-    syncSizzleButton();
-    attachSizzleListeners();
-    if (!prefs.sizzle_reels_enabled) hideSizzle();
-    log('sizzle reels', prefs.sizzle_reels_enabled ? 'enabled' : 'disabled');
-  }
-
-  function ensureSizzleVideo() {
-    if (sizzleVideo) return;
-    sizzleVideo = document.createElement('video');
-    sizzleVideo.id = 'sizzle-preview';
-    sizzleVideo.muted = true;
-    sizzleVideo.autoplay = true;
-    sizzleVideo.playsinline = true;
-    sizzleVideo.setAttribute('aria-hidden', 'true');
-    sizzleVideo.style.cssText = [
-      'position:fixed', 'right:12px', 'bottom:64px',
-      'width:220px', 'height:124px',
-      'background:#000',
-      'border:2px solid var(--primary-color,#1ed3ce)',
-      'border-radius:6px',
-      'z-index:8800',
-      'display:none',
-      'pointer-events:none'
-    ].join(';');
-    document.body.appendChild(sizzleVideo);
-  }
-
-  function showSizzle(url) {
-    ensureSizzleVideo();
-    sizzleVideo.style.display = 'block';
-    if (sizzleHls) { sizzleHls.destroy(); sizzleHls = null; }
-    if (window.Hls && Hls.isSupported()) {
-      sizzleHls = new Hls({ maxBufferLength: 8, maxMaxBufferLength: 16 });
-      sizzleHls.loadSource(url);
-      sizzleHls.attachMedia(sizzleVideo);
-    } else {
-      sizzleVideo.src = url;
-    }
-    sizzleVideo.play().catch(function () {});
-  }
-
-  function hideSizzle() {
-    clearTimeout(sizzleTimer);
-    sizzleTimer = null;
-    if (sizzleVideo) sizzleVideo.style.display = 'none';
-    if (sizzleHls) { sizzleHls.destroy(); sizzleHls = null; }
-    if (sizzleVideo) { sizzleVideo.src = ''; }
-  }
-
-  function attachSizzleListeners() {
-    document.querySelectorAll('.chan-name').forEach(el => {
-      // Remove stale listeners by replacing dataset flag
-      if (prefs.sizzle_reels_enabled) {
-        if (!el.dataset.sizzleAttached) {
-          el.dataset.sizzleAttached = '1';
-          el.addEventListener('mouseenter', function () {
-            if (!prefs.sizzle_reels_enabled) return;
-            const url = el.dataset.url;
-            if (!url) return;
-            sizzleTimer = setTimeout(function () { showSizzle(url); }, 1500);
-          });
-          el.addEventListener('mouseleave', hideSizzle);
-        }
-      } else {
-        delete el.dataset.sizzleAttached;
-      }
-    });
-  }
-
   // ─── Right-click context menu ──────────────────────────────────────────────
   let ctxMenu = null;
   let ctxTarget = null;   // the .chan-name element that was right-clicked
@@ -363,13 +278,8 @@
     applyHiddenChannels();
     applyAutoLoadMarker();
     syncAutoLoadButton();
-    syncSizzleButton();
     syncShowHiddenButton();
     scheduleAutoLoad();
-
-    if (prefs.sizzle_reels_enabled) {
-      attachSizzleListeners();
-    }
 
     // Wire Settings-menu buttons (desktop + mobile, present in _header.html)
     function wire(id, fn) {
@@ -378,11 +288,9 @@
     }
     wire('setAutoLoadChannel',       setAutoLoad);
     wire('clearAutoLoadChannel',     clearAutoLoad);
-    wire('toggleSizzleReels',        toggleSizzleReels);
     wire('toggleShowHidden',         toggleShowHidden);
     wire('mobileSetAutoLoadChannel', setAutoLoad);
     wire('mobileClearAutoLoadChannel', clearAutoLoad);
-    wire('mobileToggleSizzleReels',  toggleSizzleReels);
     wire('mobileToggleShowHidden',   toggleShowHidden);
 
     // Right-click context menu on channel names
@@ -409,7 +317,6 @@
     save:             savePatch,
     setAutoLoad:      setAutoLoad,
     clearAutoLoad:    clearAutoLoad,
-    toggleSizzleReels: toggleSizzleReels,
     toggleShowHidden: toggleShowHidden,
     hideChannel:      hideChannel,
     unhideChannel:    unhideChannel

@@ -83,18 +83,26 @@
       // Adjust guideOuter height to accommodate scaled content so that elements below remain reachable
       const guideOuter = document.getElementById('guideOuter');
       if (guideOuter) {
-        if (scale < 1) {
-          // estimate original content height using bounding rect and scale factor
-          const rect = gridContent.getBoundingClientRect();
-          // boundingRect is already scaled; estimate original by dividing by scale
-          const estimatedUnscaledH = rect.height / (scale || 1);
-          const scaledHeight = Math.round(estimatedUnscaledH * scale);
-          // keep a sensible minimum and add room for the player row above
-          const minHeight = 220;
-          guideOuter.style.height = Math.max(minHeight, scaledHeight + 180) + 'px';
+        // On mobile guide-outer scrolls internally (overflow:auto, flex:1) inside the
+        // fixed #appZoomRoot — the same model as desktop.  An explicit pixel height would
+        // fight the flex layout, so always use resetGuideHeight() on mobile.
+        if (window.innerWidth > MOBILE_MAX) {
+          if (scale < 1) {
+            // estimate original content height using bounding rect and scale factor
+            const rect = gridContent.getBoundingClientRect();
+            // boundingRect is already scaled; estimate original by dividing by scale
+            const estimatedUnscaledH = rect.height / (scale || 1);
+            const scaledHeight = Math.round(estimatedUnscaledH * scale);
+            // keep a sensible minimum and add room for the player row above
+            const minHeight = 220;
+            guideOuter.style.height = Math.max(minHeight, scaledHeight + 180) + 'px';
+          } else {
+            // Use the zoom-aware helper rather than clearing to '' so the correct
+            // height is always set when a display-size zoom is active.
+            resetGuideHeight();
+          }
         } else {
-          // Use the zoom-aware helper rather than clearing to '' so the correct
-          // height is always set when a display-size zoom is active.
+          // Mobile: clear any explicit height so flex:1 drives the layout
           resetGuideHeight();
         }
       }

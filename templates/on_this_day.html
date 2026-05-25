@@ -11,7 +11,7 @@
       font-family: Arial, Helvetica, sans-serif;
       background: #050d2a;
       color: #fff;
-      min-height: 100vh;
+      height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -20,7 +20,7 @@
 
     /* ── Outer 16:9 frame ─────────────────────────────────────── */
     .otd-frame {
-      width: min(1280px, 100vw);
+      width: min(1280px, 100vw, calc(100vh * 16 / 9));
       aspect-ratio: 16 / 9;
       background: linear-gradient(160deg, #1030c8 0%, #0a1a80 40%, #081060 100%);
       display: flex;

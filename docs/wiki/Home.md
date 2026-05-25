@@ -36,6 +36,7 @@ immediately.
 |------|-------------|
 | [Installation](Installation.md) | Docker, Linux, Raspberry Pi, and Windows install guides |
 | [Configuration](Configuration.md) | Tuner setup, settings, data directory, environment variables |
+| [IPTV Backends](IPTV-Backends.md) | Compatible IPTV servers that provide HLS segmenter streams |
 | [Virtual Channels](Virtual-Channels.md) | Overview of all 9 built-in virtual channels |
 | [FAQ](FAQ.md) | Frequently asked questions |
 | [Troubleshooting](Troubleshooting.md) | Common problems and how to fix them |

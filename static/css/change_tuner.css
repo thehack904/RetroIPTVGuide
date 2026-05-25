@@ -849,6 +849,46 @@ button:focus, select:focus, input:focus, textarea:focus {
   .mode-card { min-width: unset; }
   .tuners-table { font-size: 0.8rem; }
   .tuners-table th, .tuners-table td { padding: 6px 6px; }
+
+  /* Virtual channel list items: allow wrapping on very narrow screens */
+  .vc-enabled-item,
+  .vc-available-item {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 10px;
+  }
+
+  /* Allow channel name to wrap so it doesn't overflow */
+  .vc-item-name {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  /* Keep sub-text readable */
+  .vc-item-sub { font-size: 0.75rem; }
+
+  /* Prefs panel: stack fields vertically, allow them full width */
+  .vc-prefs-fields { flex-direction: column; gap: 10px; }
+  .vc-prefs-field,
+  .vc-prefs-field-wide { min-width: unset; width: 100%; flex-basis: 100%; }
+
+  /* Traffic city table: allow horizontal scroll on narrow screens */
+  .traffic-demo-city-table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Audio file items: stack on mobile */
+  .audio-file-item { flex-direction: column; align-items: flex-start; }
+  .audio-preview { width: 100%; max-width: 100%; min-width: unset; }
+  .audio-file-name { white-space: normal; word-break: break-all; }
+
+  /* Channel order list: ensure drag handles are touch-friendly */
+  .channel-order-item { padding: 10px 8px; }
+  .drag-handle { font-size: 1.3rem; padding: 4px 6px; }
+
+  /* Channel order save row: stack on small screens */
+  .channel-order-save-row { flex-wrap: wrap; gap: 8px; }
+
+  /* Page header: reduce title size */
+  .page-header h1 { font-size: 1.3rem; }
 }
 
 /* Smooth transitions */

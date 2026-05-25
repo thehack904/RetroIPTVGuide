@@ -12,7 +12,7 @@
       font-family: Arial, Helvetica, sans-serif;
       background: #07124a;
       color: #fff;
-      min-height: 100vh;
+      height: 100vh;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -21,7 +21,7 @@
 
     /* ── Outer frame ────────────────────────────────────────────── */
     .nw-frame {
-      width: min(1280px, 100vw);
+      width: min(1280px, 100vw, calc(100vh * 16 / 9));
       aspect-ratio: 16 / 9;
       background: linear-gradient(160deg, #1535cc 0%, #0c22a0 35%, #081870 100%);
       display: flex;

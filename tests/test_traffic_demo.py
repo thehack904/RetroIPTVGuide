@@ -17,6 +17,7 @@ from app import (
     get_traffic_demo_config, save_traffic_demo_config,
     get_traffic_demo_cities, save_traffic_demo_city,
     set_all_traffic_demo_cities_enabled, pick_random_traffic_demo_pack,
+    add_traffic_demo_city, delete_traffic_demo_city, lookup_zip_city,
     _get_congestion_distribution, _build_traffic_demo_payload,
     _TRAFFIC_DEMO_CITIES_SEED, _TRAFFIC_DEMO_CACHE,
     get_traffic_demo_roads, _overpass_to_geojson,
@@ -28,6 +29,7 @@ from app import (
     _BASEMAP_W, _BASEMAP_H,
     _prewarm_roads_cache,
     _roads_cache_path,
+    save_virtual_channel_settings,
 )
 
 
@@ -433,10 +435,379 @@ class TestApiTrafficDemoPickRandom:
         assert len(data['cities']) == 10  # default pack_size
 
 
+# ─── add_traffic_demo_city / delete_traffic_demo_city helpers ─────────────────
+
+class TestAddDeleteTrafficDemoCity:
+    @pytest.fixture(autouse=True)
+    def no_bg_download(self):
+        """Prevent background download threads from making real network calls during unit tests."""
+        with patch('app._download_city_offline_data'):
+            yield
+
+    def test_add_city_inserts_row(self):
+        before = len(get_traffic_demo_cities())
+        add_traffic_demo_city('Portland', 'OR', 45.5051, -122.6750, 652503)
+        after = get_traffic_demo_cities()
+        assert len(after) == before + 1
+        names = [c['name'] for c in after]
+        assert 'Portland' in names
+
+    def test_add_city_returns_id(self):
+        new_id = add_traffic_demo_city('Seattle', 'WA', 47.6062, -122.3321, 737255)
+        assert isinstance(new_id, int)
+        assert new_id > 0
+
+    def test_add_city_enabled_by_default(self):
+        new_id = add_traffic_demo_city('Denver', 'CO', 39.7392, -104.9903, 715522)
+        cities = get_traffic_demo_cities()
+        city = next(c for c in cities if c['id'] == new_id)
+        assert city['enabled'] is True
+        assert city['weight'] == 1
+
+    def test_add_city_validates_empty_name(self):
+        with pytest.raises(ValueError, match="name"):
+            add_traffic_demo_city('', 'CA', 34.0522, -118.2437, 100000)
+
+    def test_add_city_validates_empty_state(self):
+        with pytest.raises(ValueError, match="[Ss]tate"):
+            add_traffic_demo_city('TestCity', '', 34.0522, -118.2437, 100000)
+
+    def test_add_city_validates_lat_range(self):
+        with pytest.raises(ValueError, match="[Ll]atitude"):
+            add_traffic_demo_city('Bad', 'XX', 999.0, 0.0, 0)
+
+    def test_add_city_validates_lon_range(self):
+        with pytest.raises(ValueError, match="[Ll]ongitude"):
+            add_traffic_demo_city('Bad', 'XX', 0.0, 999.0, 0)
+
+    def test_add_city_validates_negative_population(self):
+        with pytest.raises(ValueError, match="[Pp]opulation"):
+            add_traffic_demo_city('Bad', 'XX', 0.0, 0.0, -1)
+
+    def test_delete_city_removes_row(self):
+        new_id = add_traffic_demo_city('Austin', 'TX', 30.2672, -97.7431, 961855)
+        before = len(get_traffic_demo_cities())
+        delete_traffic_demo_city(new_id)
+        after = len(get_traffic_demo_cities())
+        assert after == before - 1
+        names = [c['name'] for c in get_traffic_demo_cities()]
+        assert 'Austin' not in names
+
+    def test_delete_nonexistent_city_raises(self):
+        with pytest.raises(ValueError):
+            delete_traffic_demo_city(99999)
+
+    def test_delete_evicts_in_memory_cache(self, monkeypatch):
+        new_id = add_traffic_demo_city('Reno', 'NV', 39.5296, -119.8138, 255601)
+        # Seed a fake cache entry
+        monkeypatch.setitem(app_module._ROADS_CACHE, new_id, {'type': 'FeatureCollection', 'features': []})
+        monkeypatch.setitem(app_module._ROADS_CACHE_TIME, new_id, 1.0)
+        delete_traffic_demo_city(new_id)
+        assert new_id not in app_module._ROADS_CACHE
+        assert new_id not in app_module._ROADS_CACHE_TIME
+
+
+# ─── /api/traffic/demo/cities/add  and  DELETE /api/traffic/demo/cities/<id> ──
+
+class TestApiTrafficDemoCityAddDelete:
+    @pytest.fixture(autouse=True)
+    def no_bg_download(self):
+        """Prevent background download threads from making real network calls during unit tests."""
+        with patch('app._download_city_offline_data'):
+            yield
+
+    def test_add_city_requires_login(self, client):
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': 'Portland', 'state': 'OR',
+                                            'lat': 45.5051, 'lon': -122.675, 'population': 652503}),
+                           content_type='application/json')
+        assert resp.status_code in (302, 401)
+
+    def test_add_city_requires_admin(self, client):
+        login(client)  # logs in as non-admin 'testuser'
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': 'Portland', 'state': 'OR',
+                                            'lat': 45.5051, 'lon': -122.675, 'population': 652503}),
+                           content_type='application/json')
+        assert resp.status_code == 403
+
+    def test_add_city_success(self, client):
+        login(client, 'admin', 'adminpass')
+        before = len(get_traffic_demo_cities())
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': 'Portland', 'state': 'OR',
+                                            'lat': 45.5051, 'lon': -122.675, 'population': 652503}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['ok'] is True
+        assert data['city']['name'] == 'Portland'
+        assert data['city']['state'] == 'OR'
+        assert len(get_traffic_demo_cities()) == before + 1
+
+    def test_add_city_validation_error(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': '', 'state': 'OR',
+                                            'lat': 45.5051, 'lon': -122.675, 'population': 0}),
+                           content_type='application/json')
+        assert resp.status_code == 400
+        assert resp.get_json()['ok'] is False
+
+    def test_delete_city_requires_login(self, client):
+        cities = get_traffic_demo_cities()
+        city_id = cities[0]['id']
+        resp = client.delete(f'/api/traffic/demo/cities/{city_id}')
+        assert resp.status_code in (302, 401)
+
+    def test_delete_city_requires_admin(self, client):
+        login(client)  # non-admin
+        cities = get_traffic_demo_cities()
+        city_id = cities[0]['id']
+        resp = client.delete(f'/api/traffic/demo/cities/{city_id}')
+        assert resp.status_code == 403
+
+    def test_delete_city_success(self, client):
+        login(client, 'admin', 'adminpass')
+        # Add a city first so we don't delete a seed city in other tests
+        add_resp = client.post('/api/traffic/demo/cities/add',
+                               data=json.dumps({'name': 'Boise', 'state': 'ID',
+                                                'lat': 43.6150, 'lon': -116.2023, 'population': 235684}),
+                               content_type='application/json')
+        new_id = add_resp.get_json()['city']['id']
+        before = len(get_traffic_demo_cities())
+        del_resp = client.delete(f'/api/traffic/demo/cities/{new_id}')
+        assert del_resp.status_code == 200
+        assert del_resp.get_json()['ok'] is True
+        assert len(get_traffic_demo_cities()) == before - 1
+
+    def test_delete_nonexistent_city_returns_404(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.delete('/api/traffic/demo/cities/99999')
+        assert resp.status_code == 404
+        assert resp.get_json()['ok'] is False
+
+    def test_add_city_triggers_offline_data_download(self, client):
+        """Verify that background download thread is started; mock to avoid real network calls."""
+        login(client, 'admin', 'adminpass')
+        with patch('app._download_city_offline_data') as mock_dl, \
+             patch('threading.Thread') as mock_thread:
+            mock_thread.return_value = MagicMock()
+            resp = client.post('/api/traffic/demo/cities/add',
+                               data=json.dumps({'name': 'Tucson', 'state': 'AZ',
+                                                'lat': 32.2226, 'lon': -110.9747, 'population': 542629}),
+                               content_type='application/json')
+        assert resp.status_code == 200
+        assert resp.get_json()['ok'] is True
+        # A background thread is started (threading.Thread was called)
+        assert mock_thread.called
+
+
+# ─── virtual_channels.html UI — add/delete city elements ─────────────────────
+
+class TestChangeTunerTrafficAddDeleteUI:
+    def test_add_city_form_present(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/virtual_channels')
+        assert b'traffic-add-city-btn' in resp.data
+        assert b'traffic-add-city-name' in resp.data
+        assert b'traffic-add-city-lat' in resp.data
+        assert b'traffic-add-city-lon' in resp.data
+
+    def test_delete_buttons_present(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/virtual_channels')
+        assert b'traffic-city-delete-btn' in resp.data
+
+    def test_zip_lookup_field_present(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/virtual_channels')
+        assert b'traffic-add-city-zip' in resp.data
+        assert b'traffic-zip-lookup-btn' in resp.data
+
+
+# ─── lookup_zip_city helper and /api/traffic/demo/zip_lookup endpoint ─────────
+
+class TestLookupZipCity:
+    """Tests for the postal-code → city-info lookup helper and its API endpoint."""
+
+    _NOMINATIM_RESPONSE = [
+        {
+            'lat': '45.5194',
+            'lon': '-122.6983',
+            'address': {
+                'city': 'Portland',
+                'state': 'Oregon',
+                'postcode': '97201',
+                'country': 'United States',
+                'country_code': 'us',
+            },
+        }
+    ]
+
+    def _mock_get(self, json_body, status_code=200):
+        mock_resp = MagicMock()
+        mock_resp.status_code = status_code
+        mock_resp.json.return_value = json_body
+        if status_code >= 400:
+            mock_resp.raise_for_status.side_effect = req_lib.exceptions.HTTPError(
+                f"{status_code} error"
+            )
+        else:
+            mock_resp.raise_for_status.return_value = None
+        return mock_resp
+
+    def test_successful_us_lookup(self, monkeypatch):
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get(self._NOMINATIM_RESPONSE)))
+        result = lookup_zip_city('97201')
+        assert result['name'] == 'Portland'
+        assert result['state'] == 'OR'         # full name mapped to abbreviation
+        assert abs(result['lat'] - 45.5194) < 0.001
+        assert abs(result['lon'] - (-122.6983)) < 0.001
+
+    def test_state_name_mapped_to_abbreviation(self, monkeypatch):
+        resp = [{'lat': '30.27', 'lon': '-97.74',
+                 'address': {'city': 'Austin', 'state': 'Texas', 'country_code': 'us'}}]
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get(resp)))
+        result = lookup_zip_city('78701', 'us')
+        assert result['state'] == 'TX'
+
+    def test_empty_zip_raises(self):
+        with pytest.raises(ValueError, match="[Pp]ostal code"):
+            lookup_zip_city('')
+
+    def test_no_results_raises(self, monkeypatch):
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get([])))
+        with pytest.raises(ValueError, match="No results"):
+            lookup_zip_city('99999')
+
+    def test_network_error_raises(self, monkeypatch):
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(side_effect=Exception("connection error")))
+        with pytest.raises(ValueError, match="unavailable"):
+            lookup_zip_city('97201')
+
+    def test_fallback_to_town_when_no_city(self, monkeypatch):
+        resp = [{'lat': '44.05', 'lon': '-123.09',
+                 'address': {'town': 'Springfield', 'state': 'Oregon', 'country_code': 'us'}}]
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get(resp)))
+        result = lookup_zip_city('97477')
+        assert result['name'] == 'Springfield'
+
+    def test_api_endpoint_requires_login(self, client):
+        resp = client.get('/api/traffic/demo/zip_lookup?zip=97201')
+        assert resp.status_code in (302, 401)
+
+    def test_api_endpoint_requires_admin(self, client):
+        login(client)  # non-admin
+        resp = client.get('/api/traffic/demo/zip_lookup?zip=97201')
+        assert resp.status_code == 403
+
+    def test_api_endpoint_success(self, client, monkeypatch):
+        login(client, 'admin', 'adminpass')
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get(self._NOMINATIM_RESPONSE)))
+        resp = client.get('/api/traffic/demo/zip_lookup?zip=97201')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['ok'] is True
+        assert data['name'] == 'Portland'
+        assert data['state'] == 'OR'
+
+    def test_api_endpoint_missing_zip_param(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.get('/api/traffic/demo/zip_lookup')
+        assert resp.status_code == 400
+
+    def test_api_endpoint_not_found(self, client, monkeypatch):
+        login(client, 'admin', 'adminpass')
+        monkeypatch.setattr(app_module.requests, 'get',
+                            MagicMock(return_value=self._mock_get([])))
+        resp = client.get('/api/traffic/demo/zip_lookup?zip=99999')
+        assert resp.status_code == 404
+        assert resp.get_json()['ok'] is False
+
+
+# ─── Population comma parsing ─────────────────────────────────────────────────
+
+class TestPopulationCommaParsing:
+    @pytest.fixture(autouse=True)
+    def no_bg_download(self):
+        with patch('app._download_city_offline_data'):
+            yield
+
+    def _add(self, pop):
+        """Helper: add a throwaway city with the given population value and return the DB record."""
+        name = f'Town_{pop}'
+        new_id = add_traffic_demo_city(name, 'TX', 30.0, -97.0, pop)
+        cities = get_traffic_demo_cities()
+        return next(c for c in cities if c['id'] == new_id)
+
+    def test_plain_integer(self):
+        assert self._add(37390)['population'] == 37390
+
+    def test_plain_integer_as_string(self):
+        assert self._add('37390')['population'] == 37390
+
+    def test_us_comma_separator(self):
+        assert self._add('37,390')['population'] == 37390
+
+    def test_european_period_separator(self):
+        assert self._add('37.390')['population'] == 37390
+
+    def test_french_space_separator(self):
+        assert self._add('37 390')['population'] == 37390
+
+    def test_swiss_apostrophe_separator(self):
+        assert self._add("37'390")['population'] == 37390
+
+    def test_python_underscore_separator(self):
+        assert self._add('37_390')['population'] == 37390
+
+    def test_non_breaking_space_separator(self):
+        """Unicode non-breaking space (U+00A0) used in some locales."""
+        assert self._add('37\u00a0390')['population'] == 37390
+
+    def test_narrow_no_break_space_separator(self):
+        """Narrow no-break space (U+202F) used by French SI standard."""
+        assert self._add('37\u202f390')['population'] == 37390
+
+    def test_zero_population(self):
+        assert self._add(0)['population'] == 0
+
+    def test_api_accepts_comma_population_via_json(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': 'SmallTown', 'state': 'OR',
+                                            'lat': 45.0, 'lon': -122.0, 'population': '37,390'}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data['ok'] is True
+        assert data['city']['population'] == 37390
+
+    def test_api_accepts_european_period_via_json(self, client):
+        login(client, 'admin', 'adminpass')
+        resp = client.post('/api/traffic/demo/cities/add',
+                           data=json.dumps({'name': 'EuroTown', 'state': 'OR',
+                                            'lat': 45.0, 'lon': -122.0, 'population': '37.390'}),
+                           content_type='application/json')
+        assert resp.status_code == 200
+        assert resp.get_json()['city']['population'] == 37390
+
+
 # ─── Admin UI — change_tuner page ────────────────────────────────────────────
 
 class TestChangeTunerTrafficDemoUI:
     def test_traffic_demo_fields_in_change_tuner_page(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert resp.status_code == 200
@@ -452,6 +823,7 @@ class TestChangeTunerTrafficDemoUI:
         assert b'TomTom' not in resp.data
 
     def test_city_table_present(self, client):
+        save_virtual_channel_settings({'virtual.traffic': True})
         login(client, 'admin', 'adminpass')
         resp = client.get('/virtual_channels')
         assert b'traffic-demo-city-table' in resp.data

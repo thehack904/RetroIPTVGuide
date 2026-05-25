@@ -195,15 +195,21 @@
   /* ── Restore previously saved sizes ───────────────────────────── */
   function restoreSizes() {
     var video = document.getElementById('video');
+    var isMobile = window.innerWidth <= 900;
     try {
       var w = localStorage.getItem(LS_VIDEO_W);
       var h = localStorage.getItem(LS_VIDEO_H);
       var c = localStorage.getItem(LS_CHAN_W);
-      if (video) {
-        if (w) video.style.width  = w;
-        if (h) { video.style.height = h; video.style.removeProperty('max-height'); }
+      // On mobile, CSS (mobile.css + guide.html inline style) handles video sizing
+      // and channel column width.  Restoring saved desktop pixel values would
+      // override those rules and produce a small/misaligned player on mobile.
+      if (!isMobile) {
+        if (video) {
+          if (w) video.style.width  = w;
+          if (h) { video.style.height = h; video.style.removeProperty('max-height'); }
+        }
+        if (c) document.documentElement.style.setProperty('--chan-col-width', c);
       }
-      if (c) document.documentElement.style.setProperty('--chan-col-width', c);
     } catch (e) {}
     updateGuideHeight();
     reflow();

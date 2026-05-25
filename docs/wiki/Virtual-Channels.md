@@ -12,7 +12,7 @@ same fullscreen playback experience.
 
 | Channel | ID | Data Source |
 |---------|----|-------------|
-| [Weather](#weather) | `virtual.weather` | Open-Meteo API |
+| [Weather](#weather) | `virtual.weather` | Open-Meteo API (conditions/forecast), NOAA/NWS API (alerts), NOAA WMS (radar) |
 | [News](#news) | `virtual.news` | RSS feeds |
 | [Traffic](#traffic) | `virtual.traffic` | Overpass API |
 | [System Status](#system-status) | `virtual.status` | Internal system data |
@@ -30,18 +30,23 @@ Displays current conditions, a 5-day forecast, radar, and active weather alerts.
 
 The channel cycles through four segments on a configurable timer:
 
-| Segment | Content |
-|---------|---------|
-| 0 — Current | Current conditions at the configured location |
-| 1 — Forecast | 5-day forecast |
-| 2 — Radar | Radar map |
-| 3 — Alerts | Active weather alerts |
+| Segment | Content | Data Source |
+|---------|---------|-------------|
+| 0 — Current | Current conditions at the configured location | Open-Meteo API |
+| 1 — Forecast | 5-day forecast | Open-Meteo API |
+| 2 — Radar | NOAA regional radar map | NOAA WMS |
+| 3 — Alerts | Active severe weather alerts | NOAA/NWS Alerts API (US only) |
 
 **Configuration:**
 
 - Location is set in the Weather admin settings.
 - Rotation timer: 30–600 seconds per segment (default 300 s). Configurable via the
   `weather.seconds_per_segment` setting.
+- Alerts (segment 3) are fetched from the NWS Alerts API
+  (`https://api.weather.gov/alerts/active`). This service is US-only; non-US
+  locations show "No Active Alerts" for that segment.
+- Alert cards are colour-coded by NWS severity: **Extreme/Severe** (red),
+  **Moderate** (orange), **Minor** (yellow).
 
 **API endpoint:** `GET /api/weather`
 

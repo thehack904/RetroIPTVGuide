@@ -46,8 +46,20 @@
     'body.tv-mode .chan-name img { width: 20px; height: 20px; object-fit: contain; flex-shrink: 0; }',
     'body.tv-mode .chan-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }',
     'body.tv-mode .chan-header { height: 17px; }',
-    /* Program grid cells */
-    'body.tv-mode .program { height: 24px !important; font-size: 9px; padding: 2px 3px; top: 3px; }',
+    /* Program grid cells – fill the full row height so current and future programs
+       are always the same height as the channel-column cell on every theme.
+       Targeting both .program and .program.now (specificity 0,3,0) ensures the
+       tv-mode rule wins over any theme-specific .program.now override that would
+       otherwise cause the current program to appear taller than future ones. */
+    'body.tv-mode .program,',
+    'body.tv-mode .program.now { height: 100% !important; top: 0 !important; font-size: 9px; padding: 2px 3px; }',
+    /* Icon Guide (ersatztv) – icon cards need taller rows; give the channel name
+       enough height to show the channel logo and let programs fill the row with
+       comfortable inset padding to match the desktop design proportions. */
+    'body.tv-mode.ersatztv .chan-name { height: 64px; }',
+    'body.tv-mode.ersatztv .program,',
+    'body.tv-mode.ersatztv .program.now { top: 4px !important; height: calc(100% - 8px) !important; font-size: 10px; padding: 4px 5px; }',
+    'body.tv-mode.ersatztv .program .prog-icon-img { width: 42px; height: 42px; }',
     'body.tv-mode .time-cell { font-size: 9px; }',
     /* Fixed time bar */
     'body.tv-mode .time-header-fixed { height: 17px; }',
