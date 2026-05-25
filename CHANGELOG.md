@@ -9,7 +9,12 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## v4.9.5 - 2026-04-29
 
 ### Added
-- Added ability to hide channels per user (#190).
+- Added channel logo to be displayed in "Current Program" information area.
+- Added channel logo support to the `/api/current_program` response.
+  - The endpoint now returns a top-level `logo` field for the requested channel.
+  - If a channel has no logo, the endpoint returns an empty string instead of omitting the field.
+  - Added regression coverage in `tests/test_current_program_logo.py` to ensure the logo field is present without breaking existing program metadata.
+- Added ability to hide channels per user.
   - Users can right-click any channel name in the guide grid to access a context menu with **Hide Channel** / **Unhide Channel** options; hidden channels are persisted server-side per user account.
   - Added **Show/Hide Hidden Channels** toggle to the **Guide Preferences** submenu in the Settings menu (desktop and mobile) so users can reveal or re-hide all their hidden channels with one click.
   - Admins can now view a summary of hidden channels per user and **set hidden channels directly** from the **Manage Users** preferences panel using a multi-select channel picker — selecting channels marks them as hidden, deselecting all clears the list.
