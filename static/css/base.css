@@ -290,6 +290,12 @@ body { font-family: Arial, sans-serif; margin:0; }
 }
 .chan-name img { width:28px; height:28px; object-fit:contain; margin-bottom: 2px; }
 .chan-name span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; }
+.chan-name .user-channel-number {
+  font-size: 0.78em;
+  font-weight: 700;
+  opacity: 0.9;
+  letter-spacing: 0.02em;
+}
 .grid-row  { position:relative; height:52px; border-bottom:1px solid; }
 .grid-content { position:relative; width: var(--total-width); min-height:100%; }
 .program {
@@ -778,3 +784,15 @@ body.ersatztv{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
   font-size: 0.75em;
   opacity: 0.8;
 }
+
+/* Favorite channels: star badge on the channel name cell */
+.guide-row.chan-favorite > .chan-col .chan-name::before {
+  content: '⭐ ';
+  font-size: 0.75em;
+  opacity: 0.9;
+}
+
+/* Favorites-only filter: hide non-favourite rows when the toggle is active */
+body.favorites-only .guide-row:not(.chan-favorite) { display: none; }
+/* Always keep the time-header row visible */
+body.favorites-only .guide-row.hide-in-grid { display: flex !important; }

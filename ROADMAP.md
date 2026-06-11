@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.9.5 (2026-05-25)**
+# Current Version: **v4.9.6 (2026-06-11)**
 
 ---
 
@@ -41,10 +41,10 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Fullscreen improvements for virtual channels *(v4.9.3)*  
 - [x] Channel Mix dynamic fullscreen switching *(v4.9.3)*  
 - [ ] Search/filter box  
-- [ ] Favorites (lightweight)  
-- [ ] Channel Info Banner  
-- [ ] Channel number entry  
-- [ ] Last channel return  
+- [x] Favorites (lightweight) *(v4.9.6)*  
+- [x] Channel Info Banner *(v4.9.6)*  
+- [x] Channel number entry *(v4.9.6)*  
+- [x] Last channel return *(v4.9.6)*  
 - [ ] Browse mode  
 - [ ] "What's On Now" view  
 - [ ] Channel health indicators (lightweight only)  
@@ -86,7 +86,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ---
 
 ### 7. New Features
-- [ ] Favorites system (lightweight)  
+- [x] Favorites system (lightweight) *(v4.9.6)*  
 - [ ] Smart filtering (simple implementation only)  
 
 ---
