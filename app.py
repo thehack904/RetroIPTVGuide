@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.5"
-APP_RELEASE_DATE = "2026-05-25"
+APP_VERSION = "v4.9.6"
+APP_RELEASE_DATE = "2026-06-11"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -633,6 +633,8 @@ def inject_tuner_context():
 _DEFAULT_PREFS = {
     "auto_load_channel": None,
     "hidden_channels": [],
+    "favorite_channels": [],
+    "channel_numbers_enabled": False,
     "default_theme": None,
 }
 
@@ -737,12 +739,14 @@ def parse_m3u(m3u_url):
             tvg_id = tvg_id_match.group(1) if tvg_id_match else name
             group_match = re.search(r'group-title="([^"]*)"', info, re.IGNORECASE)
             group = group_match.group(1).strip() if group_match else ''
+            tvg_chno_match = re.search(r'tvg-chno="([^"]*)"', info)
+            tvg_chno = tvg_chno_match.group(1).strip() if tvg_chno_match else ''
             url = lines[i+1].strip() if i+1 < len(lines) else ''
 
             if url.endswith('.ts'):
                 url = url.replace('.ts', '.m3u8')
 
-            channels.append({'name': name, 'logo': logo, 'url': url, 'tvg_id': tvg_id, 'group': group})
+            channels.append({'name': name, 'logo': logo, 'url': url, 'tvg_id': tvg_id, 'group': group, 'tvg_chno': tvg_chno})
     return channels
 
 # ------------------- XMLTV EPG Parsing -------------------
@@ -785,10 +789,28 @@ def parse_epg(xml_url):
         desc = prog.find('desc').text if prog.find('desc') is not None else ''
         icon_el = prog.find('icon')
         icon = icon_el.attrib.get('src', '') if icon_el is not None else ''
+        categories = [
+            (cat.text or '').strip()
+            for cat in prog.findall('category')
+            if (cat.text or '').strip()
+        ]
+        colors = [
+            (el.text or '').strip()
+            for el in (prog.findall('colour') + prog.findall('color'))
+            if (el.text or '').strip()
+        ]
 
         if cid not in programs:
             programs[cid] = []
-        programs[cid].append({'title': title, 'desc': desc, 'start': start, 'stop': stop, 'icon': icon})
+        programs[cid].append({
+            'title': title,
+            'desc': desc,
+            'start': start,
+            'stop': stop,
+            'icon': icon,
+            'categories': categories,
+            'colors': colors,
+        })
     return programs
 
 # ------------------- EPG Fallback Helper -------------------
@@ -4663,6 +4685,22 @@ def api_user_prefs_post():
         alc = data["auto_load_channel"]
         if not (isinstance(alc, dict) and alc.get("id")):
             data["auto_load_channel"] = None
+
+    # Sanitise favorite_channels: must be a list of non-empty strings
+    if "favorite_channels" in data:
+        fc = data["favorite_channels"]
+        if isinstance(fc, list):
+            data["favorite_channels"] = [str(c) for c in fc if c]
+        else:
+            data["favorite_channels"] = []
+
+    # Sanitise channel_numbers_enabled: must be a boolean
+    if "channel_numbers_enabled" in data:
+        data["channel_numbers_enabled"] = (
+            data["channel_numbers_enabled"]
+            if isinstance(data["channel_numbers_enabled"], bool)
+            else False
+        )
 
     save_user_prefs(current_user.username, data)
     return jsonify({"status": "ok", "prefs": get_user_prefs(current_user.username)})

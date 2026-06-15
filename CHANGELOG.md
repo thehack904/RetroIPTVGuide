@@ -6,6 +6,121 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.6 - 2026-06-11
+
+### Added
+
+* Added **Favorites (lightweight)** feature.
+
+  * Users can right-click any channel name in the guide grid to **Add to Favorites** or **Remove from Favorites**.
+  * Favorite channels are persisted server-side per user account through the existing user preferences system.
+  * Favorited channels are marked with a star badge in the guide.
+  * Added **Show Favorites Only** toggle to the **Guide Preferences** submenu on desktop and mobile.
+  * Toggle label updates to **Show All Channels** when the favorites-only filter is active.
+
+* Added **Channel Info Banner** to the guide player.
+
+  * Banner appears when tuning a channel and displays channel logo, channel number, channel name, current program title, program time range, progress bar, remaining time, and description.
+  * Added an info button to manually toggle the banner.
+  * Added keyboard shortcut support using the `i` key when focus is not inside an input field.
+  * Added Channel Info Banner support inside virtual-channel fullscreen overlay mode.
+
+* Added **Guide Search / Filter** panel.
+
+  * Added SEARCH link to the guide header on desktop and mobile.
+  * Users can search by channel name, program title, program description, group/type, category, and color metadata.
+  * Added type filter dropdown populated from channel groups, virtual-channel markers, and XMLTV program categories.
+  * Search/filter behavior updates visible guide rows and recomputes auto-scroll loops.
+
+* Added **Channel Number Entry**.
+
+  * Added `static/js/channel-number-entry.js`.
+  * Users can type numeric channel numbers to jump directly to a channel.
+  * Supports delayed auto-navigation after number entry.
+  * Supports immediate confirmation with Enter.
+  * Supports canceling entry with Escape or GoBack.
+  * Supports decimal/sub-channel numbers such as `2.1`, `16.5`, and `31.2`.
+  * Displays a retro-style channel-number HUD while typing.
+  * Uses `tvg-chno` from M3U playlists when available, with row-index fallback when missing.
+
+* Added **Last Channel Return**.
+
+  * Stores the previously watched channel before switching to a new channel.
+  * Added `window.returnToLastChannel()` helper.
+  * Added `L` key shortcut support through channel-number entry handling.
+
+* Added support for parsing `tvg-chno` values from M3U playlists.
+
+  * Parsed channel numbers are stored on channel metadata as `tvg_chno`.
+  * Guide rows now expose channel numbers through `data-chan-num`.
+  * `/api/channels` now returns parsed `tvg-chno` values as the channel number when available.
+
+* Added optional user-controlled channel-number display.
+
+  * Added `channel_numbers_enabled` to default user preferences.
+  * Added **Show Channel Numbers / Hide Channel Numbers** toggle to Guide Preferences on desktop and mobile.
+  * User-injected channel numbers are hidden automatically for themes that already include built-in channel numbers, including `tvguide1990` and `classic-cable`.
+
+* Added XMLTV metadata parsing for guide filtering.
+
+  * Program categories are now parsed from XMLTV `<category>` entries.
+  * Program color metadata is now parsed from XMLTV `<colour>` and `<color>` entries.
+  * Guide program blocks now expose category and color metadata through `data-categories` and `data-colors`.
+
+### Changed
+
+* Improved guide player fullscreen behavior.
+
+  * Native video fullscreen now uses `object-fit: contain` so video letterboxes instead of cropping.
+  * Fullscreen control labeling was generalized from virtual-channel-only wording to broader fullscreen wording.
+
+* Improved guide preference handling.
+
+  * User preferences now include `favorite_channels` and `channel_numbers_enabled`.
+  * API preference updates sanitize `favorite_channels` as a list of non-empty strings.
+  * API preference updates coerce invalid `channel_numbers_enabled` values to `false`.
+
+* Expanded the right-click channel context menu.
+
+  * Added favorite and unfavorite actions.
+  * Preserved existing play, auto-load, hide, and unhide actions.
+
+### Fixed
+
+* Fixed channel info display behavior for virtual channel fullscreen overlays.
+
+  * Info banner and info button now appear correctly in fullscreen overlay mode.
+  * Info banner controls fade consistently with fullscreen overlay controls.
+
+* Fixed native video fullscreen cropping.
+
+  * Browser fullscreen entered from the video control bar now preserves full video framing instead of cropping to fill.
+
+* Fixed guide search/filter layout integration.
+
+  * Opening or closing the search panel now refreshes the fixed time bar and now-line positioning.
+
+### Tests
+
+* Added `tests/test_channel_info_banner.py`.
+* Added `tests/test_channel_number_entry.py`.
+* Added `tests/test_guide_search_filter.py`.
+* Added `tests/test_last_channel_return.py`.
+* Added `tests/test_user_prefs_channel_numbers.py`.
+* Expanded `tests/test_user_prefs.py` coverage for:
+
+  * favorite channel defaults
+  * saving and retrieving favorites
+  * API favorite-channel updates
+  * invalid favorite-channel sanitization
+  * preserving favorites during partial preference updates
+  * channel-number preference toggling
+  * invalid channel-number preference sanitization
+  * guide preference controls for channel-number display
+
+
+---
+
 ## v4.9.5 - 2026-05-25
 
 ### Added

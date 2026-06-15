@@ -2,6 +2,7 @@
 // Features:
 //   • Auto-load channel: automatically plays a saved channel when the guide opens
 //   • Hidden channels:   hides selected channels from the guide grid (right-click to hide)
+//   • Favorite channels: marks favorite channels with a star; optional filter to show only favorites
 //
 // Prefs are loaded from window.__initialUserPrefs (injected by guide.html) and
 // saved back to the server via POST /api/user_prefs.
@@ -14,16 +15,23 @@
 //   .toggleShowHidden()       — toggle visibility of hidden rows in the guide
 //   .hideChannel(id)          — add channel to hidden list
 //   .unhideChannel(id)        — remove channel from hidden list
+//   .addFavorite(id)          — add channel to favorites list
+//   .removeFavorite(id)       — remove channel from favorites list
+//   .toggleShowFavoritesOnly() — toggle guide filter to show only favorite channels
 
 (function () {
   'use strict';
 
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
-    { auto_load_channel: null, hidden_channels: [] },
+    { auto_load_channel: null, hidden_channels: [], favorite_channels: [], channel_numbers_enabled: false },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
+  let showingFavoritesOnly = false; // current toggle state for "show favorites only"
+  let channelNumberReapplyQueued = false;
+  const CHANNEL_NUMBER_PREFIX = 'CH ';
+  const THEMES_WITH_BUILT_IN_CHANNEL_NUMBERS = ['tvguide1990', 'classic-cable'];
 
   // ─── Helpers ──────────────────────────────────────────────────────────────
   function log() {
@@ -97,6 +105,123 @@
     await savePatch({ hidden_channels: next });
     applyHiddenChannels();
     log('unhidden channel', cid);
+  }
+
+  // ─── Favorite channels ────────────────────────────────────────────────────
+  function applyFavoriteChannels() {
+    const favorites = prefs.favorite_channels || [];
+    document.querySelectorAll('.guide-row[data-cid]').forEach(row => {
+      const cid = row.dataset.cid;
+      if (favorites.includes(cid)) {
+        row.classList.add('chan-favorite');
+      } else {
+        row.classList.remove('chan-favorite');
+      }
+    });
+  }
+
+  function syncShowFavoritesButton() {
+    const label = showingFavoritesOnly ? '⭐ Show All Channels' : '⭐ Show Favorites Only';
+    ['toggleShowFavoritesOnly', 'mobileToggleShowFavoritesOnly'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = label;
+    });
+  }
+
+  function toggleShowFavoritesOnly() {
+    showingFavoritesOnly = !showingFavoritesOnly;
+    document.body.classList.toggle('favorites-only', showingFavoritesOnly);
+    syncShowFavoritesButton();
+  }
+
+  async function addFavorite(cid) {
+    if (!cid) return;
+    const favorites = prefs.favorite_channels || [];
+    if (!favorites.includes(cid)) {
+      const next = favorites.concat([cid]);
+      await savePatch({ favorite_channels: next });
+      applyFavoriteChannels();
+    }
+    log('added favorite', cid);
+  }
+
+  async function removeFavorite(cid) {
+    if (!cid) return;
+    const next = (prefs.favorite_channels || []).filter(id => id !== cid);
+    await savePatch({ favorite_channels: next });
+    applyFavoriteChannels();
+    log('removed favorite', cid);
+  }
+
+  // ─── Channel numbers toggle ────────────────────────────────────────────────
+  function isThemeWithBuiltInChannelNumbers() {
+    return THEMES_WITH_BUILT_IN_CHANNEL_NUMBERS.some(function (theme) {
+      return document.body.classList.contains(theme);
+    });
+  }
+
+  function removeUserChannelNumbers() {
+    document.querySelectorAll('.chan-name .user-channel-number').forEach(function (el) {
+      el.remove();
+    });
+  }
+
+  function addUserChannelNumbers() {
+    var channelEls = Array.from(document.querySelectorAll('.guide-row[data-cid] .chan-name')).filter(function (el) {
+      return !el.closest('.__auto_scroll_clone');
+    });
+    removeUserChannelNumbers();
+    channelEls.forEach(function (el, idx) {
+      if (el.querySelector('.channel-number')) return;
+      var num = document.createElement('span');
+      num.className = 'user-channel-number';
+      num.textContent = CHANNEL_NUMBER_PREFIX + String(idx + 1);
+      el.insertBefore(num, el.firstChild);
+    });
+  }
+
+  function applyChannelNumbersPreference() {
+    const shouldShow = !!prefs.channel_numbers_enabled && !isThemeWithBuiltInChannelNumbers();
+    if (shouldShow) {
+      addUserChannelNumbers();
+    } else {
+      removeUserChannelNumbers();
+    }
+  }
+
+  function scheduleChannelNumbersReapply() {
+    if (channelNumberReapplyQueued) return;
+    channelNumberReapplyQueued = true;
+    var run = function () {
+      channelNumberReapplyQueued = false;
+      if (!prefs.channel_numbers_enabled || isThemeWithBuiltInChannelNumbers()) return;
+      applyChannelNumbersPreference();
+    };
+    if (typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(run);
+    } else {
+      setTimeout(run, 0);
+    }
+  }
+
+  function syncChannelNumbersButton() {
+    const hidden = isThemeWithBuiltInChannelNumbers();
+    const enabled = !!prefs.channel_numbers_enabled;
+    const label = enabled ? '🔢 Hide Channel Numbers' : '🔢 Show Channel Numbers';
+    ['toggleChannelNumbers', 'mobileToggleChannelNumbers'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.style.display = hidden ? 'none' : '';
+      el.textContent = label;
+    });
+  }
+
+  async function toggleChannelNumbers() {
+    if (isThemeWithBuiltInChannelNumbers()) return;
+    prefs.channel_numbers_enabled = !prefs.channel_numbers_enabled;
+    await savePatch({ channel_numbers_enabled: !!prefs.channel_numbers_enabled });
+    syncChannelNumbersButton();
+    applyChannelNumbersPreference();
   }
 
   // ─── Auto-load channel ────────────────────────────────────────────────────
@@ -218,34 +343,50 @@
       return d;
     }
 
-    menu.appendChild(item('ctxPlay',      '▶  Play Channel'));
-    menu.appendChild(item('ctxAutoLoad',  'Set as Auto-Load Channel'));
-    menu.appendChild(item('ctxHide',      '🙈 Hide Channel'));
-    menu.appendChild(item('ctxUnhide',    '👁  Unhide Channel'));
+    menu.appendChild(item('ctxPlay',       '▶  Play Channel'));
+    menu.appendChild(item('ctxAutoLoad',   'Set as Auto-Load Channel'));
+    menu.appendChild(item('ctxFavorite',   '⭐ Add to Favorites'));
+    menu.appendChild(item('ctxUnfavorite', '✖  Remove from Favorites'));
+    menu.appendChild(item('ctxHide',       '🙈 Hide Channel'));
+    menu.appendChild(item('ctxUnhide',     '👁  Unhide Channel'));
 
     document.body.appendChild(menu);
 
     menu.querySelector('#ctxPlay').addEventListener('click', function () {
+      const tgt = ctxTarget;
       closeCtxMenu();
-      if (!ctxTarget) return;
+      if (!tgt) return;
       if (typeof window.playChannel === 'function') {
-        window.playChannel(ctxTarget.dataset.url, ctxTarget.dataset.cid, ctxTarget.dataset.name);
+        window.playChannel(tgt.dataset.url, tgt.dataset.cid, tgt.dataset.name);
       }
     });
     menu.querySelector('#ctxAutoLoad').addEventListener('click', async function () {
+      const tgt = ctxTarget;
       closeCtxMenu();
-      if (!ctxTarget) return;
-      await savePatch({ auto_load_channel: { id: ctxTarget.dataset.cid, name: ctxTarget.dataset.name } });
+      if (!tgt) return;
+      await savePatch({ auto_load_channel: { id: tgt.dataset.cid, name: tgt.dataset.name } });
       syncAutoLoadButton();
       applyAutoLoadMarker();
     });
     menu.querySelector('#ctxHide').addEventListener('click', async function () {
+      const cid = ctxTarget ? ctxTarget.dataset.cid : null;
       closeCtxMenu();
-      if (ctxTarget) await hideChannel(ctxTarget.dataset.cid);
+      if (cid) await hideChannel(cid);
     });
     menu.querySelector('#ctxUnhide').addEventListener('click', async function () {
+      const cid = ctxTarget ? ctxTarget.dataset.cid : null;
       closeCtxMenu();
-      if (ctxTarget) await unhideChannel(ctxTarget.dataset.cid);
+      if (cid) await unhideChannel(cid);
+    });
+    menu.querySelector('#ctxFavorite').addEventListener('click', async function () {
+      const cid = ctxTarget ? ctxTarget.dataset.cid : null;
+      closeCtxMenu();
+      if (cid) await addFavorite(cid);
+    });
+    menu.querySelector('#ctxUnfavorite').addEventListener('click', async function () {
+      const cid = ctxTarget ? ctxTarget.dataset.cid : null;
+      closeCtxMenu();
+      if (cid) await removeFavorite(cid);
     });
 
     return menu;
@@ -255,13 +396,16 @@
     if (!ctxMenu) ctxMenu = createContextMenu();
     ctxTarget = chanEl;
     const cid = chanEl.dataset.cid;
-    const isHidden = (prefs.hidden_channels || []).includes(cid);
-    ctxMenu.querySelector('#ctxHide').style.display   = isHidden ? 'none' : '';
-    ctxMenu.querySelector('#ctxUnhide').style.display = isHidden ? ''     : 'none';
+    const isHidden   = (prefs.hidden_channels   || []).includes(cid);
+    const isFavorite = (prefs.favorite_channels || []).includes(cid);
+    ctxMenu.querySelector('#ctxHide').style.display        = isHidden   ? 'none' : '';
+    ctxMenu.querySelector('#ctxUnhide').style.display      = isHidden   ? ''     : 'none';
+    ctxMenu.querySelector('#ctxFavorite').style.display    = isFavorite ? 'none' : '';
+    ctxMenu.querySelector('#ctxUnfavorite').style.display  = isFavorite ? ''     : 'none';
 
     ctxMenu.style.display = 'block';
     // Keep within viewport
-    const menuW = 210, menuH = 140;
+    const menuW = 210, menuH = 180;
     const left = (x + menuW > window.innerWidth)  ? (x - menuW) : x;
     const top  = (y + menuH > window.innerHeight) ? (y - menuH) : y;
     ctxMenu.style.left = left + 'px';
@@ -276,9 +420,13 @@
   // ─── Init ──────────────────────────────────────────────────────────────────
   function init() {
     applyHiddenChannels();
+    applyFavoriteChannels();
     applyAutoLoadMarker();
     syncAutoLoadButton();
     syncShowHiddenButton();
+    syncShowFavoritesButton();
+    syncChannelNumbersButton();
+    applyChannelNumbersPreference();
     scheduleAutoLoad();
 
     // Wire Settings-menu buttons (desktop + mobile, present in _header.html)
@@ -286,12 +434,29 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener('click', function (e) { e.preventDefault(); fn(); });
     }
-    wire('setAutoLoadChannel',       setAutoLoad);
-    wire('clearAutoLoadChannel',     clearAutoLoad);
-    wire('toggleShowHidden',         toggleShowHidden);
-    wire('mobileSetAutoLoadChannel', setAutoLoad);
-    wire('mobileClearAutoLoadChannel', clearAutoLoad);
-    wire('mobileToggleShowHidden',   toggleShowHidden);
+    wire('setAutoLoadChannel',           setAutoLoad);
+    wire('clearAutoLoadChannel',         clearAutoLoad);
+    wire('toggleShowHidden',             toggleShowHidden);
+    wire('toggleShowFavoritesOnly',      toggleShowFavoritesOnly);
+    wire('mobileSetAutoLoadChannel',     setAutoLoad);
+    wire('mobileClearAutoLoadChannel',   clearAutoLoad);
+    wire('mobileToggleShowHidden',       toggleShowHidden);
+    wire('mobileToggleShowFavoritesOnly', toggleShowFavoritesOnly);
+    wire('toggleChannelNumbers',         toggleChannelNumbers);
+    wire('mobileToggleChannelNumbers',   toggleChannelNumbers);
+
+    window.addEventListener('theme:applied', function () {
+      syncChannelNumbersButton();
+      applyChannelNumbersPreference();
+    });
+
+    var guideOuter = document.getElementById('guideOuter');
+    if (guideOuter && typeof MutationObserver === 'function') {
+      var rowObserver = new MutationObserver(function () {
+        scheduleChannelNumbersReapply();
+      });
+      rowObserver.observe(guideOuter, { childList: true });
+    }
 
     // Right-click context menu on channel names
     document.querySelectorAll('.chan-name').forEach(function (el) {
@@ -314,12 +479,16 @@
   // ─── Public API ───────────────────────────────────────────────────────────
   window.__userPrefs = {
     get prefs() { return prefs; },
-    save:             savePatch,
-    setAutoLoad:      setAutoLoad,
-    clearAutoLoad:    clearAutoLoad,
-    toggleShowHidden: toggleShowHidden,
-    hideChannel:      hideChannel,
-    unhideChannel:    unhideChannel
+    save:                  savePatch,
+    setAutoLoad:           setAutoLoad,
+    clearAutoLoad:         clearAutoLoad,
+    toggleShowHidden:      toggleShowHidden,
+    hideChannel:           hideChannel,
+    unhideChannel:         unhideChannel,
+    addFavorite:           addFavorite,
+    removeFavorite:        removeFavorite,
+    toggleShowFavoritesOnly: toggleShowFavoritesOnly,
+    toggleChannelNumbers:  toggleChannelNumbers
   };
 
   // Bootstrap when DOM is ready

@@ -151,6 +151,13 @@
         height: 100% !important;
         object-fit: cover;
     }
+    /* Native fullscreen entered from the video control bar should letterbox instead of crop. */
+    #video:fullscreen,
+    #video:-webkit-full-screen {
+        width: 100vw !important;
+        height: 100vh !important;
+        object-fit: contain !important;
+    }
     /* Maintain 16:9 aspect ratio for the virtual overlay root in native fullscreen
        so channel_mix and other overlay-only channels are not stretched.
        Width is capped at 1280px (max 720px tall) to match standalone-page letterboxing.
@@ -211,6 +218,24 @@
     }
     #vcFsOverlayMute:hover { background: rgba(0, 0, 0, 0.95); }
     #vcFsOverlayMute.vc-fs-overlay-close-fade { opacity: 0; pointer-events: none; }
+    #vcFsOverlayInfo {
+        position: absolute;
+        top: 12px;
+        right: 128px;
+        z-index: 9110;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        padding: 8px 14px;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        transition: background 0.15s, opacity 0.4s;
+        opacity: 1;
+    }
+    #vcFsOverlayInfo:hover { background: rgba(0, 0, 0, 0.95); }
+    #vcFsOverlayInfo.vc-fs-overlay-close-fade { opacity: 0; pointer-events: none; }
     /* Transparent layer that captures mouse events when the iframe would swallow them */
     #vcFsMouseTrap {
         position: absolute;
@@ -220,6 +245,151 @@
         cursor: default;
     }
     #vcFsMouseTrap.active { pointer-events: auto; }
+    /* ── Channel Info Banner ────────────────────────────────────────────────── */
+    .channel-info-banner {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 30;
+        background: linear-gradient(to bottom, transparent 0%, rgba(0,0,0,0.88) 40%, rgba(0,0,0,0.96) 100%);
+        padding: 24px 14px 10px;
+        pointer-events: none;
+        transform: translateY(0);
+        opacity: 1;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+    .channel-info-banner.cib-hiding {
+        transform: translateY(100%);
+        opacity: 0;
+    }
+    .cib-inner {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        color: #fff;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+    .cib-logo-wrap { flex-shrink: 0; }
+    .cib-logo {
+        width: 44px;
+        height: 44px;
+        object-fit: contain;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.08);
+        display: block;
+    }
+    .cib-info { flex: 1; min-width: 0; }
+    .cib-title-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+        margin-bottom: 4px;
+        min-width: 0;
+    }
+    .cib-chan-num {
+        font-size: 0.78em;
+        color: #ffd700;
+        font-weight: 700;
+        flex-shrink: 0;
+        letter-spacing: 0.03em;
+    }
+    .cib-chan-name {
+        font-size: 0.78em;
+        font-weight: 700;
+        color: #9fbfff;
+        flex-shrink: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 130px;
+    }
+    .cib-prog-title {
+        font-size: 1em;
+        font-weight: 700;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        flex: 1;
+        min-width: 0;
+    }
+    .cib-time-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 3px;
+    }
+    .cib-time {
+        font-size: 0.72em;
+        color: #bbb;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .cib-progress-wrap {
+        flex: 1;
+        height: 3px;
+        background: rgba(255,255,255,0.18);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    .cib-progress-bar {
+        height: 100%;
+        background: #4a8fff;
+        border-radius: 2px;
+        transition: width 1s linear;
+    }
+    .cib-remaining {
+        font-size: 0.68em;
+        color: #aaa;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .cib-desc {
+        font-size: 0.73em;
+        color: #ccc;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        line-height: 1.3;
+    }
+    /* Info toggle button – bottom-left of video player */
+    .cib-toggle-btn {
+        bottom: 8px !important;
+        top: auto !important;
+        right: auto !important;
+        left: 8px !important;
+        font-size: 14px !important;
+    }
+    .guide-filter-panel {
+        display: none;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 10px;
+        border-bottom: 1px solid var(--timebar-border, rgba(0,0,0,0.12));
+        background: var(--timebar-bg, rgba(255,255,255,0.95));
+        color: var(--timebar-color, inherit);
+    }
+    .guide-filter-panel.is-open { display: flex; }
+    .guide-filter-panel label {
+        font-size: 12px;
+        opacity: 0.85;
+        white-space: nowrap;
+    }
+    .guide-filter-panel input,
+    .guide-filter-panel select {
+        min-height: 30px;
+        padding: 4px 8px;
+        background: var(--chan-col-bg, #fff);
+        color: inherit;
+        border: 1px solid var(--timebar-border, rgba(0,0,0,0.2));
+    }
+    .guide-filter-panel input { flex: 1; min-width: 180px; }
+    .guide-row.chan-search-hidden { display: none !important; }
+    #vcFsOverlay .channel-info-banner {
+        z-index: 9109;
+        padding: 64px 20px 16px;
+    }
     </style>
     {% if overlay_appearance.text_color or overlay_appearance.bg_color %}
     <style>
@@ -234,6 +404,15 @@
 <div id="appZoomRoot">
 {% include '_header.html' %}
 
+<div id="guideSearchPanel" class="guide-filter-panel" role="search" hidden>
+    <label for="guideSearchInput">Search</label>
+    <input id="guideSearchInput" type="search" placeholder="Channel, program, type…" autocomplete="off" aria-label="Search guide by channel, program, or type">
+    <label for="guideTypeFilter">Type</label>
+    <select id="guideTypeFilter" aria-label="Filter guide by type">
+        <option value="">All</option>
+    </select>
+</div>
+
 <!-- Player row: summary left, video right -->
 <div class="player" id="playerRow">
     <div class="summary" id="summary">
@@ -244,7 +423,31 @@
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
         <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
-        <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle virtual channel fullscreen" title="Fullscreen">⛶</button>
+        <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
+        <button id="chanInfoBtn" class="vc-fs-btn cib-toggle-btn" hidden aria-label="Toggle channel info" title="Channel Info">ℹ</button>
+        <!-- Channel Info Banner: slides up from bottom of the video player on channel select -->
+        <div id="channelInfoBanner" class="channel-info-banner" aria-live="polite" aria-atomic="true" style="display:none;">
+            <div class="cib-inner">
+                <div class="cib-logo-wrap">
+                    <img id="cibLogo" class="cib-logo" src="" alt="Channel logo" onerror="this.style.display='none'">
+                </div>
+                <div class="cib-info">
+                    <div class="cib-title-row">
+                        <span id="cibChanNum" class="cib-chan-num"></span>
+                        <span id="cibChanName" class="cib-chan-name"></span>
+                        <span id="cibProgTitle" class="cib-prog-title"></span>
+                    </div>
+                    <div class="cib-time-row">
+                        <span id="cibTime" class="cib-time"></span>
+                        <div class="cib-progress-wrap">
+                            <div id="cibProgress" class="cib-progress-bar"></div>
+                        </div>
+                        <span id="cibRemaining" class="cib-remaining"></span>
+                    </div>
+                    <div id="cibDesc" class="cib-desc"></div>
+                </div>
+            </div>
+        </div>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
 </div>
@@ -283,6 +486,7 @@
                  data-cid="{{ ch.tvg_id }}"
                  data-name="{{ ch.name|e }}"
                  data-logo="{{ ch.logo }}"
+                 data-chan-num="{{ ch.tvg_chno if ch.tvg_chno else loop.index }}"
                  {% if ch.is_virtual %}
                  data-is-virtual="true"
                  data-loop-asset="{{ ch.loop_asset }}"
@@ -326,10 +530,12 @@
                             data-stop="{{ prog.stop.isoformat() }}"
                             data-title="{{ prog.title }}"
                             data-desc="{{ prog.desc }}"
-                            data-icon="{{ prog.icon if prog.icon else '' }}">
-                            {{ prog.title }}
-                        </div>
-                    {% endif %}
+                                data-icon="{{ prog.icon if prog.icon else '' }}"
+                                data-categories="{{ (prog.categories or [])|join(' | ') }}"
+                                data-colors="{{ (prog.colors or [])|join(' | ') }}">
+                                {{ prog.title }}
+                            </div>
+                        {% endif %}
                 {% endfor %}
             {% endif %}
             </div>
@@ -416,6 +622,8 @@ function _scheduleVcFsHide(delay) {
         if (btn && !btn.hidden) btn.classList.add('vc-fs-btn-fade');
         const mb = document.getElementById('vcMuteBtn');
         if (mb && !mb.hidden) mb.classList.add('vc-fs-btn-fade');
+        const ib = document.getElementById('chanInfoBtn');
+        if (ib && !ib.hidden) ib.classList.add('vc-fs-btn-fade');
     }, delay);
 }
 
@@ -426,6 +634,8 @@ function _scheduleOverlayCloseFade(delay) {
         if (cb) cb.classList.add('vc-fs-overlay-close-fade');
         const mb = document.getElementById('vcFsOverlayMute');
         if (mb) mb.classList.add('vc-fs-overlay-close-fade');
+        const ib = document.getElementById('vcFsOverlayInfo');
+        if (ib && !ib.hidden) ib.classList.add('vc-fs-overlay-close-fade');
         const trap = document.getElementById('vcFsMouseTrap');
         if (trap) trap.classList.add('active');
     }, delay);
@@ -438,6 +648,8 @@ function _showOverlayClose() {
     if (cb) cb.classList.remove('vc-fs-overlay-close-fade');
     const mb = document.getElementById('vcFsOverlayMute');
     if (mb) mb.classList.remove('vc-fs-overlay-close-fade');
+    const ib = document.getElementById('vcFsOverlayInfo');
+    if (ib && !ib.hidden) ib.classList.remove('vc-fs-overlay-close-fade');
     _scheduleOverlayCloseFade(1500);
 }
 
@@ -447,6 +659,8 @@ function _cancelOverlayCloseFade() {
     if (cb) cb.classList.remove('vc-fs-overlay-close-fade');
     const mb = document.getElementById('vcFsOverlayMute');
     if (mb) mb.classList.remove('vc-fs-overlay-close-fade');
+    const ib = document.getElementById('vcFsOverlayInfo');
+    if (ib) ib.classList.remove('vc-fs-overlay-close-fade');
     const trap = document.getElementById('vcFsMouseTrap');
     if (trap) trap.classList.remove('active');
 }
@@ -475,8 +689,18 @@ function showVcFsBtn() {
     if (!btn) return;
     btn.hidden = false;
     btn.classList.remove('vc-fs-btn-fade');
+    btn.title = 'Fullscreen';
+    btn.setAttribute('aria-label', 'Toggle fullscreen');
     const mb = document.getElementById('vcMuteBtn');
-    if (mb) { mb.hidden = false; mb.classList.remove('vc-fs-btn-fade'); }
+    if (mb) {
+        mb.hidden = !_vcCurrentOverlayType;
+        mb.classList.remove('vc-fs-btn-fade');
+    }
+    const ib = document.getElementById('chanInfoBtn');
+    if (ib) {
+        ib.hidden = !currentChannelId;
+        ib.classList.remove('vc-fs-btn-fade');
+    }
     _updateVcMuteBtn();
     _scheduleVcFsHide(3500);
 }
@@ -490,12 +714,19 @@ function hideVcFsBtn() {
     }
     const mb = document.getElementById('vcMuteBtn');
     if (mb) { mb.hidden = true; mb.classList.remove('vc-fs-btn-fade'); }
+    const ib = document.getElementById('chanInfoBtn');
+    if (ib) { ib.hidden = true; ib.classList.remove('vc-fs-btn-fade'); }
     // Close iframe overlay if active when switching away from a virtual channel.
     const overlay = document.getElementById('vcFsOverlay');
     const iframe  = document.getElementById('vcFsIframe');
     if (overlay && !overlay.classList.contains('hidden')) {
         overlay.classList.add('hidden');
         if (iframe) iframe.src = '';
+    }
+    const overlayInfo = document.getElementById('vcFsOverlayInfo');
+    if (overlayInfo) {
+        overlayInfo.hidden = true;
+        overlayInfo.classList.remove('vc-fs-overlay-close-fade');
     }
     // Exit fullscreen if the user switches to a normal channel while fullscreen.
     _exitVcFs();
@@ -565,10 +796,18 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!overlay || !iframe) return;
         iframe.src = pageUrl;
         overlay.classList.remove('hidden');
+        const infoBtn = document.getElementById('vcFsOverlayInfo');
+        if (infoBtn) {
+            infoBtn.hidden = !currentChannelId;
+            infoBtn.classList.remove('vc-fs-overlay-close-fade');
+        }
         btn.textContent = '✕';
         btn.title = 'Exit fullscreen';
         btn.setAttribute('aria-label', 'Exit fullscreen');
         _showOverlayClose();
+        if (currentChannelId && typeof window.showChannelInfoBanner === 'function') {
+            window.showChannelInfoBanner(currentChannelId, (window.currentChannelMeta && window.currentChannelMeta.name) || '');
+        }
         if (_vcCurrentOverlayType === 'channel_mix') { _startCmFsPoll(); }
         // Request true fullscreen on the overlay div so the browser chrome hides
         const req = overlay.requestFullscreen || overlay.webkitRequestFullscreen || overlay.mozRequestFullscreen;
@@ -585,9 +824,11 @@ document.addEventListener('DOMContentLoaded', function () {
         const iframe  = document.getElementById('vcFsIframe');
         if (overlay) overlay.classList.add('hidden');
         if (iframe) iframe.src = '';  // stop network activity in iframe
+        const infoBtn = document.getElementById('vcFsOverlayInfo');
+        if (infoBtn) infoBtn.hidden = true;
         btn.textContent = '⛶';
         btn.title = 'Fullscreen';
-        btn.setAttribute('aria-label', 'Toggle virtual channel fullscreen');
+        btn.setAttribute('aria-label', 'Toggle fullscreen');
         if (fsElement()) {
             (document.exitFullscreen || document.webkitExitFullscreen || function(){}).call(document);
         }
@@ -613,6 +854,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 openVcFsOverlay(pageUrl);
             } else {
                 // Fallback for overlay types without a standalone page
+                if (currentChannelId && typeof window.showChannelInfoBanner === 'function') {
+                    window.showChannelInfoBanner(currentChannelId, (window.currentChannelMeta && window.currentChannelMeta.name) || '');
+                }
                 const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen || wrap.mozRequestFullscreen;
                 if (req) {
                     const p = req.call(wrap);
@@ -627,6 +871,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const overlayMuteBtn = document.getElementById('vcFsOverlayMute');
     if (overlayMuteBtn) overlayMuteBtn.addEventListener('click', _toggleVcMute);
+
+    const overlayInfoBtn = document.getElementById('vcFsOverlayInfo');
+    if (overlayInfoBtn) overlayInfoBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        if (typeof window.toggleChannelInfoBanner === 'function') window.toggleChannelInfoBanner();
+    });
 
     const wrapMuteBtn = document.getElementById('vcMuteBtn');
     if (wrapMuteBtn) wrapMuteBtn.addEventListener('click', _toggleVcMute);
@@ -659,16 +909,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const iframe  = document.getElementById('vcFsIframe');
             if (overlay) overlay.classList.add('hidden');
             if (iframe) iframe.src = '';
+            const infoBtn = document.getElementById('vcFsOverlayInfo');
+            if (infoBtn) infoBtn.hidden = true;
             btn.textContent = '⛶';
             btn.title = 'Fullscreen';
-            btn.setAttribute('aria-label', 'Toggle virtual channel fullscreen');
+            btn.setAttribute('aria-label', 'Toggle fullscreen');
             return;
         }
         // Wrapper-based fullscreen (fallback for 'status' and future overlay types)
         const isFs = fsEl === wrap;
         btn.textContent = isFs ? '✕' : '⛶';
         btn.title = isFs ? 'Exit fullscreen' : 'Fullscreen';
-        btn.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Toggle virtual channel fullscreen');
+        btn.setAttribute('aria-label', isFs ? 'Exit fullscreen' : 'Toggle fullscreen');
     }
 
     document.addEventListener('fullscreenchange', onFsChange);
@@ -691,18 +943,22 @@ document.addEventListener('DOMContentLoaded', function () {
     // Auto-hide: show button on mouse activity over the player wrap, hide after idle
     if (wrap) {
         wrap.addEventListener('mousemove', function () {
-            if (!btn.hidden) {
+            const ib = document.getElementById('chanInfoBtn');
+            // Activate for virtual-channel controls (vcFsBtn visible) OR whenever ℹ is active
+            if (!btn.hidden || (ib && !ib.hidden)) {
                 const now = Date.now();
                 if (now - _vcFsLastMove < 250) return;
                 _vcFsLastMove = now;
-                btn.classList.remove('vc-fs-btn-fade');
+                if (!btn.hidden) btn.classList.remove('vc-fs-btn-fade');
                 const mb = document.getElementById('vcMuteBtn');
                 if (mb && !mb.hidden) mb.classList.remove('vc-fs-btn-fade');
+                if (ib && !ib.hidden) ib.classList.remove('vc-fs-btn-fade');
                 _scheduleVcFsHide(1500);
             }
         });
         wrap.addEventListener('mouseleave', function () {
-            if (!btn.hidden) _scheduleVcFsHide(1500);
+            const ib = document.getElementById('chanInfoBtn');
+            if (!btn.hidden || (ib && !ib.hidden)) _scheduleVcFsHide(1500);
         });
     }
 
@@ -737,10 +993,18 @@ function getDisplayZoom() {
 
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
+    // Save the current channel as "last channel" before switching (skip if it's the same channel)
+    if (currentChannelId && currentChannelId !== cid && window.currentChannelMeta) {
+        window.lastChannelMeta = Object.assign({}, window.currentChannelMeta);
+    }
     currentChannelId = cid;
     // Expose currently-playing channel for user-prefs.js (auto-load / context menu)
     window.currentChannelMeta = { id: cid, name: name, url: url };
     updateSummary(cid, name);
+    // Show the channel info banner on tune-in
+    if (typeof window.showChannelInfoBanner === 'function') {
+        window.showChannelInfoBanner(cid, name);
+    }
 
     fetch("/play_channel", {
         method: "POST",
@@ -781,6 +1045,8 @@ function playChannel(url, cid, name) {
 
     // Ensure any mute applied by a previous virtual channel is cleared.
     _vcCurrentOverlayType = '';
+    // Normal channels use the native video player's built-in fullscreen button;
+    // keep virtual-channel-only controls hidden.
     hideVcFsBtn();
     video.muted = false;
 
@@ -810,6 +1076,15 @@ function playChannel(url, cid, name) {
         tryPlay();
     }
 }
+
+/**
+ * Return to the previously watched channel ("Last Channel" feature).
+ * Exposed globally so channel-number-entry.js (and any future module) can trigger it.
+ */
+window.returnToLastChannel = function () {
+    if (!window.lastChannelMeta) return;
+    playChannel(window.lastChannelMeta.url, window.lastChannelMeta.id, window.lastChannelMeta.name);
+};
 
 function escapeHTML(str) {
     return String(str)
@@ -867,6 +1142,266 @@ function updateSummary(cid, fallbackName) {
       window.dispatchEvent(new Event('resize'));
     });
 }
+
+// ── Channel Info Banner ───────────────────────────────────────────────────────
+(function () {
+    'use strict';
+
+    var _cibHideTimer = null;
+    var _cibVisible = false;
+    var _cibProgressTimer = null;
+    var _CIB_AUTODISMISS_MS = 6000;
+    var _BANNERS = [
+        {
+            bannerId: 'channelInfoBanner',
+            buttonId: 'chanInfoBtn',
+            logoId: 'cibLogo',
+            chanNumId: 'cibChanNum',
+            chanNameId: 'cibChanName',
+            progTitleId: 'cibProgTitle',
+            timeId: 'cibTime',
+            progressId: 'cibProgress',
+            remainingId: 'cibRemaining',
+            descId: 'cibDesc'
+        },
+        {
+            bannerId: 'vcFsChannelInfoBanner',
+            buttonId: 'vcFsOverlayInfo',
+            logoId: 'vcFsCibLogo',
+            chanNumId: 'vcFsCibChanNum',
+            chanNameId: 'vcFsCibChanName',
+            progTitleId: 'vcFsCibProgTitle',
+            timeId: 'vcFsCibTime',
+            progressId: 'vcFsCibProgress',
+            remainingId: 'vcFsCibRemaining',
+            descId: 'vcFsCibDesc'
+        }
+    ];
+
+    function _fmt(ms) {
+        var total = Math.max(0, Math.round(ms / 60000));
+        if (total < 1) return '< 1 min left';
+        if (total === 1) return '1 min left';
+        return total + ' min left';
+    }
+
+    function _fmtTime(d) {
+        return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function _isFsOverlayActive() {
+        var overlay = document.getElementById('vcFsOverlay');
+        return !!(overlay && !overlay.classList.contains('hidden'));
+    }
+
+    function _activeBannerConfigs() {
+        return _BANNERS.filter(function (cfg) {
+            return cfg.bannerId === 'channelInfoBanner' || _isFsOverlayActive();
+        });
+    }
+
+    function _bannerEl(cfg, key) {
+        return document.getElementById(cfg[key]);
+    }
+
+    function _applyBannerData(cfg, data) {
+        var banner = _bannerEl(cfg, 'bannerId');
+        if (!banner) return;
+
+        var logoEl = _bannerEl(cfg, 'logoId');
+        if (logoEl) {
+            if (data.logo) {
+                logoEl.src = data.logo;
+                logoEl.alt = data.chanName;
+                logoEl.style.display = '';
+            } else {
+                logoEl.src = '';
+                logoEl.style.display = 'none';
+            }
+        }
+
+        var numEl = _bannerEl(cfg, 'chanNumId');
+        if (numEl) numEl.textContent = data.chanNum ? 'CH ' + data.chanNum : '';
+
+        var nameEl = _bannerEl(cfg, 'chanNameId');
+        if (nameEl) nameEl.textContent = data.chanName;
+
+        var titleEl = _bannerEl(cfg, 'progTitleId');
+        if (titleEl) titleEl.textContent = data.progTitle || data.chanName;
+
+        var timeEl = _bannerEl(cfg, 'timeId');
+        var progressEl = _bannerEl(cfg, 'progressId');
+        var remainingEl = _bannerEl(cfg, 'remainingId');
+        var descEl = _bannerEl(cfg, 'descId');
+
+        if (data.progStart && data.progStop) {
+            if (timeEl) timeEl.textContent = _fmtTime(data.progStart) + ' – ' + _fmtTime(data.progStop);
+            if (progressEl) progressEl.style.width = data.progressPct + '%';
+            if (remainingEl) remainingEl.textContent = _fmt(data.progStop - data.now);
+        } else {
+            if (timeEl) timeEl.textContent = '';
+            if (progressEl) progressEl.style.width = '0%';
+            if (remainingEl) remainingEl.textContent = '';
+        }
+
+        if (descEl) descEl.textContent = data.progDesc;
+
+        banner.style.display = '';
+        // Force a reflow before removing cib-hiding so the slide/fade animation
+        // has a concrete starting state and reliably plays on every show.
+        banner.offsetHeight; // eslint-disable-line no-unused-expressions
+        banner.classList.remove('cib-hiding');
+    }
+
+    function _collectBannerData(cid, fallbackName) {
+        var escapedCid = (typeof CSS !== 'undefined' && CSS.escape)
+            ? CSS.escape(cid)
+            : cid.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
+        var chanEl = document.querySelector('.chan-name[data-cid="' + escapedCid + '"]');
+        var now = new Date();
+        var row = document.querySelector('.guide-row[data-cid="' + escapedCid + '"]');
+        var progTitle = '';
+        var progDesc = '';
+        var progStart = null;
+        var progStop = null;
+
+        if (row) {
+            row.querySelectorAll('.program').forEach(function (p) {
+                var s = new Date(p.dataset.start);
+                var e = new Date(p.dataset.stop);
+                if (s <= now && e >= now) {
+                    progTitle = p.dataset.title || '';
+                    progDesc = p.dataset.desc || '';
+                    progStart = s;
+                    progStop = e;
+                }
+            });
+        }
+
+        var progressPct = 0;
+        if (progStart && progStop) {
+            progressPct = Math.min(100, Math.max(0, ((now - progStart) / (progStop - progStart)) * 100));
+        }
+
+        return {
+            now: now,
+            logo: (chanEl && chanEl.dataset.logo) ? chanEl.dataset.logo : '',
+            chanName: (chanEl && chanEl.dataset.name) ? chanEl.dataset.name : (fallbackName || ''),
+            chanNum: (chanEl && chanEl.dataset.chanNum) ? chanEl.dataset.chanNum : '',
+            progTitle: progTitle,
+            progDesc: progDesc,
+            progStart: progStart,
+            progStop: progStop,
+            progressPct: progressPct
+        };
+    }
+
+    /**
+     * Populate and show the Channel Info Banner for the given channel/cid.
+     * Data is sourced entirely from the guide DOM so no extra fetch is needed.
+     */
+    function showBanner(cid, fallbackName) {
+        var data = _collectBannerData(cid, fallbackName);
+        _activeBannerConfigs().forEach(function (cfg) {
+            _applyBannerData(cfg, data);
+            var btn = _bannerEl(cfg, 'buttonId');
+            if (btn) {
+                btn.hidden = false;
+                if (cfg.bannerId === 'channelInfoBanner') {
+                    btn.classList.remove('vc-fs-btn-fade');
+                } else {
+                    btn.classList.remove('vc-fs-overlay-close-fade');
+                }
+            }
+        });
+        _cibVisible = true;
+        if (typeof showVcFsBtn === 'function') showVcFsBtn();
+        if (_isFsOverlayActive() && typeof _showOverlayClose === 'function') _showOverlayClose();
+
+        // Live-update the progress bar every 15 s while banner is visible
+        if (_cibProgressTimer) { clearInterval(_cibProgressTimer); _cibProgressTimer = null; }
+        if (data.progStart && data.progStop) {
+            _cibProgressTimer = setInterval(function () {
+                if (!_cibVisible) { clearInterval(_cibProgressTimer); _cibProgressTimer = null; return; }
+                var refreshed = _collectBannerData(cid, fallbackName);
+                _activeBannerConfigs().forEach(function (cfg) {
+                    var progressEl = _bannerEl(cfg, 'progressId');
+                    var remainingEl = _bannerEl(cfg, 'remainingId');
+                    if (progressEl) progressEl.style.width = refreshed.progressPct + '%';
+                    if (remainingEl) remainingEl.textContent = refreshed.progStop ? _fmt(refreshed.progStop - refreshed.now) : '';
+                });
+            }, 15000);
+        }
+
+        // Auto-dismiss
+        _scheduleDismiss();
+    }
+
+    function hideBanner() {
+        _cancelDismiss();
+        if (_cibProgressTimer) { clearInterval(_cibProgressTimer); _cibProgressTimer = null; }
+        if (!_cibVisible) return;
+        _BANNERS.forEach(function (cfg) {
+            var banner = _bannerEl(cfg, 'bannerId');
+            if (!banner) return;
+            banner.classList.add('cib-hiding');
+        });
+        _cibVisible = false;
+        // After transition completes, hide from layout
+        setTimeout(function () {
+            if (_cibVisible) return;
+            _BANNERS.forEach(function (cfg) {
+                var banner = _bannerEl(cfg, 'bannerId');
+                if (banner) banner.style.display = 'none';
+            });
+        }, 350);
+    }
+
+    function toggleBanner() {
+        if (_cibVisible) {
+            hideBanner();
+        } else if (window._cibLastCid) {
+            showBanner(window._cibLastCid, window._cibLastName);
+        }
+    }
+
+    function _scheduleDismiss() {
+        _cancelDismiss();
+        _cibHideTimer = setTimeout(hideBanner, _CIB_AUTODISMISS_MS);
+    }
+
+    function _cancelDismiss() {
+        if (_cibHideTimer) { clearTimeout(_cibHideTimer); _cibHideTimer = null; }
+    }
+
+    // Expose for guide.html channel switching
+    window.showChannelInfoBanner = function (cid, name) {
+        window._cibLastCid  = cid;
+        window._cibLastName = name;
+        showBanner(cid, name);
+    };
+    window.toggleChannelInfoBanner = toggleBanner;
+
+    // Wire the toggle button
+    document.addEventListener('DOMContentLoaded', function () {
+        var btn = document.getElementById('chanInfoBtn');
+        if (btn) {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                toggleBanner();
+            });
+        }
+
+        // Keyboard shortcut: 'i' key when focus is not in an input
+        document.addEventListener('keydown', function (e) {
+            if (e.key.toLowerCase() !== 'i') return;
+            var tag = (document.activeElement || {}).tagName || '';
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            toggleBanner();
+        });
+    });
+})();
 
 /* Fixed time header function kept (unchanged behavior) */
 function createOrUpdateFixedTimeBar(){
@@ -1026,6 +1561,135 @@ function updateNowLine(){
     } catch(e){ console.debug('updateNowLine err', e); }
 }
 
+function normalizeFilterToken(value) {
+    return (value || '').trim().toLowerCase();
+}
+
+function collectGuideRowTypes(row) {
+    const types = new Set();
+    const group = (row.dataset.group || '').trim();
+    if (group) types.add(group);
+    const chanEl = row.querySelector('.chan-name');
+    if (chanEl && chanEl.dataset.isVirtual === 'true') types.add('virtual');
+    row.querySelectorAll('.program').forEach(prog => {
+        (prog.dataset.categories || '').split(' | ').forEach(function (cat) {
+            const cleaned = cat.trim();
+            if (cleaned) types.add(cleaned);
+        });
+    });
+    return Array.from(types);
+}
+
+function initGuideSearchFilter() {
+    const panel = document.getElementById('guideSearchPanel');
+    const searchInput = document.getElementById('guideSearchInput');
+    const typeFilter = document.getElementById('guideTypeFilter');
+    const desktopToggle = document.getElementById('guideSearchToggle');
+    const mobileToggle = document.getElementById('mobileGuideSearchToggle');
+    if (!panel || !searchInput || !typeFilter) return;
+
+    const rows = Array.from(document.querySelectorAll('.guide-row[data-cid]'));
+    const allTypes = new Set();
+
+    rows.forEach(function (row) {
+        const chanEl = row.querySelector('.chan-name');
+        const types = collectGuideRowTypes(row);
+        types.forEach(function (t) { allTypes.add(t); });
+
+        const searchChunks = [
+            chanEl ? (chanEl.dataset.name || '') : '',
+            row.dataset.group || '',
+            types.join(' '),
+        ];
+        row.querySelectorAll('.program').forEach(function (prog) {
+            searchChunks.push(
+                prog.dataset.title || '',
+                prog.dataset.desc || '',
+                prog.dataset.categories || '',
+                prog.dataset.colors || ''
+            );
+        });
+
+        row.dataset.filterText = normalizeFilterToken(searchChunks.join(' '));
+        row.dataset.filterTypes = types.map(normalizeFilterToken).filter(Boolean).join('|');
+    });
+
+    Array.from(allTypes)
+        .sort(function (a, b) { return a.localeCompare(b); })
+        .forEach(function (typeName) {
+            const opt = document.createElement('option');
+            opt.value = normalizeFilterToken(typeName);
+            opt.textContent = typeName;
+            typeFilter.appendChild(opt);
+        });
+
+    function applyGuideSearchFilter() {
+        const query = normalizeFilterToken(searchInput.value);
+        const type = normalizeFilterToken(typeFilter.value);
+
+        rows.forEach(function (row) {
+            const rowText = row.dataset.filterText || '';
+            const rowTypes = (row.dataset.filterTypes || '').split('|').filter(Boolean);
+            const matchesQuery = !query || rowText.includes(query);
+            const matchesType = !type || rowTypes.includes(type);
+            row.classList.toggle('chan-search-hidden', !(matchesQuery && matchesType));
+        });
+
+        if (window.__autoScroll && typeof window.__autoScroll.recomputeLoops === 'function') {
+            window.__autoScroll.recomputeLoops();
+        }
+    }
+
+    function syncGuideSearchToggles(isOpen) {
+        [desktopToggle, mobileToggle].forEach(function (toggle) {
+            if (!toggle) return;
+            toggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+        });
+    }
+
+    function setGuideSearchOpen(isOpen) {
+        panel.hidden = !isOpen;
+        panel.classList.toggle('is-open', isOpen);
+        syncGuideSearchToggles(isOpen);
+
+        requestAnimationFrame(function () {
+            if (typeof createOrUpdateFixedTimeBar === 'function') createOrUpdateFixedTimeBar();
+            if (typeof updateNowLine === 'function') updateNowLine();
+        });
+
+        if (isOpen) {
+            searchInput.focus();
+            searchInput.select();
+        } else if (document.activeElement === searchInput || document.activeElement === typeFilter) {
+            searchInput.blur();
+        }
+    }
+
+    function toggleGuideSearch(event) {
+        if (event) event.preventDefault();
+        if (window.mobileNavControl && typeof window.mobileNavControl.close === 'function') {
+            window.mobileNavControl.close();
+        }
+        setGuideSearchOpen(panel.hidden);
+    }
+
+    searchInput.addEventListener('input', applyGuideSearchFilter);
+    typeFilter.addEventListener('change', applyGuideSearchFilter);
+    if (desktopToggle) desktopToggle.addEventListener('click', toggleGuideSearch);
+    if (mobileToggle) mobileToggle.addEventListener('click', toggleGuideSearch);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && !panel.hidden &&
+            (document.activeElement === searchInput || document.activeElement === typeFilter)) {
+            event.preventDefault();
+            setGuideSearchOpen(false);
+        }
+    });
+
+    window.toggleGuideSearchPanel = function () {
+        setGuideSearchOpen(panel.hidden);
+    };
+}
+
 /* --- Initialization and bindings --- */
 document.addEventListener("DOMContentLoaded", () => {
     const savedTheme = localStorage.getItem("theme") || "dark";
@@ -1067,6 +1731,7 @@ document.addEventListener("DOMContentLoaded", () => {
     createOrUpdateFixedTimeBar();
     if (typeof updateClock === 'function') updateClock();
     updateNowLine();
+    initGuideSearchFilter();
 
     setInterval(updateClock, 1000);
     setInterval(updateNowLine, 60000);
@@ -1573,6 +2238,9 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Per-user channel preferences: auto-load channel, hidden channels, sizzle reels -->
 <script src="{{ url_for('static', filename='js/user-prefs.js') }}" defer></script>
 
+<!-- Channel number entry: type digits to jump directly to a channel -->
+<script src="{{ url_for('static', filename='js/channel-number-entry.js') }}" defer></script>
+
 
 
 <!-- Android / Fire / Google TV detection (keeps TV experience simple) -->
@@ -1686,7 +2354,30 @@ document.addEventListener('DOMContentLoaded', () => {
      playing in the parent page (outside this iframe). -->
 <div id="vcFsOverlay" class="hidden" role="dialog" aria-modal="true" aria-label="Virtual channel fullscreen">
     <button id="vcFsOverlayMute" aria-label="Mute virtual channel" title="Mute">🔇</button>
+    <button id="vcFsOverlayInfo" hidden aria-label="Toggle channel info" title="Channel Info">ℹ</button>
     <button id="vcFsOverlayClose" aria-label="Close fullscreen">✕</button>
+    <div id="vcFsChannelInfoBanner" class="channel-info-banner cib-hiding" aria-live="polite" aria-atomic="true" style="display:none;">
+        <div class="cib-inner">
+            <div class="cib-logo-wrap">
+                <img id="vcFsCibLogo" class="cib-logo" src="" alt="Channel logo" onerror="this.style.display='none'">
+            </div>
+            <div class="cib-info">
+                <div class="cib-title-row">
+                    <span id="vcFsCibChanNum" class="cib-chan-num"></span>
+                    <span id="vcFsCibChanName" class="cib-chan-name"></span>
+                    <span id="vcFsCibProgTitle" class="cib-prog-title"></span>
+                </div>
+                <div class="cib-time-row">
+                    <span id="vcFsCibTime" class="cib-time"></span>
+                    <div class="cib-progress-wrap">
+                        <div id="vcFsCibProgress" class="cib-progress-bar"></div>
+                    </div>
+                    <span id="vcFsCibRemaining" class="cib-remaining"></span>
+                </div>
+                <div id="vcFsCibDesc" class="cib-desc"></div>
+            </div>
+        </div>
+    </div>
     <div id="vcFsMouseTrap"></div>
     <iframe id="vcFsIframe" src="" title="Virtual channel" allow="autoplay"></iframe>
 </div>

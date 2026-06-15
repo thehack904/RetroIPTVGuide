@@ -7,6 +7,9 @@
   <div class="links" role="navigation" aria-label="Main navigation">
       <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
       <a href="{{ url_for('guide') }}">HOME</a>
+      {% if request.endpoint == 'guide' %}
+      <a href="#" id="guideSearchToggle" role="button" aria-expanded="false" aria-controls="guideSearchPanel">SEARCH</a>
+      {% endif %}
 
       <div class="dropdown" id="settingsMenu">
           <button class="dropbtn">SETTINGS ▾</button>
@@ -36,6 +39,8 @@
                       <li><a href="#" id="setAutoLoadChannel">Auto Load Channel</a></li>
                       <li><a href="#" id="clearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
                       <li><a href="#" id="toggleShowHidden">👁 Show Hidden Channels</a></li>
+                      <li><a href="#" id="toggleShowFavoritesOnly">⭐ Show Favorites Only</a></li>
+                      <li><a href="#" id="toggleChannelNumbers" style="display:none">🔢 Show Channel Numbers</a></li>
                     </ul>
                   </li>
                   {% endif %}
@@ -124,6 +129,9 @@
 
     <ul class="mobile-links" role="menubar">
       <li role="none"><a role="menuitem" href="{{ url_for('guide') }}">HOME</a></li>
+      {% if request.endpoint == 'guide' %}
+      <li role="none"><a role="menuitem" href="#" id="mobileGuideSearchToggle" aria-expanded="false" aria-controls="guideSearchPanel">SEARCH</a></li>
+      {% endif %}
 
       <!-- Settings collapsible -->
       <li class="mobile-submenu" role="none">
@@ -191,6 +199,8 @@
                   <li role="none"><a role="menuitem" href="#" id="mobileSetAutoLoadChannel">Auto Load Channel</a></li>
                   <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
                   <li role="none"><a role="menuitem" href="#" id="mobileToggleShowHidden">👁 Show Hidden Channels</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileToggleShowFavoritesOnly">⭐ Show Favorites Only</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileToggleChannelNumbers" style="display:none">🔢 Show Channel Numbers</a></li>
                 </ul>
               </li>
               {% endif %}

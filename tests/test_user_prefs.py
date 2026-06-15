@@ -213,6 +213,38 @@ class TestApiUserPrefsPost:
                     content_type="application/json")
         assert get_user_prefs("testuser")["auto_load_channel"] is None
 
+    def test_channel_numbers_enabled_can_be_toggled_via_api(self, client):
+        login(client)
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"channel_numbers_enabled": True}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["channel_numbers_enabled"] is True
+
+    def test_channel_numbers_enabled_invalid_value_coerces_false(self, client):
+        login(client)
+        save_user_prefs("testuser", {"channel_numbers_enabled": True})
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"channel_numbers_enabled": "yes"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["channel_numbers_enabled"] is False
+
+
+class TestGuideChannelNumberToggleUi:
+    def test_guide_preferences_include_channel_number_toggle_controls(self, client):
+        login(client)
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b'id="toggleChannelNumbers"' in resp.data
+        assert b'id="mobileToggleChannelNumbers"' in resp.data
+
 
 # ─── Admin: manage_users set_user_prefs action ───────────────────────────────
 
@@ -521,3 +553,74 @@ class TestManageUsersHiddenChannels:
         resp = client.get("/manage_users")
         assert resp.status_code == 200
         assert b"1 channel hidden" in resp.data
+
+
+# ─── Favorites feature ────────────────────────────────────────────────────────
+
+class TestFavoriteChannels:
+    """Tests for the lightweight favorites feature."""
+
+    def test_default_favorite_channels_is_empty_list(self):
+        prefs = get_user_prefs("newuser")
+        assert "favorite_channels" in prefs
+        assert prefs["favorite_channels"] == []
+
+    def test_save_and_retrieve_favorites(self):
+        save_user_prefs("testuser", {"favorite_channels": ["ch1", "ch2"]})
+        prefs = get_user_prefs("testuser")
+        assert prefs["favorite_channels"] == ["ch1", "ch2"]
+
+    def test_add_favorite_via_api(self, client):
+        login(client)
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"favorite_channels": ["sports", "news"]}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        body = resp.get_json()
+        assert body["status"] == "ok"
+        assert "sports" in body["prefs"]["favorite_channels"]
+        assert "news" in body["prefs"]["favorite_channels"]
+
+    def test_clear_favorites_via_api(self, client):
+        login(client)
+        save_user_prefs("testuser", {"favorite_channels": ["ch1", "ch2"]})
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"favorite_channels": []}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["favorite_channels"] == []
+
+    def test_invalid_favorites_rejected(self, client):
+        """Non-list value for favorite_channels is coerced to empty list."""
+        login(client)
+        resp = client.post("/api/user_prefs",
+                           data=json.dumps({"favorite_channels": "not-a-list"}),
+                           content_type="application/json")
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["favorite_channels"] == []
+
+    def test_partial_update_preserves_favorites(self, client):
+        login(client)
+        save_user_prefs("testuser", {
+            "auto_load_channel": {"id": "ch1", "name": "News"},
+            "favorite_channels": ["ch1", "ch2"],
+        })
+        # Update only hidden_channels — favorites must not be touched
+        client.post("/api/user_prefs",
+                    data=json.dumps({"hidden_channels": ["ch3"]}),
+                    content_type="application/json")
+        prefs = get_user_prefs("testuser")
+        assert prefs["favorite_channels"] == ["ch1", "ch2"]  # unchanged
+
+    def test_favorite_channels_in_default_prefs(self):
+        assert "favorite_channels" in _DEFAULT_PREFS
+        assert _DEFAULT_PREFS["favorite_channels"] == []
+
+    def test_api_get_includes_favorite_channels(self, client):
+        login(client)
+        save_user_prefs("testuser", {"favorite_channels": ["movie-ch"]})
+        resp = client.get("/api/user_prefs")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert "favorite_channels" in data
+        assert "movie-ch" in data["favorite_channels"]

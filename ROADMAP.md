@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.9.5 (2026-05-25)**
+# Current Version: **v4.9.6 (2026-06-11)**
 
 ---
 
@@ -40,11 +40,11 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Responsive layout *(v4.2.0)*  
 - [x] Fullscreen improvements for virtual channels *(v4.9.3)*  
 - [x] Channel Mix dynamic fullscreen switching *(v4.9.3)*  
-- [ ] Search/filter box  
-- [ ] Favorites (lightweight)  
-- [ ] Channel Info Banner  
-- [ ] Channel number entry  
-- [ ] Last channel return  
+- [x] Search/filter box *(v4.9.6)* 
+- [x] Favorites (lightweight) *(v4.9.6)*  
+- [x] Channel Info Banner *(v4.9.6)*  
+- [x] Channel number entry *(v4.9.6)*  
+- [x] Last channel return *(v4.9.6)*  
 - [ ] Browse mode  
 - [ ] "What's On Now" view  
 - [ ] Channel health indicators (lightweight only)  
@@ -57,11 +57,11 @@ These are **not yet implemented**, partially implemented, or completed in previo
 
 ### 4. User Management
 - [x] User management UI *(v4.0.0)*  
-- [-] Basic admin-only access model  
+- [x] Basic admin-only access model *(initial v1.x; expanded through v2.0.0, v4.0.0, v4.9.2, and v4.9.3)* 
 - [x] Last login tracking *(v4.5.0)*  
 - [x] Auto-Load Channel *(v4.7.0)*  
 - [x] Assigned Tuner per User *(v4.7.0)*  
-- [ ] User role/channel restrictions  
+- [x] User role/channel restrictions *(v4.7.0 / v4.9.5)*
 
 ---
 
@@ -86,8 +86,8 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ---
 
 ### 7. New Features
-- [ ] Favorites system (lightweight)  
-- [ ] Smart filtering (simple implementation only)  
+- [x] Favorites system (lightweight) *(v4.9.6)*  
+- [x] Smart filtering (simple implementation only) *(v4.9.6)* 
 
 ---
 
@@ -128,6 +128,6 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ## User Submitted Enhancements
 - [x] Resize Pop Out Video *(v4.6.0)*
 - [x] Resize video *(v4.6.0)*
-- [ ] Auto load Channel from Guide  
+- [x] Auto load Channel from Guide  *(v4.8.0)*
 - [x] Adjustable scrolling speed *(v4.6.0)*
 - [x] Unraid Template
