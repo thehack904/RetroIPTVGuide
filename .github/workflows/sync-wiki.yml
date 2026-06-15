@@ -53,6 +53,23 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
+          cd wiki
+
+          if git ls-remote --exit-code --heads origin master >/dev/null 2>&1; then
+            WIKI_BRANCH="master"
+          else
+            WIKI_BRANCH="main"
+          fi
+
+          echo ""
+          echo "Using wiki branch: ${WIKI_BRANCH}"
+
+          git fetch origin "${WIKI_BRANCH}"
+          git checkout "${WIKI_BRANCH}"
+          git pull --rebase origin "${WIKI_BRANCH}"
+
+          cd ..
+
           rsync -av --delete --exclude='.git/' docs/wiki/ wiki/
 
           cd wiki
@@ -74,4 +91,4 @@ jobs:
           git commit -m "Sync wiki from docs/wiki"
 
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.wiki.git"
-          git push origin HEAD:main
+          git push origin HEAD:"${WIKI_BRANCH}"
