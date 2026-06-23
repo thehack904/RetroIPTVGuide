@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.6"
-APP_RELEASE_DATE = "2026-06-11"
+APP_VERSION = "v4.9.7-dev"
+APP_RELEASE_DATE = "2026-06-22"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -635,8 +635,13 @@ _DEFAULT_PREFS = {
     "hidden_channels": [],
     "favorite_channels": [],
     "channel_numbers_enabled": False,
+    "browse_mode_enabled": False,
+    "guide_layout": "full",
     "default_theme": None,
+    "reminders": [],
 }
+
+_MAX_REMINDERS = 50
 
 
 def get_user_prefs(username):
@@ -4049,9 +4054,13 @@ def manage_users():
             ch_name = request.form.get('auto_load_channel_name', '').strip() or ch_id
             auto_load = {"id": ch_id, "name": ch_name} if ch_id else None
             raw_theme = request.form.get('default_theme', '').strip() or None
+            guide_layout = request.form.get('guide_layout', '').strip()
+            if guide_layout not in ("full", "mini"):
+                guide_layout = "full"
             patch = {
                 "auto_load_channel": auto_load,
                 "default_theme": raw_theme,
+                "guide_layout": guide_layout,
             }
             if request.form.get('update_hidden_channels'):
                 patch["hidden_channels"] = request.form.getlist('hidden_channel_ids')
@@ -4702,6 +4711,49 @@ def api_user_prefs_post():
             else False
         )
 
+    # Sanitise browse_mode_enabled: must be a boolean
+    if "browse_mode_enabled" in data:
+        data["browse_mode_enabled"] = (
+            data["browse_mode_enabled"]
+            if isinstance(data["browse_mode_enabled"], bool)
+            else False
+        )
+
+    # Sanitise guide_layout: must be one of the supported guide views
+    if "guide_layout" in data:
+        data["guide_layout"] = (
+            data["guide_layout"]
+            if data["guide_layout"] in ("full", "mini")
+            else "full"
+        )
+
+    # Sanitise reminders: must be a list of valid reminder objects, capped at _MAX_REMINDERS
+    if "reminders" in data:
+        raw = data["reminders"]
+        if not isinstance(raw, list):
+            data["reminders"] = []
+        else:
+            clean = []
+            for item in raw:
+                if not isinstance(item, dict):
+                    continue
+                rid = item.get("id")
+                cid = item.get("channel_id")
+                if not rid or not isinstance(rid, str) or not cid or not isinstance(cid, str):
+                    continue
+                notify_before = item.get("notify_before_mins", 5)
+                if not isinstance(notify_before, int) or not (0 <= notify_before <= 60):
+                    notify_before = 5
+                clean.append({
+                    "id": str(rid)[:64],
+                    "channel_id": str(cid)[:256],
+                    "channel_name": str(item.get("channel_name") or "")[:256],
+                    "program_title": str(item.get("program_title") or "")[:512],
+                    "program_start": str(item.get("program_start") or "")[:32],
+                    "notify_before_mins": notify_before,
+                })
+            data["reminders"] = clean[:_MAX_REMINDERS]
+
     save_user_prefs(current_user.username, data)
     return jsonify({"status": "ok", "prefs": get_user_prefs(current_user.username)})
 
@@ -4725,7 +4777,82 @@ def api_channels():
         })
     return jsonify({'channels': out, 'timestamp': datetime.now(timezone.utc).isoformat()})
 
-@app.route('/api/news', methods=['GET'])
+
+_HEALTH_CHECK_TIMEOUT = 4   # seconds per channel
+_HEALTH_CHECK_MAX_BATCH = 50  # max channels per request
+
+
+@app.route('/api/channel_health', methods=['POST'])
+@login_required
+def api_channel_health():
+    """Lightweight liveness check for a batch of channels.
+
+    Accepts JSON ``{"channel_ids": ["id1", "id2", ...]}``.
+    Performs a cheap HEAD (falling back to a short GET) request for each
+    channel URL and returns ``{"results": {"id": "up"|"down"|"virtual"}, ...}``.
+
+    Virtual channels (no real stream URL) are reported as ``"virtual"``.
+    Batch size is capped at :data:`_HEALTH_CHECK_MAX_BATCH` entries.
+    """
+    import concurrent.futures as _cf
+
+    try:
+        body = request.get_json(force=True, silent=False)
+        if body is None:
+            return jsonify({"error": "invalid JSON"}), 400
+        channel_ids = body.get("channel_ids", [])
+        if not isinstance(channel_ids, list):
+            return jsonify({"error": "channel_ids must be a list"}), 400
+    except Exception:
+        return jsonify({"error": "invalid JSON"}), 400
+
+    # Cap batch size
+    channel_ids = channel_ids[:_HEALTH_CHECK_MAX_BATCH]
+
+    # Build a lookup from tvg_id → url using the live channel cache
+    url_map = {ch.get("tvg_id"): ch.get("url", "") for ch in cached_channels}
+
+    def _check_one(cid):
+        url = url_map.get(cid, "")
+        if not url:
+            return cid, "virtual"
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme not in ("http", "https"):
+                return cid, "virtual"
+            resp = requests.head(url, timeout=_HEALTH_CHECK_TIMEOUT,
+                                 allow_redirects=True,
+                                 headers={"User-Agent": "RetroIPTVGuide-HealthCheck/1.0"})
+            if resp.status_code < 400:
+                return cid, "up"
+            # Some IPTV servers reject HEAD; retry with a tiny GET
+            resp2 = requests.get(url, timeout=_HEALTH_CHECK_TIMEOUT,
+                                 stream=True,
+                                 headers={"User-Agent": "RetroIPTVGuide-HealthCheck/1.0"})
+            resp2.close()
+            return cid, "up" if resp2.status_code < 400 else "down"
+        except Exception:
+            return cid, "down"
+
+    results = {}
+    if channel_ids:
+        with _cf.ThreadPoolExecutor(max_workers=min(10, len(channel_ids))) as pool:
+            futures = {pool.submit(_check_one, cid): cid for cid in channel_ids}
+            for fut in _cf.as_completed(futures, timeout=_HEALTH_CHECK_TIMEOUT + 2):
+                try:
+                    cid, status = fut.result()
+                    results[cid] = status
+                except Exception:
+                    results[futures[fut]] = "down"
+
+    # Fill in any IDs that timed out
+    for cid in channel_ids:
+        if cid not in results:
+            results[cid] = "down"
+
+    return jsonify({"results": results})
+
+
 @login_required
 def api_news():
     """Return headlines from the configured RSS/Atom feeds.
@@ -5843,6 +5970,114 @@ def api_current_program():
     except Exception as e:
         logging.exception("api_current_program error: %s", e)
         return jsonify({"ok": False, "error": "Internal server error"}), 500
+
+
+@app.route('/api/whats_on_now', methods=['GET'])
+@login_required
+def api_whats_on_now():
+    """Return all channels with their currently-airing program.
+
+    Response:
+      {
+        ok: True,
+        timestamp: "<iso>",
+        channels: [
+          {
+            tvg_id, name, logo, group, number,
+            program: { title, desc, start_iso, stop_iso, progress_pct }
+          },
+          ...
+        ]
+      }
+    """
+    try:
+        now = datetime.now(timezone.utc)
+        virtual_ch = get_virtual_channels()
+        vc_settings = get_virtual_channel_settings()
+        virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch.get('tvg_id', ''), True)]
+        grid_start = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
+        virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
+        all_channels = virtual_ch + cached_channels
+        all_epg = {**virtual_epg, **cached_epg}
+
+        out = []
+        for ch in all_channels:
+            tvg_id = ch.get('tvg_id') or ''
+            programs = all_epg.get(tvg_id) or []
+            current_prog = None
+            for prog in programs:
+                start = prog.get('start')
+                stop = prog.get('stop')
+                if start and stop and start <= now <= stop:
+                    current_prog = prog
+                    break
+
+            if current_prog is None and programs:
+                # Fall back to first non-placeholder entry
+                _no_data = 'No Guide Data Available'
+                for prog in programs:
+                    if prog.get('title') and prog.get('title') != _no_data:
+                        current_prog = prog
+                        break
+                if current_prog is None:
+                    current_prog = programs[0]
+
+            prog_title = ''
+            prog_desc = ''
+            start_iso = None
+            stop_iso = None
+            progress_pct = 0
+            if current_prog:
+                raw_title = current_prog.get('title') or ''
+                # Omit the internal fallback placeholder so the UI can show a "No Data" state
+                prog_title = '' if raw_title == 'No Guide Data Available' else raw_title
+                prog_desc = current_prog.get('desc') or ''
+                p_start = current_prog.get('start')
+                p_stop = current_prog.get('stop')
+                if p_start:
+                    start_iso = p_start.isoformat()
+                if p_stop:
+                    stop_iso = p_stop.isoformat()
+                if p_start and p_stop and p_start <= now <= p_stop:
+                    duration = (p_stop - p_start).total_seconds()
+                    elapsed = (now - p_start).total_seconds()
+                    progress_pct = int(min(100, max(0, (elapsed / duration) * 100))) if duration > 0 else 0
+
+            out.append({
+                'tvg_id': tvg_id,
+                'name': ch.get('name') or '',
+                'logo': ch.get('logo') or '',
+                'group': ch.get('group') or '',
+                'number': ch.get('tvg_chno') or ch.get('number') or '',
+                'program': {
+                    'title': prog_title,
+                    'desc': prog_desc,
+                    'start_iso': start_iso,
+                    'stop_iso': stop_iso,
+                    'progress_pct': progress_pct,
+                }
+            })
+
+        return jsonify({'ok': True, 'timestamp': now.isoformat(), 'channels': out})
+    except Exception as e:
+        logging.exception("api_whats_on_now error: %s", e)
+        return jsonify({'ok': False, 'error': 'Internal server error'}), 500
+
+
+@app.route('/whats-on-now')
+@login_required
+def whats_on_now():
+    """'What's On Now' page – shows all channels with their currently-airing program."""
+    log_event(current_user.username, "Loaded What's On Now page")
+    user_prefs = get_user_prefs(current_user.username)
+    user_default_theme = user_prefs.get("default_theme") or None
+    return render_template(
+        'whats_on_now.html',
+        current_tuner=get_current_tuner(),
+        user_prefs=user_prefs,
+        user_default_theme=user_default_theme,
+    )
+
 
 @app.route('/logs', methods=['GET'], endpoint='view_logs')
 @login_required

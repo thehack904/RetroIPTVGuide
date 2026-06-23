@@ -49,6 +49,8 @@ class TestUserPrefsHelpers:
         prefs = get_user_prefs("newuser")
         assert prefs["auto_load_channel"] is None
         assert prefs["hidden_channels"] == []
+        assert prefs["browse_mode_enabled"] is False
+        assert prefs["guide_layout"] == "full"
 
     def test_all_default_keys_present(self):
         prefs = get_user_prefs("nobody")
@@ -236,6 +238,50 @@ class TestApiUserPrefsPost:
         prefs = get_user_prefs("testuser")
         assert prefs["channel_numbers_enabled"] is False
 
+    def test_browse_mode_enabled_can_be_toggled_via_api(self, client):
+        login(client)
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"browse_mode_enabled": True}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["browse_mode_enabled"] is True
+
+    def test_browse_mode_enabled_invalid_value_coerces_false(self, client):
+        login(client)
+        save_user_prefs("testuser", {"browse_mode_enabled": True})
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"browse_mode_enabled": "yes"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        prefs = get_user_prefs("testuser")
+        assert prefs["browse_mode_enabled"] is False
+
+    def test_guide_layout_can_be_set_via_api(self, client):
+        login(client)
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"guide_layout": "mini"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["guide_layout"] == "mini"
+
+    def test_invalid_guide_layout_coerces_to_full(self, client):
+        login(client)
+        save_user_prefs("testuser", {"guide_layout": "mini"})
+        resp = client.post(
+            "/api/user_prefs",
+            data=json.dumps({"guide_layout": "sideways"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["guide_layout"] == "full"
+
 
 class TestGuideChannelNumberToggleUi:
     def test_guide_preferences_include_channel_number_toggle_controls(self, client):
@@ -244,6 +290,8 @@ class TestGuideChannelNumberToggleUi:
         assert resp.status_code == 200
         assert b'id="toggleChannelNumbers"' in resp.data
         assert b'id="mobileToggleChannelNumbers"' in resp.data
+        assert b'id="toggleBrowseMode"' in resp.data
+        assert b'id="mobileToggleBrowseMode"' in resp.data
 
 
 # ─── Admin: manage_users set_user_prefs action ───────────────────────────────
@@ -293,6 +341,24 @@ class TestManageUsersSetPrefs:
         login(client, "admin", "adminpass")
         resp = client.get("/manage_users")
         assert resp.status_code == 200
+
+    def test_manage_users_includes_guide_layout_select(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b'name="guide_layout"' in resp.data
+        assert b"Regular Guide" in resp.data
+        assert b"Mini Guide" in resp.data
+
+    def test_manage_users_can_set_default_guide_layout(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "set_user_prefs",
+            "username": "testuser",
+            "guide_layout": "mini",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        assert get_user_prefs("testuser")["guide_layout"] == "mini"
 
     def test_manage_users_includes_user_prefs_in_response(self, client):
         """After setting prefs, a GET of manage_users reflects the saved values."""

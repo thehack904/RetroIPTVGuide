@@ -24,7 +24,7 @@
 
   // ─── State ────────────────────────────────────────────────────────────────
   let prefs = Object.assign(
-    { auto_load_channel: null, hidden_channels: [], favorite_channels: [], channel_numbers_enabled: false },
+    { auto_load_channel: null, hidden_channels: [], favorite_channels: [], channel_numbers_enabled: false, browse_mode_enabled: false, guide_layout: 'full' },
     (typeof window.__initialUserPrefs === 'object' && window.__initialUserPrefs) || {}
   );
   let showingHidden = false;   // current toggle state for "show hidden channels"
@@ -222,6 +222,29 @@
     await savePatch({ channel_numbers_enabled: !!prefs.channel_numbers_enabled });
     syncChannelNumbersButton();
     applyChannelNumbersPreference();
+  }
+
+  // ─── Browse mode toggle ─────────────────────────────────────────────────────
+  function applyBrowseModePreference() {
+    const enabled = !!prefs.browse_mode_enabled;
+    document.body.classList.toggle('browse-mode', enabled);
+    window.__browseModeEnabled = enabled;
+  }
+
+  function syncBrowseModeButton() {
+    const enabled = !!prefs.browse_mode_enabled;
+    const label = enabled ? '🧭 Disable Browse Mode' : '🧭 Enable Browse Mode';
+    ['toggleBrowseMode', 'mobileToggleBrowseMode'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = label;
+    });
+  }
+
+  async function toggleBrowseMode() {
+    prefs.browse_mode_enabled = !prefs.browse_mode_enabled;
+    await savePatch({ browse_mode_enabled: !!prefs.browse_mode_enabled });
+    syncBrowseModeButton();
+    applyBrowseModePreference();
   }
 
   // ─── Auto-load channel ────────────────────────────────────────────────────
@@ -426,7 +449,9 @@
     syncShowHiddenButton();
     syncShowFavoritesButton();
     syncChannelNumbersButton();
+    syncBrowseModeButton();
     applyChannelNumbersPreference();
+    applyBrowseModePreference();
     scheduleAutoLoad();
 
     // Wire Settings-menu buttons (desktop + mobile, present in _header.html)
@@ -444,6 +469,8 @@
     wire('mobileToggleShowFavoritesOnly', toggleShowFavoritesOnly);
     wire('toggleChannelNumbers',         toggleChannelNumbers);
     wire('mobileToggleChannelNumbers',   toggleChannelNumbers);
+    wire('toggleBrowseMode',             toggleBrowseMode);
+    wire('mobileToggleBrowseMode',       toggleBrowseMode);
 
     window.addEventListener('theme:applied', function () {
       syncChannelNumbersButton();
@@ -488,7 +515,8 @@
     addFavorite:           addFavorite,
     removeFavorite:        removeFavorite,
     toggleShowFavoritesOnly: toggleShowFavoritesOnly,
-    toggleChannelNumbers:  toggleChannelNumbers
+    toggleChannelNumbers:  toggleChannelNumbers,
+    toggleBrowseMode:      toggleBrowseMode
   };
 
   // Bootstrap when DOM is ready

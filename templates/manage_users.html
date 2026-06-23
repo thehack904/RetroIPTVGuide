@@ -126,6 +126,16 @@
                       </select>
                     </div>
 
+                    <!-- Default guide layout -->
+                    <div class="prefs-field">
+                      <label for="guide-layout-{{ user.username }}">Guide Layout</label>
+                      <select id="guide-layout-{{ user.username }}" name="guide_layout">
+                        <option value="full" {% if user.prefs.guide_layout != 'mini' %}selected{% endif %}>Regular Guide</option>
+                        <option value="mini" {% if user.prefs.guide_layout == 'mini' %}selected{% endif %}>Mini Guide</option>
+                      </select>
+                      <small class="prefs-hint">Mini Guide loads a compact channel list and works well with TV remotes.</small>
+                    </div>
+
                     <!-- Hidden channels -->
                     <div class="prefs-field">
                       <label for="hidden-channels-{{ user.username }}">Hidden Channels</label>

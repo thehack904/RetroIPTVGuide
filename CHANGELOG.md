@@ -6,7 +6,32 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
-## v4.9.6 - 2026-06-11
+## v4.9.7 - 2026-06-16
+
+### Added
+
+* Added **Mini Guide overlay**.
+
+  * A compact, semi-transparent channel list overlay that slides in over the video player showing channels near the currently-playing one.
+  * Each row displays channel number, logo, channel name, current program title, program time range (with remaining time), and a progress bar.
+  * The currently-playing channel is highlighted in the list.
+  * Toggle with the `G` key (when focus is not in an input field) or the new **☰ Mini Guide** button on the video player.
+  * Navigate up/down with **↑ / ↓** arrow keys; press **Enter** to tune to the selected channel; press **Escape** or `G` to dismiss without switching.
+  * Click any channel row to tune to that channel.
+  * Auto-dismisses after 8 seconds of inactivity; the timer pauses while the mouse is over the panel.
+  * The Mini Guide button is shown alongside the Channel Info button in the player controls whenever a channel is playing.
+  * Added `static/js/mini-guide.js` implementing the overlay engine.
+
+* Added **Channel Health Indicators (lightweight)**.
+
+  * Added channel stream reachability checks to **Admin Diagnostics → Health**.
+  * A coloured dot is displayed in the diagnostics channel table: green = stream up, red = stream down, blue = virtual channel (no real stream URL).
+  * Added `/api/channel_health` POST endpoint that performs lightweight HEAD requests (falling back to a short streaming GET) for each requested channel URL with a 4-second timeout.
+  * Checks run in parallel (up to 10 concurrent requests) and are capped at 50 channels per batch to avoid overloading the server.
+  * Virtual channels (RTMP or no URL) are excluded from HTTP checks and reported as a separate status.
+
+---
+
 
 ### Added
 

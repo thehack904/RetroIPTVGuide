@@ -169,6 +169,20 @@ body.retro-magazine .diag-container { --dc-accent: #bb0000; }
 .ch-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
 .ch-table th { color: var(--dc-subtle); font-weight: normal; text-transform: uppercase; font-size: 0.68rem; padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--dc-border-faint); }
 .ch-table td { padding: 0.25rem 0.4rem; border-bottom: 1px solid var(--dc-border-faint); font-family: monospace; word-break: break-all; }
+.channel-health-summary { display:flex; gap:0.6rem; flex-wrap:wrap; margin:0.7rem 0; }
+.channel-health-stat { border:1px solid var(--dc-border); border-radius:3px; padding:0.35rem 0.65rem; background:var(--dc-bg-deep); font-size:0.82rem; color:var(--dc-muted2); }
+.channel-health-stat b { color:var(--dc-text); }
+.channel-health-table-wrap { overflow-x:auto; max-height:55vh; border:1px solid var(--dc-border); border-radius:4px; }
+.channel-health-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+.channel-health-table th { position:sticky; top:0; background:var(--dc-bg-panel); color:var(--dc-muted); font-weight:normal; text-transform:uppercase; font-size:0.72rem; padding:0.4rem 0.5rem; border-bottom:1px solid var(--dc-border); text-align:left; }
+.channel-health-table td { padding:0.35rem 0.5rem; border-bottom:1px solid var(--dc-border-faint); vertical-align:top; }
+.channel-health-table td.mono { font-family:monospace; word-break:break-all; }
+.diag-health-status { display:inline-flex; align-items:center; gap:0.35rem; font-weight:700; text-transform:uppercase; font-size:0.75rem; }
+.diag-health-dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:#888; box-shadow:0 0 0 1px rgba(255,255,255,0.15); }
+.diag-health-dot.chi-up { background:#33cc66; }
+.diag-health-dot.chi-down { background:#ff4444; }
+.diag-health-dot.chi-virtual { background:#66a3ff; }
+.diag-health-dot.chi-pending { background:#888; }
 /* Issue draft tab */
 .issue-desc-area { width: 100%; min-height: 80px; background: var(--dc-bg-input); color: var(--dc-input-text); border: 1px solid var(--dc-border); border-radius: 3px; padding: 0.5rem; font-size: 0.88rem; font-family: inherit; resize: vertical; box-sizing: border-box; margin-bottom: 0.6rem; }
 .issue-title-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.7rem; }
@@ -382,6 +396,16 @@ body.retro-magazine .sd-tip-warn    { background:rgba(130,50,0,0.10); border-lef
       <button type="button" class="btn-action" id="btnRunHealth">&#x25BA; Run All Checks</button>
       <div id="healthGrid" class="health-grid" style="margin-top:0.8rem"></div>
       <div id="healthExtras"></div>
+    </div>
+    <div class="diag-box">
+      <h3>Channel Stream Reachability <span id="channelHealthSpinner" class="spinner" style="display:none"></span></h3>
+      <p style="color:var(--dc-muted);font-size:0.85rem;margin:0 0 0.6rem">
+        Lightweight per-channel liveness checks from the server. HTTP and HTTPS stream URLs are probed with HEAD and a short GET fallback; virtual or non-HTTP channels are labelled virtual.
+      </p>
+      <button type="button" class="btn-action" id="btnRunChannelHealth">&#x25BA; Check Channels</button>
+      <span id="channelHealthProgress" style="font-size:0.82rem;color:var(--dc-muted);margin-left:0.3rem"></span>
+      <div id="channelHealthSummary" class="channel-health-summary" style="display:none"></div>
+      <div id="channelHealthOutput" style="margin-top:0.7rem"></div>
     </div>
   </div>
 
@@ -949,6 +973,140 @@ document.getElementById('btnRunHealth').addEventListener('click',function(){
   }).catch(function(e){
     spin('healthSpinner',false);
     document.getElementById('healthGrid').innerHTML='<span class="st-fail">Failed: '+esc(String(e))+'</span>';
+  });
+});
+
+/* ── Channel stream reachability ── */
+var channelHealthRows = [];
+
+function channelHealthBadge(status){
+  var label = {
+    up: 'Up',
+    down: 'Down',
+    virtual: 'Virtual',
+    pending: 'Pending'
+  }[status] || 'Pending';
+  return '<span class="diag-health-status"><span class="diag-health-dot chi-'+esc(status||'pending')+'"></span>'+esc(label)+'</span>';
+}
+
+function setChannelHealthProgress(text){
+  document.getElementById('channelHealthProgress').textContent = text || '';
+}
+
+function renderChannelHealthSummary(){
+  var counts = {up:0, down:0, virtual:0, pending:0};
+  channelHealthRows.forEach(function(row){ counts[row.status || 'pending'] = (counts[row.status || 'pending'] || 0) + 1; });
+  var div = document.getElementById('channelHealthSummary');
+  div.style.display = 'flex';
+  div.innerHTML = [
+    ['Total', channelHealthRows.length],
+    ['Up', counts.up],
+    ['Down', counts.down],
+    ['Virtual', counts.virtual],
+    ['Pending', counts.pending]
+  ].map(function(item){
+    return '<span class="channel-health-stat">'+esc(item[0])+': <b>'+esc(item[1])+'</b></span>';
+  }).join('');
+}
+
+function renderChannelHealthTable(channels){
+  channelHealthRows = channels
+    .filter(function(ch){ return ch && ch.tvg_id; })
+    .map(function(ch, idx){
+      return {
+        idx: idx,
+        cid: String(ch.tvg_id),
+        name: ch.name || '',
+        number: ch.number || '',
+        group: ch.group || '',
+        url: ch.url || '',
+        status: 'pending'
+      };
+    });
+
+  var out = document.getElementById('channelHealthOutput');
+  if(!channelHealthRows.length){
+    out.innerHTML = '<div style="color:var(--dc-muted);font-size:0.85rem">No cached channels with TVG IDs are available. Refresh or check the active tuner first.</div>';
+    document.getElementById('channelHealthSummary').style.display = 'none';
+    return;
+  }
+
+  var html = '<div class="channel-health-table-wrap"><table class="channel-health-table">'
+    + '<thead><tr><th>Status</th><th>Number</th><th>Channel</th><th>TVG-ID</th><th>Group</th><th>Stream URL</th></tr></thead><tbody>';
+  channelHealthRows.forEach(function(row){
+    html += '<tr data-health-row="'+esc(row.idx)+'">'
+      + '<td id="channelHealthStatus'+esc(row.idx)+'">'+channelHealthBadge('pending')+'</td>'
+      + '<td class="mono">'+esc(row.number || '-')+'</td>'
+      + '<td>'+esc(row.name || '(unnamed)')+'</td>'
+      + '<td class="mono">'+esc(row.cid)+'</td>'
+      + '<td>'+esc(row.group || '-')+'</td>'
+      + '<td class="mono">'+esc(row.url || '(none)')+'</td>'
+      + '</tr>';
+  });
+  out.innerHTML = html + '</tbody></table></div>';
+  renderChannelHealthSummary();
+}
+
+function applyChannelHealthResult(cid, status){
+  channelHealthRows.forEach(function(row){
+    if(row.cid !== cid) return;
+    row.status = status || 'down';
+    var cell = document.getElementById('channelHealthStatus' + row.idx);
+    if(cell) cell.innerHTML = channelHealthBadge(row.status);
+  });
+}
+
+function fetchChannelHealthBatch(ids){
+  return fetch('/api/channel_health', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({channel_ids: ids})
+  }).then(function(r){
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }).then(function(data){
+    var results = data.results || {};
+    Object.keys(results).forEach(function(cid){ applyChannelHealthResult(cid, results[cid]); });
+    renderChannelHealthSummary();
+  });
+}
+
+document.getElementById('btnRunChannelHealth').addEventListener('click',function(){
+  spin('channelHealthSpinner',true);
+  setChannelHealthProgress('Loading cached channels...');
+  document.getElementById('channelHealthOutput').innerHTML = '';
+  document.getElementById('channelHealthSummary').style.display = 'none';
+  fetch('/api/channels',{credentials:'same-origin'}).then(function(r){
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    renderChannelHealthTable(data.channels || []);
+    if(!channelHealthRows.length){
+      spin('channelHealthSpinner',false);
+      setChannelHealthProgress('');
+      return Promise.resolve();
+    }
+    var ids = channelHealthRows.map(function(row){ return row.cid; });
+    var batches = [];
+    for(var i=0; i<ids.length; i+=50) batches.push(ids.slice(i, i+50));
+    var done = 0;
+    return batches.reduce(function(chain, batch, idx){
+      return chain.then(function(){
+        setChannelHealthProgress('Checking batch '+(idx+1)+' of '+batches.length+'...');
+        return fetchChannelHealthBatch(batch).then(function(){
+          done += batch.length;
+          setChannelHealthProgress('Checked '+Math.min(done, ids.length)+' of '+ids.length+' channels.');
+        });
+      });
+    }, Promise.resolve());
+  }).then(function(){
+    spin('channelHealthSpinner',false);
+    if(channelHealthRows.length) setChannelHealthProgress('Done.');
+  }).catch(function(e){
+    spin('channelHealthSpinner',false);
+    setChannelHealthProgress('');
+    document.getElementById('channelHealthOutput').innerHTML = '<span class="st-fail">Failed: '+esc(String(e))+'</span>';
   });
 });
 

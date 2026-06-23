@@ -24,6 +24,12 @@
     '  box-shadow: 0 0 0 4px rgba(255,153,0,0.25);',
     '  position: relative; z-index: 2;',
     '}',
+    '.mini-guide-row.tv-focused {',
+    '  outline: 3px solid #f90 !important;',
+    '  outline-offset: -2px;',
+    '  background: rgba(255,153,0,0.24) !important;',
+    '  box-shadow: 0 0 0 4px rgba(255,153,0,0.25);',
+    '}',
     /* guide-row highlight is applied via JS to avoid :has() compat issues */
     '.guide-row.tv-focused-row { background: rgba(255,153,0,0.07); }',
     /* ── TV-mode: reduce entire UI proportionally to match 50% player ────── */
@@ -64,23 +70,37 @@
     /* Fixed time bar */
     'body.tv-mode .time-header-fixed { height: 17px; }',
     /* Guide outer: fill space below shorter header+player+timebar (20+175+17+18px padding ≈ 230px) */
-    'body.tv-mode .guide-outer { height: calc(100vh - 230px); }'
+    'body.tv-mode .guide-outer { height: calc(100vh - 230px); }',
+    'body.tv-mode .mini-guide-page { height: calc(100vh - 230px); padding: 6px; }',
+    'body.tv-mode .mini-guide-page-inner { max-width: none; }',
+    'body.tv-mode .mini-guide-page-list .mini-guide-row { min-height: 44px; grid-template-columns: 48px 30px minmax(0, 1fr); padding: 4px 6px; }',
+    'body.tv-mode .mini-guide-page-list .mg-logo,',
+    'body.tv-mode .mini-guide-page-list .mg-logo-placeholder { width: 26px; height: 26px; }',
+    'body.tv-mode .mini-guide-page-list .mg-channel-name { max-width: 32%; font-size: 0.72em; }',
+    'body.tv-mode .mini-guide-page-list .mg-program-title { font-size: 0.82em; }',
+    'body.tv-mode .mini-guide-page-list .mg-meta { font-size: 0.66em; }'
   ].join('\n');
   document.head.appendChild(style);
 
   /* ── State ────────────────────────────────────────────────────────────────── */
   var selectedIndex = -1;   // index into chanNames[]
   var chanNames = [];        // live NodeList snapshot, refreshed on demand
+  var initRetryCount = 0;
+  var initialized = false;
 
   /* ── Helpers ──────────────────────────────────────────────────────────────── */
   function getChannels() {
     // Re-query each time in case the DOM changes (guide refresh, etc.)
-    chanNames = Array.from(document.querySelectorAll('.chan-name'));
+    if (document.body.classList.contains('guide-layout-mini')) {
+      chanNames = Array.from(document.querySelectorAll('#miniGuidePageList .mini-guide-row'));
+    } else {
+      chanNames = Array.from(document.querySelectorAll('.chan-name'));
+    }
     return chanNames;
   }
 
   function clearFocus() {
-    document.querySelectorAll('.chan-name.tv-focused').forEach(function (el) {
+    document.querySelectorAll('.chan-name.tv-focused, .mini-guide-row.tv-focused').forEach(function (el) {
       el.classList.remove('tv-focused');
       var row = el.closest('.guide-row');
       if (row) row.classList.remove('tv-focused-row');
@@ -106,6 +126,7 @@
     // Scroll the channel row into view (vertically), without snapping the
     // horizontal scroll position — we only want vertical alignment.
     el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    if (el.focus && document.activeElement !== el) el.focus({ preventScroll: true });
   }
 
   function activateSelected() {
@@ -113,14 +134,38 @@
     if (selectedIndex < 0 || selectedIndex >= channels.length) return;
 
     var el = channels[selectedIndex];
-    // Delegate to the existing click handler wired by guide.html
+    if (typeof window.playChannel === 'function') {
+      window.playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
+      return;
+    }
+    // Fallback to click handler wired by guide.html
     el.click();
+  }
+
+  function wireFocusHandlers() {
+    getChannels().forEach(function (el) {
+      if (el.__tvRemoteFocusWired) return;
+      el.__tvRemoteFocusWired = true;
+      el.addEventListener('focus', function () {
+        var idx = getChannels().indexOf(el);
+        if (idx !== -1) {
+          clearFocus();
+          selectedIndex = idx;
+          el.classList.add('tv-focused');
+          var row = el.closest('.guide-row');
+          if (row) row.classList.add('tv-focused-row');
+        }
+      });
+    });
   }
 
   /* ── Keyboard handler ─────────────────────────────────────────────────────── */
   function onKeyDown(e) {
     var channels = getChannels();
-    if (!channels.length) return;
+    if (!channels.length) {
+      setTimeout(init, 50);
+      return;
+    }
 
     switch (e.keyCode) {
       case 38: // ArrowUp  / DPAD Up
@@ -149,11 +194,23 @@
 
   /* ── Init ─────────────────────────────────────────────────────────────────── */
   function init() {
-    var channels = getChannels();
-    if (!channels.length) return;
-
+    if (initialized) return;
     // Mark body so TV-mode CSS rules apply (player sizing, etc.)
     document.body.classList.add('tv-mode');
+
+    if (window.__initialUserPrefs && window.__initialUserPrefs.guide_layout === 'mini' && typeof window.setGuideLayout === 'function') {
+      window.setGuideLayout('mini', false);
+    }
+
+    var channels = getChannels();
+    if (!channels.length) {
+      if (initRetryCount < 20) {
+        initRetryCount++;
+        setTimeout(init, 50);
+      }
+      return;
+    }
+    initialized = true;
 
     // Recompute fixed time bar position after TV-mode CSS has resized the player.
     // createOrUpdateFixedTimeBar() already ran at DOMContentLoaded (before this
@@ -184,23 +241,21 @@
     } catch (e) { /* ignore localStorage errors */ }
 
     // Sync selectedIndex when a channel element receives native focus.
-    channels.forEach(function (el) {
-      el.addEventListener('focus', function () {
-        var idx = getChannels().indexOf(el);
-        if (idx !== -1) {
-          clearFocus();
-          selectedIndex = idx;
-          el.classList.add('tv-focused');
-          var row = el.closest('.guide-row');
-          if (row) row.classList.add('tv-focused-row');
-        }
-      });
-    });
+    wireFocusHandlers();
 
     // Start with the first channel highlighted.
     setFocus(0);
 
     document.addEventListener('keydown', onKeyDown);
+
+    document.addEventListener('guide-layout:changed', function () {
+      clearFocus();
+      selectedIndex = -1;
+      setTimeout(function () {
+        wireFocusHandlers();
+        setFocus(0);
+      }, 0);
+    });
 
     console.log('RetroIPTVGuide: TV remote nav active (' + channels.length + ' channels)');
   }

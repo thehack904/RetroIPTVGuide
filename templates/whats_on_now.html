@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+{% block title %}What's On Now – IPTV Guide{% endblock %}
+
+{% block page_styles %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/whats_on_now.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="won-container">
+
+  <div class="won-heading">
+    <h1>📺 What's On Now</h1>
+    <div style="display:flex;align-items:center;gap:10px;">
+      <span class="won-meta" id="wonTimestamp"></span>
+      <button class="won-refresh-btn" id="wonRefreshBtn" title="Refresh now">↻ Refresh</button>
+    </div>
+  </div>
+
+  <div class="won-filter-bar">
+    <input type="search" class="won-search" id="wonSearch" placeholder="Search channels or programs…" autocomplete="off" aria-label="Search channels or programs">
+    <select class="won-group-filter" id="wonGroupFilter" aria-label="Filter by group">
+      <option value="">All Groups</option>
+    </select>
+  </div>
+
+  <div class="won-grid" id="wonGrid">
+    <div class="won-status" id="wonStatus">Loading…</div>
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts_extra %}
+<script>
+(function () {
+  'use strict';
+
+  const REFRESH_INTERVAL_MS = 60 * 1000;  // auto-refresh every 60 s
+  let _refreshTimer = null;
+  let _allChannels = [];
+
+  function esc(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function fmtTime(isoStr) {
+    if (!isoStr) return '';
+    try {
+      return new Date(isoStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return ''; }
+  }
+
+  function buildCard(ch) {
+    const prog = ch.program || {};
+    // A channel has real guide data when the program has timing info (start_iso is set)
+    const hasRealProg = !!(prog.title && prog.start_iso);
+    const logoHtml = ch.logo
+      ? `<img class="won-logo" src="${esc(ch.logo)}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">`
+        + `<span class="won-logo-placeholder" style="display:none">📺</span>`
+      : `<span class="won-logo-placeholder">📺</span>`;
+
+    const timeStr = (prog.start_iso && prog.stop_iso)
+      ? `${fmtTime(prog.start_iso)} – ${fmtTime(prog.stop_iso)}`
+      : '';
+
+    const descHtml = hasRealProg && prog.desc
+      ? `<div class="won-prog-desc">${esc(prog.desc)}</div>`
+      : '';
+
+    const progressHtml = (prog.progress_pct > 0 || prog.start_iso)
+      ? `<div class="won-progress-wrap"><div class="won-progress-bar" style="width:${esc(String(prog.progress_pct || 0))}%"></div></div>`
+      : '';
+
+    const numberHtml = ch.number
+      ? `<span class="won-chan-number">${esc(String(ch.number))}</span>`
+      : '';
+
+    return `<div class="won-card" data-tvgid="${esc(ch.tvg_id)}" data-group="${esc(ch.group)}" data-search-text="${esc((ch.name + ' ' + (prog.title || '') + ' ' + ch.group).toLowerCase())}" role="button" tabindex="0" aria-label="${esc(ch.name)}: ${esc(prog.title || 'No program info')}">
+      <div class="won-card-header">
+        ${logoHtml}
+        <span class="won-chan-name">${esc(ch.name)}</span>
+        ${numberHtml}
+      </div>
+      <div class="won-card-body">
+        <div class="won-prog-title${hasRealProg ? '' : ' no-data'}">${esc(hasRealProg ? prog.title : 'No Guide Data')}</div>
+        ${timeStr ? `<div class="won-prog-time">${esc(timeStr)}</div>` : ''}
+        ${descHtml}
+        ${progressHtml}
+      </div>
+    </div>`;
+  }
+
+  function populateGroupFilter(channels) {
+    const sel = document.getElementById('wonGroupFilter');
+    if (!sel) return;
+    const groups = [...new Set(channels.map(ch => ch.group).filter(Boolean))].sort();
+    // keep the first "All Groups" option, rebuild the rest
+    while (sel.options.length > 1) sel.remove(1);
+    groups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g;
+      opt.textContent = g;
+      sel.appendChild(opt);
+    });
+  }
+
+  function applyFilter() {
+    const searchVal = (document.getElementById('wonSearch').value || '').toLowerCase().trim();
+    const groupVal  = (document.getElementById('wonGroupFilter').value || '').toLowerCase().trim();
+    const grid = document.getElementById('wonGrid');
+    if (!grid) return;
+
+    let visibleCount = 0;
+    let lastGroupLabel = null;
+
+    // Remove previous "no results" message
+    const existing = grid.querySelector('.won-empty');
+    if (existing) existing.remove();
+
+    Array.from(grid.children).forEach(el => {
+      if (el.classList.contains('won-group-label')) {
+        // Group labels are hidden initially; shown when at least one card in the group is visible
+        el.style.display = 'none';
+        lastGroupLabel = el;
+        return;
+      }
+      if (!el.classList.contains('won-card')) return;
+
+      const matchSearch = !searchVal || (el.dataset.searchText || '').includes(searchVal);
+      const matchGroup  = !groupVal  || (el.dataset.group || '').toLowerCase() === groupVal;
+      const visible = matchSearch && matchGroup;
+      el.style.display = visible ? '' : 'none';
+      if (visible) {
+        visibleCount++;
+        // Show the group label that preceded this card
+        if (lastGroupLabel) lastGroupLabel.style.display = '';
+      }
+    });
+
+    if (visibleCount === 0) {
+      const em = document.createElement('div');
+      em.className = 'won-empty';
+      em.textContent = 'No channels match your search.';
+      grid.appendChild(em);
+    }
+  }
+
+  function renderChannels(channels, timestamp) {
+    const grid = document.getElementById('wonGrid');
+    const ts   = document.getElementById('wonTimestamp');
+    if (!grid) return;
+
+    // Update timestamp
+    if (ts) {
+      try {
+        ts.textContent = 'Updated: ' + new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      } catch (e) { ts.textContent = ''; }
+    }
+
+    if (!channels || channels.length === 0) {
+      grid.innerHTML = '<div class="won-status">No channels available.</div>';
+      return;
+    }
+
+    // Group channels
+    const groups = {};
+    const noGroup = [];
+    channels.forEach(ch => {
+      const g = ch.group || '';
+      if (g) {
+        if (!groups[g]) groups[g] = [];
+        groups[g].push(ch);
+      } else {
+        noGroup.push(ch);
+      }
+    });
+
+    let html = '';
+    // Ungrouped first
+    if (noGroup.length) {
+      noGroup.forEach(ch => { html += buildCard(ch); });
+    }
+    // Grouped
+    Object.keys(groups).sort().forEach(g => {
+      html += `<div class="won-group-label">${esc(g)}</div>`;
+      groups[g].forEach(ch => { html += buildCard(ch); });
+    });
+
+    grid.innerHTML = html;
+
+    // Attach card click → navigate to guide and auto-play the selected channel
+    grid.querySelectorAll('.won-card').forEach(card => {
+      function activate() {
+        const tvgId = card.dataset.tvgid;
+        if (!tvgId) return;
+        // Persist the selection so guide.html can auto-play it on arrival
+        const chanData = _allChannels.find(c => c.tvg_id === tvgId);
+        try {
+          sessionStorage.setItem('wonPendingPlay', JSON.stringify({
+            id: tvgId,
+            name: (chanData && chanData.name) || (card.querySelector('.won-chan-name') || {}).textContent || ''
+          }));
+        } catch (e) {
+          console.warn('[WON] Could not write wonPendingPlay to sessionStorage:', e);
+        }
+        window.location.href = '/guide#ch-' + encodeURIComponent(tvgId);
+      }
+      card.addEventListener('click', activate);
+      card.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(); }
+      });
+    });
+
+    // Restore filter state after re-render
+    applyFilter();
+  }
+
+  async function load() {
+    if (_refreshTimer !== null) {
+      clearTimeout(_refreshTimer);
+      _refreshTimer = null;
+    }
+    const status = document.getElementById('wonStatus');
+    if (status) status.textContent = 'Loading…';
+
+    try {
+      const resp = await fetch('/api/whats_on_now');
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      const data = await resp.json();
+      if (!data.ok) throw new Error(data.error || 'Unknown error');
+
+      _allChannels = data.channels || [];
+      populateGroupFilter(_allChannels);
+      renderChannels(_allChannels, data.timestamp);
+    } catch (e) {
+      const grid = document.getElementById('wonGrid');
+      if (grid) grid.innerHTML = '<div class="won-status">Unable to load channel data. ' + esc(String(e)) + '</div>';
+    }
+
+    _refreshTimer = setTimeout(load, REFRESH_INTERVAL_MS);
+  }
+
+  document.addEventListener('DOMContentLoaded', function () {
+    // Search and filter events
+    const searchEl = document.getElementById('wonSearch');
+    const groupEl  = document.getElementById('wonGroupFilter');
+    if (searchEl) searchEl.addEventListener('input', applyFilter);
+    if (groupEl)  groupEl.addEventListener('change', applyFilter);
+
+    // Manual refresh button
+    const btn = document.getElementById('wonRefreshBtn');
+    if (btn) btn.addEventListener('click', function () {
+      if (_refreshTimer !== null) { clearTimeout(_refreshTimer); _refreshTimer = null; }
+      load();
+    });
+
+    load();
+
+    // Apply saved theme
+    const saved = localStorage.getItem('theme') || 'dark';
+    if (typeof setTheme === 'function') setTheme(saved);
+    if (typeof updateClock === 'function') updateClock();
+    setInterval(function () { if (typeof updateClock === 'function') updateClock(); }, 1000);
+  });
+})();
+</script>
+{% endblock %}

@@ -69,3 +69,13 @@ class TestChannelInfoBannerGuideMarkup:
             "        object-fit: contain !important;\n"
             "    }"
         ) in html
+
+    def test_guide_handles_delayed_hls_stream_startup(self, client):
+        login(client)
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "let hlsStartupRetryTimer = null;" in html
+        assert "HLS_STARTUP_RETRY_MAX_ATTEMPTS = 12" in html
+        assert "hlsInstance.on(Hls.Events.ERROR" in html
+        assert "hlsInstance.startLoad();" in html
