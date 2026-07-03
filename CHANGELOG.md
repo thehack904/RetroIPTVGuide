@@ -6,6 +6,19 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.8 - 2026-07-03
+
+### Added
+- (empty)
+
+### Changed
+- (empty)
+
+### Fixed
+- (empty)
+
+---
+
 ## v4.9.7 - 2026-07-03
 
 ### Added
