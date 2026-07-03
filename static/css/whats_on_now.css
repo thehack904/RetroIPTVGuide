@@ -1,0 +1,427 @@
+/* Per-page styles for What's On Now page */
+
+.won-container {
+  max-width: 1100px;
+  margin: 24px auto 60px;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+/* ── Page heading ─────────────────────────────────────────────── */
+.won-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+
+.won-heading h1 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin: 0;
+  color: inherit;
+}
+
+.won-meta {
+  font-size: 0.82rem;
+  opacity: 0.6;
+}
+
+/* ── Search / filter bar ───────────────────────────────────────── */
+.won-filter-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.won-search {
+  flex: 1 1 200px;
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: inherit;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.won-search:focus {
+  border-color: rgba(255,255,255,0.3);
+}
+
+.won-group-filter {
+  padding: 6px 10px;
+  font-size: 0.9rem;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 4px;
+  color: inherit;
+  min-width: 130px;
+  box-sizing: border-box;
+}
+
+/* ── Channel card grid ─────────────────────────────────────────── */
+.won-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 10px;
+}
+
+/* ── Single channel card ───────────────────────────────────────── */
+.won-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+
+.won-card:hover {
+  background: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.18);
+}
+
+/* Card top: logo + channel name */
+.won-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  min-height: 42px;
+}
+
+.won-logo {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: transparent;
+}
+
+.won-logo-placeholder {
+  width: 32px;
+  height: 32px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.08);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.won-chan-name {
+  font-size: 0.82rem;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.won-chan-number {
+  font-size: 0.72rem;
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+/* Card body: program info */
+.won-card-body {
+  padding: 7px 10px 10px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.won-prog-title {
+  font-size: 0.88rem;
+  font-weight: 600;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.35;
+}
+
+.won-prog-title.no-data {
+  opacity: 0.4;
+  font-style: italic;
+  font-weight: 400;
+}
+
+.won-prog-time {
+  font-size: 0.75rem;
+  opacity: 0.55;
+}
+
+.won-prog-desc {
+  font-size: 0.78rem;
+  opacity: 0.65;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+/* Progress bar */
+.won-progress-wrap {
+  margin-top: 6px;
+  height: 4px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.won-progress-bar {
+  height: 100%;
+  background: #4a90d9;
+  border-radius: 2px;
+  transition: width 1s linear;
+}
+
+/* ── Loading / error state ────────────────────────────────────── */
+.won-status {
+  text-align: center;
+  padding: 40px 16px;
+  opacity: 0.55;
+  font-size: 1rem;
+}
+
+/* ── Group separator ──────────────────────────────────────────── */
+.won-group-label {
+  grid-column: 1 / -1;
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  opacity: 0.45;
+  padding: 6px 2px 2px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-top: 4px;
+}
+
+/* ── Empty state when no channels pass filter ─────────────────── */
+.won-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px 16px;
+  opacity: 0.45;
+  font-size: 0.95rem;
+}
+
+/* ── Auto-refresh indicator ───────────────────────────────────── */
+.won-refresh-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 4px;
+  color: inherit;
+  padding: 5px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  opacity: 0.75;
+}
+
+.won-refresh-btn:hover { opacity: 1; }
+
+/* ── Light theme overrides ────────────────────────────────────── */
+[data-theme="light"] .won-search,
+[data-theme="light"] .won-group-filter {
+  background: #fff;
+  border-color: rgba(0,0,0,0.22);
+  color: #111;
+}
+
+[data-theme="light"] .won-card {
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.16);
+  color: #111;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.10);
+}
+
+[data-theme="light"] .won-card:hover {
+  background: #f0f0f0;
+  border-color: rgba(0,0,0,0.30);
+}
+
+[data-theme="light"] .won-card-header {
+  border-bottom-color: rgba(0,0,0,0.10);
+}
+
+[data-theme="light"] .won-logo-placeholder {
+  background: rgba(0,0,0,0.07);
+}
+
+[data-theme="light"] .won-progress-wrap {
+  background: rgba(0,0,0,0.10);
+}
+
+[data-theme="light"] .won-group-label {
+  border-bottom-color: rgba(0,0,0,0.14);
+}
+
+/* ── RetroIPTV theme overrides ───────────────────────────────── */
+body.retroiptv .won-search,
+body.retroiptv .won-group-filter {
+  background: #fffaf5;
+  border-color: rgba(59,15,26,0.28);
+  color: #111;
+}
+
+body.retroiptv .won-card {
+  background: #fffaf5;
+  border: 1px solid rgba(59,15,26,0.28);
+  color: #111;
+  box-shadow: 0 2px 8px rgba(59,15,26,0.10);
+}
+
+body.retroiptv .won-card:hover {
+  background: #fff4e6;
+  border-color: rgba(59,15,26,0.50);
+}
+
+body.retroiptv .won-card-header {
+  border-bottom-color: rgba(59,15,26,0.12);
+}
+
+body.retroiptv .won-logo-placeholder {
+  background: rgba(59,15,26,0.07);
+}
+
+body.retroiptv .won-progress-wrap {
+  background: rgba(59,15,26,0.10);
+}
+
+body.retroiptv .won-group-label {
+  border-bottom-color: rgba(59,15,26,0.18);
+}
+
+/* ── TV Guide (Refresh) theme overrides ─────────────────────── */
+body.retro-magazine .won-search,
+body.retro-magazine .won-group-filter {
+  background: #fff;
+  border-color: rgba(0,0,0,0.40);
+  color: #000;
+}
+
+body.retro-magazine .won-card {
+  background: #fff;
+  border: 1px solid #000;
+  color: #000;
+  box-shadow: 3px 3px 0 rgba(0,0,0,0.14);
+}
+
+body.retro-magazine .won-card:hover {
+  background: #f2f2f2;
+  box-shadow: 4px 4px 0 rgba(0,0,0,0.20);
+}
+
+body.retro-magazine .won-card-header {
+  border-bottom-color: rgba(0,0,0,0.18);
+}
+
+body.retro-magazine .won-logo-placeholder {
+  background: rgba(0,0,0,0.07);
+}
+
+body.retro-magazine .won-progress-wrap {
+  background: rgba(0,0,0,0.12);
+}
+
+body.retro-magazine .won-group-label {
+  border-bottom-color: rgba(0,0,0,0.30);
+}
+
+/* ── TV Guide (Classic) theme overrides ─────────────────────── */
+body.tvguide1990 .won-search,
+body.tvguide1990 .won-group-filter {
+  background: #fff;
+  border-color: rgba(0,0,0,0.30);
+  color: #000;
+}
+
+body.tvguide1990 .won-card {
+  background: #fff;
+  border: 1px solid #999;
+  color: #000;
+  box-shadow: 1px 1px 4px rgba(0,0,0,0.18);
+}
+
+body.tvguide1990 .won-card:hover {
+  background: #f5f5f5;
+  border-color: #555;
+}
+
+body.tvguide1990 .won-card-header {
+  border-bottom-color: rgba(0,0,0,0.12);
+}
+
+body.tvguide1990 .won-logo-placeholder {
+  background: rgba(0,0,0,0.07);
+}
+
+body.tvguide1990 .won-progress-wrap {
+  background: rgba(0,0,0,0.12);
+}
+
+body.tvguide1990 .won-group-label {
+  border-bottom-color: rgba(0,0,0,0.18);
+}
+
+/* ── DirecTV theme overrides ─────────────────────────────────── */
+body.directv .won-search,
+body.directv .won-group-filter {
+  background: rgba(0,0,0,0.25);
+  border-color: rgba(255,255,255,0.30);
+  color: #fff;
+}
+
+body.directv .won-card {
+  background: #001f66;
+  border: 1px solid #4a7fff;
+  color: #fff;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.35);
+}
+
+body.directv .won-card:hover {
+  background: #1a3a80;
+  border-color: #7fbfff;
+}
+
+body.directv .won-card-header {
+  border-bottom-color: rgba(255,255,255,0.12);
+}
+
+body.directv .won-logo-placeholder {
+  background: rgba(255,255,255,0.12);
+}
+
+body.directv .won-progress-wrap {
+  background: rgba(255,255,255,0.14);
+}
+
+body.directv .won-group-label {
+  border-bottom-color: rgba(255,255,255,0.18);
+}
+
+/* ── Responsive ───────────────────────────────────────────────── */
+@media (max-width: 640px) {
+  .won-container { margin: 16px auto 40px; padding: 0 10px; }
+  .won-grid { grid-template-columns: 1fr; }
+  .won-heading h1 { font-size: 1.1rem; }
+}

@@ -6,6 +6,137 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.7 - 2026-07-03
+
+### Added
+
+* Added **Mini Guide overlay**.
+
+  * Added a compact, semi-transparent channel list overlay that slides in over the video player.
+  * Shows nearby channels around the currently playing channel.
+  * Displays channel number, logo, channel name, current program title, program time range, remaining time, and progress bar.
+  * Highlights the currently playing channel.
+  * Added keyboard support:
+    * `G` toggles the Mini Guide.
+    * `↑` / `↓` navigates channels.
+    * `Enter` tunes the selected channel.
+    * `Escape` closes the Mini Guide.
+  * Added mouse support for clicking a row to tune directly.
+  * Auto-dismisses after 8 seconds of inactivity, with pause-on-hover behavior.
+  * Added the **☰ Mini Guide** player button next to the Channel Info button.
+  * Added `static/js/mini-guide.js`.
+
+* Added **Mini Guide Layout** option.
+
+  * Added a persistent per-user guide layout preference: `full` or `mini`.
+  * Added desktop and mobile header menu controls for switching guide layout.
+  * Added a compact full-page Mini Guide layout for TV/remote-control style navigation.
+  * Added admin user preference support for setting a user’s default guide layout.
+  * Updated TV remote navigation to work with both the regular guide grid and the Mini Guide layout.
+
+* Added **Channel Health Indicators** to Admin Diagnostics.
+
+  * Added **Admin Diagnostics → Health → Channel Stream Reachability**.
+  * Added `/api/channel_health` POST endpoint for lightweight stream reachability checks.
+  * Performs HTTP `HEAD` checks with a short streaming `GET` fallback.
+  * Uses a 4-second timeout per channel.
+  * Runs checks in parallel with up to 10 workers.
+  * Caps each request batch at 50 channels.
+  * Reports channel status as:
+    * `up`
+    * `down`
+    * `virtual`
+    * `pending`
+  * Displays colored health dots in the diagnostics channel table:
+    * Green = stream up
+    * Red = stream down
+    * Blue = virtual/non-HTTP/no stream URL
+    * Gray = pending
+
+* Added **What’s On Now** page.
+
+  * Added `/whats-on-now` page.
+  * Added `/api/whats_on_now` endpoint.
+  * Shows all channels with their currently airing program.
+  * Includes channel logos, channel numbers, group names, program titles, descriptions, time ranges, and progress bars.
+  * Added search/filter support for channels and programs.
+  * Added group filtering.
+  * Auto-refreshes the page data every 60 seconds.
+  * Clicking a channel card stores the selected channel in `sessionStorage` and opens the guide with that channel selected.
+  * Added `templates/whats_on_now.html`.
+  * Added `static/css/whats_on_now.css`.
+
+* Added **Program Reminders**.
+
+  * Added reminder support for future guide programs.
+  * Users can right-click an upcoming program to set or remove a reminder.
+  * Reminders are persisted server-side in user preferences.
+  * Added browser notification support for reminders.
+  * Added reminders panel from the desktop and mobile header menus.
+  * Added reminder count display in the Reminders menu label.
+  * Added bell indicators on programs with active reminders.
+  * Added reminder sanitization and a maximum of 50 reminders per user.
+  * Added `static/js/reminders.js`.
+
+* Added **Retro Remote overlay**.
+
+  * Added a remote-control overlay on the guide page.
+  * Added desktop and mobile remote buttons using the new remote icon.
+  * Added D-pad controls, OK/select, channel up/down, last channel, fullscreen, back/clear, and numeric entry buttons.
+  * Added support for dispatching keyboard-style remote events into the existing guide navigation flow.
+  * Added TV-mode sizing for the remote overlay.
+  * Added `static/js/retro-remote.js`.
+  * Added `static/img/remote_icon.png`.
+
+* Added **Browse Mode preference plumbing**.
+
+  * Added `browse_mode_enabled` to user preferences.
+  * Added desktop and mobile header toggles for enabling/disabling Browse Mode.
+  * Added body class handling for `browse-mode`.
+  * Exposed browse mode state through `window.__browseModeEnabled`.
+
+* Added **HLS startup retry handling**.
+
+  * Added startup retry state for HLS playback.
+  * Retries HLS startup network errors with `hlsInstance.startLoad()`.
+  * Uses up to 12 retry attempts with a 1-second retry delay.
+  * Intended to reduce initial player stalls while HLS segments are still becoming available.
+
+### Changed
+
+* Updated app version metadata from `v4.9.6` to `v4.9.7`.
+* Updated release date metadata from `2026-06-11` to `2026-06-22`.
+* Updated `ROADMAP.md` current version to v4.9.7.
+* Marked the following roadmap items complete:
+  * Channel health indicators
+  * Mini Guide overlay
+  * Reminders/notifications
+* Updated the guide header menus with:
+  * What’s On Now
+  * Browse Mode
+  * Mini Guide Layout
+  * Reminders
+  * Remote overlay button
+* Updated TV remote navigation to support Mini Guide layout rows.
+* Updated user preference validation to sanitize:
+  * `browse_mode_enabled`
+  * `guide_layout`
+  * `reminders`
+* Updated Manage Users to allow setting a user’s default guide layout.
+* Updated Channel Info Banner tests to include delayed HLS startup behavior.
+
+### Tests
+
+* Added tests for Channel Health.
+* Added tests for Mini Guide overlay and Mini Guide layout.
+* Added tests for Program Reminders.
+* Added tests for Retro Remote overlay.
+* Added tests for What’s On Now.
+* Updated user preference tests for new preference keys and validation behavior.
+* Updated Channel Info Banner tests for HLS startup retry handling.
+
+---
+
 ## v4.9.6 - 2026-06-11
 
 ### Added

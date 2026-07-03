@@ -3,6 +3,18 @@
   <button class="hamburger" id="mobileHamburger" aria-controls="mobileNav" aria-expanded="false" aria-label="Open navigation">
     <svg width="20" height="14" viewBox="0 0 20 14" aria-hidden="true"><rect width="20" height="2"></rect><rect y="6" width="20" height="2"></rect><rect y="12" width="20" height="2"></rect></svg>
   </button>
+  {% if request.endpoint == 'guide' %}
+  <button
+    type="button"
+    id="mobileRetroRemoteToggle"
+    class="retro-remote-toggle mobile-retro-remote-toggle"
+    aria-label="Open remote"
+    aria-expanded="false"
+    aria-controls="retroRemoteOverlay"
+    title="Remote">
+    <img src="{{ url_for('static', filename='img/remote_icon.png') }}" alt="" aria-hidden="true">
+  </button>
+  {% endif %}
 
   <div class="links" role="navigation" aria-label="Main navigation">
       <span style="margin-right:20px; font-weight:bold;">Active Tuner: {{ current_tuner }}</span>
@@ -10,6 +22,7 @@
       {% if request.endpoint == 'guide' %}
       <a href="#" id="guideSearchToggle" role="button" aria-expanded="false" aria-controls="guideSearchPanel">SEARCH</a>
       {% endif %}
+      <a href="{{ url_for('whats_on_now') }}">WHAT'S ON NOW</a>
 
       <div class="dropdown" id="settingsMenu">
           <button class="dropbtn">SETTINGS ▾</button>
@@ -40,7 +53,10 @@
                       <li><a href="#" id="clearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
                       <li><a href="#" id="toggleShowHidden">👁 Show Hidden Channels</a></li>
                       <li><a href="#" id="toggleShowFavoritesOnly">⭐ Show Favorites Only</a></li>
+                      <li><a href="#" id="toggleBrowseMode">🧭 Enable Browse Mode</a></li>
+                      <li><a href="#" id="toggleGuideLayout">▤ Mini Guide Layout</a></li>
                       <li><a href="#" id="toggleChannelNumbers" style="display:none">🔢 Show Channel Numbers</a></li>
+                      <li><a href="#" id="remindersBtn">🔔 Reminders</a></li>
                     </ul>
                   </li>
                   {% endif %}
@@ -114,6 +130,18 @@
       </div>
 
       <a href="{{ url_for('logout') }}">LOGOUT</a>
+      {% if request.endpoint == 'guide' %}
+      <button
+        type="button"
+        id="retroRemoteToggle"
+        class="retro-remote-toggle"
+        aria-label="Open remote"
+        aria-expanded="false"
+        aria-controls="retroRemoteOverlay"
+        title="Remote">
+        <img src="{{ url_for('static', filename='img/remote_icon.png') }}" alt="" aria-hidden="true">
+      </button>
+      {% endif %}
   </div>
 
   <div id="clock" class="clock">--:-- --</div>
@@ -132,6 +160,7 @@
       {% if request.endpoint == 'guide' %}
       <li role="none"><a role="menuitem" href="#" id="mobileGuideSearchToggle" aria-expanded="false" aria-controls="guideSearchPanel">SEARCH</a></li>
       {% endif %}
+      <li role="none"><a role="menuitem" href="{{ url_for('whats_on_now') }}">WHAT'S ON NOW</a></li>
 
       <!-- Settings collapsible -->
       <li class="mobile-submenu" role="none">
@@ -200,7 +229,10 @@
                   <li role="none"><a role="menuitem" href="#" id="mobileClearAutoLoadChannel" style="display:none">Clear Auto Load</a></li>
                   <li role="none"><a role="menuitem" href="#" id="mobileToggleShowHidden">👁 Show Hidden Channels</a></li>
                   <li role="none"><a role="menuitem" href="#" id="mobileToggleShowFavoritesOnly">⭐ Show Favorites Only</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileToggleBrowseMode">🧭 Enable Browse Mode</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileToggleGuideLayout">▤ Mini Guide Layout</a></li>
                   <li role="none"><a role="menuitem" href="#" id="mobileToggleChannelNumbers" style="display:none">🔢 Show Channel Numbers</a></li>
+                  <li role="none"><a role="menuitem" href="#" id="mobileRemindersBtn">🔔 Reminders</a></li>
                 </ul>
               </li>
               {% endif %}

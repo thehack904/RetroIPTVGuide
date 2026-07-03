@@ -99,6 +99,190 @@
         display: inline-block;
         flex-shrink: 0;
     }
+    #playerRow { position: relative; }
+    .retro-remote-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        min-width: 28px;
+        height: 28px;
+        margin-left: 2px;
+        padding: 0;
+        border: 1px solid currentColor;
+        border-radius: 4px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        line-height: 1;
+        cursor: pointer;
+        overflow: hidden;
+    }
+    .retro-remote-toggle img {
+        display: block;
+        width: 22px;
+        height: 22px;
+        object-fit: contain;
+    }
+    .mobile-retro-remote-toggle {
+        display: none;
+        margin-right: auto;
+    }
+    .retro-remote-toggle:hover,
+    .retro-remote-toggle:focus-visible {
+        background: rgba(255,255,255,0.14);
+        outline: none;
+    }
+    body.tv-mode .retro-remote-toggle {
+        width: 20px;
+        min-width: 20px;
+        height: 20px;
+        font-size: 11px;
+    }
+    body.tv-mode .retro-remote-toggle img {
+        width: 16px;
+        height: 16px;
+    }
+    .retro-remote-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 2600;
+        width: min(260px, calc(100vw - 28px));
+        max-height: calc(100vh - 90px);
+        overflow: auto;
+        padding: 12px;
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: 8px;
+        background: rgba(16, 17, 19, 0.54);
+        box-shadow: 0 18px 42px rgba(0,0,0,0.38), inset 0 0 22px rgba(255,255,255,0.05);
+        color: #f6f2e7;
+        font-family: Arial, Helvetica, sans-serif;
+        backdrop-filter: blur(3px);
+        transform: translateY(-16px);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: transform 0.2s ease, opacity 0.2s ease, visibility 0s linear 0.2s;
+    }
+    .retro-remote-overlay.is-open {
+        transform: translateY(0);
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+        transition-delay: 0s;
+    }
+    .retro-remote-shell {
+        display: grid;
+        gap: 10px;
+    }
+    .retro-remote-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+    }
+    .retro-remote-close {
+        width: 28px;
+        height: 28px;
+        border: 1px solid rgba(255,255,255,0.34);
+        border-radius: 50%;
+        background: rgba(0,0,0,0.24);
+        color: inherit;
+        cursor: pointer;
+        line-height: 1;
+    }
+    .retro-remote-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+    }
+    .retro-remote-dpad {
+        display: none;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        align-items: center;
+    }
+    body.tv-mode .retro-remote-dpad {
+        display: grid;
+    }
+    .retro-remote-key {
+        min-height: 38px;
+        border: 1px solid rgba(255,255,255,0.34);
+        border-radius: 6px;
+        background: rgba(0,0,0,0.42);
+        color: inherit;
+        font-weight: 700;
+        cursor: pointer;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+    }
+    .retro-remote-key:hover,
+    .retro-remote-key:focus-visible,
+    .retro-remote-close:hover,
+    .retro-remote-close:focus-visible {
+        background: rgba(255,153,0,0.28);
+        outline: 2px solid rgba(255,153,0,0.55);
+        outline-offset: 1px;
+    }
+    .retro-remote-key.is-ok {
+        min-height: 48px;
+        border-radius: 50%;
+        color: #ffcc66;
+    }
+    .retro-remote-key.is-wide {
+        grid-column: span 2;
+    }
+    .retro-remote-spacer {
+        min-height: 38px;
+    }
+    body.tv-mode .retro-remote-overlay {
+        width: 180px;
+        max-height: calc(100vh - 42px);
+        padding: 7px;
+        border-radius: 6px;
+    }
+    body.tv-mode .retro-remote-shell {
+        gap: 6px;
+    }
+    body.tv-mode .retro-remote-head {
+        font-size: 9px;
+        gap: 6px;
+    }
+    body.tv-mode .retro-remote-close {
+        width: 20px;
+        height: 20px;
+        font-size: 12px;
+    }
+    body.tv-mode .retro-remote-grid,
+    body.tv-mode .retro-remote-dpad {
+        gap: 5px;
+    }
+    body.tv-mode .retro-remote-key {
+        min-height: 26px;
+        border-radius: 4px;
+        font-size: 10px;
+        padding: 2px 4px;
+    }
+    body.tv-mode .retro-remote-key.is-ok {
+        min-height: 32px;
+    }
+    body.tv-mode .retro-remote-spacer {
+        min-height: 26px;
+    }
+    @media (max-width: 900px) {
+        .mobile-retro-remote-toggle { display: inline-flex; }
+        .retro-remote-toggle { width: 30px; min-width: 30px; height: 30px; }
+        .retro-remote-toggle img { width: 24px; height: 24px; }
+        .retro-remote-overlay {
+            width: min(236px, calc(100vw - 20px));
+            padding: 10px;
+        }
+        .retro-remote-key { min-height: 34px; }
+    }
     .unmute-btn {
         position: absolute;
         top: 8px;
@@ -135,6 +319,8 @@
     .vc-fs-btn.vc-fs-btn-fade { opacity: 0; pointer-events: none; }
     /* Mute button sits to the left of the FS button */
     #vcMuteBtn { right: 48px; }
+    #chanInfoBtn { right: 88px; }
+    #miniGuideBtn { right: 128px; }
     /* Fill wrapper + overlay when in fullscreen (fallback for overlay types without a standalone page) */
     #videoPlayerWrap:fullscreen,
     #videoPlayerWrap:-webkit-full-screen {
@@ -353,13 +539,211 @@
         text-overflow: ellipsis;
         line-height: 1.3;
     }
-    /* Info toggle button – bottom-left of video player */
-    .cib-toggle-btn {
-        bottom: 8px !important;
-        top: auto !important;
-        right: auto !important;
-        left: 8px !important;
-        font-size: 14px !important;
+    /* ── Mini Guide ────────────────────────────────────────────────────────── */
+    .mini-guide {
+        position: absolute;
+        top: 50%;
+        left: 12px;
+        z-index: 35;
+        width: min(520px, calc(100% - 24px));
+        max-height: calc(100% - 24px);
+        color: #fff;
+        background: rgba(8, 10, 14, 0.82);
+        border: 1px solid rgba(255,255,255,0.18);
+        border-radius: 6px;
+        box-shadow: 0 14px 36px rgba(0,0,0,0.45);
+        backdrop-filter: blur(6px);
+        transform: translate(-110%, -50%);
+        opacity: 0;
+        pointer-events: none;
+        transition: transform 0.22s ease, opacity 0.22s ease;
+        overflow: hidden;
+        font-family: Arial, Helvetica, sans-serif;
+    }
+    .mini-guide.is-open {
+        transform: translate(0, -50%);
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .mini-guide-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 9px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.12);
+        background: rgba(0,0,0,0.22);
+    }
+    .mini-guide-title {
+        font-size: 0.86em;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+    .mini-guide-close {
+        width: 28px;
+        height: 28px;
+        border: none;
+        border-radius: 4px;
+        color: #fff;
+        background: rgba(255,255,255,0.12);
+        cursor: pointer;
+        line-height: 1;
+    }
+    .mini-guide-close:hover { background: rgba(255,255,255,0.22); }
+    .mini-guide-list {
+        display: flex;
+        flex-direction: column;
+        padding: 6px;
+        gap: 4px;
+    }
+    .mini-guide-row {
+        display: grid;
+        grid-template-columns: 46px 34px minmax(0, 1fr);
+        gap: 9px;
+        align-items: center;
+        min-height: 54px;
+        padding: 6px 8px;
+        border: 1px solid transparent;
+        border-radius: 5px;
+        background: rgba(255,255,255,0.04);
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+    }
+    .mini-guide-row:hover,
+    .mini-guide-row.is-selected {
+        border-color: rgba(80, 170, 255, 0.9);
+        background: rgba(42, 116, 202, 0.42);
+    }
+    .mini-guide-row.is-current .mg-channel-num { color: #ffd700; }
+    .mg-channel-num {
+        font-size: 0.84em;
+        font-weight: 700;
+        color: #d8e7ff;
+        white-space: nowrap;
+    }
+    .mg-logo {
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.08);
+    }
+    .mg-logo-placeholder {
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        background: rgba(255,255,255,0.12);
+    }
+    .mg-main { min-width: 0; }
+    .mg-topline,
+    .mg-meta {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        min-width: 0;
+    }
+    .mg-channel-name,
+    .mg-program-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .mg-channel-name {
+        flex: 0 1 auto;
+        max-width: 38%;
+        color: #a9c8ff;
+        font-size: 0.8em;
+        font-weight: 700;
+    }
+    .mg-program-title {
+        flex: 1;
+        color: #fff;
+        font-size: 0.92em;
+        font-weight: 700;
+    }
+    .mg-meta {
+        margin-top: 4px;
+        color: #c5ced8;
+        font-size: 0.74em;
+    }
+    .mg-time,
+    .mg-remaining {
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+    .mg-progress-wrap {
+        flex: 1;
+        height: 4px;
+        min-width: 52px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: rgba(255,255,255,0.18);
+    }
+    .mg-progress-bar {
+        height: 100%;
+        width: 0%;
+        border-radius: 2px;
+        background: #50aaff;
+    }
+    .mini-guide-page {
+        display: none;
+        flex: 1;
+        overflow: auto;
+        padding: 10px;
+        background: var(--guide-bg, #111);
+    }
+    body.guide-layout-mini #guideOuter,
+    body.guide-layout-mini #fixedTimeBar {
+        display: none !important;
+    }
+    body.guide-layout-mini .mini-guide-page {
+        display: block;
+    }
+    .mini-guide-page-inner {
+        max-width: 980px;
+        margin: 0 auto;
+    }
+    .mini-guide-page-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 8px;
+        color: var(--text-color, #fff);
+    }
+    .mini-guide-page-title {
+        font-size: 1rem;
+        font-weight: 700;
+    }
+    .mini-guide-page-count {
+        font-size: 0.78rem;
+        opacity: 0.72;
+        white-space: nowrap;
+    }
+    .mini-guide-page-list {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .mini-guide-page-list .mini-guide-row {
+        grid-template-columns: 64px 42px minmax(0, 1fr);
+        min-height: 62px;
+        background: var(--program-bg, rgba(255,255,255,0.06));
+        color: var(--text-color, #fff);
+        border-color: rgba(255,255,255,0.1);
+    }
+    .mini-guide-page-list .mg-logo,
+    .mini-guide-page-list .mg-logo-placeholder {
+        width: 36px;
+        height: 36px;
+    }
+    .mini-guide-empty {
+        padding: 18px;
+        color: var(--text-color, #fff);
+        opacity: 0.75;
+        text-align: center;
     }
     .guide-filter-panel {
         display: none;
@@ -386,6 +770,14 @@
     }
     .guide-filter-panel input { flex: 1; min-width: 180px; }
     .guide-row.chan-search-hidden { display: none !important; }
+    .chan-name.browse-selected {
+        outline: 2px solid rgba(30, 211, 206, 0.85);
+        outline-offset: -2px;
+        box-shadow: 0 0 0 3px rgba(30, 211, 206, 0.25);
+    }
+    .guide-row.browse-selected-row {
+        background: rgba(30, 211, 206, 0.08);
+    }
     #vcFsOverlay .channel-info-banner {
         z-index: 9109;
         padding: 64px 20px 16px;
@@ -400,7 +792,7 @@
     </style>
     {% endif %}
 </head>
-<body class="guide-page">
+<body class="guide-page{% if user_prefs.guide_layout == 'mini' %} guide-layout-mini{% endif %}">
 <div id="appZoomRoot">
 {% include '_header.html' %}
 
@@ -419,12 +811,56 @@
         <h3>Program Info</h3>
         <p>Click a channel on the left to start playback.</p>
     </div>
+    <div id="retroRemoteOverlay" class="retro-remote-overlay" role="dialog" aria-modal="false" aria-label="Retro remote">
+        <div class="retro-remote-shell">
+            <div class="retro-remote-head">
+                <span>Remote</span>
+                <button type="button" id="retroRemoteClose" class="retro-remote-close" aria-label="Close remote">×</button>
+            </div>
+            <div class="retro-remote-dpad" aria-label="Remote navigation">
+                <span class="retro-remote-spacer" aria-hidden="true"></span>
+                <button type="button" class="retro-remote-key" data-key="ArrowUp" data-key-code="38" aria-label="Navigate up" title="Navigate up">▲</button>
+                <span class="retro-remote-spacer" aria-hidden="true"></span>
+                <button type="button" class="retro-remote-key" data-key="ArrowLeft" data-key-code="37" aria-label="Navigate left" title="Navigate left">◀</button>
+                <button type="button" class="retro-remote-key is-ok" data-key="Enter" data-key-code="13">OK</button>
+                <button type="button" class="retro-remote-key" data-key="ArrowRight" data-key-code="39" aria-label="Navigate right" title="Navigate right">▶</button>
+                <span class="retro-remote-spacer" aria-hidden="true"></span>
+                <button type="button" class="retro-remote-key" data-key="ArrowDown" data-key-code="40" aria-label="Navigate down" title="Navigate down">▼</button>
+                <span class="retro-remote-spacer" aria-hidden="true"></span>
+            </div>
+            <div class="retro-remote-grid" aria-label="Channel controls">
+                <button type="button" class="retro-remote-key" data-remote-action="channel-down">CH -</button>
+                <button type="button" class="retro-remote-key" data-key="Enter" data-key-code="13">OK</button>
+                <button type="button" class="retro-remote-key" data-remote-action="channel-up">CH +</button>
+            </div>
+            <div class="retro-remote-grid" aria-label="TV controls">
+                <button type="button" class="retro-remote-key" data-key="l" data-key-code="76">LAST</button>
+                <button type="button" class="retro-remote-key" data-remote-action="fullscreen" aria-label="Toggle fullscreen" title="Toggle fullscreen">⛶</button>
+                <button type="button" class="retro-remote-key" data-key="GoBack" data-key-code="461">BACK</button>
+            </div>
+            <div class="retro-remote-grid" aria-label="Channel number entry">
+                <button type="button" class="retro-remote-key" data-key="1" data-key-code="49">1</button>
+                <button type="button" class="retro-remote-key" data-key="2" data-key-code="50">2</button>
+                <button type="button" class="retro-remote-key" data-key="3" data-key-code="51">3</button>
+                <button type="button" class="retro-remote-key" data-key="4" data-key-code="52">4</button>
+                <button type="button" class="retro-remote-key" data-key="5" data-key-code="53">5</button>
+                <button type="button" class="retro-remote-key" data-key="6" data-key-code="54">6</button>
+                <button type="button" class="retro-remote-key" data-key="7" data-key-code="55">7</button>
+                <button type="button" class="retro-remote-key" data-key="8" data-key-code="56">8</button>
+                <button type="button" class="retro-remote-key" data-key="9" data-key-code="57">9</button>
+                <button type="button" class="retro-remote-key" data-key="." data-key-code="190">.</button>
+                <button type="button" class="retro-remote-key" data-key="0" data-key-code="48">0</button>
+                <button type="button" class="retro-remote-key" data-key="Escape" data-key-code="27">CLR</button>
+            </div>
+        </div>
+    </div>
     <div class="video-player-wrap" id="videoPlayerWrap">
         <video id="video" controls playsinline preload="metadata" tabindex="0"></video>
         <button id="unmuteBtn" class="unmute-btn" hidden aria-label="Unmute video" title="Click to unmute">🔇 Unmute</button>
         <button id="vcMuteBtn" class="vc-fs-btn" hidden aria-label="Mute virtual channel" title="Mute">🔇</button>
         <button id="vcFsBtn" class="vc-fs-btn" hidden aria-label="Toggle fullscreen" title="Fullscreen">⛶</button>
         <button id="chanInfoBtn" class="vc-fs-btn cib-toggle-btn" hidden aria-label="Toggle channel info" title="Channel Info">ℹ</button>
+        <button id="miniGuideBtn" class="vc-fs-btn" hidden aria-label="Toggle mini guide" title="Mini Guide">☰</button>
         <!-- Channel Info Banner: slides up from bottom of the video player on channel select -->
         <div id="channelInfoBanner" class="channel-info-banner" aria-live="polite" aria-atomic="true" style="display:none;">
             <div class="cib-inner">
@@ -447,6 +883,13 @@
                     <div id="cibDesc" class="cib-desc"></div>
                 </div>
             </div>
+        </div>
+        <div id="miniGuide" class="mini-guide" role="dialog" aria-modal="false" aria-label="Mini guide" aria-hidden="true">
+            <div class="mini-guide-header">
+                <div class="mini-guide-title">Mini Guide</div>
+                <button id="miniGuideClose" class="mini-guide-close" type="button" aria-label="Close mini guide">✕</button>
+            </div>
+            <div id="mgChannelList" class="mini-guide-list" role="listbox" aria-label="Channels near current channel"></div>
         </div>
         <div id="virtual-overlay-root" class="hidden" aria-hidden="true"></div>
     </div>
@@ -544,6 +987,16 @@
     {% endfor %}
 </div>
 
+<div id="miniGuidePage" class="mini-guide-page" {% if user_prefs.guide_layout != 'mini' %}hidden{% endif %} aria-label="Mini guide layout">
+    <div class="mini-guide-page-inner">
+        <div class="mini-guide-page-head">
+            <div class="mini-guide-page-title">Mini Guide</div>
+            <div id="miniGuidePageCount" class="mini-guide-page-count"></div>
+        </div>
+        <div id="miniGuidePageList" class="mini-guide-page-list" role="listbox" aria-label="Mini guide channels"></div>
+    </div>
+</div>
+
 <script src="{{ url_for('static', filename='hls.js') }}"></script>
 
 <!-- Inject per-user preferences so user-prefs.js can act before an extra round-trip -->
@@ -553,6 +1006,7 @@
 // --- Player, grid, and fixed timebar helpers (adapted with layout recompute hooks) ---
 
 let hlsInstance = null;
+let hlsStartupRetryTimer = null;
 let currentChannelId = null;
 let _vcCurrentOverlayType = '';
 let _vcBgMuted = false;
@@ -560,6 +1014,7 @@ let _vcFsHideTimer = null;
 let _vcFsLastMove = 0;
 let _vcFsOverlayCloseTimer = null;
 let _vcFsOverlayLastMove = 0;
+let browseSelectedChannelId = null;
 
 // ── Background music (virtual channel looped audio) ─────────────────────────
 let _bgAudio = null;
@@ -624,6 +1079,8 @@ function _scheduleVcFsHide(delay) {
         if (mb && !mb.hidden) mb.classList.add('vc-fs-btn-fade');
         const ib = document.getElementById('chanInfoBtn');
         if (ib && !ib.hidden) ib.classList.add('vc-fs-btn-fade');
+        const mgb = document.getElementById('miniGuideBtn');
+        if (mgb && !mgb.hidden) mgb.classList.add('vc-fs-btn-fade');
     }, delay);
 }
 
@@ -701,7 +1158,26 @@ function showVcFsBtn() {
         ib.hidden = !currentChannelId;
         ib.classList.remove('vc-fs-btn-fade');
     }
+    const mgb = document.getElementById('miniGuideBtn');
+    if (mgb) {
+        mgb.hidden = !currentChannelId;
+        mgb.classList.remove('vc-fs-btn-fade');
+    }
     _updateVcMuteBtn();
+    _scheduleVcFsHide(3500);
+}
+
+function showPlayerAuxBtns() {
+    const ib = document.getElementById('chanInfoBtn');
+    if (ib) {
+        ib.hidden = !currentChannelId;
+        ib.classList.remove('vc-fs-btn-fade');
+    }
+    const mgb = document.getElementById('miniGuideBtn');
+    if (mgb) {
+        mgb.hidden = !currentChannelId;
+        mgb.classList.remove('vc-fs-btn-fade');
+    }
     _scheduleVcFsHide(3500);
 }
 
@@ -716,6 +1192,9 @@ function hideVcFsBtn() {
     if (mb) { mb.hidden = true; mb.classList.remove('vc-fs-btn-fade'); }
     const ib = document.getElementById('chanInfoBtn');
     if (ib) { ib.hidden = true; ib.classList.remove('vc-fs-btn-fade'); }
+    const mgb = document.getElementById('miniGuideBtn');
+    if (mgb) { mgb.hidden = true; mgb.classList.remove('vc-fs-btn-fade'); }
+    if (typeof window.closeMiniGuide === 'function') window.closeMiniGuide();
     // Close iframe overlay if active when switching away from a virtual channel.
     const overlay = document.getElementById('vcFsOverlay');
     const iframe  = document.getElementById('vcFsIframe');
@@ -953,12 +1432,15 @@ document.addEventListener('DOMContentLoaded', function () {
                 const mb = document.getElementById('vcMuteBtn');
                 if (mb && !mb.hidden) mb.classList.remove('vc-fs-btn-fade');
                 if (ib && !ib.hidden) ib.classList.remove('vc-fs-btn-fade');
+                const mgb = document.getElementById('miniGuideBtn');
+                if (mgb && !mgb.hidden) mgb.classList.remove('vc-fs-btn-fade');
                 _scheduleVcFsHide(1500);
             }
         });
         wrap.addEventListener('mouseleave', function () {
             const ib = document.getElementById('chanInfoBtn');
-            if (!btn.hidden || (ib && !ib.hidden)) _scheduleVcFsHide(1500);
+            const mgb = document.getElementById('miniGuideBtn');
+            if (!btn.hidden || (ib && !ib.hidden) || (mgb && !mgb.hidden)) _scheduleVcFsHide(1500);
         });
     }
 
@@ -993,6 +1475,11 @@ function getDisplayZoom() {
 
 function playChannel(url, cid, name) {
     const video = document.getElementById('video');
+    if (hlsStartupRetryTimer) {
+        clearTimeout(hlsStartupRetryTimer);
+        hlsStartupRetryTimer = null;
+    }
+    clearBrowseSelection();
     // Save the current channel as "last channel" before switching (skip if it's the same channel)
     if (currentChannelId && currentChannelId !== cid && window.currentChannelMeta) {
         window.lastChannelMeta = Object.assign({}, window.currentChannelMeta);
@@ -1005,7 +1492,6 @@ function playChannel(url, cid, name) {
     if (typeof window.showChannelInfoBanner === 'function') {
         window.showChannelInfoBanner(cid, name);
     }
-
     fetch("/play_channel", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -1046,8 +1532,9 @@ function playChannel(url, cid, name) {
     // Ensure any mute applied by a previous virtual channel is cleared.
     _vcCurrentOverlayType = '';
     // Normal channels use the native video player's built-in fullscreen button;
-    // keep virtual-channel-only controls hidden.
+    // keep virtual-channel-only controls hidden while retaining player overlays.
     hideVcFsBtn();
+    showPlayerAuxBtns();
     video.muted = false;
 
     // Try normal play; if blocked by browser autoplay policy, retry muted
@@ -1062,6 +1549,10 @@ function playChannel(url, cid, name) {
 
     if (hlsInstance) { hlsInstance.destroy(); hlsInstance = null; }
     if (Hls.isSupported()) {
+        let hlsAwaitingStartup = true;
+        let hlsStartupRetryCount = 0;
+        const HLS_STARTUP_RETRY_MAX_ATTEMPTS = 12;
+        const HLS_STARTUP_RETRY_DELAY_MS = 1000;
         hlsInstance = new Hls({
             liveSyncDurationCount: 6,
             liveMaxLatencyDurationCount: 12,
@@ -1070,10 +1561,70 @@ function playChannel(url, cid, name) {
         });
         hlsInstance.loadSource(url);
         hlsInstance.attachMedia(video);
-        hlsInstance.on(Hls.Events.MANIFEST_PARSED, tryPlay);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, function () {
+            hlsAwaitingStartup = false;
+            if (hlsStartupRetryTimer) {
+                clearTimeout(hlsStartupRetryTimer);
+                hlsStartupRetryTimer = null;
+            }
+            tryPlay();
+        });
+        hlsInstance.on(Hls.Events.ERROR, function (_event, data) {
+            if (!hlsInstance || !data || !data.fatal) return;
+            if (hlsAwaitingStartup && data.type === Hls.ErrorTypes.NETWORK_ERROR && hlsStartupRetryCount < HLS_STARTUP_RETRY_MAX_ATTEMPTS) {
+                hlsStartupRetryCount += 1;
+                if (hlsStartupRetryTimer) clearTimeout(hlsStartupRetryTimer);
+                hlsStartupRetryTimer = setTimeout(function () {
+                    hlsStartupRetryTimer = null;
+                    if (!hlsInstance || currentChannelId !== cid) return;
+                    try {
+                        hlsInstance.startLoad();
+                    } catch (err) {
+                        console.warn('HLS startLoad retry failed', err);
+                    }
+                }, HLS_STARTUP_RETRY_DELAY_MS);
+                return;
+            }
+            if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
+                try {
+                    hlsInstance.recoverMediaError();
+                    return;
+                } catch (err) {
+                    console.warn('HLS media recovery failed', err);
+                }
+            }
+            hlsAwaitingStartup = false;
+            hlsInstance.destroy();
+            hlsInstance = null;
+        });
     } else {
         video.src = url;
         tryPlay();
+    }
+}
+
+function clearBrowseSelection() {
+    browseSelectedChannelId = null;
+    document.querySelectorAll('.chan-name.browse-selected').forEach(function (el) {
+        el.classList.remove('browse-selected');
+    });
+    document.querySelectorAll('.guide-row.browse-selected-row').forEach(function (row) {
+        row.classList.remove('browse-selected-row');
+    });
+}
+
+function previewChannel(cid, name) {
+    if (!cid) return;
+    clearBrowseSelection();
+    browseSelectedChannelId = cid;
+    const escapedCid = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(cid) : cid.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
+    const chanEl = document.querySelector(`.chan-name[data-cid="${escapedCid}"]`);
+    if (chanEl) chanEl.classList.add('browse-selected');
+    const row = document.querySelector(`.guide-row[data-cid="${escapedCid}"]`);
+    if (row) row.classList.add('browse-selected-row');
+    updateSummary(cid, name);
+    if (typeof window.showChannelInfoBanner === 'function') {
+        window.showChannelInfoBanner(cid, name);
     }
 }
 
@@ -1704,7 +2255,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
     document.querySelectorAll('.chan-name').forEach(el => {
         el.addEventListener('click', () => {
-            playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
+            const isBrowseMode = !!window.__browseModeEnabled;
+            if (!isBrowseMode) {
+                playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
+                return;
+            }
+            if (browseSelectedChannelId === el.dataset.cid) {
+                playChannel(el.dataset.url, el.dataset.cid, el.dataset.name);
+                return;
+            }
+            previewChannel(el.dataset.cid, el.dataset.name);
         });
     });
 
@@ -2034,6 +2594,45 @@ document.addEventListener("DOMContentLoaded", () => {
   video.addEventListener('pause', recomputeAll);
   video.addEventListener('ended', recomputeAll);
 });
+
+// ── What's On Now → auto-play ─────────────────────────────────────────────────
+// When the user arrives from the What's On Now page, the selected channel id is
+// stored in sessionStorage under 'wonPendingPlay'.  Pick it up here, clear it,
+// and trigger playChannel() so the stream starts immediately.
+(function () {
+    var raw = null;
+    try { raw = sessionStorage.getItem('wonPendingPlay'); } catch (e) {
+        console.warn('[guide] Could not read wonPendingPlay from sessionStorage:', e);
+    }
+    if (!raw) return;
+    try { sessionStorage.removeItem('wonPendingPlay'); } catch (e) {
+        console.warn('[guide] Could not remove wonPendingPlay from sessionStorage:', e);
+    }
+    var pending = null;
+    try { pending = JSON.parse(raw); } catch (e) {
+        console.warn('[guide] Failed to parse wonPendingPlay data:', e);
+    }
+    if (!pending || !pending.id) return;
+
+    function tryPlayPending() {
+        // 800 ms grace period matches scheduleAutoLoad in user-prefs.js: gives the
+        // page time to fully render deferred scripts before playChannel() is called.
+        setTimeout(function () {
+            var escapedId = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape(pending.id) : pending.id.replace(/[^a-zA-Z0-9._-]/g, '\\$&');
+            var chanEl = document.querySelector('.chan-name[data-cid="' + escapedId + '"]');
+            if (!chanEl) return;
+            if (typeof window.playChannel === 'function') {
+                window.playChannel(chanEl.dataset.url, pending.id, chanEl.dataset.name || pending.name || '');
+            }
+        }, 800);
+    }
+
+    if (document.readyState === 'complete') {
+        tryPlayPending();
+    } else {
+        document.addEventListener('DOMContentLoaded', tryPlayPending, { once: true });
+    }
+}());
 </script>
 
 <script>
@@ -2241,6 +2840,14 @@ document.addEventListener('DOMContentLoaded', () => {
 <!-- Channel number entry: type digits to jump directly to a channel -->
 <script src="{{ url_for('static', filename='js/channel-number-entry.js') }}" defer></script>
 
+<!-- Retro remote overlay: sends existing keyboard controls from on-screen buttons -->
+<script src="{{ url_for('static', filename='js/retro-remote.js') }}" defer></script>
+
+<!-- Mini guide overlay: compact channel list over the video player -->
+<script src="{{ url_for('static', filename='js/mini-guide.js') }}" defer></script>
+
+<!-- Program reminders / browser notifications -->
+<script src="{{ url_for('static', filename='js/reminders.js') }}" defer></script>
 
 
 <!-- Android / Fire / Google TV detection (keeps TV experience simple) -->
