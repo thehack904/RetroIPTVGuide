@@ -1,8 +1,8 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.8-dev"
-APP_RELEASE_DATE = "2026-07-03"
+APP_VERSION = "v4.9.8"
+APP_RELEASE_DATE = "2026-07-10"
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response, g
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
@@ -102,6 +102,8 @@ app.config['REMEMBER_COOKIE_DURATION'] = timedelta(days=30)
 DATABASE = os.path.join(DATA_DIR, 'users.db')
 TUNER_DB = os.path.join(DATA_DIR, 'tuners.db')
 ROADS_CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'roads_cache')
+EPG_CACHE_DIR = os.path.join(DATA_DIR, 'epg_cache')
+EPG_DISK_CACHE_TTL = 86400  # 24 hours — default on-disk TTL for EPG data
 ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'data', 'roads')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
@@ -230,6 +232,12 @@ def _safe_next_url(raw: str) -> str:
     if not parsed.scheme and not parsed.netloc:
         return raw
     return ''
+
+
+def _is_admin_user(user=None) -> bool:
+    """Return True when the given (or current) user is the admin account."""
+    u = user if user is not None else current_user
+    return bool(getattr(u, 'is_authenticated', False) and getattr(u, 'username', None) == 'admin')
 
 
 # ------------------- User Model -------------------
@@ -575,8 +583,12 @@ def add_combined_tuner(name, sources):
         conn.commit()
 
 
-def load_tuner_data(tuner_name):
+def load_tuner_data(tuner_name, force_refresh=False):
     """Load channels and EPG for a tuner, supporting combined tuners.
+
+    EPG data is served from disk cache when available and fresh, avoiding a
+    costly XMLTV re-fetch on every app restart.  Pass ``force_refresh=True``
+    to bypass the cache and always fetch from the network.
 
     Returns:
         (channels, epg) — lists/dicts as returned by parse_m3u / parse_epg.
@@ -586,7 +598,34 @@ def load_tuner_data(tuner_name):
     if not tuner:
         return [], {}
 
+    def _dedupe_channels(channels):
+        """Keep first channel per tvg_id to avoid duplicate guide rows."""
+        seen = set()
+        unique = []
+        for ch in channels:
+            tvg_id = (ch.get("tvg_id") or "").strip()
+            if not tvg_id:
+                unique.append(ch)
+                continue
+            if tvg_id in seen:
+                continue
+            seen.add(tvg_id)
+            unique.append(ch)
+        return unique
+
     if tuner.get("tuner_type") == "combined":
+        # --- Combined tuner: try cache first ---
+        if not force_refresh:
+            cached = _load_epg_from_disk(tuner_name)
+            if cached is not None:
+                merged_channels = []
+                for source_name in tuner.get("sources", []):
+                    source = tuners.get(source_name)
+                    if not source:
+                        continue
+                    merged_channels.extend(parse_m3u(source["m3u"]) if source.get("m3u") else [])
+                return _dedupe_channels(merged_channels), cached
+
         merged_channels = []
         merged_epg = {}
         for source_name in tuner.get("sources", []):
@@ -597,10 +636,43 @@ def load_tuner_data(tuner_name):
             src_epg = parse_epg(source["xml"]) if source.get("xml") else {}
             merged_channels.extend(src_channels)
             merged_epg.update(src_epg)
-        return merged_channels, merged_epg
+
+        if merged_epg:
+            _save_epg_to_disk(tuner_name, merged_epg)
+        elif tuner.get("sources"):
+            # Network returned nothing — use stale cache as fallback if available
+            stale = _load_epg_from_disk(tuner_name, max_age=None)
+            if stale:
+                logging.info(
+                    "load_tuner_data: combined EPG fetch returned empty for tuner %r, "
+                    "using stale disk cache",
+                    tuner_name,
+                )
+                return _dedupe_channels(merged_channels), stale
+        return _dedupe_channels(merged_channels), merged_epg
     else:
         channels = parse_m3u(tuner["m3u"]) if tuner.get("m3u") else []
+        channels = _dedupe_channels(channels)
+
+        # --- Standard tuner: try cache first ---
+        if not force_refresh:
+            cached = _load_epg_from_disk(tuner_name)
+            if cached is not None:
+                return channels, cached
+
         epg = parse_epg(tuner["xml"]) if tuner.get("xml") else {}
+        if epg:
+            _save_epg_to_disk(tuner_name, epg)
+        elif tuner.get("xml"):
+            # Network returned nothing — use stale cache as fallback if available
+            stale = _load_epg_from_disk(tuner_name, max_age=None)
+            if stale:
+                logging.info(
+                    "load_tuner_data: EPG fetch returned empty for tuner %r, "
+                    "using stale disk cache",
+                    tuner_name,
+                )
+                return channels, stale
         return channels, epg
 @app.template_filter('format_datetime')
 def format_datetime_filter(iso_string):
@@ -685,8 +757,58 @@ def save_user_prefs(username, prefs):
         save_user_prefs(username, prefs)
 
 
+def get_assigned_tuner(username):
+    """Return the explicitly assigned tuner name for *username*, or None."""
+    try:
+        with sqlite3.connect(DATABASE, timeout=10) as conn:
+            c = conn.cursor()
+            c.execute("SELECT assigned_tuner FROM users WHERE username=?", (username,))
+            row = c.fetchone()
+        return (row[0] if row and row[0] else None)
+    except sqlite3.Error:
+        logging.exception("get_assigned_tuner failed for %r", username)
+        return None
+
+
+def get_effective_tuner_for_user(username):
+    """Return the tuner that should be used for *username* right now."""
+    current_tuner = get_current_tuner()
+    assigned = get_assigned_tuner(username)
+    if not assigned:
+        return current_tuner
+    tuners = get_tuners()
+    return assigned if assigned in tuners else current_tuner
+
+
+def get_request_tuner_data():
+    """Return (tuner_name, channels, epg) scoped to the current request/user."""
+    current_tuner = get_current_tuner()
+    tuner_name = current_tuner
+    if getattr(current_user, "is_authenticated", False):
+        tuner_name = get_effective_tuner_for_user(current_user.username)
+
+    if tuner_name == current_tuner:
+        return tuner_name, cached_channels, cached_epg
+
+    cache = g.setdefault("_tuner_data_cache", {})
+    if tuner_name in cache:
+        return tuner_name, cache[tuner_name][0], cache[tuner_name][1]
+
+    channels, epg = load_tuner_data(tuner_name)
+    epg = apply_epg_fallback(channels, epg)
+    cache[tuner_name] = (channels, epg)
+    return tuner_name, channels, epg
+
+
 cached_channels = []
 cached_epg = {}
+
+
+def _set_cached_tuner_data(channels, epg):
+    """Replace the in-memory guide cache with the provided channels and EPG."""
+    global cached_channels, cached_epg
+    cached_channels = channels
+    cached_epg = epg
 
 # Track currently playing marker (server-side)
 CURRENTLY_PLAYING = None
@@ -833,6 +955,131 @@ def apply_epg_fallback(channels, epg):
                 'stop': None
             }]
     return epg
+
+
+# ------------------- EPG Disk Cache -------------------
+
+def _epg_cache_path(tuner_name: str) -> str:
+    """Return the absolute path of the on-disk EPG cache file for a given tuner.
+
+    Sanitisation strips all characters that could form path components, so the
+    result is always a plain filename with no directory component.  A final
+    canonical path check provides defence-in-depth.
+    """
+    # Replace every character that is not alphanumeric, underscore, or hyphen
+    # with '_'.  This removes all path separators, dots (dot-dot traversal),
+    # and other shell-special characters before they reach any file-system call.
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', tuner_name)
+    if not safe_name:
+        raise ValueError(f"Tuner name {tuner_name!r} results in an empty safe filename")
+    safe_dir = os.path.normpath(os.path.abspath(EPG_CACHE_DIR))
+    # Join the validated directory with the sanitised filename only — never with
+    # the raw tuner_name.
+    path = os.path.normpath(os.path.join(safe_dir, safe_name + ".json"))
+    # Defence-in-depth: verify the resolved path is strictly within the cache dir.
+    if not path.startswith(safe_dir + os.sep):
+        raise ValueError(f"Tuner name {tuner_name!r} would escape the cache directory")
+    return path
+
+
+def _serialize_epg(epg: dict) -> dict:
+    """Convert EPG dict (containing datetime values) to a JSON-serializable form."""
+    result = {}
+    for cid, programs in epg.items():
+        serialized = []
+        for prog in programs:
+            p = dict(prog)
+            for key in ('start', 'stop'):
+                val = p.get(key)
+                p[key] = val.isoformat() if val is not None else None
+            serialized.append(p)
+        result[cid] = serialized
+    return result
+
+
+def _deserialize_epg(data: dict) -> dict:
+    """Restore datetime objects in an EPG dict loaded from JSON."""
+    result = {}
+    for cid, programs in data.items():
+        restored = []
+        for prog in programs:
+            p = dict(prog)
+            for key in ('start', 'stop'):
+                val = p.get(key)
+                if val is not None:
+                    try:
+                        p[key] = datetime.fromisoformat(val)
+                    except (ValueError, TypeError):
+                        p[key] = None
+                else:
+                    p[key] = None
+            restored.append(p)
+        result[cid] = restored
+    return result
+
+
+def _load_epg_from_disk(tuner_name: str, max_age: float | None = EPG_DISK_CACHE_TTL) -> dict | None:
+    """Load EPG from disk cache if the file exists and is within max_age seconds old.
+
+    Args:
+        tuner_name: Name of the tuner whose EPG to load.
+        max_age: Maximum cache age in seconds.  Pass ``None`` to load regardless
+                 of age (stale-fallback mode).  Defaults to ``EPG_DISK_CACHE_TTL``.
+
+    Returns:
+        Restored EPG dict on success, ``None`` if the file is missing, stale, or
+        corrupt.
+    """
+    try:
+        path = _epg_cache_path(tuner_name)
+        if not os.path.isfile(path):
+            return None
+        if max_age is not None:
+            age = time.time() - os.path.getmtime(path)
+            if age > max_age:
+                logging.debug(
+                    "_load_epg_from_disk: cache stale for tuner %r (age=%.1fh)",
+                    tuner_name, age / 3600,
+                )
+                return None
+        with open(path, 'r', encoding='utf-8') as fh:
+            raw = _json.load(fh)
+        epg = _deserialize_epg(raw)
+        logging.debug(
+            "_load_epg_from_disk: loaded %d EPG channel(s) for tuner %r from cache",
+            len(epg), tuner_name,
+        )
+        return epg
+    except ValueError:
+        return None
+    except Exception:
+        logging.warning(
+            "_load_epg_from_disk: failed to read cache for tuner %r",
+            tuner_name, exc_info=True,
+        )
+        return None
+
+
+def _save_epg_to_disk(tuner_name: str, epg: dict) -> None:
+    """Persist an EPG dict to disk so app restarts skip the XMLTV re-fetch."""
+    try:
+        path = _epg_cache_path(tuner_name)
+    except ValueError:
+        logging.warning("_save_epg_to_disk: refusing unsafe path for tuner %r", tuner_name)
+        return
+    try:
+        os.makedirs(EPG_CACHE_DIR, exist_ok=True)
+        with open(path, 'w', encoding='utf-8') as fh:
+            _json.dump(_serialize_epg(epg), fh)
+        logging.debug(
+            "_save_epg_to_disk: saved %d EPG channel(s) for tuner %r",
+            len(epg), tuner_name,
+        )
+    except Exception:
+        logging.warning(
+            "_save_epg_to_disk: failed to write cache for tuner %r",
+            tuner_name, exc_info=True,
+        )
 
 
 # ------------------- Virtual Channels -------------------
@@ -4585,12 +4832,13 @@ def guide():
     user_prefs = get_user_prefs(current_user.username)
     user_default_theme = user_prefs.get("default_theme") or None
 
+    effective_tuner, tuner_channels, tuner_epg = get_request_tuner_data()
     virtual_ch = get_virtual_channels()
     vc_settings = get_virtual_channel_settings()
     virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch['tvg_id'], True)]
     virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
-    all_channels = virtual_ch + cached_channels
-    all_epg = {**virtual_epg, **cached_epg}
+    all_channels = virtual_ch + tuner_channels
+    all_epg = {**virtual_epg, **tuner_epg}
 
     return render_template(
         'guide.html',
@@ -4602,7 +4850,7 @@ def guide():
         SCALE=SCALE,
         total_width=total_width,
         now_offset=now_offset,
-        current_tuner=get_current_tuner(),
+        current_tuner=effective_tuner,
         user_prefs=user_prefs,
         user_default_theme=user_default_theme,
         overlay_appearance=get_overlay_appearance(),
@@ -4764,7 +5012,8 @@ def api_channels():
     Return JSON list of cached channels for remote UIs.
     """
     out = []
-    for ch in cached_channels:
+    _, tuner_channels, _ = get_request_tuner_data()
+    for ch in tuner_channels:
         out.append({
             'tvg_id': ch.get('tvg_id'),
             'name': ch.get('name'),
@@ -4809,8 +5058,9 @@ def api_channel_health():
     # Cap batch size
     channel_ids = channel_ids[:_HEALTH_CHECK_MAX_BATCH]
 
-    # Build a lookup from tvg_id → url using the live channel cache
-    url_map = {ch.get("tvg_id"): ch.get("url", "") for ch in cached_channels}
+    # Build a lookup from tvg_id → url using the current user's effective tuner.
+    _, tuner_channels, _ = get_request_tuner_data()
+    url_map = {ch.get("tvg_id"): ch.get("url", "") for ch in tuner_channels}
 
     def _check_one(cid):
         url = url_map.get(cid, "")
@@ -5260,6 +5510,9 @@ def api_weather_bg_override():
     POST → body JSON {"condition": "<value>"}  sets override; "" or "auto" clears it.
     DELETE → clears the override (sets to "").
     """
+    if not _is_admin_user():
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
+
     if request.method == 'GET':
         cfg = get_weather_config()
         return jsonify({'condition': cfg.get('bg_condition_override', '')})
@@ -5322,6 +5575,8 @@ def api_traffic_demo_cities():
 @login_required
 def api_traffic_demo_city_update(city_id):
     """Update enabled/weight for a single city (admin action)."""
+    if not _is_admin_user():
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
     data = request.get_json(silent=True) or {}
     enabled = bool(data.get('enabled', True))
     weight  = max(1, int(data.get('weight', 1)))
@@ -5337,6 +5592,8 @@ def api_traffic_demo_city_update(city_id):
 @login_required
 def api_traffic_demo_enable_all():
     """Enable all cities."""
+    if not _is_admin_user():
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
     set_all_traffic_demo_cities_enabled(True)
     return jsonify({'ok': True})
 
@@ -5345,6 +5602,8 @@ def api_traffic_demo_enable_all():
 @login_required
 def api_traffic_demo_disable_all():
     """Disable all cities."""
+    if not _is_admin_user():
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
     set_all_traffic_demo_cities_enabled(False)
     return jsonify({'ok': True})
 
@@ -5353,6 +5612,8 @@ def api_traffic_demo_disable_all():
 @login_required
 def api_traffic_demo_pick_random():
     """Randomly pick N cities and store as the rotation pack."""
+    if not _is_admin_user():
+        return jsonify({'ok': False, 'error': 'Admin only'}), 403
     data = request.get_json(silent=True) or {}
     demo_cfg = get_traffic_demo_config()
     n = int(data.get('pack_size', demo_cfg.get('pack_size', 10)))
@@ -5908,18 +6169,19 @@ def api_current_program():
         return jsonify({"ok": False, "error": "missing tvg_id or id"}), 400
 
     try:
+        _, tuner_channels, tuner_epg = get_request_tuner_data()
         now = datetime.now(timezone.utc)
         # find channel name and logo
         channel_name = None
         channel_logo = ''
-        for ch in cached_channels:
+        for ch in tuner_channels:
             if ch.get('tvg_id') == tvg_id or str(ch.get('number')) == str(tvg_id):
                 channel_name = ch.get('name')
                 channel_logo = ch.get('logo') or ''
                 break
 
         # get epg entries for tvg_id
-        programs = cached_epg.get(tvg_id) or []
+        programs = tuner_epg.get(tvg_id) or []
         current_prog = None
         for prog in programs:
             start = prog.get('start')
@@ -5992,13 +6254,14 @@ def api_whats_on_now():
     """
     try:
         now = datetime.now(timezone.utc)
+        _, tuner_channels, tuner_epg = get_request_tuner_data()
         virtual_ch = get_virtual_channels()
         vc_settings = get_virtual_channel_settings()
         virtual_ch = [ch for ch in virtual_ch if vc_settings.get(ch.get('tvg_id', ''), True)]
         grid_start = now.replace(minute=(0 if now.minute < 30 else 30), second=0, microsecond=0)
         virtual_epg = get_virtual_epg(grid_start, HOURS_SPAN)
-        all_channels = virtual_ch + cached_channels
-        all_epg = {**virtual_epg, **cached_epg}
+        all_channels = virtual_ch + tuner_channels
+        all_epg = {**virtual_epg, **tuner_epg}
 
         out = []
         for ch in all_channels:
@@ -6451,13 +6714,14 @@ def refresh_current_tuner(tuner_name=None):
 
         # Use load_tuner_data so combined tuners (which have no direct m3u/xml)
         # are handled correctly by merging their source tuners' feeds.
-        new_channels, new_epg = load_tuner_data(tuner_name)
+        # force_refresh=True bypasses the disk cache so we always fetch fresh data.
+        new_channels, new_epg = load_tuner_data(tuner_name, force_refresh=True)
         new_epg = apply_epg_fallback(new_channels, new_epg)
 
-        # atomic swap
-        global cached_channels, cached_epg
-        cached_channels = new_channels
-        cached_epg = new_epg
+        # Only replace the in-memory guide when refreshing the active tuner.
+        # Other tuner refreshes are used to rebuild their on-disk JSON cache.
+        if tuner_name == get_current_tuner():
+            _set_cached_tuner_data(new_channels, new_epg)
 
         now_iso = datetime.now(timezone.utc).isoformat()
         set_setting(f"last_auto_refresh:{tuner_name}", f"success|{now_iso}")
@@ -6475,6 +6739,31 @@ def refresh_current_tuner(tuner_name=None):
             _release_lock(tuner_name)
         except Exception:
             pass
+
+
+@app.route('/api/auto_refresh/trigger', methods=['POST'])
+@login_required
+def api_auto_refresh_trigger():
+    """Force-refresh a tuner's guide data and JSON cache."""
+    if not _is_admin_user():
+        return jsonify({"ok": False, "error": "Unauthorized"}), 403
+
+    payload = request.get_json(silent=True) or {}
+    tuner_name = (
+        payload.get("tuner")
+        or request.form.get("tuner")
+        or request.args.get("tuner")
+        or get_current_tuner()
+    )
+    tuner_name = tuner_name.strip() if isinstance(tuner_name, str) else ""
+    if not tuner_name:
+        return jsonify({"ok": False, "error": "No tuner specified"}), 400
+
+    if tuner_name not in get_tuners():
+        return jsonify({"ok": False, "error": "Unknown tuner"}), 404
+
+    ok = refresh_current_tuner(tuner_name)
+    return jsonify({"ok": ok, "tuner": tuner_name})
 
 def refresh_if_due(tuner_name=None):
     """Check settings and last-run timestamp; refresh if interval elapsed."""

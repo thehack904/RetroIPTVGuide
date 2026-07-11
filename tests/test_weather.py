@@ -673,14 +673,14 @@ class TestBgOverrideEndpoint:
     """Tests for the /api/weather/bg_override AJAX endpoint."""
 
     def test_get_returns_empty_by_default(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         r = client.get('/api/weather/bg_override')
         assert r.status_code == 200
         data = r.get_json()
         assert data['condition'] == ''
 
     def test_post_sets_condition(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         r = client.post('/api/weather/bg_override',
                         json={'condition': 'thunderstorm'},
                         content_type='application/json')
@@ -690,7 +690,7 @@ class TestBgOverrideEndpoint:
         assert data['condition'] == 'thunderstorm'
 
     def test_post_persists_condition(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/weather/bg_override',
                     json={'condition': 'rain'},
                     content_type='application/json')
@@ -698,7 +698,7 @@ class TestBgOverrideEndpoint:
         assert r.get_json()['condition'] == 'rain'
 
     def test_post_auto_clears_override(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/weather/bg_override',
                     json={'condition': 'snow'},
                     content_type='application/json')
@@ -709,7 +709,7 @@ class TestBgOverrideEndpoint:
         assert r.get_json()['condition'] == ''
 
     def test_post_empty_string_clears_override(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/weather/bg_override',
                     json={'condition': 'sunny'},
                     content_type='application/json')
@@ -720,7 +720,7 @@ class TestBgOverrideEndpoint:
         assert r.get_json()['condition'] == ''
 
     def test_post_invalid_condition_returns_400(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         r = client.post('/api/weather/bg_override',
                         json={'condition': 'tornado'},
                         content_type='application/json')
@@ -728,7 +728,7 @@ class TestBgOverrideEndpoint:
         assert r.get_json()['ok'] is False
 
     def test_delete_clears_override(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/weather/bg_override',
                     json={'condition': 'foggy'},
                     content_type='application/json')
@@ -750,10 +750,21 @@ class TestBgOverrideEndpoint:
 
     def test_api_weather_reflects_override(self, client):
         """After setting override, /api/weather returns that bg_condition."""
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/weather/bg_override',
                     json={'condition': 'windy'},
                     content_type='application/json')
         data = client.get('/api/weather').get_json()
         assert data['bg_condition'] == 'windy'
         assert data['bg_condition_override'] == 'windy'
+
+    def test_non_admin_forbidden(self, client):
+        login(client)
+        get_resp = client.get('/api/weather/bg_override')
+        post_resp = client.post('/api/weather/bg_override',
+                                json={'condition': 'snow'},
+                                content_type='application/json')
+        delete_resp = client.delete('/api/weather/bg_override')
+        assert get_resp.status_code == 403
+        assert post_resp.status_code == 403
+        assert delete_resp.status_code == 403

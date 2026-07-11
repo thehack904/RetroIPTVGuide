@@ -2149,6 +2149,7 @@ function initGuideSearchFilter() {
 
         const searchChunks = [
             chanEl ? (chanEl.dataset.name || '') : '',
+            chanEl ? (chanEl.dataset.chanNum || '') : '',
             row.dataset.group || '',
             types.join(' '),
         ];

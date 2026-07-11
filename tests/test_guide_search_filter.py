@@ -117,3 +117,32 @@ class TestGuideSearchFilter:
         assert resp.status_code == 200
         assert b'data-categories="Movies | Drama"' in resp.data
         assert b'data-colors="Blue"' in resp.data
+
+    def test_guide_search_script_indexes_channel_numbers(self, client, monkeypatch):
+        now = datetime.now(timezone.utc)
+        monkeypatch.setattr(app_module, "cached_channels", [
+            {
+                "name": "Channel One",
+                "logo": "",
+                "url": "http://example.test/ch1.m3u8",
+                "tvg_id": "ch1",
+                "group": "Movies",
+                "tvg_chno": "101",
+            }
+        ])
+        monkeypatch.setattr(app_module, "cached_epg", {
+            "ch1": [{
+                "title": "Movie Night",
+                "desc": "Feature film",
+                "start": now - timedelta(minutes=10),
+                "stop": now + timedelta(minutes=50),
+                "icon": "",
+                "categories": ["Movies"],
+                "colors": ["Blue"],
+            }]
+        })
+
+        login(client)
+        resp = client.get("/guide")
+        assert resp.status_code == 200
+        assert b"chanEl ? (chanEl.dataset.chanNum || '') : ''" in resp.data

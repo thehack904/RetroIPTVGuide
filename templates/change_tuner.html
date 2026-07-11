@@ -45,7 +45,7 @@
                   {% endfor %}
                 </select>
                 <button type="submit" class="primary">Set Active</button>
-                <button type="button" class="secondary" id="btn-run-now">Run Sync Now</button>
+                <button type="button" class="secondary" id="btn-run-now">Refresh JSON Cache</button>
               </form>
             </div>
             <div class="last-sync-box">
@@ -362,10 +362,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const runNow = document.getElementById('btn-run-now');
   if (runNow) {
     runNow.addEventListener('click', () => {
-      fetch('/api/auto_refresh/trigger', { method: 'POST', credentials: 'same-origin' })
-        .then(r => r.json().catch(()=>({ok:false})))
-        .then(j => { alert(j && j.ok ? 'Refresh started' : 'Refresh request sent.'); })
-        .catch(()=>alert('Refresh request failed.'));
+      const tunerSelect = document.getElementById('tuner');
+      const tuner = tunerSelect ? tunerSelect.value : '';
+      fetch('/api/auto_refresh/trigger', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tuner })
+      })
+        .then(r => r.json().catch(() => ({ ok: false, tuner: tuner || null, error: 'Invalid response' })))
+        .then(j => {
+          const name = (j && j.tuner) ? j.tuner : (tuner || 'the selected tuner');
+          alert(j && j.ok ? `Refreshed JSON cache for ${name}.` : (j && j.error ? j.error : 'Refresh request failed.'));
+        })
+        .catch(() => alert('Refresh request failed.'));
     });
   }
 

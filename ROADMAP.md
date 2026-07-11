@@ -4,7 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
-# Current Version: **v4.9.8 (2026-07-03)**
+# Current Version: **v4.9.8 (2026-07-10)**
 
 ---
 
@@ -51,7 +51,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Mini Guide overlay *(v4.9.7)*  
 - [x] Missing EPG fallback *(v3.0.1)*  
 - [x] Reminders/notifications  *(v4.9.7)*
-- [ ] EPG caching  
+- [x] EPG caching  *(v4.9.8)*
 
 ---
 

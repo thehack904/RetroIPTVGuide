@@ -9,12 +9,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import app as app_module
 
 
-def _simulate_user_prefs_channel_numbers(channels, body_classes=None, add_channel=None):
+def _simulate_user_prefs_channel_numbers(
+    channels,
+    body_classes=None,
+    add_channel=None,
+    prefs=None,
+    toggle_show_hidden=False,
+):
     js_path = Path(app_module.app.static_folder) / "js" / "user-prefs.js"
     payload = json.dumps({
         "channels": channels,
         "body_classes": body_classes or [],
         "add_channel": add_channel,
+        "prefs": prefs,
+        "toggle_show_hidden": toggle_show_hidden,
         "script_path": str(js_path),
     })
     node_script = r"""
@@ -34,7 +42,8 @@ function makeClassList(initial = []) {
       if (s.has(item)) { s.delete(item); return false; }
       s.add(item); return true;
     },
-    contains: (item) => s.has(item)
+    contains: (item) => s.has(item),
+    toArray: () => Array.from(s)
   };
 }
 
@@ -53,10 +62,14 @@ function makeUserNumNode(text) {
 
 function makeChannel(cid, hasBuiltIn) {
   const el = {
+    nodeType: 1,
     dataset: { cid },
     _children: [],
+    _listeners: {},
     firstChild: null,
-    addEventListener: () => {},
+    addEventListener: (event, cb) => {
+      el._listeners[event] = cb;
+    },
     closest: () => null,
     querySelector: (sel) => {
       if (sel === '.channel-number') return hasBuiltIn ? { className: 'channel-number' } : null;
@@ -72,8 +85,22 @@ function makeChannel(cid, hasBuiltIn) {
   return el;
 }
 
+function makeRow(cid) {
+  const row = {
+    nodeType: 1,
+    dataset: { cid },
+    classList: makeClassList(),
+    matches: (sel) => sel === '.guide-row[data-cid]',
+    querySelector: (sel) => {
+      if (sel === '.chan-name') return chanEls.find(ch => ch.dataset.cid === cid) || null;
+      return null;
+    }
+  };
+  return row;
+}
+
 const chanEls = input.channels.map(ch => makeChannel(ch.cid, !!ch.built_in));
-const rows = input.channels.map(ch => ({ dataset: { cid: ch.cid }, classList: makeClassList() }));
+const rows = input.channels.map(ch => makeRow(ch.cid));
 const guideOuter = {};
 let domReadyCb = null;
 let mutationCb = null;
@@ -83,12 +110,18 @@ const document = {
   body: { classList: makeClassList(input.body_classes || []) },
   querySelectorAll: (sel) => {
     if (sel === '.guide-row[data-cid]') return rows;
+    if (sel === '.guide-row.chan-hidden') return rows.filter(r => r.classList.contains('chan-hidden'));
     if (sel === '.guide-row[data-cid] .chan-name') return chanEls;
     if (sel === '.chan-name') return chanEls;
     if (sel === '.chan-name .user-channel-number') {
       return chanEls.flatMap(ch => ch._children.filter(n => n.className === 'user-channel-number'));
     }
     return [];
+  },
+  querySelector: (sel) => {
+    const rowMatch = sel.match(/^\.guide-row\[data-cid="(.+)"\]$/);
+    if (rowMatch) return rows.find(r => r.dataset.cid === rowMatch[1]) || null;
+    return null;
   },
   getElementById: (id) => (id === 'guideOuter' ? guideOuter : null),
   addEventListener: (event, cb) => {
@@ -101,7 +134,7 @@ const document = {
 };
 
 const windowObj = {
-  __initialUserPrefs: { channel_numbers_enabled: true },
+  __initialUserPrefs: Object.assign({ channel_numbers_enabled: true }, input.prefs || {}),
   addEventListener: () => {},
   console,
 };
@@ -114,7 +147,7 @@ const context = {
   document,
   window: windowObj,
   MutationObserver,
-  fetch: async () => ({ ok: true, json: async () => ({ prefs: { channel_numbers_enabled: true } }) }),
+  fetch: async () => ({ ok: true, json: async () => ({ prefs: Object.assign({ channel_numbers_enabled: true }, input.prefs || {}) }) }),
   alert: () => {},
   CSS: { escape: (s) => s },
   setTimeout: (fn) => { fn(); return 1; },
@@ -124,6 +157,9 @@ const context = {
 
 vm.runInNewContext(source, context, { filename: 'user-prefs.js' });
 if (domReadyCb) domReadyCb();
+if (input.toggle_show_hidden && windowObj.__userPrefs && typeof windowObj.__userPrefs.toggleShowHidden === 'function') {
+  windowObj.__userPrefs.toggleShowHidden();
+}
 
 function labels() {
   return chanEls.map(ch => {
@@ -132,13 +168,35 @@ function labels() {
   });
 }
 
-const out = { initial: labels() };
+function rowClasses() {
+  const out = {};
+  rows.forEach(row => {
+    out[row.dataset.cid] = row.classList.toArray();
+  });
+  return out;
+}
+
+function contextMenuBindings() {
+  const out = {};
+  chanEls.forEach(ch => {
+    out[ch.dataset.cid] = !!ch._listeners.contextmenu;
+  });
+  return out;
+}
+
+const out = {
+  initial: labels(),
+  initialRowClasses: rowClasses(),
+  initialContextMenuBindings: contextMenuBindings()
+};
 
 if (input.add_channel) {
   chanEls.push(makeChannel(input.add_channel.cid, !!input.add_channel.built_in));
-  rows.push({ dataset: { cid: input.add_channel.cid }, classList: makeClassList() });
-  if (mutationCb) mutationCb([{ type: 'childList', addedNodes: [1], removedNodes: [] }]);
+  rows.push(makeRow(input.add_channel.cid));
+  if (mutationCb) mutationCb([{ type: 'childList', addedNodes: [rows[rows.length - 1]], removedNodes: [] }]);
   out.afterMutation = labels();
+  out.afterMutationRowClasses = rowClasses();
+  out.afterMutationContextMenuBindings = contextMenuBindings();
 }
 
 process.stdout.write(JSON.stringify(out));
@@ -174,3 +232,26 @@ def test_user_channel_numbers_not_injected_for_builtin_number_theme():
         body_classes=["tvguide1990"],
     )
     assert result["initial"] == ["", ""]
+
+
+def test_user_prefs_reapply_row_state_and_context_menu_after_mutation():
+    result = _simulate_user_prefs_channel_numbers(
+        channels=[
+            {"cid": "existing.favorite"},
+        ],
+        add_channel={"cid": "new.favorite"},
+        prefs={
+            "channel_numbers_enabled": False,
+            "favorite_channels": ["existing.favorite", "new.favorite"],
+            "hidden_channels": ["new.favorite"],
+            "auto_load_channel": {"id": "new.favorite", "name": "New Favorite"},
+        },
+        toggle_show_hidden=True,
+    )
+
+    new_row_classes = result["afterMutationRowClasses"]["new.favorite"]
+    assert "chan-favorite" in new_row_classes
+    assert "chan-hidden" in new_row_classes
+    assert "chan-hidden-visible" in new_row_classes
+    assert "chan-autoload" in new_row_classes
+    assert result["afterMutationContextMenuBindings"]["new.favorite"] is True

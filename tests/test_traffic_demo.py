@@ -347,7 +347,7 @@ class TestApiTrafficEndpoint:
             assert k in data['summary']
 
     def test_no_cities_selected_returns_no_cities_flag(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/traffic/demo/disable_all')
         data = client.get('/api/traffic').get_json()
         assert data['no_cities'] is True
@@ -379,7 +379,7 @@ class TestApiTrafficDemoCities:
         assert len(data['cities']) == len(_TRAFFIC_DEMO_CITIES_SEED)
 
     def test_city_update_endpoint(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         cities = client.get('/api/traffic/demo/cities').get_json()['cities']
         city_id = cities[0]['id']
         resp = client.post(f'/api/traffic/demo/cities/{city_id}',
@@ -393,12 +393,22 @@ class TestApiTrafficDemoCities:
         assert updated['enabled'] is False
         assert updated['weight'] == 2
 
+    def test_city_update_requires_admin(self, client):
+        login(client)
+        cities = client.get('/api/traffic/demo/cities').get_json()['cities']
+        assert cities, "Expected seeded traffic demo cities for update test"
+        city_id = cities[0]['id']
+        resp = client.post(f'/api/traffic/demo/cities/{city_id}',
+                           data=json.dumps({'enabled': False, 'weight': 2}),
+                           content_type='application/json')
+        assert resp.status_code == 403
+
 
 # ─── /api/traffic/demo/enable_all and /disable_all ───────────────────────────
 
 class TestApiTrafficDemoBulkActions:
     def test_enable_all(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         client.post('/api/traffic/demo/disable_all')
         resp = client.post('/api/traffic/demo/enable_all')
         assert resp.get_json()['ok'] is True
@@ -406,18 +416,25 @@ class TestApiTrafficDemoBulkActions:
         assert all(c['enabled'] for c in cities)
 
     def test_disable_all(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         resp = client.post('/api/traffic/demo/disable_all')
         assert resp.get_json()['ok'] is True
         cities = client.get('/api/traffic/demo/cities').get_json()['cities']
         assert all(not c['enabled'] for c in cities)
+
+    def test_bulk_actions_require_admin(self, client):
+        login(client)
+        enable_resp = client.post('/api/traffic/demo/enable_all')
+        disable_resp = client.post('/api/traffic/demo/disable_all')
+        assert enable_resp.status_code == 403
+        assert disable_resp.status_code == 403
 
 
 # ─── /api/traffic/demo/pick_random ───────────────────────────────────────────
 
 class TestApiTrafficDemoPickRandom:
     def test_pick_random_returns_ok(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         resp = client.post('/api/traffic/demo/pick_random',
                            data=json.dumps({'pack_size': 5}),
                            content_type='application/json')
@@ -427,12 +444,19 @@ class TestApiTrafficDemoPickRandom:
         assert len(data['cities']) == 5
 
     def test_pick_random_uses_default_pack_size(self, client):
-        login(client)
+        login(client, "admin", "adminpass")
         resp = client.post('/api/traffic/demo/pick_random',
                            data='{}', content_type='application/json')
         data = resp.get_json()
         assert data['ok'] is True
         assert len(data['cities']) == 10  # default pack_size
+
+    def test_non_admin_forbidden(self, client):
+        login(client)
+        resp = client.post('/api/traffic/demo/pick_random',
+                           data=json.dumps({'pack_size': 5}),
+                           content_type='application/json')
+        assert resp.status_code == 403
 
 
 # ─── add_traffic_demo_city / delete_traffic_demo_city helpers ─────────────────

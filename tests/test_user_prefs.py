@@ -8,7 +8,7 @@ import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import app as app_module
-from app import app, init_db, init_tuners_db, get_user_prefs, save_user_prefs, _DEFAULT_PREFS
+from app import app, init_db, init_tuners_db, get_user_prefs, save_user_prefs, _DEFAULT_PREFS, add_user
 
 
 # ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -306,6 +306,34 @@ class TestManageUsersSetPrefs:
         # Non-admins are redirected away from manage_users; prefs remain unchanged
         assert get_user_prefs("testuser")["auto_load_channel"] is None
 
+    def test_non_admin_cannot_open_manage_users(self, client):
+        login(client, "testuser", "testpass")
+        resp = client.get("/manage_users", follow_redirects=False)
+        assert resp.status_code == 302
+        assert resp.headers.get("Location", "").endswith("/guide")
+
+    def test_admin_tv_user_agent_cannot_open_manage_users(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.get(
+            "/manage_users",
+            headers={"User-Agent": "Mozilla/5.0 (Linux; Android TV)"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+        assert resp.headers.get("Location", "").endswith("/guide")
+
+    def test_admin_can_assign_tuner_for_user(self, client):
+        login(client, "admin", "adminpass")
+        resp = client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "Tuner 2",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        resp = client.get("/manage_users")
+        assert resp.status_code == 200
+        assert b'data-current-tuner="Tuner 2"' in resp.data
+
     def test_auto_load_channel_name_from_form_field(self, client):
         """Channel name must come from the submitted auto_load_channel_name form
         field, not from a server-side lookup against cached_channels."""
@@ -433,6 +461,46 @@ class TestManageUsersSetPrefs:
         prefs = get_user_prefs("testuser")
         assert prefs["auto_load_channel"] is not None
         assert prefs["auto_load_channel"]["id"] == "keep-ch"
+
+    def test_api_channels_uses_assigned_tuner_per_user(self, client, monkeypatch):
+        """Different users with different assigned tuners should receive different channel lists."""
+        add_user("otheruser", "otherpass")
+
+        login(client, "admin", "adminpass")
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "testuser",
+            "tuner_name": "Tuner 1",
+        }, follow_redirects=True)
+        client.post("/manage_users", data={
+            "action": "assign_tuner",
+            "username": "otheruser",
+            "tuner_name": "Tuner 2",
+        }, follow_redirects=True)
+
+        t1_channels = [{"tvg_id": "t1.ch", "name": "Tuner 1 Channel", "url": "http://t1/stream"}]
+        t2_channels = [{"tvg_id": "t2.ch", "name": "Tuner 2 Channel", "url": "http://t2/stream"}]
+        monkeypatch.setattr(app_module, "cached_channels", t1_channels)
+        monkeypatch.setattr(app_module, "cached_epg", {})
+        monkeypatch.setattr(
+            app_module,
+            "load_tuner_data",
+            lambda tuner_name, force_refresh=False: (t2_channels, {}) if tuner_name == "Tuner 2" else (t1_channels, {}),
+        )
+
+        client.get("/logout")
+        login(client, "testuser", "testpass")
+        data_testuser = client.get("/api/channels").get_json()
+        names_testuser = [ch["name"] for ch in data_testuser["channels"]]
+        assert "Tuner 1 Channel" in names_testuser
+        assert "Tuner 2 Channel" not in names_testuser
+
+        client.get("/logout")
+        login(client, "otheruser", "otherpass")
+        data_other = client.get("/api/channels").get_json()
+        names_other = [ch["name"] for ch in data_other["channels"]]
+        assert "Tuner 2 Channel" in names_other
+        assert "Tuner 1 Channel" not in names_other
 
     def test_manage_users_response_has_no_store_header(self, client):
         """GET /manage_users must return Cache-Control: no-store so browsers
