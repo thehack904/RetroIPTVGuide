@@ -45,8 +45,9 @@ These are **not yet implemented**, partially implemented, or completed in previo
 - [x] Channel Info Banner *(v4.9.6)*  
 - [x] Channel number entry *(v4.9.6)*  
 - [x] Last channel return *(v4.9.6)*  
-- [ ] Browse mode  
-- [ ] "What's On Now" view  
+- [x] Browse mode *(v4.9.8)*
+- [x] "What's On Now" view *(v4.9.7)*
+- [x] EPG caching *(v4.9.8)*
 - [x] Channel health indicators (lightweight only) *(v4.9.7)*
 - [x] Mini Guide overlay *(v4.9.7)*  
 - [x] Missing EPG fallback *(v3.0.1)*  
@@ -81,7 +82,6 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ### 6. Cross-Platform
 - [x] Linux / Windows / Raspberry Pi installers *(v4.0.0)*  
 - [x] Windows parity *(v4.1.0)*  
-- [ ] TrueNAS SCALE App Catalog certification  
 
 ---
 

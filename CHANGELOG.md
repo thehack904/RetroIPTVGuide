@@ -9,13 +9,94 @@ This project follows [Semantic Versioning](https://semver.org/).
 ## v4.9.8 - 2026-07-10
 
 ### Added
-- (empty)
+
+* Added **EPG disk caching**.
+
+  * Added persistent on-disk EPG JSON cache under `DATA_DIR/epg_cache`.
+  * Added `EPG_CACHE_DIR` and `EPG_DISK_CACHE_TTL`.
+  * EPG cache defaults to a 24-hour TTL.
+  * Added safe cache filename generation for tuner names.
+  * Added EPG serialization/deserialization helpers for storing guide data with datetime values.
+  * Added stale-cache fallback when XMLTV loading returns no guide data.
+  * Added EPG caching support for both standard tuners and combined tuners.
+  * Added duplicate channel filtering by `tvg_id` when loading tuner data.
+
+* Added **per-user assigned tuner handling**.
+
+  * Added helper logic to determine the effective tuner for the current user.
+  * Guide, API channel list, Channel Health, Current Program, and What’s On Now now use the current user’s effective tuner instead of always using the global active tuner.
+  * Assigned tuners fall back to the current global tuner if the assigned tuner no longer exists.
+
+* Added **manual JSON cache refresh for selected tuners**.
+
+  * Added `/api/auto_refresh/trigger` endpoint.
+  * Admins can now force-refresh the selected tuner’s guide/JSON cache.
+  * Refreshing a non-active tuner updates that tuner’s cache without replacing the active in-memory guide.
+  * Updated the Change Tuner page button from **Run Sync Now** to **Refresh JSON Cache**.
+  * The refresh action now sends the selected tuner name and reports which tuner was refreshed.
+
+* Added shared pytest cache isolation.
+
+  * Added `tests/conftest.py` to isolate EPG cache files during tests.
+  * Added tests for EPG cache path handling, serialization, disk save/load, stale fallback, corrupt cache handling, and cache-aware tuner loading.
+  * Added tests for manual tuner cache refresh behavior.
 
 ### Changed
-- (empty)
 
-### Fixed
-- (empty)
+* Improved guide refresh behavior.
+
+  * Scheduled guide refresh now defers while video is actively playing, not only while fullscreen is active.
+  * Added handling for embedded playback, fullscreen playback, and Picture-in-Picture.
+  * Deferred refresh now runs after playback stops.
+  * Added debounce logic to avoid reloads during brief buffering pauses or channel switches.
+
+* Improved dynamic guide row preference handling.
+
+  * Hidden, favorite, and auto-load channel row states are now reapplied when guide rows are dynamically added or removed.
+  * Channel context-menu bindings are now reapplied for newly added channel rows.
+  * MutationObserver now watches guide row subtree changes instead of only top-level child changes.
+  * Hidden-channel visibility state is now preserved when showing hidden channels.
+
+* Improved guide search.
+
+  * Guide search/filter now indexes channel numbers in addition to channel names, groups, types, programs, and metadata.
+
+* Improved admin access enforcement.
+
+  * Weather background override API is now admin-only.
+  * Traffic demo city update, enable all, disable all, and random-pick actions are now admin-only.
+  * Added helper logic for checking admin user status.
+
+* Improved user-management behavior.
+
+  * Added tests confirming non-admin users cannot access Manage Users.
+  * Added tests confirming Android TV-style user agents are redirected away from Manage Users.
+  * Added test coverage for assigning tuners to users.
+
+* Updated ignored runtime/cache paths.
+
+  * Added runtime/cache directories to `.gitignore`, including:
+    * `runtime/`
+    * `config/runtime/`
+    * `config/cache/`
+    * `config/weather/`
+    * `config/epg_cache/`
+
+* Updated roadmap status.
+
+  * Marked **EPG caching** complete for v4.9.8.
+
+### Tests
+
+* Added `tests/test_epg_cache.py`.
+* Added `tests/test_tuner_cache_refresh.py`.
+* Added `tests/conftest.py`.
+* Updated tests for:
+  * Guide search/filter channel-number indexing.
+  * Traffic demo admin-only actions.
+  * Weather background override admin-only access.
+  * User preferences and assigned tuner behavior.
+  * Dynamic user preference reapplication after guide row mutations.
 
 ---
 
