@@ -87,7 +87,6 @@
     <!-- Mobile-specific overrides / responsive styles (loaded after base.css) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-submenu.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/mobile-scroll-fix.css') }}">
 
     {% block page_styles %}
     {# per-page CSS variables or small style blocks can be provided here #}
@@ -97,9 +96,11 @@
     <div id="appZoomRoot">
     {% include '_header.html' %}
 
+    <div id="pageContent">
     {% block content %}
     <!-- Page-specific content goes here -->
     {% endblock %}
+    </div><!-- #pageContent -->
     </div><!-- #appZoomRoot -->
 
     <!-- shared scripts -->

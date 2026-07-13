@@ -1,23 +1,9 @@
 (function () {
   'use strict';
 
-  var MINI_GUIDE_ROW_COUNT = 7;
-  var MINI_GUIDE_AUTODISMISS_MS = 8000;
-  var MINI_GUIDE_TOGGLE_KEY = 'g';
-
-  var isOpen = false;
-  var selectedIndex = 0;
   var channels = [];
-  var dismissTimer = null;
-  var progressTimer = null;
-  var isHovering = false;
   var guideLayout = ((window.__initialUserPrefs || {}).guide_layout === 'mini') ? 'mini' : 'full';
   var pageRenderQueued = false;
-
-  function escapeCid(cid) {
-    if (typeof CSS !== 'undefined' && CSS.escape) return CSS.escape(cid);
-    return String(cid || '').replace(/[^a-zA-Z0-9._-]/g, '\\$&');
-  }
 
   function fmtTime(date) {
     return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -87,19 +73,6 @@
     });
   }
 
-  function selectedWindow() {
-    var count = Math.min(MINI_GUIDE_ROW_COUNT, channels.length);
-    var start = Math.max(0, selectedIndex - Math.floor(count / 2));
-    start = Math.min(start, Math.max(0, channels.length - count));
-    return channels.slice(start, start + count);
-  }
-
-  function setSelectedByCurrent() {
-    var cid = currentChannelId();
-    var found = channels.findIndex(function (channel) { return channel.cid === cid; });
-    selectedIndex = found >= 0 ? found : 0;
-  }
-
   function clearChildren(el) {
     while (el.firstChild) el.removeChild(el.firstChild);
   }
@@ -111,13 +84,12 @@
     row.className = 'mini-guide-row';
     row.id = (options.idPrefix || 'mg-row-') + channel.index;
     row.setAttribute('role', 'option');
-    row.setAttribute('aria-selected', (!options.disableSelection && channel.index === selectedIndex) ? 'true' : 'false');
+    row.setAttribute('aria-selected', 'false');
     row.dataset.index = String(channel.index);
     row.dataset.url = channel.url;
     row.dataset.cid = channel.cid;
     row.dataset.name = channel.name;
 
-    if (!options.disableSelection && channel.index === selectedIndex) row.classList.add('is-selected');
     if (channel.cid === currentChannelId()) row.classList.add('is-current');
 
     var num = document.createElement('div');
@@ -185,33 +157,12 @@
     row.appendChild(logoWrap);
     row.appendChild(main);
     row.addEventListener('click', function () {
-      selectedIndex = channel.index;
-      tuneSelected();
-    });
-    row.addEventListener('mouseenter', function () {
-      if (options.disableSelection) return;
-      selectedIndex = channel.index;
-      render();
+      if (channel.url && typeof window.playChannel === 'function') {
+        window.playChannel(channel.url, channel.cid, channel.name);
+      }
     });
 
     return row;
-  }
-
-  function render() {
-    var list = document.getElementById('mgChannelList');
-    if (!list) return;
-    collectChannels();
-    if (!channels.length) {
-      clearChildren(list);
-      return;
-    }
-    if (selectedIndex < 0 || selectedIndex >= channels.length) setSelectedByCurrent();
-
-    clearChildren(list);
-    selectedWindow().forEach(function (channel) {
-      list.appendChild(buildRow(channel));
-    });
-    list.setAttribute('aria-activedescendant', 'mg-row-' + selectedIndex);
   }
 
   function renderPageMiniGuide() {
@@ -232,7 +183,7 @@
     }
 
     channels.forEach(function (channel) {
-      list.appendChild(buildRow(channel, { idPrefix: 'mg-page-row-', disableSelection: true }));
+      list.appendChild(buildRow(channel, { idPrefix: 'mg-page-row-' }));
     });
   }
 
@@ -296,106 +247,7 @@
     applyGuideLayout(guideLayout === 'mini' ? 'full' : 'mini', true);
   }
 
-  function scheduleDismiss() {
-    cancelDismiss();
-    if (!isOpen || isHovering) return;
-    dismissTimer = setTimeout(closeMiniGuide, MINI_GUIDE_AUTODISMISS_MS);
-  }
-
-  function cancelDismiss() {
-    if (dismissTimer) {
-      clearTimeout(dismissTimer);
-      dismissTimer = null;
-    }
-  }
-
-  function resetIdleTimer() {
-    scheduleDismiss();
-  }
-
-  function openMiniGuide() {
-    var panel = document.getElementById('miniGuide');
-    if (!panel) return;
-    collectChannels();
-    setSelectedByCurrent();
-    isOpen = true;
-    panel.classList.add('is-open');
-    panel.setAttribute('aria-hidden', 'false');
-    render();
-    scheduleDismiss();
-    if (progressTimer) clearInterval(progressTimer);
-    progressTimer = setInterval(function () {
-      if (!isOpen) return;
-      render();
-    }, 15000);
-  }
-
-  function closeMiniGuide() {
-    var panel = document.getElementById('miniGuide');
-    if (!panel) return;
-    isOpen = false;
-    panel.classList.remove('is-open');
-    panel.setAttribute('aria-hidden', 'true');
-    cancelDismiss();
-    if (progressTimer) {
-      clearInterval(progressTimer);
-      progressTimer = null;
-    }
-  }
-
-  function toggleMiniGuide() {
-    if (isOpen) closeMiniGuide();
-    else openMiniGuide();
-  }
-
-  function moveSelection(delta) {
-    if (!channels.length) collectChannels();
-    if (!channels.length) return;
-    selectedIndex = Math.min(channels.length - 1, Math.max(0, selectedIndex + delta));
-    render();
-    resetIdleTimer();
-  }
-
-  function tuneSelected() {
-    var channel = channels[selectedIndex];
-    if (!channel || !channel.url || typeof window.playChannel !== 'function') return;
-    window.playChannel(channel.url, channel.cid, channel.name);
-    closeMiniGuide();
-  }
-
-  function shouldIgnoreShortcut(event) {
-    var tag = (document.activeElement || {}).tagName || '';
-    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON' || event.ctrlKey || event.metaKey || event.altKey;
-  }
-
   function wire() {
-    var button = document.getElementById('miniGuideBtn');
-    var closeButton = document.getElementById('miniGuideClose');
-    var panel = document.getElementById('miniGuide');
-
-    if (button) {
-      button.addEventListener('click', function (event) {
-        event.stopPropagation();
-        toggleMiniGuide();
-      });
-    }
-    if (closeButton) {
-      closeButton.addEventListener('click', function () {
-        closeMiniGuide();
-      });
-    }
-    if (panel) {
-      panel.addEventListener('mouseenter', function () {
-        isHovering = true;
-        cancelDismiss();
-      });
-      panel.addEventListener('mouseleave', function () {
-        isHovering = false;
-        scheduleDismiss();
-      });
-      panel.addEventListener('mousemove', resetIdleTimer);
-    }
-
     ['toggleGuideLayout', 'mobileToggleGuideLayout'].forEach(function (id) {
       var layoutToggle = document.getElementById(id);
       if (!layoutToggle) return;
@@ -421,35 +273,9 @@
       if (input) input.addEventListener('change', schedulePageRender);
     });
 
-    document.addEventListener('keydown', function (event) {
-      if (shouldIgnoreShortcut(event)) return;
-      if (event.key && event.key.toLowerCase() === MINI_GUIDE_TOGGLE_KEY) {
-        event.preventDefault();
-        toggleMiniGuide();
-        return;
-      }
-      if (!isOpen) return;
-      if (event.key === 'ArrowUp') {
-        event.preventDefault();
-        moveSelection(-1);
-      } else if (event.key === 'ArrowDown') {
-        event.preventDefault();
-        moveSelection(1);
-      } else if (event.key === 'Enter') {
-        event.preventDefault();
-        tuneSelected();
-      } else if (event.key === 'Escape') {
-        event.preventDefault();
-        closeMiniGuide();
-      }
-    });
-
     applyGuideLayout(guideLayout, false);
   }
 
-  window.openMiniGuide = openMiniGuide;
-  window.closeMiniGuide = closeMiniGuide;
-  window.toggleMiniGuide = toggleMiniGuide;
   window.setGuideLayout = function (layout, persist) { applyGuideLayout(layout, persist !== false); };
   window.toggleGuideLayout = toggleGuideLayout;
   window.renderMiniGuidePage = renderPageMiniGuide;

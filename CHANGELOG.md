@@ -86,6 +86,14 @@ This project follows [Semantic Versioning](https://semver.org/).
 
   * Marked **EPG caching** complete for v4.9.8.
 
+* Removed **Mini Guide overlay** from the video player.
+
+  * Removed the semi-transparent channel list overlay that previously slid in over the video player.
+  * Removed the **☰ Mini Guide** player button.
+  * Removed the `G` keyboard shortcut that toggled the overlay.
+  * Removed overlay-only functions from `static/js/mini-guide.js` (`openMiniGuide`, `closeMiniGuide`, `toggleMiniGuide`, auto-dismiss timer, keyboard navigation).
+  * The **Mini Guide Layout** option (compact full-page list view) is unaffected and remains available.
+
 ### Tests
 
 * Added `tests/test_epg_cache.py`.

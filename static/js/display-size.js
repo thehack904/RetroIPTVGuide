@@ -52,9 +52,12 @@
       root.style.position = 'fixed';
       root.style.top = '0';
       root.style.left = '0';
-      // Guide page uses its own internal scroll container (.guide-outer); all other pages
-      // (Logs, About, Tuner Management, etc.) need the zoom root itself to be scrollable.
-      root.style.overflow = document.body.classList.contains('guide-page') ? 'hidden' : 'auto';
+      // #appZoomRoot is always overflow:hidden.  On guide pages, .guide-outer
+      // is the internal scroll container.  On all other pages (base.html-derived),
+      // #pageContent is the internal scroll container.  Keeping #appZoomRoot
+      // hidden avoids the iOS Safari bug where overflow-x:hidden on an ancestor
+      // silently breaks position:sticky for all descendants.
+      root.style.overflow = 'hidden';
       if (scale < 1) {
         // Explicit px avoids 100%/vh resolution quirks when overflow:hidden is involved
         root.style.transform = 'scale(' + scale + ')';
@@ -151,7 +154,13 @@
       if (initStyle) initStyle.parentNode.removeChild(initStyle);
 
       var saved = localStorage.getItem(STORAGE_KEY);
-      if (!saved) return;
+      if (!saved) {
+        // No preference saved — apply 1.0× so that inline position/overflow
+        // styles are set on #appZoomRoot immediately and the CSS-only fallback
+        // is not relied on (important for browsers that cache the layout).
+        applyUiZoom(1.0);
+        return;
+      }
       var scale = ZOOM_PRESETS[saved] || 1.0;
       _scale = scale;
 

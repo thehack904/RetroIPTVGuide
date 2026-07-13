@@ -189,6 +189,14 @@ class TestWhatsOnNowPage:
         resp = client.get("/whats-on-now")
         assert b"/api/whats_on_now" in resp.data
 
+    def test_page_does_not_load_guide_mobile_scroll_fix_css(self, client, monkeypatch):
+        """What's On Now should not load guide-only mobile scroll locking CSS."""
+        monkeypatch.setattr(app_module, "cached_channels", _make_channels())
+        monkeypatch.setattr(app_module, "cached_epg",      _make_epg())
+        login(client)
+        resp = client.get("/whats-on-now")
+        assert b"css/mobile-scroll-fix.css" not in resp.data
+
     def test_page_stores_pending_play_in_session_storage(self, client, monkeypatch):
         """Clicking a card stores wonPendingPlay in sessionStorage before navigating."""
         monkeypatch.setattr(app_module, "cached_channels", _make_channels())
@@ -209,3 +217,4 @@ class TestWhatsOnNowPage:
         text = resp.data.decode()
         assert "wonPendingPlay" in text
         assert "sessionStorage.getItem" in text
+

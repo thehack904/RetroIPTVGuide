@@ -4,6 +4,7 @@ This document tracks **planned upgrades** and ideas for improving the IPTV Flask
 These are **not yet implemented**, partially implemented, or completed in previous releases.
 
 ---
+
 # Current Version: **v4.9.8 (2026-07-10)**
 
 ---
@@ -121,7 +122,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 ## 🍓 Installer Enhancements
 - [x] Unified installer architecture  
 - [x] Windows parity  
-- [ ] **Deprecate Windows installer in v5.0** — Docker is the recommended deployment method going forward  
+- [x] **Deprecate Windows installer in v5.0** — Docker is the recommended deployment method going forward *(notice added v4.9.4; effective v5.0)*   
 
 ---
 
