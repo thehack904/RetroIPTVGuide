@@ -77,6 +77,33 @@ set_gpu_mem() {
 ensure_owned_by_iptv() { sudo chown -R "$APP_USER:$APP_USER" "$APP_DIR"; }
 pip_install_as_iptv()   { sudo -u "$APP_USER" bash -lc "$1"; }
 
+# Returns 0 (true) if RetroStation MC — or any other non-RetroIPTVGuide service
+# that runs as the shared 'iptv' user — is detected on this system.
+retrostation_mc_is_present(){
+  local rsmc_services=("retrostation-mc" "retrostation_mc" "retrostationmc" "retrostation")
+  for svc in "${rsmc_services[@]}"; do
+    [ -f "/etc/systemd/system/${svc}.service" ] && return 0
+  done
+
+  while IFS= read -r -d '' svcfile; do
+    local svcname
+    svcname=$(basename "$svcfile" .service)
+    if [ "$svcname" != "retroiptvguide" ] && grep -Eq '^[[:space:]]*User=iptv[[:space:]]*$' "$svcfile" 2>/dev/null; then
+      return 0
+    fi
+  done < <(find /etc/systemd/system -maxdepth 1 -name "*.service" -print0 2>/dev/null)
+
+  local rsmc_dirs=(
+    "/home/iptv/RetroStationMC"
+    "/home/iptv/retrostation-mc"
+    "/home/iptv/retrostation_mc"
+    "/home/iptv/retrostation"
+  )
+  for dir in "${rsmc_dirs[@]}"; do [ -d "$dir" ] && return 0; done
+
+  return 1
+}
+
 #====================== INSTALL ======================#
 install_app() {
   echo ""
@@ -296,6 +323,14 @@ uninstall_app() {
   systemctl stop retroiptvguide 2>/dev/null || true
   systemctl disable retroiptvguide 2>/dev/null || true
   [ -f "$SERVICE_FILE" ] && sudo rm -f "$SERVICE_FILE" && sudo systemctl daemon-reload
+
+  if retrostation_mc_is_present; then
+    echo ""
+    echo "⚠️  RetroStation MC (or another service using the 'iptv' user) was detected."
+    echo "   The 'iptv' user and home directory will NOT be removed to avoid breaking"
+    echo "   that installation. Only the RetroIPTVGuide app directory will be removed."
+    echo ""
+  fi
 
   if [ -d "$APP_DIR" ]; then
     if [ "$AUTO_YES" = true ]; then
