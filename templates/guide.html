@@ -2264,7 +2264,7 @@ function applyThemeGuide(theme){
     const wasCC=b.classList.contains("classic-cable");
     const wasIconGuide=b.classList.contains("ersatztv");
     b.classList.remove("light","dark","retro-tvguide","retro-aol","retro-webtv",
-                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990","classic-cable","retroiptv","ersatztv");
+                       "retro-tvguide2000","retro-magazine","directv","comcast","tvguide1990","classic-cable","retroiptv","ersatztv","retrostation-mc");
     if (theme) b.classList.add(theme);
     try { localStorage.setItem('theme', theme); } catch (e) {}
     if((wasTVG || wasCC) && theme !== "tvguide1990" && theme !== "classic-cable") {
