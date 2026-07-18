@@ -35,6 +35,19 @@ This project follows [Semantic Versioning](https://semver.org/).
   * Updated the Change Tuner page button from **Run Sync Now** to **Refresh JSON Cache**.
   * The refresh action now sends the selected tuner name and reports which tuner was refreshed.
 
+* Added **mobile Program Info folding**.
+
+  * Added a mobile-only **Hide Info / Program Info** toggle for the guide summary panel.
+  * The summary panel can collapse to free vertical space for the video and guide grid on small screens.
+  * Added one-minute auto-collapse while video is playing on mobile.
+  * The summary panel re-expands on channel changes.
+  * Added `static/js/mobile-summary-fold.js`.
+
+* Added **RetroStation MC theme**.
+
+  * Added `retrostation-mc` theme styling.
+  * Added RetroStation MC to the desktop and mobile theme menus.
+
 * Added shared pytest cache isolation.
 
   * Added `tests/conftest.py` to isolate EPG cache files during tests.
@@ -42,6 +55,18 @@ This project follows [Semantic Versioning](https://semver.org/).
   * Added tests for manual tuner cache refresh behavior.
 
 ### Changed
+
+* Updated release metadata to `v4.9.8` with release date `2026-07-10`.
+* Updated README version badge to `v4.9.8`.
+* Updated Linux, Raspberry Pi, Windows batch, and Windows PowerShell installer version metadata to `4.9.8`.
+
+* Improved **Linux installer and uninstaller behavior**.
+
+  * Renamed the Linux systemd service from `iptv-server` to `retroiptvguide`.
+  * Added legacy `iptv-server` service cleanup when the legacy unit is confirmed to belong to RetroIPTVGuide.
+  * Added safeguards so uninstall does not remove the shared `iptv` user/home directory when RetroStation MC or another service using that user is detected.
+  * Added RetroStation MC detection by service name, foreign `User=iptv` systemd units, and known install directories.
+  * Updated install/update flow to rewrite the current systemd service and clean owned legacy service files.
 
 * Improved guide refresh behavior.
 
@@ -61,11 +86,26 @@ This project follows [Semantic Versioning](https://semver.org/).
 
   * Guide search/filter now indexes channel numbers in addition to channel names, groups, types, programs, and metadata.
 
+* Improved mobile and responsive layout behavior.
+
+  * Added `#pageContent` as the internal scroll container for non-guide pages.
+  * Kept `#appZoomRoot` overflow hidden to avoid sticky-header issues, including iOS Safari behavior.
+  * Updated display-size handling so the default 1.0x zoom still applies the required root layout styles.
+  * Updated mobile video height calculations to account for whether the summary panel is expanded or collapsed.
+  * Removed the separate `mobile-scroll-fix.css` include from the base template.
+
 * Improved admin access enforcement.
 
   * Weather background override API is now admin-only.
   * Traffic demo city update, enable all, disable all, and random-pick actions are now admin-only.
   * Added helper logic for checking admin user status.
+
+* Improved diagnostics and stream-detection hardening.
+
+  * Stream detection now catches unexpected probe failures and returns a controlled JSON error instead of allowing an unhandled exception.
+  * Stream detection removes raw byte data from failed fetch responses.
+  * DNS failure messages are now less verbose to users.
+  * Service probe logging now strips query strings, fragments, and embedded credentials before writing URLs to logs.
 
 * Improved user-management behavior.
 
@@ -84,7 +124,11 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 * Updated roadmap status.
 
-  * Marked **EPG caching** complete for v4.9.8.
+  * Marked **Browse mode** complete.
+  * Marked **What’s On Now** complete.
+  * Marked **EPG caching** complete.
+
+### Removed
 
 * Removed **Mini Guide overlay** from the video player.
 
@@ -92,17 +136,22 @@ This project follows [Semantic Versioning](https://semver.org/).
   * Removed the **☰ Mini Guide** player button.
   * Removed the `G` keyboard shortcut that toggled the overlay.
   * Removed overlay-only functions from `static/js/mini-guide.js` (`openMiniGuide`, `closeMiniGuide`, `toggleMiniGuide`, auto-dismiss timer, keyboard navigation).
-  * The **Mini Guide Layout** option (compact full-page list view) is unaffected and remains available.
+  * The **Mini Guide Layout** option, meaning the compact full-page list view, remains available.
 
 ### Tests
 
-* Added `tests/test_epg_cache.py`.
-* Added `tests/test_tuner_cache_refresh.py`.
 * Added `tests/conftest.py`.
+* Added `tests/test_epg_cache.py`.
+* Added `tests/test_install_scripts.py`.
+* Added `tests/test_tuner_cache_refresh.py`.
 * Updated tests for:
+  * Admin diagnostics stream-detection failure handling.
   * Guide search/filter channel-number indexing.
+  * Linux/Raspberry Pi installer shared-user protections.
+  * Mini Guide layout behavior after overlay removal.
   * Traffic demo admin-only actions.
   * Weather background override admin-only access.
+  * What’s On Now assigned-tuner behavior.
   * User preferences and assigned tuner behavior.
   * Dynamic user preference reapplication after guide row mutations.
 
