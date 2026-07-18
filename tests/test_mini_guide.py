@@ -1,4 +1,4 @@
-"""Tests for the mini guide overlay on the guide page."""
+"""Tests for the mini guide layout on the guide page."""
 import os
 import sys
 
@@ -54,29 +54,12 @@ def mini_guide_js():
 
 
 class TestMiniGuideMarkup:
-    def test_guide_renders_mini_guide_button(self, guide_html):
-        assert 'id="miniGuideBtn"' in guide_html
-        assert 'aria-label="Toggle mini guide"' in guide_html
-        assert 'title="Mini Guide"' in guide_html
+    def test_guide_does_not_render_mini_guide_overlay_button(self, guide_html):
+        assert 'id="miniGuideBtn"' not in guide_html
 
-    def test_guide_renders_mini_guide_panel(self, guide_html):
-        assert 'id="miniGuide"' in guide_html
-        assert 'class="mini-guide"' in guide_html
-        assert 'id="mgChannelList"' in guide_html
-
-    def test_guide_sets_dialog_aria_attributes(self, guide_html):
-        assert 'role="dialog"' in guide_html
-        assert 'aria-modal="false"' in guide_html
-        assert 'aria-label="Mini guide"' in guide_html
-        assert 'aria-hidden="true"' in guide_html
-
-    def test_guide_sets_channel_list_aria_attributes(self, guide_html):
-        assert 'role="listbox"' in guide_html
-        assert 'aria-label="Channels near current channel"' in guide_html
-
-    def test_guide_renders_close_button(self, guide_html):
-        assert 'id="miniGuideClose"' in guide_html
-        assert 'aria-label="Close mini guide"' in guide_html
+    def test_guide_does_not_render_mini_guide_overlay_panel(self, guide_html):
+        assert 'id="miniGuide"' not in guide_html
+        assert 'id="mgChannelList"' not in guide_html
 
     def test_guide_loads_mini_guide_script(self, guide_html):
         assert "js/mini-guide.js" in guide_html
@@ -93,10 +76,10 @@ class TestMiniGuideMarkup:
 
 
 class TestMiniGuideScript:
-    def test_script_exposes_public_api(self, mini_guide_js):
-        assert "window.openMiniGuide = openMiniGuide;" in mini_guide_js
-        assert "window.closeMiniGuide = closeMiniGuide;" in mini_guide_js
-        assert "window.toggleMiniGuide = toggleMiniGuide;" in mini_guide_js
+    def test_script_does_not_expose_overlay_api(self, mini_guide_js):
+        assert "window.openMiniGuide" not in mini_guide_js
+        assert "window.closeMiniGuide" not in mini_guide_js
+        assert "window.toggleMiniGuide" not in mini_guide_js
 
     def test_script_uses_dom_source_for_channels(self, mini_guide_js):
         assert "document.querySelectorAll('.guide-row[data-cid]')" in mini_guide_js
@@ -104,24 +87,10 @@ class TestMiniGuideScript:
         assert 'fetch("/api/channels"' not in mini_guide_js
         assert "fetch('/api/channels'" not in mini_guide_js
 
-    def test_script_limits_overlay_to_seven_rows(self, mini_guide_js):
-        assert "MINI_GUIDE_ROW_COUNT = 7" in mini_guide_js
-        assert "selectedWindow()" in mini_guide_js
-
-    def test_script_sets_eight_second_autodismiss(self, mini_guide_js):
-        assert "MINI_GUIDE_AUTODISMISS_MS = 8000" in mini_guide_js
-        assert "setTimeout(closeMiniGuide, MINI_GUIDE_AUTODISMISS_MS)" in mini_guide_js
-
-    def test_script_defines_keyboard_shortcuts(self, mini_guide_js):
-        assert "MINI_GUIDE_TOGGLE_KEY = 'g'" in mini_guide_js
-        assert "event.key === 'ArrowUp'" in mini_guide_js
-        assert "event.key === 'ArrowDown'" in mini_guide_js
-        assert "event.key === 'Enter'" in mini_guide_js
-        assert "event.key === 'Escape'" in mini_guide_js
-
-    def test_script_tunes_selected_channel_with_existing_player(self, mini_guide_js):
-        assert "typeof window.playChannel !== 'function'" in mini_guide_js
-        assert "window.playChannel(channel.url, channel.cid, channel.name)" in mini_guide_js
+    def test_script_does_not_define_overlay_keyboard_shortcuts(self, mini_guide_js):
+        assert "MINI_GUIDE_TOGGLE_KEY" not in mini_guide_js
+        assert "openMiniGuide" not in mini_guide_js
+        assert "closeMiniGuide" not in mini_guide_js
 
     def test_script_exposes_layout_api_and_pref_key(self, mini_guide_js):
         assert "guide_layout" in mini_guide_js
@@ -131,14 +100,12 @@ class TestMiniGuideScript:
 
 
 class TestMiniGuideStyles:
-    def test_styles_include_slide_in_panel_and_open_state(self, guide_html):
-        assert ".mini-guide {" in guide_html
-        assert "transform: translate(-110%, -50%);" in guide_html
-        assert ".mini-guide.is-open {" in guide_html
-        assert "transform: translate(0, -50%);" in guide_html
+    def test_styles_do_not_include_slide_in_overlay_panel(self, guide_html):
+        assert "transform: translate(-110%, -50%);" not in guide_html
+        assert ".mini-guide.is-open {" not in guide_html
 
-    def test_styles_include_selected_row_and_progress_bar(self, guide_html):
-        assert ".mini-guide-row.is-selected" in guide_html
+    def test_styles_include_row_hover_and_progress_bar(self, guide_html):
+        assert ".mini-guide-row:hover {" in guide_html
         assert ".mg-progress-wrap" in guide_html
         assert ".mg-progress-bar" in guide_html
 

@@ -6,6 +6,157 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.8 - 2026-07-10
+
+### Added
+
+* Added **EPG disk caching**.
+
+  * Added persistent on-disk EPG JSON cache under `DATA_DIR/epg_cache`.
+  * Added `EPG_CACHE_DIR` and `EPG_DISK_CACHE_TTL`.
+  * EPG cache defaults to a 24-hour TTL.
+  * Added safe cache filename generation for tuner names.
+  * Added EPG serialization/deserialization helpers for storing guide data with datetime values.
+  * Added stale-cache fallback when XMLTV loading returns no guide data.
+  * Added EPG caching support for both standard tuners and combined tuners.
+  * Added duplicate channel filtering by `tvg_id` when loading tuner data.
+
+* Added **per-user assigned tuner handling**.
+
+  * Added helper logic to determine the effective tuner for the current user.
+  * Guide, API channel list, Channel Health, Current Program, and What’s On Now now use the current user’s effective tuner instead of always using the global active tuner.
+  * Assigned tuners fall back to the current global tuner if the assigned tuner no longer exists.
+
+* Added **manual JSON cache refresh for selected tuners**.
+
+  * Added `/api/auto_refresh/trigger` endpoint.
+  * Admins can now force-refresh the selected tuner’s guide/JSON cache.
+  * Refreshing a non-active tuner updates that tuner’s cache without replacing the active in-memory guide.
+  * Updated the Change Tuner page button from **Run Sync Now** to **Refresh JSON Cache**.
+  * The refresh action now sends the selected tuner name and reports which tuner was refreshed.
+
+* Added **mobile Program Info folding**.
+
+  * Added a mobile-only **Hide Info / Program Info** toggle for the guide summary panel.
+  * The summary panel can collapse to free vertical space for the video and guide grid on small screens.
+  * Added one-minute auto-collapse while video is playing on mobile.
+  * The summary panel re-expands on channel changes.
+  * Added `static/js/mobile-summary-fold.js`.
+
+* Added **RetroStation MC theme**.
+
+  * Added `retrostation-mc` theme styling.
+  * Added RetroStation MC to the desktop and mobile theme menus.
+
+* Added shared pytest cache isolation.
+
+  * Added `tests/conftest.py` to isolate EPG cache files during tests.
+  * Added tests for EPG cache path handling, serialization, disk save/load, stale fallback, corrupt cache handling, and cache-aware tuner loading.
+  * Added tests for manual tuner cache refresh behavior.
+
+### Changed
+
+* Updated release metadata to `v4.9.8` with release date `2026-07-10`.
+* Updated README version badge to `v4.9.8`.
+* Updated Linux, Raspberry Pi, Windows batch, and Windows PowerShell installer version metadata to `4.9.8`.
+
+* Improved **Linux installer and uninstaller behavior**.
+
+  * Renamed the Linux systemd service from `iptv-server` to `retroiptvguide`.
+  * Added legacy `iptv-server` service cleanup when the legacy unit is confirmed to belong to RetroIPTVGuide.
+  * Added safeguards so uninstall does not remove the shared `iptv` user/home directory when RetroStation MC or another service using that user is detected.
+  * Added RetroStation MC detection by service name, foreign `User=iptv` systemd units, and known install directories.
+  * Updated install/update flow to rewrite the current systemd service and clean owned legacy service files.
+
+* Improved guide refresh behavior.
+
+  * Scheduled guide refresh now defers while video is actively playing, not only while fullscreen is active.
+  * Added handling for embedded playback, fullscreen playback, and Picture-in-Picture.
+  * Deferred refresh now runs after playback stops.
+  * Added debounce logic to avoid reloads during brief buffering pauses or channel switches.
+
+* Improved dynamic guide row preference handling.
+
+  * Hidden, favorite, and auto-load channel row states are now reapplied when guide rows are dynamically added or removed.
+  * Channel context-menu bindings are now reapplied for newly added channel rows.
+  * MutationObserver now watches guide row subtree changes instead of only top-level child changes.
+  * Hidden-channel visibility state is now preserved when showing hidden channels.
+
+* Improved guide search.
+
+  * Guide search/filter now indexes channel numbers in addition to channel names, groups, types, programs, and metadata.
+
+* Improved mobile and responsive layout behavior.
+
+  * Added `#pageContent` as the internal scroll container for non-guide pages.
+  * Kept `#appZoomRoot` overflow hidden to avoid sticky-header issues, including iOS Safari behavior.
+  * Updated display-size handling so the default 1.0x zoom still applies the required root layout styles.
+  * Updated mobile video height calculations to account for whether the summary panel is expanded or collapsed.
+  * Removed the separate `mobile-scroll-fix.css` include from the base template.
+
+* Improved admin access enforcement.
+
+  * Weather background override API is now admin-only.
+  * Traffic demo city update, enable all, disable all, and random-pick actions are now admin-only.
+  * Added helper logic for checking admin user status.
+
+* Improved diagnostics and stream-detection hardening.
+
+  * Stream detection now catches unexpected probe failures and returns a controlled JSON error instead of allowing an unhandled exception.
+  * Stream detection removes raw byte data from failed fetch responses.
+  * DNS failure messages are now less verbose to users.
+  * Service probe logging now strips query strings, fragments, and embedded credentials before writing URLs to logs.
+
+* Improved user-management behavior.
+
+  * Added tests confirming non-admin users cannot access Manage Users.
+  * Added tests confirming Android TV-style user agents are redirected away from Manage Users.
+  * Added test coverage for assigning tuners to users.
+
+* Updated ignored runtime/cache paths.
+
+  * Added runtime/cache directories to `.gitignore`, including:
+    * `runtime/`
+    * `config/runtime/`
+    * `config/cache/`
+    * `config/weather/`
+    * `config/epg_cache/`
+
+* Updated roadmap status.
+
+  * Marked **Browse mode** complete.
+  * Marked **What’s On Now** complete.
+  * Marked **EPG caching** complete.
+
+### Removed
+
+* Removed **Mini Guide overlay** from the video player.
+
+  * Removed the semi-transparent channel list overlay that previously slid in over the video player.
+  * Removed the **☰ Mini Guide** player button.
+  * Removed the `G` keyboard shortcut that toggled the overlay.
+  * Removed overlay-only functions from `static/js/mini-guide.js` (`openMiniGuide`, `closeMiniGuide`, `toggleMiniGuide`, auto-dismiss timer, keyboard navigation).
+  * The **Mini Guide Layout** option, meaning the compact full-page list view, remains available.
+
+### Tests
+
+* Added `tests/conftest.py`.
+* Added `tests/test_epg_cache.py`.
+* Added `tests/test_install_scripts.py`.
+* Added `tests/test_tuner_cache_refresh.py`.
+* Updated tests for:
+  * Admin diagnostics stream-detection failure handling.
+  * Guide search/filter channel-number indexing.
+  * Linux/Raspberry Pi installer shared-user protections.
+  * Mini Guide layout behavior after overlay removal.
+  * Traffic demo admin-only actions.
+  * Weather background override admin-only access.
+  * What’s On Now assigned-tuner behavior.
+  * User preferences and assigned tuner behavior.
+  * Dynamic user preference reapplication after guide row mutations.
+
+---
+
 ## v4.9.7 - 2026-07-03
 
 ### Added

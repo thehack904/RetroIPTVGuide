@@ -52,6 +52,12 @@ html, body {
 .mobile-nav .mobile-links a { color: inherit; text-decoration:none; display:block; padding:10px 6px; border-radius:4px; }
 .mobile-nav .mobile-links a:hover { background: rgba(255,255,255,0.06); }
 
+/* Hide the mobile summary toggle on desktop; only shown inside the @media block */
+#mobileSummaryToggle {
+  display: none;
+}
+
+
 /* --- Mobile UX breakpoints --- */
 @media (max-width: 900px) {
   /* header */
@@ -135,6 +141,49 @@ html, body {
     max-width: 100% !important;
     box-sizing: border-box;
     padding: 10px !important;
+    overflow: hidden;
+    /* 600px is a generous upper bound for the summary panel content height;
+       typical content (title + description + time) is well under 200px.
+       A large value is required for the max-height CSS transition trick to work
+       smoothly — if this ever proves too small, increase it. */
+    max-height: 600px;
+    transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.35s ease;
+    opacity: 1;
+  }
+
+  /* Collapsed state: summary folds away entirely */
+  .player .summary.summary-collapsed {
+    max-height: 0 !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* Mobile-only toggle button between summary and video */
+  #mobileSummaryToggle {
+    display: flex;
+    order: 1;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+    color: inherit;
+    font-size: 0.75em;
+    padding: 4px 10px;
+    cursor: pointer;
+    box-sizing: border-box;
+    flex-shrink: 0;
+    letter-spacing: 0.03em;
+    transition: background 0.2s;
+  }
+  #mobileSummaryToggle:hover,
+  #mobileSummaryToggle:focus {
+    background: rgba(255, 255, 255, 0.15);
+    outline: none;
   }
 
   /* Video player wrap must be block (not inline-block) so it stretches to the

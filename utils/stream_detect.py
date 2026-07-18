@@ -238,6 +238,7 @@ def detect_stream_type(url: str) -> Dict[str, Any]:
     result["fetch"] = fetch
 
     if not fetch["ok"]:
+        fetch.pop("raw_bytes", None)
         result["confidence"] = "none"
         result["description"] = f"HTTP probe failed: {fetch.get('error', 'unknown error')}."
         result["tips"].append("Verify the URL is reachable from the server, not just from your browser.")
@@ -1002,8 +1003,9 @@ def _fetch_partial(url: str, timeout: int = _TIMEOUT, resolved_ip: Optional[str]
                 if not addr_info:
                     raise socket.gaierror(f"No addresses returned for '{_original_hostname}'")
                 _effective_ip = addr_info[0][4][0]
-            except (socket.gaierror, OSError, IndexError) as _gai_err:
-                result["error"] = f"DNS resolution failed: {_gai_err}"
+            except (socket.gaierror, OSError, IndexError) as _dns_error:
+                logger.debug("DNS resolution failed during stream fetch for %s: %s", url, _dns_error)
+                result["error"] = "DNS resolution failed."
                 result["response_time_ms"] = int((time.monotonic() - t0) * 1000)
                 return result
 

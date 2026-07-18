@@ -3999,6 +3999,48 @@ class TestStreamDetectEndpoint:
         data = json.loads(resp.data)
         assert data["stream_type"] == "Unknown"
 
+    def test_endpoint_returns_generic_error_on_exception(self, client, isolated_db, monkeypatch):
+        """Unexpected probe exceptions must not expose internal details to the caller."""
+        import utils.stream_detect as sd_mod
+
+        def _raise_exception(url):
+            raise RuntimeError("internal detail")
+
+        monkeypatch.setattr(sd_mod, "detect_stream_type", _raise_exception)
+
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/live.m3u8"},
+        )
+        assert resp.status_code == 500
+        data = json.loads(resp.data)
+        assert data["error"] == "Stream detection failed. Check server logs for details."
+        assert "internal detail" not in resp.data.decode()
+        assert "Traceback" not in resp.data.decode()
+
+    def test_endpoint_hides_dns_exception_details(self, client, isolated_db, monkeypatch):
+        """DNS lookup errors should be returned as generic probe failures."""
+        import socket
+        import utils.stream_detect as sd_mod
+
+        def _raise_gaierror(*args, **kwargs):
+            raise socket.gaierror("temporary failure in name resolution")
+
+        monkeypatch.setattr(sd_mod.socket, "getaddrinfo", _raise_gaierror)
+
+        login(client)
+        resp = client.post(
+            "/admin/diagnostics/stream-detect",
+            json={"url": "http://example.com/live.m3u8"},
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["fetch"]["error"] == "DNS resolution failed."
+        body = resp.data.decode()
+        assert "temporary failure in name resolution" not in body
+        assert "Traceback" not in body
+
     def test_stream_tab_visible_on_diagnostics_page(self, client, isolated_db):
         """The Stream Detect tab button appears in the diagnostics HTML."""
         login(client)

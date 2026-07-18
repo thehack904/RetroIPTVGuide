@@ -64,11 +64,9 @@
     const hidden = prefs.hidden_channels || [];
     document.querySelectorAll('.guide-row[data-cid]').forEach(row => {
       const cid = row.dataset.cid;
-      if (hidden.includes(cid)) {
-        row.classList.add('chan-hidden');
-      } else {
-        row.classList.remove('chan-hidden');
-      }
+      const isHidden = hidden.includes(cid);
+      row.classList.toggle('chan-hidden', isHidden);
+      row.classList.toggle('chan-hidden-visible', isHidden && showingHidden);
     });
   }
 
@@ -440,6 +438,30 @@
     ctxTarget = null;
   }
 
+  function wireChannelContextMenus() {
+    document.querySelectorAll('.chan-name').forEach(function (el) {
+      if (el.__userPrefsCtxBound) return;
+      el.__userPrefsCtxBound = true;
+      el.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        openCtxMenu(e.clientX, e.clientY, el);
+      });
+    });
+  }
+
+  function hasRelevantGuideMutation(mutations) {
+    return mutations.some(function (mutation) {
+      const nodes = Array.from(mutation.addedNodes || []).concat(Array.from(mutation.removedNodes || []));
+      return nodes.some(function (node) {
+        if (!node || node.nodeType !== 1) return false;
+        if (typeof node.matches === 'function' && (node.matches('.guide-row[data-cid]') || node.matches('.chan-name'))) {
+          return true;
+        }
+        return typeof node.querySelector === 'function' && !!node.querySelector('.guide-row[data-cid], .chan-name');
+      });
+    });
+  }
+
   // ─── Init ──────────────────────────────────────────────────────────────────
   function init() {
     applyHiddenChannels();
@@ -479,19 +501,19 @@
 
     var guideOuter = document.getElementById('guideOuter');
     if (guideOuter && typeof MutationObserver === 'function') {
-      var rowObserver = new MutationObserver(function () {
+      var rowObserver = new MutationObserver(function (mutations) {
+        if (!hasRelevantGuideMutation(mutations)) return;
+        applyHiddenChannels();
+        applyFavoriteChannels();
+        applyAutoLoadMarker();
+        wireChannelContextMenus();
         scheduleChannelNumbersReapply();
       });
-      rowObserver.observe(guideOuter, { childList: true });
+      rowObserver.observe(guideOuter, { childList: true, subtree: true });
     }
 
     // Right-click context menu on channel names
-    document.querySelectorAll('.chan-name').forEach(function (el) {
-      el.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        openCtxMenu(e.clientX, e.clientY, el);
-      });
-    });
+    wireChannelContextMenus();
 
     // Close context menu on outside click / scroll / Escape
     document.addEventListener('click', function (e) {

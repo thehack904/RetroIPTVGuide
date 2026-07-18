@@ -37,12 +37,34 @@ body.guide-page { overflow: hidden; }
   -webkit-font-smoothing: antialiased;
 }
 
-/* Non-guide pages (Logs, About, Tuner Management, etc.) need their own scroll since they
-   do not have an internal scroll container like .guide-outer.  display-size.js also sets
-   this at runtime, but the CSS rule ensures correct behavior even before that script runs
-   (e.g. when no displaySize preference is stored and the JS early-returns). */
-body:not(.guide-page) #appZoomRoot {
+/* Non-guide pages (Logs, About, Tuner Management, etc.) scroll inside #pageContent,
+   not inside #appZoomRoot.  #appZoomRoot stays overflow:hidden so that
+   position:sticky on .header works on all browsers (including iOS Safari, which
+   breaks sticky when any overflow axis on an ancestor is 'hidden'). */
+
+/* #pageContent is the scroll surface for all base.html-derived (non-guide) pages.
+   It fills the remaining flex space below the header and scrolls internally,
+   mirroring the role .guide-outer plays on the guide page. */
+#pageContent {
+  flex: 1;
+  min-height: 0;
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+  box-sizing: border-box;
+}
+
+/* On mobile, lock html/body so the browser does not try to show/hide the
+   address bar dynamically.  Dynamic toolbars can overlay the top of
+   #appZoomRoot and cover the header.  Locking overflow:hidden here prevents
+   that browser behaviour for all pages (guide already has this via
+   mobile-scroll-fix.css; non-guide pages need it here). */
+@media (max-width: 900px) {
+  html, body {
+    height: 100%;
+    overflow: hidden;
+  }
 }
 
 /* Authoritative Header + menus (single source of truth for site) */
@@ -53,7 +75,9 @@ body { font-family: Arial, sans-serif; margin:0; }
   justify-content: space-between;
   align-items: center;
   padding: 0 10px;
-  position: relative;
+  position: sticky;
+  top: 0;
+  flex-shrink: 0;
   z-index: 2000;
   box-shadow: none;
   background: #222;
@@ -741,6 +765,34 @@ body.ersatztv .time-header-fixed .left-spacer{background:var(--chan-col-bg);}
 body.ersatztv{--arrow-collapsed:"▶";--arrow-expanded:"▼";}
 
 
+/* RetroStation MC Theme */
+body.retrostation-mc{--timebar-bg:#0C0E29;--timebar-border:#223463;--timebar-color:#5AC4F3;--chan-col-bg:#0C0E29;--chan-col-width:250px;--now-line-color:#0FCCFC;background:#05070F;color:#C6C3E2;font-family:"Arial","Helvetica",sans-serif}
+body.retrostation-mc .header{background:#0FCCFC;color:#05070F;border-bottom:2px solid #223463}
+body.retrostation-mc .header .links>a,body.retrostation-mc .header .links>.dropdown>.dropbtn,body.retrostation-mc .header .links>span,body.retrostation-mc .header .links>div#clock{color:#05070F!important;font-weight:bold!important}
+body.retrostation-mc .header .links>a:hover,body.retrostation-mc .header .links>.dropdown:hover>.dropbtn{background:#5AC4F3!important;color:#05070F!important}
+body.retrostation-mc .dropdown-content,body.retrostation-mc .submenu-content{background:#0C0E29!important;border:1px solid #223463!important;box-shadow:0 4px 8px rgba(0,0,0,.6)!important}
+body.retrostation-mc .dropdown-content a,body.retrostation-mc .submenu-content li a{color:#C6C3E2!important;font-weight:bold!important}
+body.retrostation-mc .dropdown-content a:hover,body.retrostation-mc .submenu-content li a:hover{background:#223463!important;color:#0FCCFC!important}
+body.retrostation-mc .dropdown-content .submenu>a{color:#C6C3E2!important;padding-right:28px!important;position:relative}
+body.retrostation-mc .dropdown-content .submenu>a::after{content:"▸";position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#5AC4F3}
+body.retrostation-mc .dropdown-content .submenu:hover>a{background:#223463!important;color:#0FCCFC!important}
+body.retrostation-mc .time-header-wrap,body.retrostation-mc .time-header-fixed{background:#0C0E29;color:#5AC4F3;border-bottom:2px solid #223463}
+body.retrostation-mc .time-cell{color:#5AC4F3;border-right:1px solid #223463;font-weight:bold}
+body.retrostation-mc .chan-col{background:#0C0E29;border-right:2px solid #223463;color:#C6C3E2}
+body.retrostation-mc .chan-header{background:#0C0E29;color:#C6C3E2;border-color:#223463}
+body.retrostation-mc .chan-name{color:#C6C3E2;border-color:#223463;font-weight:bold}
+body.retrostation-mc .grid-col{background:#05070F}
+body.retrostation-mc .program{background:#0C0E29;border:1px solid #EC32E6;color:#C6C3E2;border-radius:4px}
+body.retrostation-mc .program.now{background:#14164a!important;border-color:#0FCCFC!important;color:#fff!important;font-weight:bold!important;box-shadow:0 0 8px rgba(15,204,252,.3)!important}
+body.retrostation-mc .program:hover{background:#14164a;border-color:#0FCCFC}
+body.retrostation-mc .now-line,body.retrostation-mc .time-header-fixed .now-line{background:#0FCCFC;width:3px;box-shadow:0 0 6px #5AC4F3}
+body.retrostation-mc .summary,body.retrostation-mc #program-info{background:#0C0E29;color:#C6C3E2;border:1px solid #EC32E6;padding:12px;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+body.retrostation-mc .summary h3,body.retrostation-mc #program-info h3{margin:0 0 6px 0;color:#0FCCFC}
+body.retrostation-mc .summary p,body.retrostation-mc #program-info p{margin:0;color:#C6C3E2}
+body.retrostation-mc #video{background:#000;border:1px solid #223463;border-radius:4px}
+body.retrostation-mc .footer{background:#8E16D4;color:#C6C3E2;border-top:2px solid #682175}
+body.retrostation-mc .time-header-fixed .left-spacer{background:#0C0E29;width:var(--chan-col-width,250px)!important;min-width:var(--chan-col-width,250px)!important;max-width:var(--chan-col-width,250px)!important}
+body.retrostation-mc{--arrow-collapsed:"▸";--arrow-expanded:"▾"}
 
 
 /* Theme-aware separator for tuner fly-outs */

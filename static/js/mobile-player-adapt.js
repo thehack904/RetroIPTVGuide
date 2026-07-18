@@ -22,7 +22,11 @@
       const vh = window.innerHeight;
       const headerHeight = header ? Math.round(header.getBoundingClientRect().height) : 40;
       const fixedBarHeight = fixedBar ? Math.round(fixedBar.getBoundingClientRect().height) : 0;
-      const reserved = headerHeight + fixedBarHeight + 80; // 80px for summary + paddings/controls
+      // When the summary panel is collapsed on mobile, its height is effectively 0
+      const summary = document.getElementById('summary');
+      const summaryCollapsed = summary && summary.classList.contains('summary-collapsed');
+      const summaryHeight = summaryCollapsed ? 0 : (summary ? Math.round(summary.getBoundingClientRect().height) : 80);
+      const reserved = headerHeight + fixedBarHeight + summaryHeight + 24; // 24px for paddings/toggle
       // Give the video a max height that's the remaining viewport minus some buffer
       const maxH = Math.max(160, Math.round(vh - reserved));
       // Restrict to a reasonable share of viewport (so timeline remains reachable)

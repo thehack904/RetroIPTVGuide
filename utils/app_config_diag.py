@@ -655,10 +655,10 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
         "resolved_ip": None,
     }
 
-    # Strip query string and fragment for logging to avoid exposing API keys or tokens
-    # that may appear as query parameters (e.g. ?api_key=…).
+    # Strip query string, fragment, and embedded credentials for logging to avoid
+    # exposing API keys, tokens, or passwords (e.g. ?api_key=… or user:pass@host).
     parsed = urlparse(url)
-    _log_url = parsed._replace(query="", fragment="").geturl()
+    _log_url = _sanitize_url_for_log(parsed._replace(query="", fragment="").geturl())
     hostname = parsed.hostname
 
     try:
@@ -666,8 +666,8 @@ def _probe_service(svc_id: str, name: str, url: str, timeout: int = 8) -> Dict[s
             try:
                 result["resolved_ip"] = socket.getaddrinfo(hostname, None)[0][4][0]
             except socket.gaierror as dns_err:
-                # hostname is the bare domain name (e.g. api.nasa.gov) — no query parameters
-                logger.debug("DNS resolution failed for '%s': %s", hostname, dns_err)
+                # _log_url has credentials and query params stripped (safe to log)
+                logger.debug("DNS resolution failed for '%s': %s", _log_url, dns_err)
                 result["error"] = "DNS resolution failed. Check application logs for details."
                 return result
 

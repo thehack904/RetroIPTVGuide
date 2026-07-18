@@ -458,8 +458,12 @@ def diagnostics_stream_detect():
             return jsonify({"error": "Invalid URL scheme — only http/https/rtmp are supported."}), 400
 
     from utils.stream_detect import detect_stream_type  # noqa: PLC0415
-    result = detect_stream_type(url)
-    return jsonify(result)
+    try:
+        result = detect_stream_type(url)
+        return jsonify(result)
+    except Exception as exc:  # noqa: BLE001
+        logger.exception("stream-detect: unexpected probe failure for %r: %s", url, exc)
+        return jsonify({"error": "Stream detection failed. Check server logs for details."}), 500
 
 
 @admin_diagnostics_bp.route("/tuner-sources", methods=["GET"])

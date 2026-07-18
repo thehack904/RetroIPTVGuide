@@ -3,7 +3,7 @@
 # License: Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)
 
 set -euo pipefail
-VERSION="4.9.7"
+VERSION="4.9.8"
 TIMESTAMP=$(date +"%Y-%m-%d_%H-%M-%S")
 LOGFILE="retroiptv_${TIMESTAMP}.log"
 exec > >(tee -a "$LOGFILE") 2>&1
@@ -40,7 +40,8 @@ done
 [[ $(id -u) -ne 0 ]] && { echo "Run as root (sudo)."; exit 1; }
 
 APP_USER="iptv"; APP_HOME="/home/$APP_USER"; APP_DIR=""
-SERVICE_NAME="iptv-server"; SYSTEMD_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+SERVICE_NAME="retroiptvguide"; SYSTEMD_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+LEGACY_SERVICE_NAME="iptv-server"; LEGACY_SYSTEMD_FILE="/etc/systemd/system/${LEGACY_SERVICE_NAME}.service"
 LOG_DIR_LINUX="/var/log/iptv"
 
 # --- OS detection ------------------------------------------------------------
@@ -85,8 +86,8 @@ agree_terms() {
   echo "      * Copy project files into /opt/retroiptvguide (Fedora/RHEL)"
   echo "      * Create and configure a Python virtual environment"
   echo "      * Upgrade pip and install requirements"
-  echo "      * Create and enable the iptv-server systemd service"
-  echo "      * Start the iptv-server service"
+  echo "      * Create and enable the retroiptvguide systemd service"
+  echo "      * Start the retroiptvguide service"
   echo ""
   echo "By continuing, you acknowledge and agree that:"
   echo "  - This software should ONLY be run on internal networks."
@@ -195,6 +196,65 @@ WantedBy=multi-user.target
 EOF
 }
 
+# Returns 0 (true) if RetroStation MC — or any other non-RetroIPTVGuide service
+# that runs as the shared 'iptv' user — is detected on this system.
+# Checks in three ways:
+#   1. Known RetroStation MC systemd service names
+#   2. Any systemd unit file that sets User=iptv but is not owned by us
+#   3. Known RetroStation MC install directories under /home/iptv
+retrostation_mc_is_present(){
+  # 1. Known service names
+  local rsmc_services=("retrostation-mc" "retrostation_mc" "retrostationmc" "retrostation")
+  for svc in "${rsmc_services[@]}"; do
+    [[ -f "/etc/systemd/system/${svc}.service" ]] && return 0
+  done
+
+  # 2. Any foreign service file that runs as the iptv user
+  local our_names=("$SERVICE_NAME" "$LEGACY_SERVICE_NAME")
+  while IFS= read -r -d '' svcfile; do
+    local svcname
+    svcname=$(basename "$svcfile" .service)
+    local is_ours=false
+    for ours in "${our_names[@]}"; do [[ "$svcname" == "$ours" ]] && is_ours=true && break; done
+    if [[ "$is_ours" == false ]] && grep -Eq '^[[:space:]]*User=iptv[[:space:]]*$' "$svcfile" 2>/dev/null; then
+      return 0
+    fi
+  done < <(find /etc/systemd/system -maxdepth 1 -name "*.service" -print0 2>/dev/null)
+
+  # 3. Known RetroStation MC directories
+  local rsmc_dirs=(
+    "/home/iptv/RetroStationMC"
+    "/home/iptv/retrostation-mc"
+    "/home/iptv/retrostation_mc"
+    "/home/iptv/retrostation"
+  )
+  for dir in "${rsmc_dirs[@]}"; do [[ -d "$dir" ]] && return 0; done
+
+  return 1
+}
+
+service_unit_belongs_to_retroiptvguide(){
+  local unit_file="$1"
+  [[ -f "$unit_file" ]] || return 1
+  grep -Fq "RetroIPTVGuide" "$unit_file" || \
+    grep -Eq '^[[:space:]]*WorkingDirectory=(/home/iptv/iptv-server|/opt/retroiptvguide)[[:space:]]*$' "$unit_file" || \
+    grep -Eq '^[[:space:]]*ExecStart=(/home/iptv/iptv-server|/opt/retroiptvguide)/venv/bin/(python|python3)([[:space:]]+-[^[:space:]]+)*[[:space:]]+app\.py([[:space:]].*)?$' "$unit_file"
+}
+
+cleanup_legacy_service_if_owned(){
+  [[ -f "$LEGACY_SYSTEMD_FILE" ]] || return 0
+
+  if service_unit_belongs_to_retroiptvguide "$LEGACY_SYSTEMD_FILE"; then
+    echo "Removing legacy $LEGACY_SERVICE_NAME service owned by RetroIPTVGuide..."
+    systemctl stop "$LEGACY_SERVICE_NAME" 2>/dev/null || true
+    systemctl disable "$LEGACY_SERVICE_NAME" 2>/dev/null || true
+    rm -f "$LEGACY_SYSTEMD_FILE"
+    systemctl daemon-reload
+  else
+    echo "Leaving legacy $LEGACY_SERVICE_NAME service untouched because it is not owned by RetroIPTVGuide."
+  fi
+}
+
 rhel_firewall_selinux(){
   [[ "$PKG_MANAGER" =~ dnf|yum ]] || return 0
   if systemctl is-active --quiet firewalld; then
@@ -220,6 +280,7 @@ start_and_verify(){
 install_linux(){
   agree_terms
   ensure_packages; ensure_user; clone_or_stage_project; make_venv_and_install; write_systemd_service
+  cleanup_legacy_service_if_owned
   rhel_firewall_selinux; start_and_verify
   echo "Installed to: $APP_DIR"
   echo "End time: $(date)"
@@ -242,6 +303,8 @@ update_linux(){
     sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install --upgrade pip
     sudo -u "$APP_USER" "$APP_DIR/venv/bin/pip" install -r "$APP_DIR/requirements.txt"
   fi
+  write_systemd_service
+  cleanup_legacy_service_if_owned
   systemctl daemon-reload; systemctl restart "$SERVICE_NAME"
   echo "✅ Updated and restarted."
 }
@@ -251,6 +314,7 @@ uninstall_linux(){
   systemctl stop "$SERVICE_NAME" 2>/dev/null || true
   systemctl disable "$SERVICE_NAME" 2>/dev/null || true
   [[ -f "$SYSTEMD_FILE" ]] && rm -f "$SYSTEMD_FILE" && systemctl daemon-reload
+  cleanup_legacy_service_if_owned
 
   echo "Removing files..."
   rm -rf "$LOG_DIR_LINUX" 2>/dev/null || true
@@ -280,36 +344,53 @@ uninstall_linux(){
     semanage port -d -t http_port_t -p tcp 5000 2>/dev/null || true
   fi
 
-  echo "Removing user/group..."
+  echo "Checking for shared-user services (e.g. RetroStation MC)..."
+  if retrostation_mc_is_present; then
+    echo ""
+    echo "⚠️  RetroStation MC (or another service using the 'iptv' user) was detected."
+    echo "   Skipping removal of user '$APP_USER', group '$APP_USER', and home directory"
+    echo "   to avoid breaking that installation."
+    echo "   To fully remove the 'iptv' user, uninstall RetroStation MC first, then run:"
+    echo "     pkill -u $APP_USER 2>/dev/null || true"
+    echo "     userdel -r $APP_USER && groupdel $APP_USER"
+    SHARED_USER_PRESERVED=true
+  else
+    echo "Removing user/group..."
 
-# Stop processes that may still run as iptv
-pkill -u "$APP_USER" 2>/dev/null || true
+    # Stop processes that may still run as iptv
+    pkill -u "$APP_USER" 2>/dev/null || true
 
-# Remove system user and home directory if it exists
-if id "$APP_USER" &>/dev/null; then
-  echo " - Deleting user '$APP_USER' and home directory"
-  userdel -r "$APP_USER" 2>/dev/null || true
-else
-  echo " - User '$APP_USER' not found, skipping"
-fi
+    # Remove system user and home directory if it exists
+    if id "$APP_USER" &>/dev/null; then
+      echo " - Deleting user '$APP_USER' and home directory"
+      userdel -r "$APP_USER" 2>/dev/null || true
+    else
+      echo " - User '$APP_USER' not found, skipping"
+    fi
 
-# Remove group if it still exists
-if getent group "$APP_USER" >/dev/null 2>&1; then
-  echo " - Deleting group '$APP_USER'"
-  groupdel "$APP_USER" 2>/dev/null || true
-fi
+    # Remove group if it still exists
+    if getent group "$APP_USER" >/dev/null 2>&1; then
+      echo " - Deleting group '$APP_USER'"
+      groupdel "$APP_USER" 2>/dev/null || true
+    fi
 
+    SHARED_USER_PRESERVED=false
+  fi
 
   echo ""
   echo "============================================================"
   echo " Uninstallation Complete "
   echo "============================================================"
   echo "Removed:"
-  echo "  - Systemd service and unit file"
+  echo "  - RetroIPTVGuide systemd service and unit file"
   echo "  - Application directories (/opt/retroiptvguide or /home/iptv/iptv-server)"
   echo "  - Firewall rules (firewalld/UFW) for TCP 5000"
   echo "  - SELinux port context (if previously set)"
-  echo "  - User and group 'iptv'"
+  if [[ "${SHARED_USER_PRESERVED:-false}" == true ]]; then
+    echo "  - (User/group 'iptv' and home directory preserved — RetroStation MC detected)"
+  else
+    echo "  - User and group 'iptv'"
+  fi
   echo ""
   echo "✅ Uninstall complete. Full log saved to $LOGFILE."
 }
