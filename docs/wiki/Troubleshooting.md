@@ -89,11 +89,11 @@ downloaded and offers to clone from GitHub.
 
 If the admin password is unknown it can be reset from the command line.
 
-**Linux / Raspberry Pi:**
+**Linux (v4.9.9+ layout):**
 
 ```bash
-sudo -u iptv python3 /home/iptv/iptv-server/scripts/reset_admin_password.py \
-  --db /home/iptv/iptv-server/config/users.db
+sudo -u retroiptvguide python3 /opt/retroiptvguide/scripts/reset_admin_password.py \
+  --db /var/lib/retroiptvguide/users.db
 ```
 
 **Docker:**
@@ -112,9 +112,9 @@ If the script reports a database write error, run it as the user that owns the
 database file:
 
 ```bash
-ls -la /home/iptv/iptv-server/config/users.db
-sudo -u iptv python3 /home/iptv/iptv-server/scripts/reset_admin_password.py \
-  --db /home/iptv/iptv-server/config/users.db
+ls -la /var/lib/retroiptvguide/users.db
+sudo -u retroiptvguide python3 /opt/retroiptvguide/scripts/reset_admin_password.py \
+  --db /var/lib/retroiptvguide/users.db
 ```
 
 ### Immutable File (Rare)
@@ -122,13 +122,13 @@ sudo -u iptv python3 /home/iptv/iptv-server/scripts/reset_admin_password.py \
 If the issue persists, check if the file has been made immutable:
 
 ```bash
-lsattr /home/iptv/iptv-server/config/users.db
+lsattr /var/lib/retroiptvguide/users.db
 ```
 
 Remove the immutable flag if present:
 
 ```bash
-sudo chattr -i /home/iptv/iptv-server/config/users.db
+sudo chattr -i /var/lib/retroiptvguide/users.db
 ```
 
 ---

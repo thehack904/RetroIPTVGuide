@@ -180,8 +180,8 @@ separate resizable window.
 ### How do I update RetroIPTVGuide?
 
 - **Docker:** `docker compose pull && docker compose up -d`
-- **Linux:** `sudo /home/iptv/iptv-server/retroiptv_linux.sh update --yes`
-- **Raspberry Pi:** `sudo /home/iptv/iptv-server/retroiptv_rpi.sh update --yes`
+- **Linux:** `sudo /opt/retroiptvguide/retroiptv_linux.sh update --yes`
+- **Raspberry Pi:** `sudo /home/iptv/iptv-server/retroiptv_rpi.sh update --yes` (Raspberry Pi path unchanged)
 
 ### Where can I find the release history?
 

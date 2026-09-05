@@ -782,6 +782,7 @@ class TestHealthChecks:
         assert "data_dir" in result
         assert "logs_dir" in result
         assert "app_working_dir" in result
+        assert result["app_working_dir"]["exists"] is True
 
     def test_check_file_system_symlink_detection(self, isolated_db, tmp_path):
         """Symlink targets should be reported (critical for Docker volume debugging)."""

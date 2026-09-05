@@ -1,6 +1,6 @@
 # app.py — merged version (features from both sources)
-APP_VERSION = "v4.9.8"
-APP_RELEASE_DATE = "2026-07-10"
+APP_VERSION = "v4.9.9"
+APP_RELEASE_DATE = "2026-07-21"
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, abort, make_response, g
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
@@ -63,6 +63,18 @@ def _resolve_data_dir() -> str:
 
 DATA_DIR = _resolve_data_dir()
 
+# Emit a clear non-fatal warning when the application is running from the
+# deprecated legacy layout (/home/iptv/iptv-server) so operators know
+# migration is required without adding duplicate startup noise.
+_APP_FILE = os.path.abspath(__file__)
+if _APP_FILE.startswith("/home/iptv/iptv-server"):
+    print(
+        "[RetroIPTVGuide] WARNING: Running from deprecated legacy path "
+        "/home/iptv/iptv-server. Please migrate to the supported "
+        "/opt/retroiptvguide layout using: sudo ./retroiptv_linux.sh install",
+        file=sys.stderr,
+    )
+
 # Ensure required subdirectories exist
 for _subdir in ("logs", "db", "xmltv", "support"):
     _subdir_path = os.path.join(DATA_DIR, _subdir)
@@ -107,7 +119,7 @@ EPG_DISK_CACHE_TTL = 86400  # 24 hours — default on-disk TTL for EPG data
 ROADS_BUNDLED_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'data', 'roads')
 AUDIO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'audio')
 _ALLOWED_AUDIO_EXTENSIONS = {'mp3', 'ogg', 'wav', 'aac', 'm4a', 'flac'}
-LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual')
+LOGO_UPLOAD_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual', 'uploads')
 ICON_PACK_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'logos', 'virtual', 'icon_pack')
 _ALLOWED_LOGO_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'}
 
@@ -3407,7 +3419,7 @@ def _resolve_channel_logo(tvg_id, default_logo, custom_filename, use_icon_pack):
     3. Default SVG logo (fallback)
     """
     if custom_filename:
-        return f'/static/logos/virtual/{custom_filename}'
+        return f'/static/logos/virtual/uploads/{custom_filename}'
     if use_icon_pack:
         pack_url = _ICON_PACK_LOGOS.get(tvg_id)
         if pack_url:
@@ -6089,7 +6101,7 @@ def api_logo_upload():
         logging.warning("api_logo_upload: invalid logo for %s: %s", tvg_id, exc)
         return jsonify({'error': 'Invalid logo file.'}), 400
     log_event(current_user.username, f"Uploaded logo for {tvg_id}: {dest_name}")
-    return jsonify({'ok': True, 'filename': dest_name, 'url': f'/static/logos/virtual/{dest_name}'}), 201
+    return jsonify({'ok': True, 'filename': dest_name, 'url': f'/static/logos/virtual/uploads/{dest_name}'}), 201
 
 
 @app.route('/api/logo/reset/<tvg_id>', methods=['POST'])

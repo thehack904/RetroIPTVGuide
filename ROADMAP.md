@@ -5,7 +5,7 @@ These are **not yet implemented**, partially implemented, or completed in previo
 
 ---
 
-# Current Version: **v4.9.8 (2026-07-10)**
+# Current Version: **v4.9.9 (2026-07-21)**
 
 ---
 

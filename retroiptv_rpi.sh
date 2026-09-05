@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="4.9.8"
+VERSION="4.9.9"
 # RetroIPTVGuide Raspberry Pi Installer (Headless, Pi3/4/5)
 # Installs to /home/iptv/iptv-server for consistency with Debian/Windows
 # Logs to /var/log/retroiptvguide/install-YYYYMMDD-HHMMSS.log
@@ -189,7 +189,7 @@ install_app() {
     echo "✅ Full release detected in '$SCRIPT_DIR'. Using local files."
     # Only rsync if source and destination differ to avoid self-deletion.
     if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$APP_DIR")" ]; then
-      sudo rsync -a --delete --exclude 'venv' "$SCRIPT_DIR/" "$APP_DIR/"
+      sudo rsync -a --delete --exclude 'venv' --exclude 'data' "$SCRIPT_DIR/" "$APP_DIR/"
     fi
     ensure_owned_by_iptv
     sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
@@ -357,13 +357,37 @@ update_app() {
   echo "Updating installation in $APP_DIR"
   echo ""
 
-  if [ ! -d "$APP_DIR/.git" ]; then
-    echo "❌ Cannot update — directory is not a git repo: $APP_DIR"
-    exit 1
+  if [ -d "$APP_DIR/.git" ]; then
+    echo "Pulling latest updates from git..."
+    sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
+  else
+    echo "⚠️  $APP_DIR is not a git repository (installed from local files or ZIP)."
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    if [ -f "$SCRIPT_DIR/app.py" ] && [ -f "$SCRIPT_DIR/requirements.txt" ]; then
+      echo "✅ Full release detected in '$SCRIPT_DIR'. Updating from local files."
+      if [ "$(realpath "$SCRIPT_DIR")" != "$(realpath "$APP_DIR")" ]; then
+        sudo rsync -a --delete --exclude 'venv' --exclude 'data' "$SCRIPT_DIR/" "$APP_DIR/"
+        ensure_owned_by_iptv
+        sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
+      fi
+    else
+      echo ""
+      echo "ℹ️  No local release files found. The updater needs to clone from GitHub."
+      echo ""
+      if [ "$AUTO_YES" = true ]; then
+        echo "Auto-yes flag set. Proceeding with clone."
+      else
+        read -p "Proceed with cloning from GitHub? (yes/no): " clone_confirm
+        [[ "$clone_confirm" != "yes" ]] && echo "Update aborted by user." && exit 1
+      fi
+      sudo rm -rf /tmp/retroiptvguide_update
+      sudo -u "$APP_USER" git clone https://github.com/thehack904/RetroIPTVGuide.git /tmp/retroiptvguide_update
+      sudo rsync -a --delete --exclude 'venv' --exclude 'data' /tmp/retroiptvguide_update/ "$APP_DIR/"
+      sudo rm -rf /tmp/retroiptvguide_update
+      ensure_owned_by_iptv
+      sudo chmod 744 "$APP_DIR/retroiptv_linux.sh" "$APP_DIR/retroiptv_rpi.sh" 2>/dev/null || true
+    fi
   fi
-
-  echo "Pulling latest updates..."
-  sudo -u "$APP_USER" bash -lc "cd '$APP_DIR' && git fetch --all && git reset --hard origin/main"
 
   echo "Updating Python dependencies..."
   if [ -d "$APP_DIR/venv" ]; then
@@ -381,6 +405,13 @@ update_app() {
   echo "Restarting service..."
   sudo systemctl daemon-reload
   sudo systemctl restart retroiptvguide
+
+  sleep 3
+  if systemctl is-active --quiet retroiptvguide; then
+    echo "✅ Service is active."
+  else
+    echo "❌ Service failed to restart. Run: sudo systemctl status retroiptvguide"
+  fi
 
   echo ""
   echo "============================================================"

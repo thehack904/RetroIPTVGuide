@@ -75,18 +75,37 @@ If the full repository is **not** detected in the current directory the installe
 will ask for confirmation before cloning from GitHub. Pass `--yes` to skip the
 prompt in non-interactive environments.
 
-Default install location: `/home/iptv/iptv-server`
+Default Linux layout:
+
+- App + venv: `/opt/retroiptvguide`
+- Admin-managed environment file: `/etc/retroiptvguide/retroiptvguide.env`
+- Mutable state, uploads, and caches: `/var/lib/retroiptvguide`
+- Dedicated service account: `retroiptvguide`
+
+When the Linux installer or updater sees a legacy `/home/iptv/iptv-server` deployment,
+it creates a timestamped pre-migration backup under
+`/var/backups/retroiptvguide-migration-*`, migrates state into
+`/var/lib/retroiptvguide`, rewrites `retroiptvguide.service`, and may remove the legacy
+RetroIPTVGuide directory after a successful validated migration when nothing else still
+depends on the shared legacy `iptv` account or path. If shared resources are still in
+use by RetroStation MC or another sibling service, those shared resources are retained.
 
 ### Update
 
 ```bash
-sudo /home/iptv/iptv-server/retroiptv_linux.sh update --yes
+sudo /opt/retroiptvguide/retroiptv_linux.sh update --yes
 ```
 
 ### Uninstall
 
 ```bash
-sudo /home/iptv/iptv-server/retroiptv_linux.sh uninstall --yes
+sudo /opt/retroiptvguide/retroiptv_linux.sh uninstall --yes
+```
+
+### Purge
+
+```bash
+sudo /opt/retroiptvguide/retroiptv_linux.sh purge --yes
 ```
 
 ---
@@ -178,15 +197,15 @@ You are required to change the password immediately after the first login.
 If the admin password is lost it can be reset from the command line.
 
 ```bash
-python3 /home/iptv/iptv-server/scripts/reset_admin_password.py \
-  --db /home/iptv/iptv-server/config/users.db
+python3 /opt/retroiptvguide/scripts/reset_admin_password.py \
+  --db /var/lib/retroiptvguide/users.db
 ```
 
 Run as the user that owns the database file to avoid permission errors:
 
 ```bash
-sudo -u iptv python3 /home/iptv/iptv-server/scripts/reset_admin_password.py \
-  --db /home/iptv/iptv-server/config/users.db
+sudo -u retroiptvguide python3 /opt/retroiptvguide/scripts/reset_admin_password.py \
+  --db /var/lib/retroiptvguide/users.db
 ```
 
 On success the admin password is reset and the account is flagged to require a

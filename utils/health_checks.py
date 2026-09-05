@@ -500,6 +500,7 @@ def check_file_system(db_path: str, tuner_db_path: str, data_dir: str) -> Dict[s
         },
         "app_working_dir": {
             "path": os.path.abspath(os.getcwd()),
+            "exists": os.path.isdir(os.getcwd()),
             "listing": _dir_listing(os.getcwd(), max_entries=40),
         },
     }
