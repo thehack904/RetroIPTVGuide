@@ -129,7 +129,7 @@ class TestGetVirtualChannelsCustomLogo:
         from app import get_virtual_channels
         channels = get_virtual_channels()
         news_ch = next(ch for ch in channels if ch['tvg_id'] == 'virtual.news')
-        assert news_ch['logo'] == '/static/logos/virtual/virtual_news_logo.png'
+        assert news_ch['logo'] == '/static/logos/virtual/uploads/virtual_news_logo.png'
 
     def test_no_custom_logo_uses_default(self, tmp_path, monkeypatch):
         monkeypatch.setattr(app_module, "LOGO_UPLOAD_DIR", str(tmp_path / "logos" / "virtual"))

@@ -24,3 +24,8 @@ config/tuners.db
 config/users.db
 config/users.db-shm
 config/users.db-wal
+runtime/
+config/runtime/
+config/cache/
+config/weather/
+config/epg_cache/

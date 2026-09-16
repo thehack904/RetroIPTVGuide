@@ -6,6 +6,39 @@ This project follows [Semantic Versioning](https://semver.org/).
 
 ---
 
+## v4.9.9 - 2026-07-21
+
+### Added
+- Added Linux installer coverage that guards the dedicated `retroiptvguide` service
+  account, `/opt/retroiptvguide` app path, `/etc/retroiptvguide` configuration path,
+  `/var/lib/retroiptvguide` state path, safe uninstall behavior, explicit purge behavior,
+  and CI enforcement against reintroducing shared `/home/iptv` ownership assumptions.
+
+### Changed
+- Standardized Linux installs on the isolated layout:
+  - application code and virtualenv in `/opt/retroiptvguide`
+  - administrator-managed environment file in `/etc/retroiptvguide`
+  - mutable state and app logs in `/var/lib/retroiptvguide`
+  - dedicated `retroiptvguide` service account for `retroiptvguide.service`
+- Linux migration from `/home/iptv/iptv-server` is now automatic when the v4.9.9+
+  installer or updater detects the legacy RetroIPTVGuide layout.
+- Automatic migration rewrites the current systemd unit, copies legacy application state
+  into `/var/lib/retroiptvguide`, and only removes `iptv-server.service` when that unit
+  is confirmed to belong to RetroIPTVGuide.
+- Linux uninstall now removes the service and application directory while retaining
+  `/etc/retroiptvguide`, `/var/lib/retroiptvguide`, and any untouched legacy tree for
+  reinstall or rollback. Explicit `purge` is required to remove retained config/state.
+
+### Fixed
+- Removed Linux uninstall behavior that relied on shared-user cleanup patterns such as
+  user-wide process termination or recursive user-home deletion.
+- Hardened the v4.9.9 legacy-layout migration so backup creation must succeed before
+  destructive steps continue, migrated persistent state is validated before the success
+  marker is written, legacy state conflicts are preserved explicitly, and safe cleanup
+  only runs after validation succeeds.
+
+---
+
 ## v4.9.8 - 2026-07-10
 
 ### Added

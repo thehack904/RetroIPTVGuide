@@ -52,6 +52,26 @@ Configuration is typically stored in:
 - local configuration files
 - database tables
 
+### Linux deployment layout (v4.9.9+)
+
+The repository layout above is separate from the standardized Linux runtime layout:
+
+- `/opt/retroiptvguide`
+  - application code
+  - Python virtual environment
+  - installer scripts
+- `/etc/retroiptvguide`
+  - administrator-managed environment overrides
+  - `retroiptvguide.env`
+- `/var/lib/retroiptvguide`
+  - mutable application state
+  - SQLite databases
+  - caches and runtime support files
+  - application log files
+
+The Linux systemd unit remains `retroiptvguide.service` and runs as the dedicated
+`retroiptvguide` service account rather than the legacy shared `iptv` user.
+
 ---
 
 ## Static Asset Organization

@@ -2075,7 +2075,7 @@ class TestResolveChannelLogo:
             'virtual_news_logo.png',
             True,
         )
-        assert url == '/static/logos/virtual/virtual_news_logo.png'
+        assert url == '/static/logos/virtual/uploads/virtual_news_logo.png'
 
     def test_custom_logo_takes_priority_when_icon_pack_disabled(self):
         url = _resolve_channel_logo(
@@ -2084,7 +2084,7 @@ class TestResolveChannelLogo:
             'virtual_news_logo.png',
             False,
         )
-        assert url == '/static/logos/virtual/virtual_news_logo.png'
+        assert url == '/static/logos/virtual/uploads/virtual_news_logo.png'
 
     def test_icon_pack_used_when_enabled_and_no_custom(self):
         # The icon pack files exist on disk (they are in the repo)

@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://github.com/thehack904/RetroIPTVGuide">
-    <img src="https://img.shields.io/badge/version-v4.9.8-blue?style=for-the-badge" alt="Version">
+    <img src="https://img.shields.io/badge/version-v4.9.9-blue?style=for-the-badge" alt="Version">
   </a>
   <a href="https://github.com/thehack904/RetroIPTVGuide/pkgs/container/retroiptvguide">
     <img src="https://img.shields.io/badge/GHCR-ghcr.io/thehack904/retroiptvguide-green?style=for-the-badge&logo=docker" alt="GHCR">
@@ -108,6 +108,38 @@ You will be required to change this password immediately on first login.
 ## 🔐 Admin Password Reset
 
 If you lose access to the admin account, see: INSTALL.md → Admin Password Recovery
+
+------------------------------------------------------------------------
+
+## 🐧 Linux Layout Migration (v4.9.9+)
+
+Linux installs now use an isolated filesystem layout and dedicated service account:
+
+- App + venv: `/opt/retroiptvguide`
+- Admin-managed environment file: `/etc/retroiptvguide/retroiptvguide.env`
+- Mutable state, uploads, caches, and app logs: `/var/lib/retroiptvguide`
+- Service account: `retroiptvguide`
+- systemd unit: `retroiptvguide.service`
+
+If you are upgrading from `/home/iptv/iptv-server`, the Linux installer/update flow
+automatically creates a timestamped pre-migration backup under
+`/var/backups/retroiptvguide-migration-*`, migrates legacy state into
+`/var/lib/retroiptvguide`, and only removes the legacy `iptv-server.service` when it is
+confirmed to belong to RetroIPTVGuide. The legacy `/home/iptv/iptv-server` tree may be
+removed after a successful validated migration when nothing else still depends on the
+shared legacy `iptv` account or path, so the backup is the primary rollback copy when
+cleanup occurs.
+
+Useful Linux commands:
+
+```bash
+sudo /opt/retroiptvguide/retroiptv_linux.sh update --yes
+sudo systemctl status retroiptvguide
+sudo journalctl -u retroiptvguide -f
+```
+
+See [INSTALL.md](INSTALL.md) for backup/restore, rollback, uninstall vs purge, and
+coexistence guidance for sibling projects and RetroStation Player.
 
 ------------------------------------------------------------------------
 
